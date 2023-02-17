@@ -7,6 +7,6 @@
   <li><strong>Software Licensing Management Tool information:</strong> License and activation information for the installed active Windows.</li>    
   <li><strong>Software Inventory:</strong> Gets Software inventory information using CimInstance and from registry uninstall details. (in future will add WinGet list).</li>
   <li><strong>Network Adapter: Detail on network adapter información and WiFi Profiles.</li>
-  <li><strong>Battery report:</strong>The Battery "Powercfg /batteryreport" report.</li>
+  <li><strong>Battery report:</strong> The Battery "Powercfg /batteryreport" report.</li>
 </ul>
 <p>Script creates output files and organized by folders.</p>
