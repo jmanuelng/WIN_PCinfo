@@ -269,6 +269,248 @@ function Get-PrinterInventory {
     }
 }
 
+
+function Test-IntuneDefenderAndOtherEndpoints {
+    # Initialize an array to store the results
+    $testResults = @()
+
+        # List of required service endpoints
+    $allEndpoints = @(
+        "https://portal.azure.com",
+        "https://login.microsoftonline.com",
+        # ... Include all endpoints here ...
+        "https://portal.azure.com",
+        "https://login.microsoftonline.com",
+        "https://enterpriseregistration.windows.net",
+        "https://mam.manage.microsoft.com"
+        "https://manage.microsoft.com",
+        "https://policy.manage.microsoft.com",
+        "https://device.manage.microsoft.com",
+        "https://provisioning.manage.microsoft.com",
+        "https://portal.manage.microsoft.com",
+        "https://diagnostics.manage.microsoft.com",
+        "https://us.tip.manage.microsoft.com",
+        "https://eu.tip.manage.microsoft.com",
+        "https://apac.tip.manage.microsoft.com",
+        "https://winatp-gw-cus.microsoft.com",
+        "https://winatp-gw-eus.microsoft.com",
+        "https://winatp-gw-weu.microsoft.com",
+        "https://winatp-gw-neu.microsoft.com",
+        "https://winatp-gw-uks.microsoft.com",
+        "https://winatp-gw-ukw.microsoft.com",
+        "https://winatp-gw-usgv.microsoft.com",
+        "https://winatp-gw-usgt.microsoft.com",
+        "https://eu.vortex-win.data.microsoft.com",
+        "https://us.vortex-win.data.microsoft.com",
+        "https://uk.vortex-win.data.microsoft.com",
+        "https://events.data.microsoft.com",
+        "https://settings-win.data.microsoft.com",
+        "https://eu-v20.events.data.microsoft.com",
+        "https://uk-v20.events.data.microsoft.com",
+        "https://us-v20.events.data.microsoft.com",
+        "https://us4-v20.events.data.microsoft.com",
+        "https://us5-v20.events.data.microsoft.com",
+        "https://ctldl.windowsupdate.com",
+        "http://ctldl.windowsupdate.com",
+        "https://validation-v2.sls.microsoft.com",
+        "https://validation.sls.microsoft.com",
+        "https://purchase.mp.microsoft.com",
+        "https://purchase.md.mp.microsoft.com",
+        "https://login.live.com",
+        "https://licensing.md.mp.microsoft.com",
+        "https://licensing.mp.microsoft.com",
+        "https://go.microsoft.com",
+        "https://displaycatalog.md.mp.microsoft.com",
+        "https://displaycatalog.mp.microsoft.com",
+        "https://activation-v2.sls.microsoft.com",
+        "https://activation.sls.microsoft.com",
+        "https://ekop.intel.com",
+        "https://ekcert.spserv.microsoft.com",
+        "https://ftpm.amd.com",
+        "https://cs.dds.microsoft.com",
+        "https://login.live.com",
+        "https://ztd.dds.microsoft.com",
+        "https://emdl.ws.microsoft.com",
+        "https://dl.delivery.mp.microsoft.com",
+        "https://geo-prod.do.dsp.mp.microsoft.com"
+    )
+    
+    #From https://learn.microsoft.com/en-us/mem/intune/fundamentals/intune-endpoints
+    #$onlineEndpoints = (invoke-restmethod -Uri ("https://endpoints.office.com/endpoints/WorldWide?ServiceAreas=MDE`&clientrequestid=" + ([GUID]::NewGuid()).Guid)) | ?{$_.ServiceArea -eq "MDE" -and $_.urls} | select -unique -ExpandProperty urls
+
+    # Test each endpoint
+    foreach ($endpoint in $allEndpoints) {
+        # Initialize an object to store the test result for this endpoint
+        $testResult = New-Object PSObject
+        $testResult | Add-Member -MemberType NoteProperty -Name "URL" -Value $endpoint
+
+        # Extract the scheme and host from the endpoint URL
+        $uri = [Uri]$endpoint
+        $scheme = $uri.Scheme
+        $hostname = $uri.Host
+
+        # Determine the port to test based on the scheme
+        $port = if ($scheme -eq 'https') { 443 } else { 80 }
+
+        # Test DNS resolution and connectivity to the endpoint
+        try {
+            $dnsResult = Resolve-DnsName -Name $hostname -ErrorAction Stop
+
+            $connectionResult = Test-NetConnection -ComputerName $hostname -Port $port -InformationLevel Detailed -ErrorAction Stop
+
+            if ($connectionResult.TcpTestSucceeded) {
+                $testResult | Add-Member -MemberType NoteProperty -Name "TestResult" -Value "OK"
+                $testResult | Add-Member -MemberType NoteProperty -Name "ResultDescription" -Value "Connected successfully to $endpoint on port $port"
+            } else {
+                $testResult | Add-Member -MemberType NoteProperty -Name "TestResult" -Value "Error"
+                $testResult | Add-Member -MemberType NoteProperty -Name "ResultDescription" -Value "Failed to connect to $endpoint on port $port"
+            }
+        } catch {
+            $testResult | Add-Member -MemberType NoteProperty -Name "TestResult" -Value "Error"
+            $testResult | Add-Member -MemberType NoteProperty -Name "ResultDescription" -Value "An error occurred while trying to connect to $($endpoint): $_"
+        }
+
+        # Add the test result to the array
+        $testResults += $testResult
+    }
+
+    # Return the test results
+    return $testResults
+}
+
+
+function Invoke-AsSystem {
+    <#
+    .SYNOPSIS
+    Function for running specified code under SYSTEM account locally.
+
+    .DESCRIPTION
+    Function for running specified code under SYSTEM account locally. This function creates a scheduled task to run a provided script block as SYSTEM.
+
+    .PARAMETER scriptBlock
+    Scriptblock that should be run under SYSTEM account.
+
+    .PARAMETER returnTranscript
+    If set, creates a transcript of the scriptBlock's output and returns it.
+
+    .PARAMETER cacheToDisk
+    If set, writes the script block to a temporary file on disk if it's too large to run normally.
+
+    .PARAMETER argument
+    Hashtable of variables to define at the start of the scriptBlock.
+
+    .EXAMPLE
+    Invoke-AsSystem {New-Item $env:TEMP\abc}
+
+    Will call the given scriptblock under the SYSTEM account locally.
+    #>
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [scriptblock] $scriptBlock,
+
+        [switch] $returnTranscript,
+
+        [hashtable] $argument,
+
+        [switch] $CacheToDisk
+    )
+
+    # SYSTEM account string for scheduled tasks
+    $runAs = "NT Authority\SYSTEM"
+
+    # Check if running as administrator
+    if (! ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        throw "You don't have administrator rights"
+    }
+
+    # Script block to create and run the scheduled task
+    $command = {
+        param ($scriptBlock, $runAs, $CacheToDisk, $VerbosePreference, $ReturnTranscript, $Argument)
+
+        # Create a transcript if required
+        $TranscriptPath = "$ENV:TEMP\Invoke-AsSYSTEM_$(Get-Random).log"
+        if ($Argument -or $ReturnTranscript) {
+            if ($Argument) {
+                $VariableTextDef = Create-VariableTextDefinition $Argument
+            }
+            if ($ReturnTranscript) {
+                $TranscriptStart = "Start-Transcript $TranscriptPath"
+                $TranscriptEnd = 'Stop-Transcript'
+            }
+
+            # Create a new script block with the transcript and any arguments
+            $ScriptBlockContent = ($TranscriptStart + "`n`n" + $VariableTextDef + "`n`n" + $ScriptBlock.ToString() + "`n`n" + $TranscriptEnd)
+            $scriptBlock = [Scriptblock]::Create($ScriptBlockContent)
+        }
+
+        # Write the script block to a temporary file if it's too large or cacheToDisk is set
+        if ($CacheToDisk) {
+            $ScriptGuid = New-Guid
+            $null = New-Item "$($ENV:TEMP)\$($ScriptGuid).ps1" -Value $ScriptBlock -Force
+            $pwshcommand = "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$($ENV:TEMP)\$($ScriptGuid).ps1`""
+        } else {
+            $encodedcommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ScriptBlock))
+            $pwshcommand = "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -EncodedCommand $($encodedcommand)"
+        }
+
+        # Create and run the scheduled task
+        $taskName = "RunAsSystem_" + (Get-Random)
+        $A = New-ScheduledTaskAction -Execute "$($ENV:windir)\system32\WindowsPowerShell\v1.0\powershell.exe" -Argument $pwshcommand
+        $P = New-ScheduledTaskPrincipal -UserId $runAs -LogonType ServiceAccount
+        $S = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd
+
+        try {
+            $null = New-ScheduledTask -Action $A -Principal $P -Settings $S -ErrorAction Stop | Register-ScheduledTask -Force -TaskName $taskName -ErrorAction Stop
+            Start-Sleep -Milliseconds 200
+            Start-ScheduledTask $taskName
+
+            # Wait for the task to complete
+            Write-Verbose "Waiting for scheduled task to complete..."
+            $i = 0
+            while (((Get-ScheduledTask $taskName -ErrorAction SilentlyContinue).State -ne "Ready") -and $i -lt 500) {
+                ++$i
+                Start-Sleep -Milliseconds 200
+            }
+
+            # Get the task result code
+            $result = (Get-ScheduledTaskInfo $taskName).LastTaskResult
+
+            # If returnTranscript was set, get the transcript content
+            if ($ReturnTranscript) {
+                if (Test-Path $TranscriptPath) {
+                    $transcriptContent = (Get-Content $TranscriptPath -Raw) -Split [regex]::Escape('**********************')
+                    ($transcriptContent[2] -Split "`n" | Select-Object -Skip 2 | Select-Object -SkipLast 3) -Join "`n"
+                    Remove-Item $TranscriptPath -Force
+                } else {
+                    Write-Warning "There is no transcript, command probably failed!"
+                }
+            }
+
+            # If cacheToDisk was set, delete the temporary file
+            if ($CacheToDisk) { $null = Remove-Item "$($ENV:TEMP)\$($ScriptGuid).ps1" -Force }
+
+            # Unregister (delete) the scheduled task
+            try {
+                Unregister-ScheduledTask $taskName -Confirm:$false -ErrorAction Stop
+            } catch {
+                throw "Unable to unregister scheduled task $taskName. Please remove it manually"
+            }
+
+            # If the task result code is not 0, throw an exception
+            if ($result -ne 0) {
+                throw "Command did not complete successfully ($result)"
+            }
+        } catch {
+            throw $_.Exception
+        }
+    }
+
+}
+
+
+
 #Endregion Functions
 
 #Region Main
@@ -572,6 +814,58 @@ Out-File -FilePath $NET_infofile  -InputObject $logFooter -Encoding Default -App
 Out-File -FilePath $NET_infofile -InputObject $NET_connection -Encoding Default -Append
 Out-File -FilePath $NET_infofile  -InputObject $logFooter -Encoding Default -Append
 
+<# 
+=============================================================================
+         Tests to Intune and Defender for Endpoint network Endpoints          
+=============================================================================
+#>
+
+$msg = "`...Testing Network connectivity to Microsoft Intune and MDE endpoints (user)."
+Write-Host $msg -ForegroundColor White
+
+$EndPointTest_folder = ".\NetTestEndpoints"
+If ( -not(Test-Path $EndPointTest_folder)) {  
+    #Create folder if it does not exist
+    New-Item -Path "$EndPointTest_folder" -ItemType Directory | Out-Null
+}
+$EndPointTest_folder = $PSScriptRoot + "\NetTestEndpoints"
+$EndPoint_CSVfile = "$EndPointTest_folder\TestEndpoint_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).csv"
+
+# Call the function to test the endpoints
+$NetTestResults = Test-IntuneDefenderAndOtherEndpoints | Select-Object URL, TestResult, ResultDescription
+
+# @jmanuelnieto: Notify user of report fil creation.
+$msg = "`...Writing network connectivity results to CSV file."
+Write-Host $msg -ForegroundColor White
+
+$NetTestResults | Export-CSV -Path $EndPoint_CSVfile -NoType
+
+<#
+$msg = "`...Testing Network connectivity to Microsoft Intune and MDE endpoints (system)."
+Write-Host $msg -ForegroundColor White
+
+$EndPointTest_folder = ".\NetTestEndpoints"
+If ( -not(Test-Path $EndPointTest_folder)) {  
+    #Create folder if it does not exist
+    New-Item -Path "$EndPointTest_folder" -ItemType Directory | Out-Null
+}
+$EndPointTest_folder = $PSScriptRoot + "\NetTestEndpoints"
+$EndPoint_CSVsysfile = "$EndPointTest_folder\SysTestEndpoint_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).csv"
+# Call the function to test the endpoints
+$SysNetTestResults = Invoke-AsSystem -ScriptBlock { Test-IntuneDefenderAndOtherEndpoints } -ReturnTranscript -CacheToDisk
+#$SysNetTestResults = Invoke-AsSystem { dsregcmd /status }
+$msg = "`...Writing network connectivity results to CSV file."
+Write-Host $msg -ForegroundColor White
+
+#$SysNetTestResults | Export-CSV -Path $EndPoint_CSVsysfile -NoType
+#>
+
+<# 
+=============================================================================
+                      Device Software Inventory          
+=============================================================================
+#>
+
 # @jmanuelnieto: Get Software Inventory.
 $msg = "`...Getting Software Inventory."
 Write-Host $msg -ForegroundColor White
@@ -595,6 +889,12 @@ $ExportCSV =".\$SW_folder\ComputerInfo_SW_$((Get-Date -format yyyy-MMM-dd-ddd` h
 #$PC_swReport | out-gridview
 $PC_swReport | Export-CSV -Path $ExportCSV -NoType
 
+
+<# 
+=============================================================================
+                      Device Battery Report          
+=============================================================================
+#>
 # @jmanuelnieto: If laptop, create battery report
 If (fnDetectLaptop) 
     { 
