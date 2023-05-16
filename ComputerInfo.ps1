@@ -21,7 +21,7 @@
     
 #>
 
-
+#region Functions
 function fnGetMachineType {
     $ComputerSystemInfo = Get-WmiObject -Class Win32_ComputerSystem
     switch ($ComputerSystemInfo.Model) { 
@@ -86,22 +86,192 @@ function fnGetMachineType {
 
 
 
-Function fnDetectLaptop {
+function fnDetectLaptop {
     [cmdletbinding()]
-    param (
-        [string]$computer="localhost"
-    )
         
     $isLaptop = $false
-    #The chassis is the physical container that houses the components of a computer. Check if the machine’s chasis type is 9.Laptop 10.Notebook 14.Sub-Notebook
-    if(Get-WmiObject -Class win32_systemenclosure -ComputerName $computer | Where-Object { $_.chassistypes -eq 9 -or $_.chassistypes -eq 10 -or $_.chassistypes -eq 14})
-        { $isLaptop = $true }
-    #Shows battery status , if true then the machine is a laptop.
-    if(Get-WmiObject -Class win32_battery -ComputerName $computer)
-        { $isLaptop = $true }
-    $isLaptop
+    # The chassis is the physical container that houses the components of a computer. Check if the machine’s chasis type is 9.Laptop 10.Notebook 14.Sub-Notebook
+    $chassisType = (Get-CimInstance -ClassName Win32_SystemEnclosure).ChassisTypes
+    if ($chassisType -contains 9 -or $chassisType -contains 10 -or $chassisType -contains 14) {
+        # Shows battery status, if true then the machine is a laptop.
+        if (Get-CimInstance -ClassName Win32_Battery) {
+            $isLaptop = $true
+        }
+    }
+    return $isLaptop
 }
 
+function Get-BiosTpm {
+    # Error handling with Try/Catch
+    try {
+        # Get BIOS info using the Win32_BIOS WMI class
+        $bios = Get-WmiObject -Class Win32_BIOS
+        Write-Output "BIOS Manufacturer: $($bios.Manufacturer)"
+        Write-Output "BIOS Version: $($bios.SMBIOSBIOSVersion)"
+
+        # Get TPM info using the Win32_Tpm WMI class
+        $tpm = Get-WmiObject -Namespace "Root\CIMv2\Security\MicrosoftTpm" -Class Win32_Tpm
+
+        if ($tpm) {
+            Write-Output "TPM Manufacturer ID: $($tpm.ManufacturerID)"
+            Write-Output "TPM Version: $($tpm.SpecVersion)"
+            Write-Output "TPM Status: $($tpm.Status)"
+        } else {
+            Write-Output "TPM is not available on this system."
+        }
+    } catch {
+        # Catch and display any errors
+        Write-Output "An error occurred: $_"
+    }
+}
+
+
+function Get-InstalledSoftware {
+    # Initialize an empty array to hold software objects
+    $allSoftware = @()
+
+    # Error handling with Try/Catch
+    try {
+        # Get installed software from CIM
+        $cimSoftware = Get-CimInstance -ClassName Win32_Product
+        foreach ($software in $cimSoftware) {
+            $allSoftware += New-Object -TypeName psobject -Property @{
+                Name           = $software.Name
+                Version        = $software.Version
+                Vendor         = $software.Vendor
+                InstallDate    = $software.InstallDate
+                Description    = $software.Description
+                InstallLocation = $software.InstallLocation
+                InstallSource  = $software.InstallSource
+                PackageName    = $software.PackageName
+                InventorySource = "CimInstance"
+            }
+        }
+
+        # Define registry paths for installed software
+        $registryPaths = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*', 
+                         'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                         'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+
+        foreach($path in $registryPaths){
+            # Get installed software from registry
+            $registrySoftware = Get-ItemProperty $path
+            foreach ($software in $registrySoftware) {
+                if ($null -ne $software.DisplayName) {
+                    $allSoftware += New-Object -TypeName psobject -Property @{
+                        Name            = $software.DisplayName
+                        Version         = $software.DisplayVersion
+                        Vendor          = $software.Publisher
+                        InstallDate     = $software.InstallDate
+                        Description     = $software.DisplayName
+                        InstallLocation = $software.InstallLocation
+                        InstallSource   = $software.InstallSource
+                        PackageName     = $software.PSChildName
+                        InventorySource = "Registry"
+                    }
+                }
+            }
+        }
+
+        # Get installed software from AppxPackage
+        $appxSoftware = Get-AppxPackage
+        foreach ($software in $appxSoftware) {
+            $allSoftware += New-Object -TypeName psobject -Property @{
+                Name            = $software.Name
+                Version         = $software.Version
+                Vendor          = $software.Publisher
+                InstallDate     = $software.InstallDate
+                Description     = $software.PackageFullName
+                InstallLocation = $software.InstallLocation
+                InstallSource   = $software.InstallLocation
+                PackageName     = $software.PackageFullName
+                InventorySource = "AppxPackage"
+            }
+        }
+
+    } catch {
+        # Catch and display any errors
+        Write-Output "An error occurred while trying to retrieve Installed Software details: $_"
+    }
+
+    # Return the consolidated software list
+    return $allSoftware
+}
+
+function Get-SharedFoldersInventory {
+    try {
+        # Get all shared folders
+        $sharedFolders = Get-CimInstance -ClassName Win32_Share
+
+        # Select specific properties for each shared folder
+        $sharedFoldersInfo = $sharedFolders | Select-Object -Property Name, Path, Description, Status
+
+        # Return the shared folders information
+        return $sharedFoldersInfo
+
+    } catch {
+        # Catch and display any errors
+        Write-Output "An error occurred: $_"
+    }
+}
+
+function Get-NetworkDrivesInventory {
+    try {
+        # Get all PowerShell drives and filter for network drives
+        $networkDrives = Get-PSDrive | Where-Object { $_.Provider -like "Microsoft.PowerShell.Core\FileSystem" -and $_.Root -like "\\*" }
+
+        # Select specific properties for each network drive
+        $networkDrivesInfo = $networkDrives | Select-Object -Property Name, Root, Description
+
+        # Return the network drives information
+        return $networkDrivesInfo
+
+    } catch {
+        # Catch and display any errors
+        Write-Output "An error occurred: $_"
+    }
+}
+
+function Get-GPOInventory {
+    try {
+        # Run gpresult and capture its output
+        $gpresult = gpresult /h gpresult.html
+
+        # Parse the gpresult output to find the applied policies
+        $gpos = Select-String -Path gpresult.html -Pattern 'Applied Group Policy Objects'
+
+        # Clean up the gpresult file
+        Remove-Item -Path gpresult.html
+
+        # Return the GPO information
+        return $gpos
+
+    } catch {
+        # Catch and display any errors
+        Write-Output "An error occurred: $_"
+    }
+}
+
+function Get-PrinterInventory {
+    try {
+        # Get all printers
+        $printers = Get-Printer
+
+        # Select specific properties for each printer
+        $printerInfo = $printers | Select-Object -Property Name, DriverName, PortName, Shared, ShareName, Location, Comment, PrinterStatus
+
+        # Return the printer information
+        return $printerInfo
+
+    } catch {
+        # Catch and display any errors
+        Write-Output "An error occurred: $_"
+    }
+}
+
+#Endregion Functions
+
+#Region Main
 $msg = "`n`nGathering information on: " + (Get-Childitem env:computername).value
 Write-Host $msg -ForegroundColor White
 
@@ -261,20 +431,106 @@ Out-File -FilePath $PC_filename -InputObject $logHeading -Encoding ASCII -Append
 Out-File -FilePath $PC_filename -InputObject $PC_winlicenseexpanded -Encoding ASCII -Append
 Out-File -FilePath $PC_filename -InputObject $PC_winlicense -Encoding ASCII -Append
 Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+# === This is the end of System configuration info
 
-
-# @jmanuelnieto: Get BIOS and TPM information. This is to understando if the system hast TPM, and what version.
-$PC_bios = Get-WmiObject -Class Win32_Bios | Format-List -Property *
-$PC_tpm = Get-WmiObject -Class Win32_Tpm -Namespace root\cimv2\security\microsofttpm | Format-List -Property *
-
-# @jmanuelnieto: It then adds BIOS and TPM info to file.
-$msg = "`...Wiritng SystemInfo report."
+# ======= BIOS Info =======
+$msg = "`...Getting BIOS information."
 Write-Host $msg -ForegroundColor White
 
-Out-File -FilePath $PC_filename -InputObject $PC_bios -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_tpm -Encoding ASCII -Append
+# @jmanuelnieto: Banner and heading to distinguish this section in Output File.
+$logBanner = "==========================================================="
+$logBanner += "          BIOS Information          " 
+$logBanner += "===========================================================`n`n"
+$logFooter = "`n`n==========`n`n"
 
-# === This is the end of System configuration info
+# @jmanuelnieto: Get BIOS and TPM information. This is to understand if the system has TPM, and what version.
+$PC_biostpm = Get-BiosTpm
+
+# @jmanuelnieto: It then adds BIOS and TPM info to file.
+$msg = "`...Wiritng BIOS report."
+Write-Host $msg -ForegroundColor White
+
+# Writing result to file after execution in case user cancels before ending execution. 
+Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $PC_biostpm -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+
+# === End of BIOS information
+
+# ======= Shares and Network Drives Info =======
+$msg = "`...Getting Network Shares and Network Drives information."
+Write-Host $msg -ForegroundColor White
+
+# @jmanuelnieto: Banner and heading to distinguish this section in Output File.
+$logBanner = "==========================================================="
+$logBanner += "          Shared Folders and Network Drives Information          " 
+$logBanner += "===========================================================`n`n"
+$logSpacing = "`n`n"
+$logHeading01 = " === Shared folders report using CimInstance:"
+$logHeading02 = " === Connected Network drives report:"
+$logFooter = "`n`n==========`n`n"
+
+# Calls funcion to get Shares report.
+$PC_Shares = Get-SharedFoldersInventory | Format-Table
+# Calls the function to get Netowkr Drive info.
+$PC_NetDrives = Get-NetworkDrivesInventory | Format-Table
+
+
+
+# @jmanuelnieto: It then adds BIOS and TPM info to file.
+$msg = "`...Wiritng Shares and Network Drives reporte."
+Write-Host $msg -ForegroundColor White
+
+# Writing result to file after execution in case user cancels before ending execution. 
+Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $logHeading01 -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $PC_Shares -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $logSpacing -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $logHeading02 -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $PC_NetDrives -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+
+# === End of Shares and Network Drives information.
+
+# @jmanuelnieto: Banner and heading to distinguish this section in Output File.
+$logBanner = "==========================================================="
+$logBanner += "          Group and Local Policies Information          " 
+$logBanner += "===========================================================`n`n"
+$logFooter = "`n`n==========`n`n"
+
+# @jmanuelnieto: Get info for applied policies on device, it will list Local and Domain policies applied.
+$PC_GpoInfo = Get-GPOInventory | Format-Table
+
+# @jmanuelnieto: It then adds Policies information to file.
+$msg = "`...Wiritng Policies report."
+Write-Host $msg -ForegroundColor White
+
+# Writing result to file after execution in case user cancels before ending execution. 
+Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $PC_GpoInfo -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+
+# === End of Policies information
+
+# @jmanuelnieto: Banner and heading to distinguish this section in Output File.
+$logBanner = "==========================================================="
+$logBanner += "          Installed Printers Information          " 
+$logBanner += "===========================================================`n`n"
+$logFooter = "`n`n==========`n`n"
+
+# @jmanuelnieto: Get installed printers information. 
+$PC_Printers = Get-PrinterInventory | Format-Table
+
+# @jmanuelnieto: It then adds Policies information to file.
+$msg = "`...Wiritng Installed printers report."
+Write-Host $msg -ForegroundColor White
+
+# Writing result to file after execution in case user cancels before ending execution. 
+Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $PC_Printers -Encoding ASCII -Append
+Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+
+# === End of Printers information
 
 
 # ===========   @jmanuelnieto: Networking details.   ===========
@@ -284,9 +540,9 @@ $logBanner = "==========================================================="
 $logBanner += "          Network Adapter Info          " 
 $logBanner += "===========================================================`n`n"
 
-# == Computer information, CimInstace
+# == Network information, Get-NetAdapter, netsh
 # @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
-$logHeading = " === Detailed netwoek information from PS Get-NetAdapters" 
+$logHeading = " === Detailed network information from PS Get-NetAdapters" 
 $logFooter = "==========`n`n"
 
 $NET_folder = ".\Network"
@@ -326,29 +582,18 @@ If ( -not(Test-Path $SW_folder)) {
     New-Item -Path ".\$SW_folder" -ItemType Directory | Out-Null
 }
 
+# Call software inventory function and write results to CSV file
+$PC_swReport = Get-InstalledSoftware | Select-Object Name, Version, Vendor, PackageName, InstallDate, Description, InstallLocation, InstallSource, InventorySource
 
-$PC_swReport = Get-CimInstance win32_product | Select-Object InstallState, Name, Description, Version, Vendor, InstallDate, PackageName, URLInfoAbout, URLUpdateInfo, ProductID, Language, InstallLocation, InstallSource
-$PC_regswReport = Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |  Select-Object SystemComponent, DisplayName, DisplayVersion, Publisher, InstallDate, Language, InstallLocation, InstallSource
-$PC_appXReport = Get-AppxPackage | Select-Object Name, PackageFullName, Status, Version, Publisher, Architecture, InstallLocation, SignatureKind, NonRemovable, IsResourcePackage, IsBundle, IsDevelopmentMode 
-
-# @jmanuelnieto: Create Software Inventory report.
+# @jmanuelnieto: Notify about Software Inventory report.
 $msg = "`...Writing Software Inventory to CSV file."
 Write-Host $msg -ForegroundColor White
 
 # @jmanuelnieto: Create Software Inventory report, show it in GridView.
 $ExportCSV =".\$SW_folder\ComputerInfo_SW_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).csv"
+# gridview used while testing
 #$PC_swReport | out-gridview
 $PC_swReport | Export-CSV -Path $ExportCSV -NoType
-
-# @jmanuelnieto: Create Software Inventory report from the Uninstall info o system registry, show it in GridView.
-$ExportCSV =".\$SW_folder\ComputerInfo_rSW_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).csv"
-#$PC_regswReport | out-gridview
-$PC_regswReport | Export-CSV -Path $ExportCSV -NoType
-
-# @jmanuelnieto: Create Software Inventory report for AppX apps (for example Microsoft Store), show it in GridView.
-$ExportCSV =".\$SW_folder\ComputerInfo_axSW_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).csv"
-#$PC_appxReport | out-gridview
-$PC_appxReport | Export-CSV -Path $ExportCSV -NoType
 
 # @jmanuelnieto: If laptop, create battery report
 If (fnDetectLaptop) 
@@ -368,3 +613,5 @@ If (fnDetectLaptop)
 
 
 Write-Host "The end! `n`n" -ForegroundColor White
+
+#Endregion Main
