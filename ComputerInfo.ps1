@@ -271,10 +271,31 @@ function Get-PrinterInventory {
 
 
 function Test-IntuneDefenderAndOtherEndpoints {
+    <#
+    .SYNOPSIS
+    Function to test connectivity to various Microsoft Intune and Defender endpoints.
+    
+    .DESCRIPTION
+    Resolves the DNS for each endpoint and tests the connectivity to it. 
+    It records the test results in an array and, if specified, writes the results to a CSV file.
+    
+    .PARAMETER outFilePath
+    The full path of the CSV file to write the test results to. If not specified, the function returns the test results.
+    #>
+
+    [CmdletBinding()]
+    param (
+        [string] $outFilePath
+    )
     # Initialize an array to store the results
     $testResults = @()
 
-        # List of required service endpoints
+    # Error checking for file existence and overwrite
+    if ($outFilePath -and (Test-Path -Path $outFilePath)) {
+        Write-Host "File '$outFilePath' already exists. It will be overwritten."
+    }
+
+    # List of required service endpoints
     $allEndpoints = @(
         "https://portal.azure.com",
         "https://login.microsoftonline.com",
@@ -375,141 +396,222 @@ function Test-IntuneDefenderAndOtherEndpoints {
     }
 
     # Return the test results
-    return $testResults
+    if ($outFilePath) {
+        try {
+            $testResults | Select-Object URL, TestResult, ResultDescription | Export-CSV -Path $outFilePath -NoTypeInformation -Force
+        } catch {
+            Write-Error -Message "An error occurred while trying to write to '$outFilePath': $_"
+        }
+    }
+    else {
+        return $testResults
+    }
+    
 }
 
 
 function Invoke-AsSystem {
     <#
     .SYNOPSIS
-    Function for running specified code under SYSTEM account locally.
+    Function for running specified code under SYSTEM account.
 
     .DESCRIPTION
-    Function for running specified code under SYSTEM account locally. This function creates a scheduled task to run a provided script block as SYSTEM.
+    Function for running specified code under SYSTEM account.
+
+    Helper files and sched. tasks are automatically deleted.
 
     .PARAMETER scriptBlock
     Scriptblock that should be run under SYSTEM account.
 
+    .PARAMETER computerName
+    Name of computer, where to run this.
+
     .PARAMETER returnTranscript
-    If set, creates a transcript of the scriptBlock's output and returns it.
+    Add creating of transcript to specified scriptBlock and returns its output.
 
     .PARAMETER cacheToDisk
-    If set, writes the script block to a temporary file on disk if it's too large to run normally.
+    Necessity for long scriptBlocks. Content will be saved to disk and run from there.
 
     .PARAMETER argument
-    Hashtable of variables to define at the start of the scriptBlock.
+    If you need to pass some variables to the scriptBlock.
+    Hashtable where keys will be names of variables and values will be, well values :)
+
+    Example:
+    [hashtable]$Argument = @{
+        name = "John"
+        cities = "Boston", "Prague"
+        hash = @{var1 = 'value1','value11'; var2 = @{ key ='value' }}
+    }
+
+    Will in beginning of the scriptBlock define variables:
+    $name = 'John'
+    $cities = 'Boston', 'Prague'
+    $hash = @{var1 = 'value1','value11'; var2 = @{ key ='value' }
+
+    ! ONLY STRING, ARRAY and HASHTABLE variables are supported !
+
+    .PARAMETER runAs
+    Let you change if scriptBlock should be running under SYSTEM, LOCALSERVICE or NETWORKSERVICE account.
+
+    Default is SYSTEM.
 
     .EXAMPLE
     Invoke-AsSystem {New-Item $env:TEMP\abc}
 
-    Will call the given scriptblock under the SYSTEM account locally.
+    On local computer will call given scriptblock under SYSTEM account.
+
+    .EXAMPLE
+    Invoke-AsSystem {New-Item "$env:TEMP\$name"} -computerName PC-01 -ReturnTranscript -Argument @{name = 'someFolder'} -Verbose
+
+    On computer PC-01 will call given scriptblock under SYSTEM account i.e. will create folder 'someFolder' in C:\Windows\Temp.
+    Transcript will be outputted in console too.
     #>
 
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
         [scriptblock] $scriptBlock,
-
+        [string] $computerName,
         [switch] $returnTranscript,
-
         [hashtable] $argument,
-
+        [ValidateSet('SYSTEM', 'NETWORKSERVICE', 'LOCALSERVICE')]
+        [string] $runAs = "SYSTEM",
         [switch] $CacheToDisk
     )
 
-    # SYSTEM account string for scheduled tasks
-    $runAs = "NT Authority\SYSTEM"
+    (Get-Variable runAs).Attributes.Clear()
+    $runAs = "NT Authority\$runAs"
 
-    # Check if running as administrator
-    if (! ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        throw "You don't have administrator rights"
+    #region prepare Invoke-Command parameters
+    # export this function to remote session (so I am not dependant whether it exists there or not)
+    $allFunctionDefs = "function Create-VariableTextDefinition { ${function:Create-VariableTextDefinition} }"
+
+    $param = @{
+        argumentList = $scriptBlock, $runAs, $CacheToDisk, $allFunctionDefs, $VerbosePreference, $ReturnTranscript, $Argument
     }
 
-    # Script block to create and run the scheduled task
-    $command = {
-        param ($scriptBlock, $runAs, $CacheToDisk, $VerbosePreference, $ReturnTranscript, $Argument)
+    if ($computerName -and $computerName -notmatch "localhost|$env:COMPUTERNAME") {
+        $param.computerName = $computerName
+    } else {
+        if (! ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+            throw "You don't have administrator rights"
+        }
+    }
+    #endregion prepare Invoke-Command parameters
 
-        # Create a transcript if required
+    Invoke-Command @param -ScriptBlock {
+        param ($scriptBlock, $runAs, $CacheToDisk, $allFunctionDefs, $VerbosePreference, $ReturnTranscript, $Argument)
+
+        foreach ($functionDef in $allFunctionDefs) {
+            . ([ScriptBlock]::Create($functionDef))
+        }
+
         $TranscriptPath = "$ENV:TEMP\Invoke-AsSYSTEM_$(Get-Random).log"
+
         if ($Argument -or $ReturnTranscript) {
+            # define passed variables
             if ($Argument) {
+                # convert hash to variables text definition
                 $VariableTextDef = Create-VariableTextDefinition $Argument
             }
+
             if ($ReturnTranscript) {
+                # modify scriptBlock to contain creation of transcript
                 $TranscriptStart = "Start-Transcript $TranscriptPath"
                 $TranscriptEnd = 'Stop-Transcript'
             }
 
-            # Create a new script block with the transcript and any arguments
             $ScriptBlockContent = ($TranscriptStart + "`n`n" + $VariableTextDef + "`n`n" + $ScriptBlock.ToString() + "`n`n" + $TranscriptEnd)
+            Write-Verbose "####### SCRIPTBLOCK TO RUN"
+            Write-Verbose $ScriptBlockContent
+            Write-Verbose "#######"
             $scriptBlock = [Scriptblock]::Create($ScriptBlockContent)
         }
 
-        # Write the script block to a temporary file if it's too large or cacheToDisk is set
         if ($CacheToDisk) {
             $ScriptGuid = New-Guid
             $null = New-Item "$($ENV:TEMP)\$($ScriptGuid).ps1" -Value $ScriptBlock -Force
-            $pwshcommand = "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$($ENV:TEMP)\$($ScriptGuid).ps1`""
+            $pwshcommand = "-ExecutionPolicy Bypass -Window Hidden -noprofile -file `"$($ENV:TEMP)\$($ScriptGuid).ps1`""
         } else {
             $encodedcommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ScriptBlock))
-            $pwshcommand = "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -EncodedCommand $($encodedcommand)"
+            $pwshcommand = "-ExecutionPolicy Bypass -Window Hidden -noprofile -EncodedCommand $($encodedcommand)"
         }
 
-        # Create and run the scheduled task
-        $taskName = "RunAsSystem_" + (Get-Random)
-        $A = New-ScheduledTaskAction -Execute "$($ENV:windir)\system32\WindowsPowerShell\v1.0\powershell.exe" -Argument $pwshcommand
-        $P = New-ScheduledTaskPrincipal -UserId $runAs -LogonType ServiceAccount
-        $S = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd
+        $OSLevel = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentVersion
+        if ($OSLevel -lt 6.2) { $MaxLength = 8190 } else { $MaxLength = 32767 }
+        if ($encodedcommand.length -gt $MaxLength -and $CacheToDisk -eq $false) {
+            throw "The encoded script is longer than the command line parameter limit. Please execute the script with the -CacheToDisk option."
+        }
 
         try {
-            $null = New-ScheduledTask -Action $A -Principal $P -Settings $S -ErrorAction Stop | Register-ScheduledTask -Force -TaskName $taskName -ErrorAction Stop
+            #region create&run sched. task
+            $A = New-ScheduledTaskAction -Execute "$($ENV:windir)\system32\WindowsPowerShell\v1.0\powershell.exe" -Argument $pwshcommand
+            if ($runAs -match "\$") {
+                # pod gMSA uctem
+                $P = New-ScheduledTaskPrincipal -UserId $runAs -LogonType Password
+            } else {
+                # pod systemovym uctem
+                $P = New-ScheduledTaskPrincipal -UserId $runAs -LogonType ServiceAccount
+            }
+            $S = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd
+            $taskName = "RunAsSystem_" + (Get-Random)
+            try {
+                $null = New-ScheduledTask -Action $A -Principal $P -Settings $S -ea Stop | Register-ScheduledTask -Force -TaskName $taskName -ea Stop
+            } catch {
+                if ($_ -match "No mapping between account names and security IDs was done") {
+                    throw "Account $runAs doesn't exist or cannot be used on $env:COMPUTERNAME"
+                } else {
+                    throw "Unable to create helper scheduled task. Error was:`n$_"
+                }
+            }
+
+            # run scheduled task
             Start-Sleep -Milliseconds 200
             Start-ScheduledTask $taskName
 
-            # Wait for the task to complete
-            Write-Verbose "Waiting for scheduled task to complete..."
+            # wait for sched. task to end
+            Write-Verbose "waiting on sched. task end ..."
             $i = 0
-            while (((Get-ScheduledTask $taskName -ErrorAction SilentlyContinue).State -ne "Ready") -and $i -lt 500) {
+            while (((Get-ScheduledTask $taskName -ErrorAction silentlyContinue).state -ne "Ready") -and $i -lt 500) {
                 ++$i
                 Start-Sleep -Milliseconds 200
             }
 
-            # Get the task result code
+            # get sched. task result code
             $result = (Get-ScheduledTaskInfo $taskName).LastTaskResult
+            Write-Verbose "Task result: $result"
 
-            # If returnTranscript was set, get the transcript content
+            # read & delete transcript
             if ($ReturnTranscript) {
+                # return just interesting part of transcript
                 if (Test-Path $TranscriptPath) {
-                    $transcriptContent = (Get-Content $TranscriptPath -Raw) -Split [regex]::Escape('**********************')
-                    ($transcriptContent[2] -Split "`n" | Select-Object -Skip 2 | Select-Object -SkipLast 3) -Join "`n"
+                    $transcriptContent = (Get-Content $TranscriptPath -Raw) -Split [regex]::escape('**********************')
+                    # return command output
+                    ($transcriptContent[2] -split "`n" | Select-Object -Skip 2 | Select-Object -SkipLast 3) -join "`n"
+
                     Remove-Item $TranscriptPath -Force
                 } else {
                     Write-Warning "There is no transcript, command probably failed!"
                 }
             }
 
-            # If cacheToDisk was set, delete the temporary file
             if ($CacheToDisk) { $null = Remove-Item "$($ENV:TEMP)\$($ScriptGuid).ps1" -Force }
 
-            # Unregister (delete) the scheduled task
             try {
-                Unregister-ScheduledTask $taskName -Confirm:$false -ErrorAction Stop
+                Unregister-ScheduledTask $taskName -Confirm:$false -ea Stop
             } catch {
-                throw "Unable to unregister scheduled task $taskName. Please remove it manually"
+                throw "Unable to unregister sched. task $taskName. Please remove it manually"
             }
 
-            # If the task result code is not 0, throw an exception
             if ($result -ne 0) {
-                throw "Command did not complete successfully ($result)"
+                throw "Command wasn't successfully ended ($result)"
             }
+            #endregion create&run sched. task
         } catch {
             throw $_.Exception
         }
     }
-
 }
-
-
 
 #Endregion Functions
 
@@ -829,10 +931,10 @@ If ( -not(Test-Path $EndPointTest_folder)) {
     New-Item -Path "$EndPointTest_folder" -ItemType Directory | Out-Null
 }
 $EndPointTest_folder = $PSScriptRoot + "\NetTestEndpoints"
-$EndPoint_CSVfile = "$EndPointTest_folder\TestEndpoint_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).csv"
+$EndPoint_CSVfile = "$EndPointTest_folder\TestEndpoint_$((Get-Date -format yyyy-MMM-dd_`HH-mm).ToString()).csv"
 
 # Call the function to test the endpoints
-$NetTestResults = Test-IntuneDefenderAndOtherEndpoints | Select-Object URL, TestResult, ResultDescription
+$NetTestResults = Test-IntuneDefenderAndOtherEndpoints
 
 # @jmanuelnieto: Notify user of report fil creation.
 $msg = "`...Writing network connectivity results to CSV file."
@@ -840,8 +942,7 @@ Write-Host $msg -ForegroundColor White
 
 $NetTestResults | Export-CSV -Path $EndPoint_CSVfile -NoType
 
-<#
-$msg = "`...Testing Network connectivity to Microsoft Intune and MDE endpoints (system)."
+$msg = "`...Testing Network connectivity to Microsoft Intune and MDE endpoints (System)."
 Write-Host $msg -ForegroundColor White
 
 $EndPointTest_folder = ".\NetTestEndpoints"
@@ -850,15 +951,22 @@ If ( -not(Test-Path $EndPointTest_folder)) {
     New-Item -Path "$EndPointTest_folder" -ItemType Directory | Out-Null
 }
 $EndPointTest_folder = $PSScriptRoot + "\NetTestEndpoints"
-$EndPoint_CSVsysfile = "$EndPointTest_folder\SysTestEndpoint_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).csv"
-# Call the function to test the endpoints
-$SysNetTestResults = Invoke-AsSystem -ScriptBlock { Test-IntuneDefenderAndOtherEndpoints } -ReturnTranscript -CacheToDisk
-#$SysNetTestResults = Invoke-AsSystem { dsregcmd /status }
-$msg = "`...Writing network connectivity results to CSV file."
+$EndPoint_CSVsysfile = "$EndPointTest_folder\SysTestEndpoint_$((Get-Date -format yyyy-MMM-dd_`HH-mm).ToString()).csv"
+
+# Convert the function to a string.
+$functionString = ${function:Test-IntuneDefenderAndOtherEndpoints}.ToString()
+
+# Now insert the function into the script block.
+$ScriptBlock = [ScriptBlock]::Create(@"
+function Test-IntuneDefenderAndOtherEndpoints { $functionString }
+Test-IntuneDefenderAndOtherEndpoints -outFilePath "$EndPoint_CSVsysfile"
+"@)
+
+# Call the function as System using Invoke-AsSystem function, will test endpoint under System context.
+Invoke-AsSystem $ScriptBlock
+$msg = "`...Finished testing as SYSYTEM, results should be on CSV file, in folder $EndPointTest_folder"
 Write-Host $msg -ForegroundColor White
 
-#$SysNetTestResults | Export-CSV -Path $EndPoint_CSVsysfile -NoType
-#>
 
 <# 
 =============================================================================
