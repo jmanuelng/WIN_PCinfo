@@ -14,6 +14,10 @@
     https://social.technet.microsoft.com/Forums/azure/en-US/06a7fed6-7775-4542-bf32-afbe8a48d49b/list-all-installed-appx-packages-along-with-their-display-names?forum=ITCG
     https://petri.com/how-to-back-up-and-restore-wireless-network-profiles/
 
+    To do:
+    Get start menu apps
+        Get-StartApps https://learn.microsoft.com/en-us/windows/configuration/find-the-application-user-model-id-of-an-installed-app
+        Get info to customize task bar and start menu: https://learn.microsoft.com/en-us/windows/configuration/customize-taskbar-windows-11#get-the-aumid-and-desktop-app-link-path
 
 .COMMENTS
     Should also add comment that to run script to verify 
