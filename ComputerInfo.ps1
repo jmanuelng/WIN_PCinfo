@@ -852,6 +852,145 @@ function Invoke-AsSystem {
     }
 }
 
+function Resolve-DNS {
+    <#
+    .SYNOPSIS
+    Resolve-DNS  performs DNS resolution of one or more hostnames.
+
+    .DESCRIPTION
+    The Resolve-DNS function accepts a list of hostnames and optionally, a list of DNS servers. It attempts to resolve each hostname using each DNS server, handling A records and CNAME records appropriately. 
+
+    .PARAMETERS
+    - Hostname (Mandatory): An array of hostnames that the function will attempt to resolve. 
+    - DnsServer (Optional): An array of DNS server IP addresses to use for the resolution. If this parameter is not provided, the function will use the DNS servers configured on the local host.
+
+    .FUNCTIONALITY
+    The function iterates over each hostname in the Hostname parameter. If no DNS servers are provided in the DnsServer parameter, it retrieves the default DNS server(s) configured on the local host. 
+    For each hostname, it attempts to resolve the name using the provided or default DNS servers. The function checks if the response is a CNAME record and if so, it resolves the CNAME to its corresponding A record. 
+        The results of the DNS query (CNAME, hostname, resolved IP address, and DNS server used) are then stored in a PSObject and outputted.
+    If the hostname is successfully resolved using a DNS server, the function breaks out of the DNS server loop and proceeds with the next hostname. 
+    If an error occurs during resolution, the function checks the exception message. If the hostname is unknown, it suggests verifying the hostname and DNS configuration. Otherwise, it outputs the exception message and proceeds with the next DNS server or hostname.
+
+    .NOTES
+    July 2023: Resolves a list of hostnames against multiple DNS servers and handle different types of DNS records like A records and CNAME records. I mainly use it for Intune projects, run it on user devices, 
+        mainly to verify if they can resolve enterpriseenrollment and enterpriseregistration record, and to find if they get authoritative answer from the DNS server that answered the query.
+        Sometimes internal DNS server have a "version" of public DNS domains.
+
+    #>
+    param (
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string[]]$Hostname,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$DnsServer
+    )
+
+    process {
+        foreach ($name in $Hostname) {
+            if (-not $DnsServer) {
+                # Get the DNS server that was used to resolve the hostname
+                $DnsServer = Get-DnsClientServerAddress -InterfaceAlias (Get-NetRoute | Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' } | Get-NetIPInterface).InterfaceAlias | Select-Object -ExpandProperty ServerAddresses
+            }
+
+            foreach ($dns in $DnsServer) {
+                try {
+                    # Resolve the hostname
+                    $dnsResponses = Resolve-DnsName -Name $name -Server $dns -ErrorAction Stop
+
+                    # Loop through each DNS response
+                    foreach ($dnsResponse in $dnsResponses) {
+                        # Determine if the DNS response is authoritative
+                        $isAuthoritative = $dnsResponse.Authority -ne $null
+
+                        # If the DNS response is a CNAME record
+                        if ($dnsResponse.QueryType -eq 'CNAME') {
+                            # Resolve the CNAME to its corresponding A record
+                            $cnameResponses = Resolve-DnsName -Name $dnsResponse.NameHost -Server $dns -ErrorAction Stop
+
+                            # Loop through each CNAME response
+                            foreach ($cnameResponse in $cnameResponses) {
+                                # Create an object to store the results
+                                $output = New-Object PSObject
+                                # Add the original CNAME, resolved hostname, IP address, DNS server, and whether the response is authoritative to the object
+                                $output | Add-Member -Type NoteProperty -Name Cname -Value $name
+                                $output | Add-Member -Type NoteProperty -Name Hostname -Value $cnameResponse.NameHost
+                                $output | Add-Member -Type NoteProperty -Name DnsResponse -Value $cnameResponse.IPAddress
+                                $output | Add-Member -Type NoteProperty -Name DnsServer -Value $dns
+                                $output | Add-Member -Type NoteProperty -Name IsAuthoritative -Value $isAuthoritative
+                                # Output the object
+                                $output
+                            }
+                        } else {
+                            # If the DNS response is not a CNAME record
+                            # Create a similar object to store the results
+                            $output = New-Object PSObject
+                            # Add the hostname, IP address, DNS server, and whether the response is authoritative to the object
+                            $output | Add-Member -Type NoteProperty -Name Hostname -Value $name
+                            $output | Add-Member -Type NoteProperty -Name DnsResponse -Value $dnsResponse.IPAddress
+                            $output | Add-Member -Type NoteProperty -Name DnsServer -Value $dns
+                            $output | Add-Member -Type NoteProperty -Name IsAuthoritative -Value $isAuthoritative
+                            # Output the object
+                            $output
+                        }
+                    }
+                }
+                catch {
+                    if ($_.Exception.Message -like "*No such host is known*") {
+                        Write-Host "Unable to resolve hostname $($name) using DNS server $dns. Please verify that the hostname is correct and that your DNS settings are configured correctly." -ForegroundColor Red
+                    }
+                    else {
+                        Write-Host "An error occurred while resolving hostname $($name) using DNS server $($dns): $_" -ForegroundColor Red
+                    }
+                }
+            }
+        }
+    }
+}
+
+Function Get-AADAccounts {
+    <#
+    .SYNOPSIS
+        Get the Azure AD accounts from the local device, excluding the default account.
+
+    .DESCRIPTION
+        July 2023: This script will fetch all Azure AD accounts from the local machine using 'dsregcmd /listaccounts' command.
+        The command output is parsed to get the UserPrincipalNames. The account listed as the default is excluded from the result.
+
+    .EXAMPLE
+        PS C:\> Get-AADAccounts
+
+        This command gets all Azure AD accounts from the local machine, excluding the default account.
+
+    .NOTES
+        Always ensure you have appropriate permissions to run 'dsregcmd' command before executing the script.
+    #>
+    param ()
+
+    # Run dsregcmd /listaccounts and capture the output
+    try {
+        $output = & dsregcmd /listaccounts 2>&1 -ErrorAction Stop
+    }
+    catch {
+        Write-Host "Error running dsregcmd /listaccounts. Do you have administrative permissions?" -ForegroundColor Red
+        return $null
+    }
+
+    # Parse the output to get the UserPrincipalName
+    $UserLines = $output | Where-Object { $_ -match "Account: " -and $_ -notmatch "Default account: " }
+
+    if ($null -eq $UserLines) {
+        Write-Host "No Azure AD accounts found." -ForegroundColor Yellow
+        return @()
+    }
+
+    # Extract UPNs from lines and return as an array
+    $UPNs = $UserLines | ForEach-Object {
+        ($_ -split ",")[1].Trim().Substring(6)  # Extracts UPN from the string 'user: user.id@domain.com'
+    }
+
+    return $UPNs
+}
+
 #Endregion Functions
 
 #Region Main
@@ -879,7 +1018,11 @@ Else
 
 
 #region Main SystemConfig
-
+<# 
+=============================================================================
+                      System Configuration          
+=============================================================================
+#>
 # ===========   @jmanuelnieto: System data collection.   ===========
 
 # @jmanuelnieto: Collect DSReg status info
@@ -1004,7 +1147,7 @@ $msg = "`...Getting BIOS information."
 Write-Host $msg -ForegroundColor White
 
 # @jmanuelnieto: Banner and heading to distinguish this section in Output File.
-$logTitle = "BIOS Information"
+$logTitle = "BIOS and TPM Information"
 
 # @jmanuelnieto: Get BIOS and TPM information. This is to understand if the system has TPM, and what version.
 $PC_biostpm = Get-BiosTpm
@@ -1108,6 +1251,48 @@ netsh wlan export profile key=clear folder="$NET_folder"
 # Write info from PS commands to a log file.
 Write-Log -Log "$NET_adapter `n`n  $NET_connection" -Filename $NET_infofile -Title $logTitle
 
+#endregion Main Network
+
+<# 
+=============================================================================
+                      Azure AD Account(s)          
+=============================================================================
+#>
+
+$msg = "`...Getting Azure AD account information and details."
+Write-Host $msg -ForegroundColor White
+
+# @jmanuelnieto: Banner and heading to distinguish this section in Output File.
+$logTitle = "Azure AD accounts(s) Details" 
+
+$AAD_folder = ".\AADaccounts"
+Test-FolderExists -Folder $AAD_folder
+
+$AAD_logfile = "$AAD_folder\AadAccounts_$((Get-Date -format yyyy-MMM-dd_`HH-mm).ToString()).txt"
+
+# Call the function to get all Azure AD accounts except the default one
+$UPNs = Get-AADAccounts
+
+# Check if there are any accounts returned by the function
+if ($UPNs.Count -gt 0) {
+    # At least one UPN found, write the first line of log to multi-line string variable
+    $AadLog = "Found Azure AD accounts: `n`n"
+    # If accounts found, add each account to the multi-line string
+    foreach ($UPN in $UPNs) {
+        $AadLog += "$UPN `n"
+    }
+} else {
+    # If no accounts found, add a corresponding message to the string
+    $AadLog += "No Azure AD accounts found. `n"
+}
+
+# @jmanuelnieto: It then adds Policies information to file.
+$msg = "`...Wiritng Azure AD account details to report."
+Write-Host $msg -ForegroundColor White
+
+# Write info to a log file.
+Write-Log -Log $AadLog -Filename $AAD_logfile -Title $logTitle
+
 
 <# 
 =============================================================================
@@ -1119,10 +1304,8 @@ $msg = "`...Testing Network connectivity to Microsoft Intune and MDE endpoints (
 Write-Host $msg -ForegroundColor White
 
 $EndPointTest_folder = ".\NetTestEndpoints"
-If ( -not(Test-Path $EndPointTest_folder)) {  
-    #Create folder if it does not exist
-    New-Item -Path "$EndPointTest_folder" -ItemType Directory | Out-Null
-}
+Test-FolderExists -Folder $EndPointTest_folder
+
 $EndPointTest_folder = $PSScriptRoot + "\NetTestEndpoints"
 $EndPoint_CSVfile = "$EndPointTest_folder\TestEndpoint_$((Get-Date -format yyyy-MMM-dd_`HH-mm).ToString()).csv"
 
@@ -1138,12 +1321,6 @@ $NetTestResults | Export-CSV -Path $EndPoint_CSVfile -NoType
 $msg = "`...Testing Network connectivity to Microsoft Intune and MDE endpoints (System)."
 Write-Host $msg -ForegroundColor White
 
-$EndPointTest_folder = ".\NetTestEndpoints"
-If ( -not(Test-Path $EndPointTest_folder)) {  
-    #Create folder if it does not exist
-    New-Item -Path "$EndPointTest_folder" -ItemType Directory | Out-Null
-}
-$EndPointTest_folder = $PSScriptRoot + "\NetTestEndpoints"
 $EndPoint_CSVsysfile = "$EndPointTest_folder\SysTestEndpoint_$((Get-Date -format yyyy-MMM-dd_`HH-mm).ToString()).csv"
 
 # Convert the function to a string.
@@ -1163,6 +1340,84 @@ Write-Host $msg -ForegroundColor White
 
 <# 
 =============================================================================
+                    EnterpriseEnrollment DNS Resolution          
+=============================================================================
+#>
+
+$msg = "`...Testing DNS resolution to EneterpriseEnrollment and EnterpriseRegistration."
+Write-Host $msg -ForegroundColor White
+
+# @jmanuelnieto: Banner and heading to distinguish this section in Output File.
+$logTitle = "EnterpriseEnrollment DNS Resolution" 
+
+$EndPointTest_folder = ".\NetTestEndpoints"
+Test-FolderExists -Folder $EndPointTest_folder
+
+$EndPointTest_folder = $PSScriptRoot + "\NetTestEndpoints"
+$defaultDNS_logfile = "$EndPointTest_folder\DefaultDNS_$((Get-Date -format yyyy-MMM-dd_`HH-mm).ToString()).csv"
+$knownDNS_logfile = "$EndPointTest_folder\KnownDNS_$((Get-Date -format yyyy-MMM-dd_`HH-mm).ToString()).csv"
+
+# Print out the UPNs
+if ($UPNs.Count -gt 0) {
+    # Define a list of hostnames for testing
+    $hostnames = @()
+
+    # Get Username for logged on user
+    foreach ($UPN in $UPNs) {
+        # Get the Username
+        $username = $UPN
+
+        # Split the username at the '@' to get the domain
+        $domain = $username.Split("@")[1]
+
+        # Create the hostnames
+        $hostname1 = "enterpriseregistration.$domain"
+        $hostname2 = "enterpriseenrollment.$domain"
+
+        # Add the new hostnames to the hostnames list
+        $hostnames += $hostname1, $hostname2
+    }
+
+    # Test the function with the default DNS server
+    Write-Host "`tTesting with the default DNS server"
+    $defaultDNS_log = Resolve-DNS -Hostname $hostnames
+    $defaultDNS_log | Export-CSV -Path $defaultDNS_logfile -NoType
+
+
+    # Test the function with a specific DNS server
+    $dnsServer = @(
+        "8.8.8.8",      # Google's public DNS server for example
+        "8.8.4.4",      # Google DNS
+        "1.1.1.1",      # Cloudflare DNS
+        "1.0.0.1",      # Cloudflare DNS
+        "9.9.9.9",      # Quad9
+        "64.6.64.6",    # Verisign DNS
+        "64.6.65.6",    # Verisign DNS
+        "208.67.222.222",   # OpenDNS
+        "208.67.220.220",   # OpenDNS
+        "149.112.112.112"   # Quad9
+    )
+
+    $dnsServerString = $dnsServer -join ', '
+    Write-Host "`tTesting with DNS Server(s) $($dnsServerString)"
+    $knownDNS_log = Resolve-DNS -Hostname $hostnames -DnsServer $dnsServer
+    $knownDNS_log | Export-CSV -Path $knownDNS_logfile -NoType
+    
+}
+else {
+    # If no accounts exist, add a corresponding message to the string
+    Write-Host "`tNo Azure AD accounts found. `n"
+}
+
+# @jmanuelnieto: It then adds Policies information to file.
+$msg = "`...Wiritng DNS test results to report."
+Write-Host $msg -ForegroundColor White
+
+
+
+
+<# 
+=============================================================================
                       Device Software Inventory          
 =============================================================================
 #>
@@ -1172,10 +1427,7 @@ $msg = "`...Getting Software Inventory."
 Write-Host $msg -ForegroundColor White
 
 $SW_folder = "Software"
-If ( -not(Test-Path $SW_folder)) {  
-    #Create folder if it does not exist
-    New-Item -Path ".\$SW_folder" -ItemType Directory | Out-Null
-}
+Test-FolderExists -Folder $SW_folder
 
 # Call software inventory function and write results to CSV file
 $PC_swReport = Get-InstalledSoftware | Select-Object Name, Version, Vendor, PackageName, InstallDate, Description, InstallLocation, InstallSource, InventorySource
@@ -1203,13 +1455,10 @@ If (fnDetectLaptop)
         
         $BAT_folder = ".\Battery"
         Write-Host $msg -ForegroundColor White
-        If ( -not(Test-Path $BAT_folder)) {
-            #Create folder if it does not exist
-            New-Item -Path "$BAT_folder" -ItemType Directory | Out-Null
-        }        
+        Test-FolderExists -Folder $BAT_folder       
         
-        $batreportHtml = "$BAT_folder\BatteryReport_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).html"
-        Powercfg /batteryreport /output $batreportHtml | Out-Null
+        $batteryreportHtml = "$BAT_folder\BatteryReport_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).html"
+        Powercfg /batteryreport /output $batteryreportHtml | Out-Null
     }
 
 
