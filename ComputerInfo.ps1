@@ -26,6 +26,151 @@
 #>
 
 #region Functions
+
+function Test-FolderExists {
+    <#
+    .SYNOPSIS
+        Checks if a specified folder exists, and if it doesn't, creates it.
+
+    .DESCRIPTION
+        The function takes a parameter 'Folder', which specifies the path to the folder.
+        If the folder does not exist, the function creates it.
+        The function determines if the 'Folder' parameter is a full path or relative path based on the presence of a slash character.
+        If the 'Folder' parameter does not contain a slash, it is treated as a relative path from the current directory.
+        
+    .PARAMETER Folder
+        The path to the folder to check or create. This can be a full path or a relative path.
+        
+    .EXAMPLE
+        Test-FolderExists -Folder "Config"
+        Ensures that a folder named 'Config' exists in the current directory.
+        
+    .EXAMPLE
+        Test-FolderExists -Folder "C:\Config"
+        Ensures that a folder named 'Config' exists in the root of the C drive.
+    #>
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)]
+        [string] $Folder
+    )
+
+    try {
+        # Check if the 'Folder' parameter contains a slash. If not, treat it as a relative path from the current directory.
+        if ($Folder -notmatch '\\') {
+            $Folder = ".\$Folder"
+        }
+
+        # Check if the folder exists
+        if (-not (Test-Path $Folder)) {
+            # If the folder does not exist, create it
+            New-Item -Path $Folder -ItemType Directory -Force | Out-Null
+        } 
+    } catch {
+        # Catch and display any errors that occurred during execution
+        Write-Host "An error occurred: $_" -ForegroundColor Red
+    }
+}
+
+function Write-Log {
+    <#
+    .SYNOPSIS
+    This function writes log information to a specified file.
+
+    .DESCRIPTION
+    The function accepts log data, a file path and an optional title.
+    It formats the log data and writes it to the file. If a title is provided,
+    it creates a formatted header and footer using the title. An additional
+    optional parameter allows the user to specify whether they want to add
+    the header, the footer, both, or none to the output file.
+
+    .PARAMETER Log
+    The log data to be written to the file.
+
+    .PARAMETER Filename
+    The path of the file where the log data will be written.
+
+    .PARAMETER Title
+    The title to be used for the header and footer. If not provided, no header or footer will be added.
+
+    .PARAMETER HeaderFooter
+    An optional parameter specifying whether to add Title to the header ("H"), or to the footer ("F"), both (not provided or any other value), or none ("").
+
+    .EXAMPLE
+    Write-Log -Log $LogData -Filename "log.txt" -Title "Log Title" -HeaderFooter "H"
+    #>
+
+    param (
+        [Parameter(Mandatory=$false)]
+        [Object]$Log,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Filename,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Title,
+
+        [Parameter(Mandatory=$false)]
+        [ValidateSet("H","F","")]
+        [string]$HeaderFooter
+    )
+
+    # If Log is null or empty, return without doing anything
+    if ([string]::IsNullOrEmpty($Log)) {
+        return
+    }
+
+    # Convert the Log object to a string
+    $Log = $Log | Out-String
+
+    # Define the total line length
+    $lineLength = 200
+
+    # Check if Title is provided and not empty
+    if (![string]::IsNullOrEmpty($Title)) {
+        # Calculate the amount of padding needed on either side of the title to center it
+        $padding = ($lineLength - $Title.Length) / 2
+
+        # Create the banner and footer with the centered title
+        $logBanner = "=" * $lineLength
+        $logBanner += "`n" + (" " * [math]::Floor($padding)) + $Title + (" " * [math]::Ceiling($padding))
+        $logBanner += "`n" + "=" * $lineLength + "`n`n"
+
+        $logFooter = "`n`n" + "=" * $lineLength
+        $logFooter += "`n" + (" " * [math]::Floor($padding)) + $Title + (" " * [math]::Ceiling($padding))
+        $logFooter += "`n" + "=" * $lineLength + "`n`n`n`n"
+
+        # Write the log information, banner and footer to the output file
+        try {
+            if ($HeaderFooter -ne "F") {
+                Out-File -FilePath $Filename -InputObject $logBanner -Encoding ASCII -Append # If file already exists it will append.
+            }
+
+            Out-File -FilePath $Filename -InputObject $Log -Encoding ASCII -Append
+
+            if ($HeaderFooter -ne "H") {
+                Out-File -FilePath $Filename -InputObject $logFooter -Encoding ASCII -Append
+            }
+        }
+        catch {
+            # Catch any errors that occurred during the execution and print to the console
+            Write-Host "An error occurred while writing to the log file: $_" -ForegroundColor Red
+        }
+    }
+    else {
+        # Write only log information to the output file, as Title was not provided
+        try {
+            Out-File -FilePath $Filename -InputObject $Log -Encoding ASCII -Append
+        }
+        catch {
+            # Catch any errors that occurred during the execution and print to the console
+            Write-Host "An error occurred while writing to the log file: $_" -ForegroundColor Red
+        }
+    }
+}
+
+
 function fnGetMachineType {
     $ComputerSystemInfo = Get-WmiObject -Class Win32_ComputerSystem
     switch ($ComputerSystemInfo.Model) { 
@@ -301,22 +446,60 @@ function Test-IntuneDefenderAndOtherEndpoints {
 
     # List of required service endpoints
     $allEndpoints = @(
-        "https://portal.azure.com",
-        "https://login.microsoftonline.com",
-        # ... Include all endpoints here ...
-        "https://portal.azure.com",
-        "https://login.microsoftonline.com",
-        "https://enterpriseregistration.windows.net",
-        "https://mam.manage.microsoft.com"
+        #  **Intune Service**
+        "https://manage.microsoft.com",
+        "https://prod.do.dsp.mp.microsoft.com",
+        "https://device.listener.prod.microsoft.com",
+        "https://device.listener.prod.eudb.microsoft.com",
+        "https://payload.prod.blob.core.windows.net",
+        "https://intune.cdn.pea.sd.azureedge.net",
+        "https://mam.manage.microsoft.com",
         "https://manage.microsoft.com",
         "https://policy.manage.microsoft.com",
         "https://device.manage.microsoft.com",
         "https://provisioning.manage.microsoft.com",
         "https://portal.manage.microsoft.com",
         "https://diagnostics.manage.microsoft.com",
+        "https://enterpriseregistration.windows.net",
+        "https://enterpriseenrollment-s.manage.microsoft.us"
+        "https://mam.manage.microsoft.com",
+        
+        # **Threat and Vulnerability Management (TVM)**
         "https://us.tip.manage.microsoft.com",
         "https://eu.tip.manage.microsoft.com",
         "https://apac.tip.manage.microsoft.com",
+        
+        #  **Windows Update and Delivery Optimization**
+        "http://windowsupdate.com",
+        "https://dl.delivery.mp.microsoft.com",
+        "https://update.microsoft.com",
+        "https://delivery.mp.microsoft.com",
+        "https://tsfe.trafficshaping.dsp.mp.microsoft.com",
+        "https://emdl.ws.microsoft.com",
+        "https://do.dsp.mp.microsoft.com",
+        "http://ctldl.windowsupdate.com",
+        "https://ctldl.windowsupdate.com",
+        "https://geo-prod.do.dsp.mp.microsoft.com",
+        
+        # **Push Notifications**
+        "https://notify.windows.com",
+        "https://wns.windows.com",
+
+        # **NTP Sync**
+        "http://time.windows.com",
+
+        # **Scripts**
+        "http://www.msftconnecttest.com",
+        "http://www.msftncsi.com",
+
+        # **Win32 Apps**
+        "https://s.microsoft.com",
+
+        #Other services, or I don't know the related service
+        "https://portal.azure.com",
+        "https://login.microsoftonline.com",
+
+        # **Microsoft Defender for Endpoint
         "https://winatp-gw-cus.microsoft.com",
         "https://winatp-gw-eus.microsoft.com",
         "https://winatp-gw-weu.microsoft.com",
@@ -325,6 +508,8 @@ function Test-IntuneDefenderAndOtherEndpoints {
         "https://winatp-gw-ukw.microsoft.com",
         "https://winatp-gw-usgv.microsoft.com",
         "https://winatp-gw-usgt.microsoft.com",
+        
+        # **Windows Telemetry**
         "https://eu.vortex-win.data.microsoft.com",
         "https://us.vortex-win.data.microsoft.com",
         "https://uk.vortex-win.data.microsoft.com",
@@ -335,29 +520,79 @@ function Test-IntuneDefenderAndOtherEndpoints {
         "https://us-v20.events.data.microsoft.com",
         "https://us4-v20.events.data.microsoft.com",
         "https://us5-v20.events.data.microsoft.com",
-        "https://ctldl.windowsupdate.com",
-        "http://ctldl.windowsupdate.com",
+
+        # **Software Licensing Service (SLS)**
         "https://validation-v2.sls.microsoft.com",
         "https://validation.sls.microsoft.com",
-        "https://purchase.mp.microsoft.com",
-        "https://purchase.md.mp.microsoft.com",
-        "https://login.live.com",
-        "https://licensing.md.mp.microsoft.com",
-        "https://licensing.mp.microsoft.com",
-        "https://go.microsoft.com",
-        "https://displaycatalog.md.mp.microsoft.com",
-        "https://displaycatalog.mp.microsoft.com",
+
+        # **Software Activation**
         "https://activation-v2.sls.microsoft.com",
         "https://activation.sls.microsoft.com",
+
+        # **Microsoft Account**
+        "https://login.live.com",
+        "https://login.windows.net",
+
+        # **Intel EKOP**
+        "https://ek.cert.spserv.microsoft.com",
         "https://ekop.intel.com",
         "https://ekcert.spserv.microsoft.com",
+
+        # **AMD FTPM**
         "https://ftpm.amd.com",
+
+        # **Device Health Attestation (DHA)**
         "https://cs.dds.microsoft.com",
-        "https://login.live.com",
+
+        # **Remote Help**
+        "https://remoteassistance.prod.acs.communication.azure.com",
+
+        # **Autopilot Self-Deploy**
         "https://ztd.dds.microsoft.com",
-        "https://emdl.ws.microsoft.com",
-        "https://dl.delivery.mp.microsoft.com",
-        "https://geo-prod.do.dsp.mp.microsoft.com"
+        "https://storeclientconfig.passport.net",
+        "https://windowsphone.com",
+        "https://approdi.me.data.hotfix.azureedge.net",
+        "https://approdi.me.data.pri.azureedge.net",
+        "https://approdi.me.data.sec.azureedge.net",
+        "https://eu.prodi.me.data.hotfix.azureedge.net",
+        "https://eu.prodi.me.data.pri.azureedge.net",
+        "https://eu.prodi.me.data.sec.azureedge.net",
+        "https://na.prodi.me.data.hotfix.azureedge.net",
+        "https://na.prodi.me.data.pri.azureedge.net",
+        "https://sw.da.01.ms.cdn.azureedge.net",
+        "https://sw.da.02.ms.cdn.azureedge.net",
+        "https://sw.db.01.ms.cdn.azureedge.net",
+        "https://sw.db.02.ms.cdn.azureedge.net",
+        "https://sw.dc.01.ms.cdn.azureedge.net",
+        "https://sw.dc.02.ms.cdn.azureedge.net",
+        "https://sw.dd.01.ms.cdn.azureedge.net",
+        "https://sw.dd.02.ms.cdn.azureedge.net",
+        "https://sw.din.01.ms.cdn.azureedge.net",
+        "https://sw.din.02.ms.cdn.azureedge.net",
+
+        # **Microsoft Store**
+        "https://purchase.mp.microsoft.com",
+        "https://purchase.md.mp.microsoft.com",
+        "https://licensing.md.mp.microsoft.com",
+        "https://licensing.mp.microsoft.com",
+        "https://displaycatalog.md.mp.microsoft.com",
+        "https://displaycatalog.mp.microsoft.com",
+
+        # ** Channel Services**
+        "https://channel.services.microsoft.com", 
+
+        # **Apple Device Management**
+        "https://itunes.apple.com",
+        "https://mzstatic.com",
+        "https://phobos.apple.com",
+        "https://5.courier-push.apple.com",
+        "https://ax.itunes.apple.com.edgesuite.net",
+        "http://ocsp.apple.com",
+        "http://phobos.itunes.apple.com.akadns.net",
+
+        # ... Include other endpoints here ...
+        # Other services, or I didn't know where to classify them
+        "https://go.microsoft.com"
     )
     
     #From https://learn.microsoft.com/en-us/mem/intune/fundamentals/intune-endpoints
@@ -643,126 +878,111 @@ Else
 	}
 
 
+#region Main SystemConfig
+
 # ===========   @jmanuelnieto: System data collection.   ===========
 
 # @jmanuelnieto: Collect DSReg status info
 # @jmanuelnieto: File name and locations to store gathered info, the "output file".
 $PC_folder = "Config"
-If ( -not(Test-Path $PC_folder)) {  
-    #Create folder if it does not exist
-    New-Item -Path ".\$PC_folder" -ItemType Directory | Out-Null
-}
+Test-FolderExists -Folder $PC_folder
 
 $PC_filename = ".\$PC_folder\ComputerInfo_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).txt"
 
+
 # == DSReg ==
+# @jmanuelnieto: Title for Banner and heading to distinguish this section in Output File.
+$logTitle = "Device Registration Troubleshooter Command Tool"
 # @jmanuelnieto: Collect DSReg status info
 # Inform user on screen
 $msg = "`...Getting DSReg information."
 Write-Host $msg -ForegroundColor White
-# @jmanuelnieto: The banner and footer to distinguish this section in Output File.
-$logBanner = "==========================================================="
-$logBanner += "          Device Registration Troubleshooter Command Tool          " 
-$logBanner += "=========================================================== `n`n"
-$logFooter = "`n`n==========================================================="
-$logFooter += "          Device Registration Troubleshooter Command Tool          "
-$logFooter += "==========================================================`n`n`n`n"
 # @jmanuelnieto: running the diagnostics in SYSTEM context is closest to the actual join scenario. 
 # To run diagnostics in SYSTEM context, the dsregcmd /status command must be run from an elevated command prompt.
 $DSreg = dsregcmd /status
 # @jmanuelnieto: Write DSReg results to output file.
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII
-Out-File -FilePath $PC_filename -InputObject $DSreg -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log $DSreg -Filename $PC_filename -Title "$logTitle"
+
 
 
 # ==== Computer Info ====
 $msg = "`...Getting systemInfo."
 Write-Host $msg -ForegroundColor White
 
-# @jmanuelnieto: Banner and heading to distinguish this section in Output File.
-$logBanner = "==========================================================="
-$logBanner += "          Computer Information          " 
-$logBanner += "===========================================================`n`n"
+# @jmanuelnieto: Title for Banner and heading to distinguish this section in Output File.
+$logTitle = "Detailed Computer, Windows and Licensing Information" 
+
+# @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
+$logHeading = " === Basic Computer information: Name, owner, domain, memory, manufacturer and model from CimInstance:`n`n" 
 
 # == Computer information, CimInstace
-# @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
-$logHeading = " === Basic Computer information: Name, owner, domain, memory, manufacturer and model from CimInstance:" 
-$logFooter = "==========`n`n"
 # @jmanuelnieto: Get basic Computer information: Name, owner, domain, memory, manufacturer and model from CimInstance
 $PC_basicinfo = Get-CimInstance -ClassName Win32_ComputerSystem
+# Add heading to Log content
+
 # @jmanuelnieto: Write CiMInstance results to output file.
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logHeading -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_basicinfo -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log "$logHeading $PC_basicinfo" -Filename $PC_filename -Title $logTitle -HeaderFooter "H"
 
-# == SystemInfo
+
+# == SystemInfo 
 # @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
-$logHeading = " === Complete Computer information using ""systeminfo"":" 
-$logFooter = "==========`n`n"
+$logHeading = " === Complete Computer information using ""systeminfo"": `n`n" 
+
 # @jmanuelnieto: Get detailed System Information using "systeminfo" command
 # Displays detailed configuration information about a computer and its operating system, including operating system configuration, security information, product ID, and hardware properties (such as RAM, disk space, and network cards).
 # Systeminfo /fo = Format output to CSV.
 # | Forma-List = Capture the output, convert it to a list to append to Output file
-$PC_systeminfo = Systeminfo /fo CSV | ConvertFrom-CSV | Format-List
+$PC_systeminfo = Systeminfo /fo CSV | ConvertFrom-CSV | Format-List | Out-String
 # @jmanuelnieto: Write SystemInfo results to output file.
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logHeading -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_systeminfo -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log "$logHeading $PC_systeminfo" -Filename $PC_filename
+
 
 # == Complete System Information from WmiObject ComputerSystemProduct
 # @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
-$logHeading = " === Complete Computer information using ""WmiObject ComputerSystemProduct"":" 
-$logFooter = "==========`n`n"
+$logHeading = " === Complete Computer information using ""WmiObject ComputerSystemProduct"": `n`n" 
+
 # The Win32_ComputerSystemProduct WMI class represents a product. This includes software and hardware used on the computer system.
-$PC_product = Get-WmiObject -Class Win32_ComputerSystemProduct | Format-List -Property *
+$PC_product = Get-WmiObject -Class Win32_ComputerSystemProduct | Format-List -Property * | Out-String
 # @jmanuelnieto: Write Win32_ComputerSystemProduct results to output file.
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logHeading -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_product -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log "$logHeading $PC_product" -Filename $PC_filename
 
 
 # == Complete System Information from WmiObject ComputerSystem
 # @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
 $logHeading = " === Complete Windows information using ""WmiObject ComputerSystem"":" 
-$logFooter = "==========`n`n"
+
 # The Win32_ComputerSystem WMI class represents a computer system running Windows.
-$PC_system = Get-WmiObject -Class Win32_ComputerSystem | Format-List -Property *
+$PC_system = Get-WmiObject -Class Win32_ComputerSystem | Format-List -Property * | Out-String
 # @jmanuelnieto: Write Win32_ComputerSystem results to output file.
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logHeading -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_system -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log "$logHeading $PC_system" -Filename $PC_filename
 
 
 # == Software Licensing Tool
 # @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
 $logHeading = " === Software Licensing Management Tool, get license and activation information: `n" 
-$logFooter = "==========`n`n"
+
 # @jmanuelnieto: Get path to slmgr.vbs (Software Licensing Management Tool) script, and then execute script. 
 # @jmanuelnieto: used with /dlv to display license information for the installed active Windows.
 [string]$slmgrPath = Get-ChildItem -Path Env:\windir | Select-Object -ExpandProperty Value
 $slmgrPath += "\System32\slmgr.vbs"
-$PC_actinfo = cscript $slmgrPath /dlv
+$PC_actinfo = cscript $slmgrPath /dlv | Out-String
 # @jmanuelnieto: Write Software Licensing Management Tool results to output file.
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logHeading -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_actinfo -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log "$logHeading $PC_actinfo" -Filename $PC_filename
 
 
 # == Windows License details
 # @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
 $logHeading = " === License keys details from CimInstance, license information:" 
-$logFooter = "==========`n`n"
+
 # @jmanuelnieto: Get Windows keys detail information. This includes Firmware OEM License. 
 # Upgrade to Enterprise requires Activation Keys. More info: https://docs.microsoft.com/en-us/windows/deployment/deploy-enterprise-licenses
-$PC_winlicenseexpanded = Get-CimInstance -ClassName SoftwareLicensingService | Format-List -Property *
+$PC_winlicenseexpanded = Get-CimInstance -ClassName SoftwareLicensingService | Format-List -Property * | Out-String
 # @jmanuelnieto: Get Windows Firmware Embedded Activation Key (OEM Windows licenses), if blank, system does not have OEM license
 $PC_winlicense = Get-CimInstance -ClassName SoftwareLicensingService | Select-Object -ExpandProperty OA3xOriginalProductKey
 If( $PC_winlicense -eq "") 
@@ -774,11 +994,9 @@ Else
         $PC_winlicense = "`n`nOA3xOriginalProductKey = " + $PC_winlicense + "`n"
     }
 # @jmanuelnieto: Write License keys detailed results to output file.
-# Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logHeading -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_winlicenseexpanded -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_winlicense -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+# Writing result to file after execution in case user cancels before ending execution.
+Write-Log -Log "$logHeading $PC_winlicenseexpanded $PC_winlicense" -Filename $PC_filename -Title $logTitle -HeaderFooter "F"
+
 # === This is the end of System configuration info
 
 # ======= BIOS Info =======
@@ -786,10 +1004,7 @@ $msg = "`...Getting BIOS information."
 Write-Host $msg -ForegroundColor White
 
 # @jmanuelnieto: Banner and heading to distinguish this section in Output File.
-$logBanner = "==========================================================="
-$logBanner += "          BIOS Information          " 
-$logBanner += "===========================================================`n`n"
-$logFooter = "`n`n==========`n`n"
+$logTitle = "BIOS Information"
 
 # @jmanuelnieto: Get BIOS and TPM information. This is to understand if the system has TPM, and what version.
 $PC_biostpm = Get-BiosTpm
@@ -799,9 +1014,7 @@ $msg = "`...Wiritng BIOS report."
 Write-Host $msg -ForegroundColor White
 
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_biostpm -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log $PC_biostpm -Filename $PC_filename -Title $logTitle
 
 # === End of BIOS information
 
@@ -810,41 +1023,28 @@ $msg = "`...Getting Network Shares and Network Drives information."
 Write-Host $msg -ForegroundColor White
 
 # @jmanuelnieto: Banner and heading to distinguish this section in Output File.
-$logBanner = "==========================================================="
-$logBanner += "          Shared Folders and Network Drives Information          " 
-$logBanner += "===========================================================`n`n"
-$logSpacing = "`n`n"
-$logHeading01 = " === Shared folders report using CimInstance:"
-$logHeading02 = " === Connected Network drives report:"
-$logFooter = "`n`n==========`n`n"
+$logTitle = "Shared Folders and Network Drives Information" 
+$logHeading01 = " === Shared folders report using CimInstance:`n"
+$logHeading02 = " === Connected Network drives report:`n"
+
 
 # Calls funcion to get Shares report.
-$PC_Shares = Get-SharedFoldersInventory | Format-Table
+$PC_Shares = Get-SharedFoldersInventory | Format-Table | Out-String
 # Calls the function to get Netowkr Drive info.
-$PC_NetDrives = Get-NetworkDrivesInventory | Format-Table
-
-
+$PC_NetDrives = Get-NetworkDrivesInventory | Format-Table | Out-String
 
 # @jmanuelnieto: It then adds BIOS and TPM info to file.
 $msg = "`...Wiritng Shares and Network Drives reporte."
 Write-Host $msg -ForegroundColor White
 
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logHeading01 -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_Shares -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logSpacing -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logHeading02 -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_NetDrives -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log "$logHeading01 $PC_Shares $logHeading02 $PC_NetDrives" -Filename $PC_filename -Title $logTitle
+
 
 # === End of Shares and Network Drives information.
 
 # @jmanuelnieto: Banner and heading to distinguish this section in Output File.
-$logBanner = "==========================================================="
-$logBanner += "          Group and Local Policies Information          " 
-$logBanner += "===========================================================`n`n"
-$logFooter = "`n`n==========`n`n"
+$logTitle = "Group and Local Policies Information" 
 
 # @jmanuelnieto: Get info for applied policies on device, it will list Local and Domain policies applied.
 $PC_GpoInfo = Get-GPOInventory | Format-Table
@@ -854,17 +1054,13 @@ $msg = "`...Wiritng Policies report."
 Write-Host $msg -ForegroundColor White
 
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_GpoInfo -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log $PC_GpoInfo -Filename $PC_filename -Title $logTitle
+
 
 # === End of Policies information
 
 # @jmanuelnieto: Banner and heading to distinguish this section in Output File.
-$logBanner = "==========================================================="
-$logBanner += "          Installed Printers Information          " 
-$logBanner += "===========================================================`n`n"
-$logFooter = "`n`n==========`n`n"
+$logTitle = "Installed Printers Information" 
 
 # @jmanuelnieto: Get installed printers information. 
 $PC_Printers = Get-PrinterInventory | Format-Table
@@ -874,51 +1070,44 @@ $msg = "`...Wiritng Installed printers report."
 Write-Host $msg -ForegroundColor White
 
 # Writing result to file after execution in case user cancels before ending execution. 
-Out-File -FilePath $PC_filename -InputObject $logBanner -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $PC_Printers -Encoding ASCII -Append
-Out-File -FilePath $PC_filename -InputObject $logFooter -Encoding ASCII -Append
+Write-Log -Log $PC_Printers -Filename $PC_filename -Title $logTitle
+
 
 # === End of Printers information
 
+#endregion Main SystemConfig
+
+#region Main Network
 
 # ===========   @jmanuelnieto: Networking details.   ===========
 
 # @jmanuelnieto: Banner and heading to distinguish this section in Output File.
-$logBanner = "==========================================================="
-$logBanner += "          Network Adapter Info          " 
-$logBanner += "===========================================================`n`n"
+$logTitle = "Network Adapter Info" 
 
 # == Network information, Get-NetAdapter, netsh
 # @jmanuelnieto: Heading and Footer to distinguish this section in Output File.
 $logHeading = " === Detailed network information from PS Get-NetAdapters" 
-$logFooter = "==========`n`n"
 
 $NET_folder = ".\Network"
-If ( -not(Test-Path $NET_folder)) {  
-    #Create folder if it does not exist
-    New-Item -Path "$NET_folder" -ItemType Directory | Out-Null
-}
-$NET_folder = $PSScriptRoot + "\Network"
+Test-FolderExists -Folder $NET_folder
+
+$NET_folder = $PSScriptRoot + "\Network" # Had issues using netsh with relative Path
 $NET_infofile = "$NET_folder\Networkinfo_$((Get-Date -format yyyy-MMM-dd-ddd` hh-mm` tt).ToString()).txt"
 
 
 # @jmanuelnieto: get network adapters list
-$NET_adapter = Get-NetAdapter | Format-List -Property *
+$NET_adapter = Get-NetAdapter | Format-List -Property * | Out-String
 
 # @jmanuelnieto: get profile information for connected netwrok adapter using PS command
-$NET_connection = Get-NetConnectionProfile | Format-List -Property *
+$NET_connection = Get-NetConnectionProfile | Format-List -Property * | Out-String
 
 # @jmanuelnieto: get Lan and WLan profiles with netsh
 # @jmanuelnieto: netsh is used to get a list of all profiles, stores the list in a TXT file, puts in a folder
 netsh wlan export profile key=clear folder="$NET_folder"
 
 # Write info from PS commands to a log file.
-Out-File -FilePath $NET_infofile -InputObject $logBanner -Encoding Default -Append
-Out-File -FilePath $NET_infofile  -InputObject $logHeading -Encoding Default -Append
-Out-File -FilePath $NET_infofile -InputObject $NET_adapter -Encoding Default -Append
-Out-File -FilePath $NET_infofile  -InputObject $logFooter -Encoding Default -Append
-Out-File -FilePath $NET_infofile -InputObject $NET_connection -Encoding Default -Append
-Out-File -FilePath $NET_infofile  -InputObject $logFooter -Encoding Default -Append
+Write-Log -Log "$NET_adapter `n`n  $NET_connection" -Filename $NET_infofile -Title $logTitle
+
 
 <# 
 =============================================================================
