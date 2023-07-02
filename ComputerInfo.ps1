@@ -957,12 +957,12 @@ Function Get-AADAccounts {
         The command output is parsed to get the UserPrincipalNames. The account listed as the default is excluded from the result.
 
     .EXAMPLE
-        PS C:\> Get-AADAccounts
-
+        Get-AADAccounts
         This command gets all Azure AD accounts from the local machine, excluding the default account.
 
     .NOTES
         Always ensure you have appropriate permissions to run 'dsregcmd' command before executing the script.
+        July 2023: This function will get list of users in device, main script will get domain from accounts and verify dns records.
     #>
     param ()
 
