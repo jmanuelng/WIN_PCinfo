@@ -991,6 +991,69 @@ Function Get-AADAccounts {
     return $UPNs
 }
 
+
+
+function Get-LocalAdminAccounts {
+    <#
+    .SYNOPSIS
+    Retrieves all the administrative accounts from the local machine.
+
+    .DESCRIPTION
+    The Get-LocalAdminAccounts function uses the Get-LocalGroup cmdlet to fetch the Administrators group
+    by its well-known SID, then retrieves the members of this group. If this cmdlet fails, it falls back to the 
+    'net localgroup' command.
+
+    .OUTPUTS
+    PSCustomObject
+    Returns a custom PowerShell object with the properties 'Name' and 'PrincipalSource'.
+
+    .EXAMPLE
+    PS C:\> Get-LocalAdminAccounts
+    Lists all administrative accounts on the local device.
+    #>
+
+    try {
+        # The well-known SID for the Administrators group is S-1-5-32-544
+        $adminGroup = Get-LocalGroup -SID "S-1-5-32-544"
+
+        if ($adminGroup) {
+            $admins = $adminGroup | Get-LocalGroupMember -ErrorAction Stop | Select-Object Name, PrincipalSource
+            return $admins
+        }
+        else {
+            throw "Administrators group not found by SID."
+        }
+    }
+    catch {
+        try {
+            # If the primary cmdlet fails, attempt to use net localgroup command.
+            # 'net localgroup' returns localized group names, so it's used as a fallback.
+            $localGroupName = (Get-Culture).TextInfo.ToTitleCase((Get-LocalGroup -SID "S-1-5-32-544").Name.ToLower())
+            $adminsFallback = net localgroup "$localGroupName" | Where-Object {
+                $_ -and $_ -notmatch "^(The command completed successfully\.)|(^Alias name\s)|(^Comment\s)|(^Members\s)|(-{10,})"
+            } | ForEach-Object {
+                # Parse the output into a PSCustomObject
+                [PSCustomObject]@{
+                    Name = $_.Trim()
+                    PrincipalSource = 'Fallback'
+                }
+            }
+
+            if ($adminsFallback) {
+                return $adminsFallback
+            }
+            else {
+                throw "No administrators found or unable to retrieve administrator accounts using net localgroup."
+            }
+        }
+        catch {
+            Write-Error "Both methods to retrieve local admin accounts have failed. Error: $_"
+        }
+    }
+}
+
+
+
 #Endregion Functions
 
 #Region Main
@@ -1292,6 +1355,47 @@ Write-Host $msg -ForegroundColor White
 
 # Write info to a log file.
 Write-Log -Log $AadLog -Filename $AAD_logfile -Title $logTitle
+
+<# 
+=============================================================================
+                      Local Admin Account(s)          
+=============================================================================
+#>
+
+$msg = "`...Collecting information for Local Admin account(s)."
+Write-Host $msg -ForegroundColor White
+
+# @jmanuelnieto: Banner and heading to distinguish this section in Output File.
+$logTitle = "Local Admin(s) details" 
+
+$LAA_folder = ".\LAaccounts"
+
+# Ensure the directory exists
+if (-not (Test-Path -Path $LAA_folder)) {
+    $null = New-Item -Path $LAA_folder -ItemType Directory
+}
+
+$LAA_logfile = "$LAA_folder\LAaccounts_$((Get-Date -format yyyy-MMM-dd_`HH-mm).ToString()).txt"
+
+# Call the function to get Local Admin Account(s) information
+$LAAs = Get-LocalAdminAccounts
+
+# Check if there are any accounts returned by the function
+$LAALog = if ($LAAs.Count -gt 0) {
+    # At least one Account found, write the first line of log to multi-line string variable
+    "Found Local Admin Accounts:`n" + ($LAAs | Out-String)
+} else {
+    # If no accounts found, add a corresponding message to the string
+    "No Local Admin accounts found.`n"
+}
+
+# @jmanuelnieto: It then adds Policies information to file.
+$msg = "`...Wiritng Local Admin account details to report."
+Write-Host $msg -ForegroundColor White
+
+# Write info to a log file.
+Write-Log -Log $LAALog -Filename $LAA_logfile -Title $logTitle
+
 
 
 <# 
