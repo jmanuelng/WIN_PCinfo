@@ -1,0 +1,14 @@
+# Reports containing machine, account, network, and software information
+/Config/
+/Network/
+/AADaccounts/
+/LAaccounts/
+/NetTestEndpoints/
+/Software/
+/Battery/
+/gpresult.html
+
+# Common local and secret-bearing files
+.env
+.env.*
+*.log
