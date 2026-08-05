@@ -6,6 +6,12 @@
 
 It collects a comprehensive set of information from a device, allows understanding of current environment and helps identify potential issues that might cause problems during a Microsoft Intune project, this based on my experience.
 
+## Version 2 specification
+
+The root script documents the current legacy release. WIN-PCInfo v2 is being defined through a public, decision-led specification before implementation begins.
+
+Start with the [v2 capability-ledger rulebook](docs/spec/capability-ledger.md) to understand how legacy and new capabilities are classified, prioritized, selected for previews, and traced into release evidence. The broader route is indexed in the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
+
 ## Features
 
 The `ComputerInfo.ps1` script collects the following information:
