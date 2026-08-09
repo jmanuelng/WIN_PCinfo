@@ -234,6 +234,12 @@ Each Preview slice:
 
 The release-specific Preview Capability Matrix is generated from the ledger snapshot.
 
+## Release definitions
+
+A named release target has a human-readable and machine-readable definition under `docs/spec/releases/`. The capability ledger records which Product Capabilities are `release-targeted` and names their `targetRelease`; the release definition owns the complete objective, Assessment Profile, scenario-claim templates, explicit deferrals, boundaries, and required Release Evidence.
+
+The first target is [WIN-PCInfo 2.0.0-preview.1](./releases/2.0.0-preview.1.md), with its [machine-readable release definition](./releases/2.0.0-preview.1.json). A release target is a planning commitment, not proof that a capability is implemented, validated, Preview, or Supported.
+
 ## Freezing Stable scope
 
 Before Stable `2.0.0`:

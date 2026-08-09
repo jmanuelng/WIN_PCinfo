@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "kind": "win-pcinfo-release-definition",
+  "release": "2.0.0-preview.1",
+  "status": "planned",
+  "objective": "Prove that WIN-PCInfo can safely produce a comprehensive, reconstruction-ready Microsoft Zero Trust Migration Baseline from one Windows 10 or Windows 11 client while clearly separating observed facts, advisory interpretation, coverage limitations, and tenant-side discovery needs.",
+  "profile": {
+    "id": "comprehensive-local-assessment",
+    "name": "Comprehensive Local Assessment",
+    "selectedCapabilityIds": [
+      "CAP-0001",
+      "CAP-0002",
+      "CAP-0003",
+      "CAP-0004",
+      "CAP-0005",
+      "CAP-0006",
+      "CAP-0007",
+      "CAP-0008",
+      "CAP-0009",
+      "CAP-0010",
+      "CAP-0011",
+      "CAP-0012",
+      "CAP-0013",
+      "CAP-0014",
+      "CAP-0016"
+    ],
+    "networkBehaviors": [
+      "microsoft-connectivity-enabled",
+      "local-only"
+    ],
+    "focusedProfilesAvailable": false,
+    "customCapabilitySelectionAvailable": false
+  },
+  "releaseEnabledCapabilityIds": [
+    "CAP-0001",
+    "CAP-0002",
+    "CAP-0003",
+    "CAP-0004",
+    "CAP-0005",
+    "CAP-0006",
+    "CAP-0007",
+    "CAP-0008",
+    "CAP-0009",
+    "CAP-0010",
+    "CAP-0011",
+    "CAP-0012",
+    "CAP-0013",
+    "CAP-0014",
+    "CAP-0015",
+    "CAP-0016",
+    "CAP-0017",
+    "CAP-0018",
+    "CAP-0019",
+    "CAP-0020",
+    "CAP-0022",
+    "CAP-0023",
+    "CAP-0024",
+    "CAP-0025",
+    "CAP-0026",
+    "CAP-0027",
+    "CAP-0028",
+    "CAP-0030",
+    "CAP-0031"
+  ],
+  "policyAssessment": {
+    "evidenceLayers": [
+      "applied-policy-evidence",
+      "configured-policy-signal",
+      "current-control-state"
+    ],
+    "areas": [
+      "local-and-domain-group-policy",
+      "local-security-policy",
+      "mdm-policy-csp-and-conflicts",
+      "microsoft-defender-antivirus-and-firewall",
+      "attack-surface-reduction-network-protection-smartscreen-and-tamper-protection",
+      "bitlocker-secure-boot-vbs-and-credential-guard",
+      "wdac-and-applocker",
+      "windows-update-and-windows-update-for-business",
+      "rdp-winrm-smb-and-selected-legacy-authentication"
+    ],
+    "sourceBoundary": "windows-native-structured-sources-and-inbox-microsoft-modules",
+    "externalToolInstallationAllowed": false,
+    "tenantIntentClaimAllowed": false,
+    "complianceClaimAllowed": false
+  },
+  "execution": {
+    "maximumUacInteractions": 1,
+    "privilegedPlanFrozenBeforeCollection": true,
+    "systemContextOnlyWhenPredefinedAndRequired": true,
+    "continueSafeStandardCollectionAfterElevationDenial": true,
+    "midRunInstallationAllowed": false,
+    "runtime": {
+      "product": "PowerShell",
+      "edition": "Core",
+      "minimumVersion": "7.6.0",
+      "maximumMajorExclusive": 8,
+      "stableChannelOnly": true,
+      "exactReleaseAllowlistRequired": true,
+      "installedExternally": true
+    }
+  },
+  "network": {
+    "packetCaptureAllowed": false,
+    "authenticatedMicrosoftCloudCollectionAllowed": false,
+    "configurationChangesAllowed": false,
+    "tlsInspectionOutcomes": [
+      "confirmed",
+      "suspected",
+      "not-observed-within-completed-tests",
+      "indeterminate"
+    ]
+  },
+  "interpretation": {
+    "endToEndForEverySelectedCapability": true,
+    "microsoftBaselineInformedRulesAllowed": true,
+    "unknownContextBecomesIndeterminate": true,
+    "tenantGapsBecomeDiscoveryTasks": true,
+    "overallScoreAllowed": false,
+    "complianceCertificationAllowed": false,
+    "automaticRemediationAllowed": false
+  },
+  "supportClaimTemplates": [
+    {
+      "supportState": "Preview",
+      "windowsFamily": "Windows 10",
+      "edition": "Enterprise",
+      "architecture": "x64",
+      "lifecycleChannel": "non-LTSC",
+      "featureVersionSelection": "approved-release-time-validation-baseline",
+      "patchLevel": "latest-available-at-validation",
+      "qualifyingEvidenceRequired": true
+    },
+    {
+      "supportState": "Preview",
+      "windowsFamily": "Windows 11",
+      "edition": "Enterprise",
+      "architecture": "x64",
+      "lifecycleChannel": "non-LTSC",
+      "featureVersionSelection": "approved-release-time-validation-baseline",
+      "patchLevel": "latest-available-at-validation",
+      "qualifyingEvidenceRequired": true
+    }
+  ],
+  "notYetSupportedScenarioDimensions": [
+    "untested-windows-edition-build-or-architecture",
+    "physical-firmware-and-battery",
+    "real-peripherals",
+    "externally-managed-group-policy-or-mdm",
+    "co-management",
+    "real-third-party-security-products"
+  ],
+  "requiredReleaseEvidence": [
+    "deterministic-contract-schema-and-artifact-gates",
+    "privacy-secret-exclusion-and-evidence-protection-gates",
+    "lifecycle-terminal-honesty-cancellation-and-cleanup-gates",
+    "language-neutral-and-basic-primary-path-operability-gates",
+    "three-clean-full-profile-quality-budget-measurements",
+    "fresh-client-validation-for-each-claimed-windows-scenario",
+    "standard-elevated-denied-and-system-context-validation",
+    "microsoft-connectivity-enabled-and-local-only-validation",
+    "protected-package-recipient-export-corruption-and-recovery-validation",
+    "failure-injection-and-stale-run-recovery-validation",
+    "zero-round-residue",
+    "final-artifact-trust-launch-collection-package-open-and-cleanup-validation"
+  ],
+  "deferredCapabilityIds": [
+    "CAP-0021",
+    "CAP-0029",
+    "CAP-0032",
+    "CAP-0039"
+  ],
+  "outsideV2CapabilityIds": [
+    "CAP-0033",
+    "CAP-0034",
+    "CAP-0035",
+    "CAP-0036",
+    "CAP-0037",
+    "CAP-0038"
+  ],
+  "additionalDeferrals": [
+    "focused-assessment-profiles",
+    "custom-capability-selection",
+    "authenticated-microsoft-cloud-collection",
+    "packet-capture",
+    "translation-and-community-localization-governance",
+    "installer-or-compiled-launcher",
+    "automatic-product-definition-or-catalog-updates",
+    "package-migration-or-re-encryption"
+  ],
+  "governingReferences": [
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/11",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/1",
+    "docs/spec/capability-ledger.md",
+    "docs/spec/capability-ledger.json"
+  ]
+}
