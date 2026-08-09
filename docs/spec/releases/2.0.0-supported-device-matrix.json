@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "kind": "win-pcinfo-supported-device-matrix",
+  "release": "2.0.0",
+  "status": "planned",
+  "claimModel": {
+    "unit": "release-capability-named-scenario",
+    "runtimeEligibilityIndependent": true,
+    "globalProductSupportClaimAllowed": false,
+    "strongestRowRollupAllowed": false,
+    "scenarioDimensionMaterialityRequired": true
+  },
+  "windowsBaselinePolicy": {
+    "mandatoryFamily": "Windows 11",
+    "edition": "Enterprise",
+    "architecture": "x64",
+    "lifecycleChannel": "non-LTSC",
+    "selection": "newest-broadly-deployable-enterprise-version-with-approved-windows-client-baseline-at-release-freeze",
+    "currentPlanningCandidate": "25H2",
+    "exactFeatureVersionFrozenAtRelease": true,
+    "latestCumulativeUpdateAtValidation": true,
+    "marketplaceOfferRequired": false,
+    "automaticInheritanceFromNewerOrOlderVersion": false,
+    "windows10": {
+      "runtimeEligible": true,
+      "stableBlocking": false,
+      "supportStateWithoutApprovedImageAndPatchLane": "NotYetSupported",
+      "promotionRequiresApprovedLawfulImageSourceAndCurrentEvidence": true,
+      "microsoftLifecyclePresentedSeparately": true
+    },
+    "notYetSupportedByDefault": [
+      "other-windows-editions",
+      "other-windows-11-feature-versions",
+      "windows-11-26h1-select-new-device-lane",
+      "arm64",
+      "x86",
+      "ltsc"
+    ]
+  },
+  "enterpriseReferenceScenarios": [
+    {
+      "id": "unmanaged-baseline",
+      "name": "Unmanaged Baseline",
+      "identity": "workgroup-or-local-account",
+      "management": "unmanaged",
+      "securityConditions": ["microsoft-defender-active"],
+      "requiredEvidenceSources": ["ClientVMValidation"]
+    },
+    {
+      "id": "traditional-enterprise",
+      "name": "Traditional Enterprise",
+      "identity": "active-directory-domain-joined",
+      "management": "group-policy-managed",
+      "securityConditions": ["genuine-third-party-antivirus-registered", "microsoft-defender-observed-state"],
+      "requiredEvidenceSources": ["FieldValidation"]
+    },
+    {
+      "id": "cloud-managed-enterprise",
+      "name": "Cloud-managed Enterprise",
+      "identity": "microsoft-entra-joined",
+      "management": "microsoft-intune-managed",
+      "securityConditions": ["microsoft-defender-active", "microsoft-defender-for-endpoint-onboarded-when-material"],
+      "requiredEvidenceSources": ["FieldValidation"]
+    }
+  ],
+  "capabilityApplicability": [
+    {
+      "group": "cross-cutting-product-and-release",
+      "capabilityIds": ["CAP-0015", "CAP-0017", "CAP-0018", "CAP-0019", "CAP-0020", "CAP-0022", "CAP-0023", "CAP-0024", "CAP-0025", "CAP-0026", "CAP-0027", "CAP-0028", "CAP-0029", "CAP-0030", "CAP-0031"],
+      "rule": "release-level-supported-obligations-with-applicable-gates-covering-every-required-reference-scenario"
+    },
+    {
+      "group": "device-windows-firmware-and-form",
+      "capabilityIds": ["CAP-0001", "CAP-0002", "CAP-0003", "CAP-0004"],
+      "rule": "claim-only-for-evidenced-virtual-or-physical-form"
+    },
+    {
+      "group": "identity-privilege-and-policy",
+      "capabilityIds": ["CAP-0005", "CAP-0006", "CAP-0007", "CAP-0008", "CAP-0016"],
+      "rule": "separate-claims-for-each-material-reference-scenario"
+    },
+    {
+      "group": "software-security-and-user-dependencies",
+      "capabilityIds": ["CAP-0009", "CAP-0010"],
+      "rule": "claim-only-for-observed-product-condition-recognition-entry-or-device-form"
+    },
+    {
+      "group": "network-connectivity-dns-and-trust",
+      "capabilityIds": ["CAP-0011", "CAP-0012", "CAP-0013", "CAP-0014"],
+      "rule": "claim-only-for-evidenced-network-behavior-and-enterprise-condition"
+    }
+  ],
+  "deviceForms": {
+    "virtual": {
+      "required": true,
+      "form": "fresh-azure-generation-2-trusted-launch-client",
+      "physicalClaimAllowed": false
+    },
+    "physical": [
+      {
+        "form": "laptop",
+        "materialCapabilities": ["CAP-0003", "CAP-0004", "CAP-0010"]
+      },
+      {
+        "form": "desktop-class",
+        "materialCapabilities": ["CAP-0003", "CAP-0004", "CAP-0010"]
+      }
+    ],
+    "representativeDependencies": ["mapped-smb-resource", "printer", "common-peripheral"],
+    "vendorWideCompatibilityClaimAllowed": false
+  },
+  "network": {
+    "productBehaviors": ["LocalOnly", "MicrosoftConnectivityEnabled"],
+    "materialConditions": ["direct-outbound", "windows-configured-proxy", "tls-inspection", "blocked-or-partially-reachable-microsoft-services"],
+    "validationEgressProfiles": ["local-only-blocked", "restricted", "full-outbound-diagnostic-control"],
+    "explicitAuthenticatedProxySupportState": "PreviewUnlessSeparatelyEvidenced",
+    "localCollectionContinuesAfterNetworkFailure": true,
+    "securityConfigurationMutationAllowed": false
+  },
+  "universalExecutionGates": {
+    "privilegePaths": [
+      "standard-launch-one-accepted-elevation",
+      "already-elevated-no-second-prompt",
+      "elevation-denied-honest-partial-coverage",
+      "predefined-system-sub-plan"
+    ],
+    "languageNeutralExecution": {
+      "interfaceLanguage": "English",
+      "liveEnglishCoverageForEveryReferenceScenario": true,
+      "primaryLiveNonEnglishBaseline": "Spanish",
+      "automatedCultures": ["en-US", "es-MX", "tr-TR", "ja-JP", "ar-SA"],
+      "separateSupportRowPerWindowsLanguage": false,
+      "translatedInterfaceClaimAllowed": false
+    }
+  },
+  "securityProductEvidence": {
+    "broadThirdPartyAntivirusCondition": {
+      "minimumDistinctProductFamilies": 2,
+      "minimumDistinctFieldSetups": 2
+    },
+    "singleProductEvidenceCreatesNarrowNamedScenarioOnly": true,
+    "productSpecificEvidenceAutomaticallyGeneralizes": false,
+    "missingDamagedOrAmbiguousRegistrationIsNegativeTestNotSupportedEnvironment": true
+  },
+  "evidenceThresholds": {
+    "virtualizableSupportedScenario": {
+      "minimumSuccessfulFreshClientRuns": 3,
+      "minimumValidationRounds": 2
+    },
+    "physicalOrExternallyManagedSupportedScenario": {
+      "minimumApplicableValidations": 2,
+      "minimumDistinctSetups": 2
+    },
+    "evidenceFreshnessAndInvalidation": "governed-by-support-tier-contract",
+    "failedRequiredProductRunBlocksAffectedClaim": true,
+    "manualEvidenceWaiverAllowed": false
+  },
+  "fieldValidation": {
+    "maintainerAndCommunityRunsUseOneContract": true,
+    "exactCandidateOrReleaseIdentityRequired": true,
+    "declaredScenarioAndMethodRequired": true,
+    "privacySanitizedAttestationRequired": true,
+    "ordinaryPreviewUseAutomaticallyQualifies": false,
+    "automaticUploadAllowed": false,
+    "postRunValidationPromptAllowed": false,
+    "discoveryPath": "validation-documentation-or-passive-about-help",
+    "assessmentPackageSubmissionAllowed": false
+  },
+  "managedEnvironmentBoundary": {
+    "existingEntraIntuneMdeAndPolicyStateMustRemainUntouched": true,
+    "productCleansOnlyProductOwnedLocalArtifacts": true,
+    "externalTestEnrollmentCleanupIsOperatorManaged": true,
+    "providerRetainedAuditSecurityOrHistoricalRecordsExcludedFromProductCleanupClaim": true
+  },
+  "publication": {
+    "requiredReferenceScenarioWithoutEvidenceBlocksStable": true,
+    "lowerUnrelatedScenarioStateAllowedInStableRelease": true,
+    "matrixGeneratedFromFrozenClaimsAndAcceptedEvidence": true,
+    "exactWindowsBuildAndConditionsRecorded": true,
+    "publicEvidenceMustExcludeRestrictedIdentifiersAndAssessmentEvidence": true
+  },
+  "governingReferences": [
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/34",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/9",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/11",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/15",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/20",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/22",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/29",
+    "docs/spec/capability-ledger.json",
+    "docs/research/stable-supported-device-matrix-facts.md"
+  ]
+}

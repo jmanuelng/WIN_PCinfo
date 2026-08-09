@@ -4,7 +4,7 @@ This document is the public rulebook for the WIN-PCInfo v2 capability ledger. It
 
 The rulebook is intentionally separate from local agent instructions. A contributor or automation session should be able to discover and apply it from a fresh clone.
 
-The governing decisions are [Define the v2 capability taxonomy and priority ledger](https://github.com/jmanuelng/WIN_PCinfo/issues/8), [Define support tiers and release-evidence thresholds](https://github.com/jmanuelng/WIN_PCinfo/issues/9), [Define modular architecture and dependency policy](https://github.com/jmanuelng/WIN_PCinfo/issues/10), [Define measurable product quality budgets](https://github.com/jmanuelng/WIN_PCinfo/issues/15), and [Reconcile capability-ledger support dependencies and operability obligations](https://github.com/jmanuelng/WIN_PCinfo/issues/29), part of the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
+The governing decisions are [Define the v2 capability taxonomy and priority ledger](https://github.com/jmanuelng/WIN_PCinfo/issues/8), [Define support tiers and release-evidence thresholds](https://github.com/jmanuelng/WIN_PCinfo/issues/9), [Define modular architecture and dependency policy](https://github.com/jmanuelng/WIN_PCinfo/issues/10), [Define measurable product quality budgets](https://github.com/jmanuelng/WIN_PCinfo/issues/15), [Reconcile capability-ledger support dependencies and operability obligations](https://github.com/jmanuelng/WIN_PCinfo/issues/29), and [Define the Stable 2.0.0 supported-device matrix](https://github.com/jmanuelng/WIN_PCinfo/issues/34), part of the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
 
 ## Why the ledger exists
 
@@ -222,6 +222,8 @@ The Community Validation capability remains Stable-required so the privacy-safe 
 
 This conditional model keeps small Preview slices genuinely small while preserving stronger real-device evidence wherever a virtual client would be misleading.
 
+The [Stable 2.0.0 supported-device matrix](./releases/2.0.0-supported-device-matrix.md) defines the mandatory Windows baseline, three Enterprise Reference Scenarios, capability-specific scenario materiality, universal privilege and language gates, physical and field evidence, and the conditions that block a Supported claim. Its [machine-readable companion](./releases/2.0.0-supported-device-matrix.json) is the planned source for generated Stable claim rows. It does not change Preview.1 scope or prove that any Stable evidence already exists.
+
 ## Selecting Preview scope
 
 Each Preview slice:
@@ -239,6 +241,8 @@ The release-specific Preview Capability Matrix is generated from the ledger snap
 A named release target has a human-readable and machine-readable definition under `docs/spec/releases/`. The capability ledger records which Product Capabilities are `release-targeted` and names their `targetRelease`; the release definition owns the complete objective, Assessment Profile, scenario-claim templates, explicit deferrals, boundaries, and required Release Evidence.
 
 The first target is [WIN-PCInfo 2.0.0-preview.1](./releases/2.0.0-preview.1.md), with its [machine-readable release definition](./releases/2.0.0-preview.1.json). A release target is a planning commitment, not proof that a capability is implemented, validated, Preview, or Supported.
+
+Stable scenario claims are governed by the [Stable 2.0.0 supported-device matrix](./releases/2.0.0-supported-device-matrix.md) and its [machine-readable contract](./releases/2.0.0-supported-device-matrix.json). This matrix is a claim-and-evidence boundary, not a second capability ledger or a declaration that Stable scope is already frozen.
 
 Release-bound supporting catalogs and optional external enrichment sources have public governance rules when their classification or interpretation can materially affect an assessment. The current rulebooks are [Software Recognition Catalog governance](./software-recognition-catalog.md) and [WinGet package-availability enrichment](./winget-package-availability.md).
 
