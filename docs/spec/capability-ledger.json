@@ -349,18 +349,18 @@
     },
     {
       "id": "CAP-0023",
-      "name": "Accessible and localization-safe user experience",
-      "outcome": "A user can operate and understand the assessment through accessible, language-neutral interactions that do not depend on fragile localized command text.",
+      "name": "Language-neutral execution and basic primary-path operability",
+      "outcome": "A user can complete the English interface's primary assessment path on a supported Windows display language or locale while evidence and automation remain Unicode-safe and culture-independent.",
       "owningArea": "User Experience, Accessibility, and Localization",
       "relatedAreas": ["Assessment Run and Execution Profiles", "Documentation, Feedback, and Maintenance"],
       "lineage": "v2-new",
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/15", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"],
       "obligation": "public-build-invariant",
       "deliveryDisposition": "unscheduled",
       "componentIds": ["CMP-0040", "CMP-0054"],
       "dependsOnCapabilityIds": ["CAP-0015"],
-      "rationale": "The v2 baseline requires accessible operation and localization-safe behavior even before translation scope is selected.",
-      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2"]
+      "rationale": "The existing compound identity retains its compatible mandatory core: the English interface must run safely across supported Windows languages and locales, preserve Unicode, avoid translated-text parsing, and keep the primary path keyboard-operable; formal accessibility receives a separate identity and later obligation.",
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/15", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"]
     },
     {
       "id": "CAP-0024",
@@ -411,17 +411,17 @@
     {
       "id": "CAP-0027",
       "name": "Evidence-gated release promotion",
-      "outcome": "The maintainer can publish or promote a release only when its required automated, client, community, security, provenance, and supported-scenario evidence is complete.",
+      "outcome": "The maintainer can publish or promote a release only when every universal gate and every automated, client, community, security, provenance, and supported-scenario evidence source applicable to its actual claims is complete.",
       "owningArea": "Distribution, Updates, and Supply Chain",
       "relatedAreas": ["Evidence, Findings, and Reporting", "Endpoint Security"],
       "lineage": "v2-new",
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "docs/spec/capability-ledger.md: Freezing Stable scope"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/9", "https://github.com/jmanuelng/WIN_PCinfo/issues/29", "docs/spec/capability-ledger.md: Freezing Stable scope"],
       "obligation": "public-build-invariant",
       "deliveryDisposition": "unscheduled",
-      "componentIds": ["CMP-0029", "CMP-0037", "CMP-0038", "CMP-0039", "CMP-0042", "CMP-0048", "CMP-0049", "CMP-0056"],
-      "dependsOnCapabilityIds": ["CAP-0025", "CAP-0026", "CAP-0028", "CAP-0029", "CAP-0030"],
-      "rationale": "Release maturity is an evidence threshold, not merely an implementation or version label.",
-      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/8"]
+      "componentIds": ["CMP-0029", "CMP-0037", "CMP-0038", "CMP-0042", "CMP-0048", "CMP-0049", "CMP-0056"],
+      "dependsOnCapabilityIds": ["CAP-0025", "CAP-0026", "CAP-0028", "CAP-0030"],
+      "rationale": "Release maturity is an evidence threshold, not merely an implementation or version label. Community Validation is checked only for a claim whose material behavior controlled Client VM Validation cannot credibly establish, so its complete workflow is not forced into every Preview slice or promotion.",
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/8", "https://github.com/jmanuelng/WIN_PCinfo/issues/9", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"]
     },
     {
       "id": "CAP-0028",
@@ -441,17 +441,17 @@
     {
       "id": "CAP-0029",
       "name": "Privacy-preserving Community Validation Runs",
-      "outcome": "A tester can contribute version-linked, scenario-specific validation evidence without publishing restricted device, person, tenant, organization, or network data.",
+      "outcome": "When a claimed scenario cannot be established credibly in the controlled Azure lab, a tester can contribute version-linked, scenario-specific validation evidence without publishing restricted device, person, tenant, organization, or network data.",
       "owningArea": "Evidence, Findings, and Reporting",
       "relatedAreas": ["Privacy and Safe Sharing", "Documentation, Feedback, and Maintenance"],
       "lineage": "v2-new",
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/3"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/9", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"],
       "obligation": "stable-required",
       "deliveryDisposition": "unscheduled",
       "componentIds": ["CMP-0039", "CMP-0047", "CMP-0049", "CMP-0055", "CMP-0058"],
       "dependsOnCapabilityIds": ["CAP-0018", "CAP-0020"],
-      "rationale": "Representative physical and externally managed scenarios cannot all be established by virtual infrastructure, but their evidence must remain privacy-safe.",
-      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/3"]
+      "rationale": "Representative physical and externally managed scenarios cannot all be established by virtual infrastructure, but their evidence must remain privacy-safe. Stable-required means this workflow is available by Stable 2.0.0; it does not make Community Validation mandatory for every scenario, promotion, or Preview slice.",
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/9", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"]
     },
     {
       "id": "CAP-0030",
@@ -589,6 +589,21 @@
       "dependsOnCapabilityIds": [],
       "rationale": "The project will use public privacy-safe feedback paths and will not operate a private evidence ingestion service.",
       "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/7"]
+    },
+    {
+      "id": "CAP-0039",
+      "name": "Formal accessibility conformance",
+      "outcome": "A user would receive a formally defined and validated accessibility experience beyond the mandatory Language-neutral Execution and Basic Primary-path Operability baseline.",
+      "owningArea": "User Experience, Accessibility, and Localization",
+      "relatedAreas": ["Documentation, Feedback, and Maintenance"],
+      "lineage": "v2-new",
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/15", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"],
+      "obligation": "later-candidate",
+      "deliveryDisposition": "deferred",
+      "componentIds": ["CMP-0059"],
+      "dependsOnCapabilityIds": ["CAP-0023"],
+      "rationale": "Formal WCAG, WCAG2ICT, assistive-technology, or comparable conformance is intentionally distinct from the mandatory cross-locale and basic keyboard-operability baseline, and no formal conformance target is required for v2 Preview or Stable publication.",
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/15", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"]
     }
   ],
   "components": [
@@ -900,17 +915,17 @@
       "id": "CMP-0039",
       "name": "Community Validation workflow",
       "kind": "Workflow",
-      "purpose": "Collect intentional, version-linked, scenario-declared, privacy-sanitized validation attestations from representative external Windows clients.",
-      "capabilityIds": ["CAP-0027", "CAP-0029"],
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/3"]
+      "purpose": "Collect intentional, version-linked, scenario-declared, privacy-sanitized validation attestations only when a claimed behavior cannot be established credibly through controlled Client VM Validation.",
+      "capabilityIds": ["CAP-0029"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/9", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"]
     },
     {
       "id": "CMP-0040",
-      "name": "Accessible and localization-safe interaction workflow",
+      "name": "Language-neutral and basic-operability interaction workflow",
       "kind": "Workflow",
-      "purpose": "Present progress, choices, errors, cancellation, and results through accessible interactions that avoid parsing localized display text.",
+      "purpose": "Present the English primary path with understandable keyboard-operable controls, visible focus, no keyboard traps or color-only meaning, while preserving Unicode and avoiding interpretation of localized Windows display text.",
       "capabilityIds": ["CAP-0023"],
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2"]
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/15", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"]
     },
     {
       "id": "CMP-0041",
@@ -980,9 +995,9 @@
       "id": "CMP-0049",
       "name": "Release evidence and support promotion gate",
       "kind": "Control",
-      "purpose": "Block publication or support promotion unless all applicable capability obligations and approved automated, client, community, security, and provenance evidence are satisfied.",
+      "purpose": "Block publication or support promotion unless every universal obligation and every approved automated, client, community, security, and provenance evidence source applicable to the actual claim is satisfied; Community Validation is conditional by scenario.",
       "capabilityIds": ["CAP-0026", "CAP-0027", "CAP-0029", "CAP-0030"],
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/2", "docs/spec/capability-ledger.md: Freezing Stable scope"]
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/9", "https://github.com/jmanuelng/WIN_PCinfo/issues/29", "docs/spec/capability-ledger.md: Freezing Stable scope"]
     },
     {
       "id": "CMP-0050",
@@ -1055,6 +1070,14 @@
       "purpose": "Teach safe automated, Client VM, and Community Validation procedures, licensing boundaries, evidence handling, cost and concurrency controls, and verified teardown.",
       "capabilityIds": ["CAP-0028", "CAP-0029", "CAP-0030"],
       "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/22", "https://github.com/jmanuelng/WIN_PCinfo/issues/23", "https://github.com/jmanuelng/WIN_PCinfo/issues/24"]
+    },
+    {
+      "id": "CMP-0059",
+      "name": "Formal accessibility validation workflow",
+      "kind": "Workflow",
+      "purpose": "Define and validate a future formal accessibility target, including its applicable conformance criteria, assistive-technology coverage, evidence, and public claim language, beyond the mandatory basic-operability baseline.",
+      "capabilityIds": ["CAP-0039"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/15", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"]
     }
   ]
 }

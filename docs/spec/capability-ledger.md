@@ -4,7 +4,7 @@ This document is the public rulebook for the WIN-PCInfo v2 capability ledger. It
 
 The rulebook is intentionally separate from local agent instructions. A contributor or automation session should be able to discover and apply it from a fresh clone.
 
-The governing decisions are [Define the v2 capability taxonomy and priority ledger](https://github.com/jmanuelng/WIN_PCinfo/issues/8) and [Define modular architecture and dependency policy](https://github.com/jmanuelng/WIN_PCinfo/issues/10), part of the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
+The governing decisions are [Define the v2 capability taxonomy and priority ledger](https://github.com/jmanuelng/WIN_PCinfo/issues/8), [Define support tiers and release-evidence thresholds](https://github.com/jmanuelng/WIN_PCinfo/issues/9), [Define modular architecture and dependency policy](https://github.com/jmanuelng/WIN_PCinfo/issues/10), [Define measurable product quality budgets](https://github.com/jmanuelng/WIN_PCinfo/issues/15), and [Reconcile capability-ledger support dependencies and operability obligations](https://github.com/jmanuelng/WIN_PCinfo/issues/29), part of the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
 
 ## Why the ledger exists
 
@@ -36,6 +36,8 @@ A Capability Component is a typed element that contributes to one or more Produc
 - Components are not prioritized as though they were complete user outcomes.
 
 The relationship between capabilities and components is many-to-many.
+
+When one old record combines meanings that later decisions separate, its ID stays with the compatible core meaning and each newly separated meaning receives the next unused ID. The original ID is not reassigned to an unrelated outcome, and frozen historical release snapshots are never rewritten.
 
 ## Capability Areas
 
@@ -111,6 +113,17 @@ For example, clear-text Wi-Fi-key export is intentionally removed. Unsafe `Win32
 - `later-candidate`: recorded and traceable but not required for Stable `2.0.0`.
 
 The named release target belongs to Delivery Disposition, not Capability Obligation.
+
+## Required operability and later accessibility
+
+Every public build has an English, left-to-right product interface. Two minimum behaviors remain mandatory:
+
+- **Language-neutral Execution** means the English interface and assessment logic work on every supported Windows display language and locale. The product preserves Unicode evidence, writes explicit UTF-8 artifacts, uses stable culture-independent codes and JSON meanings, and does not interpret translated Windows display text as authoritative data.
+- **Basic Primary-path Operability** means a user can launch, approve preparation, follow progress, cancel, understand the terminal outcome, find the Protected Evidence Package, and navigate the report by keyboard. Primary controls are understandable, focus is visible, keyboard traps are prohibited, and color is not the only way meaning is communicated.
+
+These behaviors do not claim formal accessibility conformance. A formal WCAG, WCAG2ICT, assistive-technology, or comparable conformance program is a distinct Later Candidate. It may be designed and validated in a later release, but its absence does not block v2 Preview or Stable publication when the mandatory baseline passes.
+
+This split keeps the original public-build obligation focused on safe, dependable operation across Windows languages and locales. It also avoids promising a formal accessibility standard that the project has not selected or validated.
 
 ## Canonical data
 
@@ -197,7 +210,17 @@ Traceability grows with the strength of the product claim:
 2. Release-targeted capabilities add operational details and verification plans.
 3. Delivered or supported capabilities link applicable automated checks, Client VM Validation, Community Validation Runs, and Release Evidence.
 
-Lightweight validation checks required fields for the record's maturity, unique IDs, valid references, and valid enum values. It does not attempt to prove line-by-line coverage.
+Lightweight validation checks required fields for the record's maturity, unique IDs, valid references, reciprocal capability-component links, valid enum values, no self-dependencies, and an acyclic capability-dependency graph. It also verifies that mandatory operability and formal accessibility have distinct identities and that release promotion does not make Community Validation an unconditional dependency. It does not attempt to prove line-by-line coverage or the truth of Release Evidence.
+
+## Scenario-dependent validation evidence
+
+Controlled Client VM Validation is the normal evidence source when a named scenario can be reproduced credibly in the Azure validation lab. Community Validation is used only when material behavior cannot be established there, such as physical hardware, OEM or firmware behavior, battery or peripheral behavior, a real third-party security product, or externally managed policy.
+
+Community Validation is therefore not a dependency of every Preview slice, every release promotion, or every support claim. The release-promotion gate always checks the universal gates and then checks only the validation sources applicable to the claim being made. Informal feedback and popularity never substitute for a qualifying validation record.
+
+The Community Validation capability remains Stable-required so the privacy-safe workflow is available by Stable `2.0.0` for claims that need it. That obligation governs delivery of the workflow; it does not require every scenario or earlier Preview slice to use the workflow.
+
+This conditional model keeps small Preview slices genuinely small while preserving stronger real-device evidence wherever a virtual client would be misleading.
 
 ## Selecting Preview scope
 
