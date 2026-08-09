@@ -120,6 +120,24 @@
     "complianceCertificationAllowed": false,
     "automaticRemediationAllowed": false
   },
+  "softwareRecognition": {
+    "governance": "docs/spec/software-recognition-catalog.md",
+    "componentId": "CMP-0060",
+    "ordinaryInventoryIndependent": true,
+    "outcomes": [
+      "recognized-exact",
+      "recognized-composite",
+      "ambiguous",
+      "unrecognized",
+      "not-evaluated"
+    ],
+    "dataOnlyExactOrCompositeMatchers": true,
+    "fuzzyMatchingAllowed": false,
+    "liveRecognitionCatalogUpdateAllowed": false,
+    "livePackageAvailabilityAssessmentIncluded": false,
+    "logicalCatalogFailureContinuesInventory": true,
+    "releaseIntegrityMismatchReturnsNotStarted": true
+  },
   "supportClaimTemplates": [
     {
       "supportState": "Preview",
@@ -186,10 +204,12 @@
     "translation-and-community-localization-governance",
     "installer-or-compiled-launcher",
     "automatic-product-definition-or-catalog-updates",
+    "live-winget-package-availability-assessment",
     "package-migration-or-re-encryption"
   ],
   "governingReferences": [
     "https://github.com/jmanuelng/WIN_PCinfo/issues/11",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/35",
     "https://github.com/jmanuelng/WIN_PCinfo/issues/1",
     "docs/spec/capability-ledger.md",
     "docs/spec/capability-ledger.json"

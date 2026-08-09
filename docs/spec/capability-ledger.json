@@ -149,10 +149,10 @@
       "obligation": "stable-required",
       "deliveryDisposition": "release-targeted",
       "targetRelease": "2.0.0-preview.1",
-      "componentIds": ["CMP-0009", "CMP-0021"],
+      "componentIds": ["CMP-0009", "CMP-0021", "CMP-0060"],
       "dependsOnCapabilityIds": [],
       "rationale": "Preserve software inventory while replacing the unsafe Win32_Product path with side-effect-safe sources and explicit completeness states.",
-      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/8"]
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/8", "https://github.com/jmanuelng/WIN_PCinfo/issues/35"]
     },
     {
       "id": "CAP-0010",
@@ -1107,6 +1107,14 @@
       "purpose": "Define and validate a future formal accessibility target, including its applicable conformance criteria, assistive-technology coverage, evidence, and public claim language, beyond the mandatory basic-operability baseline.",
       "capabilityIds": ["CAP-0039"],
       "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/15", "https://github.com/jmanuelng/WIN_PCinfo/issues/29"]
+    },
+    {
+      "id": "CMP-0060",
+      "name": "Software Recognition Catalog",
+      "kind": "Catalog",
+      "purpose": "Conservatively annotate normalized installed-software observations with release-bound product-family and migration-role recognition without replacing ordinary inventory or making compatibility, safety, licensing, or deployment claims.",
+      "capabilityIds": ["CAP-0009"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/35", "docs/spec/software-recognition-catalog.md"]
     }
   ]
 }
