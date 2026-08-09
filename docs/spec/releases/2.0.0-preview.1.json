@@ -138,6 +138,14 @@
     "logicalCatalogFailureContinuesInventory": true,
     "releaseIntegrityMismatchReturnsNotStarted": true
   },
+  "packageAvailability": {
+    "included": false,
+    "status": "deferred-after-preview.1",
+    "componentId": "CMP-0061",
+    "governance": "docs/spec/winget-package-availability.md",
+    "ordinaryInventoryIndependent": true,
+    "separateConsentRequired": true
+  },
   "supportClaimTemplates": [
     {
       "supportState": "Preview",
@@ -204,12 +212,13 @@
     "translation-and-community-localization-governance",
     "installer-or-compiled-launcher",
     "automatic-product-definition-or-catalog-updates",
-    "live-winget-package-availability-assessment",
+    "opt-in-winget-package-availability-enrichment",
     "package-migration-or-re-encryption"
   ],
   "governingReferences": [
     "https://github.com/jmanuelng/WIN_PCinfo/issues/11",
     "https://github.com/jmanuelng/WIN_PCinfo/issues/35",
+    "https://github.com/jmanuelng/WIN_PCinfo/issues/36",
     "https://github.com/jmanuelng/WIN_PCinfo/issues/1",
     "docs/spec/capability-ledger.md",
     "docs/spec/capability-ledger.json"

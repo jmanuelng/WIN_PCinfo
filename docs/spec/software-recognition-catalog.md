@@ -140,7 +140,7 @@ Only affected catalog tests and scenarios need to rerun after an entry change, i
 
 A changing WinGet source answers a different question: whether it currently reports a candidate package that an Intune administrator might investigate as one software-distribution strategy. It is not the Software Recognition Catalog.
 
-Preview.1 does not perform that live check. A future separately consented capability must decide WinGet eligibility, named-source access, source agreements, refresh and telemetry behavior, structured correlation, privacy disclosure, time-bound evidence wording, failure states, and Windows validation. A future observation must never imply licensing, approval, compatibility, silent installation, correct detection rules, deployment success, or lasting package availability.
+Preview.1 does not perform that live check. The future checkbox-driven enrichment is governed by [WinGet package-availability enrichment](./winget-package-availability.md). Its observation never implies licensing, approval, compatibility, silent installation, correct detection rules, deployment success, or lasting package availability.
 
 ## Implementation handoff
 

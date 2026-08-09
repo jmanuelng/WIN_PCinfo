@@ -240,7 +240,7 @@ A named release target has a human-readable and machine-readable definition unde
 
 The first target is [WIN-PCInfo 2.0.0-preview.1](./releases/2.0.0-preview.1.md), with its [machine-readable release definition](./releases/2.0.0-preview.1.json). A release target is a planning commitment, not proof that a capability is implemented, validated, Preview, or Supported.
 
-Release-bound supporting catalogs have their own public governance rules when their classification or interpretation can materially affect an assessment. The first such rulebook is [Software Recognition Catalog governance](./software-recognition-catalog.md).
+Release-bound supporting catalogs and optional external enrichment sources have public governance rules when their classification or interpretation can materially affect an assessment. The current rulebooks are [Software Recognition Catalog governance](./software-recognition-catalog.md) and [WinGet package-availability enrichment](./winget-package-availability.md).
 
 ## Freezing Stable scope
 

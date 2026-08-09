@@ -149,10 +149,10 @@
       "obligation": "stable-required",
       "deliveryDisposition": "release-targeted",
       "targetRelease": "2.0.0-preview.1",
-      "componentIds": ["CMP-0009", "CMP-0021", "CMP-0060"],
+      "componentIds": ["CMP-0009", "CMP-0021", "CMP-0060", "CMP-0061"],
       "dependsOnCapabilityIds": [],
       "rationale": "Preserve software inventory while replacing the unsafe Win32_Product path with side-effect-safe sources and explicit completeness states.",
-      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/8", "https://github.com/jmanuelng/WIN_PCinfo/issues/35"]
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/8", "https://github.com/jmanuelng/WIN_PCinfo/issues/35", "https://github.com/jmanuelng/WIN_PCinfo/issues/36"]
     },
     {
       "id": "CAP-0010",
@@ -1115,6 +1115,14 @@
       "purpose": "Conservatively annotate normalized installed-software observations with release-bound product-family and migration-role recognition without replacing ordinary inventory or making compatibility, safety, licensing, or deployment claims.",
       "capabilityIds": ["CAP-0009"],
       "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/35", "docs/spec/software-recognition-catalog.md"]
+    },
+    {
+      "id": "CMP-0061",
+      "name": "WinGet package-availability enrichment",
+      "kind": "Workflow",
+      "purpose": "Optionally enrich normalized installed-software observations with separately consented, time-bound candidate results from the verified Microsoft WinGet Community source without changing ordinary inventory or claiming identity, Intune readiness, compatibility, or deployment success.",
+      "capabilityIds": ["CAP-0009"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/36", "docs/spec/winget-package-availability.md"]
     }
   ]
 }
