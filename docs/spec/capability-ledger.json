@@ -365,33 +365,33 @@
     {
       "id": "CAP-0024",
       "name": "Portable public distribution and first-run experience",
-      "outcome": "A user can obtain, verify, and start WIN-PCInfo through a documented portable distribution without runtime dependency installation.",
+      "outcome": "A user with an externally installed eligible stable PowerShell 7.6-or-later 7.x runtime can obtain, verify, and start WIN-PCInfo from a documented portable distribution; an ineligible or missing runtime ends safely with installation and retry guidance and no runtime change by WIN-PCInfo.",
       "owningArea": "Distribution, Updates, and Supply Chain",
       "relatedAreas": ["Documentation, Feedback, and Maintenance", "User Experience, Accessibility, and Localization"],
       "lineage": "legacy-derived",
-      "sourceReferences": ["README.md: Usage", "ComputerInfo.ps1: main/module preflight", "https://github.com/jmanuelng/WIN_PCinfo/issues/1"],
+      "sourceReferences": ["README.md: Usage", "ComputerInfo.ps1: main/module preflight", "https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/10"],
       "migrationDisposition": "improve-outcome",
       "obligation": "stable-required",
       "deliveryDisposition": "unscheduled",
       "componentIds": ["CMP-0035", "CMP-0048", "CMP-0054"],
       "dependsOnCapabilityIds": ["CAP-0022", "CAP-0023", "CAP-0025"],
-      "rationale": "Retain simple download-and-run use while removing execution-policy and runtime-install surprises; an installer or compiled launcher remains a later decision.",
-      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/8"]
+      "rationale": "Retain portable download-and-run use while making PowerShell an explicit external prerequisite: a Windows PowerShell bootstrap may only detect and relaunch an eligible host or provide retry guidance, and WIN-PCInfo never changes the runtime or bypasses execution policy; an installer or compiled launcher remains a later decision.",
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/8", "https://github.com/jmanuelng/WIN_PCinfo/issues/10"]
     },
     {
       "id": "CAP-0025",
       "name": "Trusted release provenance and integrity",
-      "outcome": "A user can independently verify publisher identity or the approved preview fallback, source revision, build provenance, contents, dependency inventory, and artifact integrity.",
+      "outcome": "A user can independently verify publisher identity or the approved preview fallback, source revision, modular-source and deterministic-build provenance, the exact generated application, authenticated supporting resources, dependency inventory, and artifact integrity.",
       "owningArea": "Distribution, Updates, and Supply Chain",
       "relatedAreas": ["Certificates and Trust", "Evidence, Findings, and Reporting"],
       "lineage": "v2-new",
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/6", "https://github.com/jmanuelng/WIN_PCinfo/issues/10"],
       "obligation": "public-build-invariant",
       "deliveryDisposition": "unscheduled",
       "componentIds": ["CMP-0029", "CMP-0036", "CMP-0048", "CMP-0056"],
       "dependsOnCapabilityIds": [],
-      "rationale": "Preview may use explicit unsigned attestation, but Stable 2.0.0 requires trusted Authenticode signing and every public artifact requires verifiable provenance.",
-      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2"]
+      "rationale": "Preview may use explicit unsigned attestation, but Stable 2.0.0 requires trusted Authenticode signing; every public artifact requires verifiable provenance, and the authentic primary application must authenticate every governing supporting resource before use.",
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/6", "https://github.com/jmanuelng/WIN_PCinfo/issues/10"]
     },
     {
       "id": "CAP-0026",
@@ -456,17 +456,17 @@
     {
       "id": "CAP-0030",
       "name": "Automated deterministic release gates",
-      "outcome": "The maintainer can repeatably validate deterministic logic, schemas, fixtures, packaging, secret prevention, and supported runtime compatibility before publishing.",
+      "outcome": "The maintainer can repeatably validate deterministic logic, schemas, fixtures, modular-source and generated-artifact equivalence, authenticated package resources, secret prevention, and eligible-runtime compatibility before publishing.",
       "owningArea": "Distribution, Updates, and Supply Chain",
       "relatedAreas": ["Evidence, Findings, and Reporting", "Privacy and Safe Sharing"],
       "lineage": "v2-new",
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/3"],
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/10", "https://github.com/jmanuelng/WIN_PCinfo/issues/14"],
       "obligation": "public-build-invariant",
       "deliveryDisposition": "unscheduled",
       "componentIds": ["CMP-0029", "CMP-0037", "CMP-0042", "CMP-0048", "CMP-0049", "CMP-0058"],
       "dependsOnCapabilityIds": ["CAP-0025"],
-      "rationale": "Deterministic release properties belong in automated gates; client-only and physical scenarios remain separate evidence paths.",
-      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/8"]
+      "rationale": "Deterministic release properties, exact runtime and validator qualification, and the equivalence of modular source to the generated candidate belong in automated gates; client-only and physical scenarios remain separate evidence paths.",
+      "governingReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/8", "https://github.com/jmanuelng/WIN_PCinfo/issues/10", "https://github.com/jmanuelng/WIN_PCinfo/issues/14"]
     },
     {
       "id": "CAP-0031",
@@ -820,9 +820,9 @@
       "id": "CMP-0029",
       "name": "Release manifest",
       "kind": "Output",
-      "purpose": "Record release identity, source revision, artifact and dependency integrity, ledger schema and hash, provenance, and applicable evidence references.",
+      "purpose": "Record release identity, source revision, ledger schema and hash, exact generated-application and supporting-resource digests, exact tested runtime, validator, dependency, and architecture identities, deterministic-build provenance, and applicable evidence references.",
       "capabilityIds": ["CAP-0025", "CAP-0027", "CAP-0030"],
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "docs/spec/capability-ledger.md: Release traceability"]
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/10", "docs/spec/capability-ledger.md: Release traceability"]
     },
     {
       "id": "CMP-0030",
@@ -868,9 +868,9 @@
       "id": "CMP-0035",
       "name": "Portable package and first-run workflow",
       "kind": "Workflow",
-      "purpose": "Guide acquisition, integrity verification, prerequisites, first launch, and safe failure without silently installing dependencies at runtime.",
+      "purpose": "Guide acquisition, integrity verification, the external stable PowerShell 7.6-or-later 7.x prerequisite, Windows PowerShell detection and relaunch, the Runtime Compatibility Check, first launch, and safe installation-and-retry guidance without WIN-PCInfo installing or changing the runtime.",
       "capabilityIds": ["CAP-0024"],
-      "sourceReferences": ["README.md: Usage", "ComputerInfo.ps1: main/module preflight", "https://github.com/jmanuelng/WIN_PCinfo/issues/2"]
+      "sourceReferences": ["README.md: Usage", "ComputerInfo.ps1: main/module preflight", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/10", "docs/spec/capability-ledger.md: Runtime and portable-package boundary"]
     },
     {
       "id": "CMP-0036",
@@ -884,9 +884,9 @@
       "id": "CMP-0037",
       "name": "Automated Gate workflow",
       "kind": "Workflow",
-      "purpose": "Run deterministic logic, fixture, schema, packaging, static, secret-prevention, and supported-runtime checks on ephemeral automation workers.",
+      "purpose": "Run deterministic logic, fixture, schema-validator conformance, packaging, static, secret-prevention, Runtime Compatibility Check, modular-source-to-generated-artifact equivalence, authenticated-resource, and exact runtime and architecture checks on ephemeral automation workers.",
       "capabilityIds": ["CAP-0027", "CAP-0030"],
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/3"]
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/3", "https://github.com/jmanuelng/WIN_PCinfo/issues/10", "https://github.com/jmanuelng/WIN_PCinfo/issues/14"]
     },
     {
       "id": "CMP-0038",
@@ -972,9 +972,9 @@
       "id": "CMP-0048",
       "name": "Supply-chain provenance and integrity control",
       "kind": "Control",
-      "purpose": "Bind source, dependencies, build process, artifacts, signatures or attestations, and release metadata and block integrity failures.",
+      "purpose": "Bind modular source, exact runtime and dependencies, deterministic build process, generated application, authenticated supporting resources, signatures or attestations, and release metadata and block every integrity or provenance failure.",
       "capabilityIds": ["CAP-0024", "CAP-0025", "CAP-0027", "CAP-0030"],
-      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2"]
+      "sourceReferences": ["https://github.com/jmanuelng/WIN_PCinfo/issues/1", "https://github.com/jmanuelng/WIN_PCinfo/issues/2", "https://github.com/jmanuelng/WIN_PCinfo/issues/6", "https://github.com/jmanuelng/WIN_PCinfo/issues/10"]
     },
     {
       "id": "CMP-0049",

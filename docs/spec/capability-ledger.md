@@ -4,7 +4,7 @@ This document is the public rulebook for the WIN-PCInfo v2 capability ledger. It
 
 The rulebook is intentionally separate from local agent instructions. A contributor or automation session should be able to discover and apply it from a fresh clone.
 
-The governing decision is [Define the v2 capability taxonomy and priority ledger](https://github.com/jmanuelng/WIN_PCinfo/issues/8), part of the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
+The governing decisions are [Define the v2 capability taxonomy and priority ledger](https://github.com/jmanuelng/WIN_PCinfo/issues/8) and [Define modular architecture and dependency policy](https://github.com/jmanuelng/WIN_PCinfo/issues/10), part of the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
 
 ## Why the ledger exists
 
@@ -167,6 +167,20 @@ When a linked capability is release-targeted, the component also records or link
 
 Documentation and verification evidence replace their plans as applicable before supported release claims are made.
 
+## Runtime and portable-package boundary
+
+WIN-PCInfo is portable application code, but PowerShell is an external prerequisite. This distinction keeps first-run behavior predictable:
+
+- A supported execution attempt uses an already installed stable PowerShell `7.6` or later `7.x` runtime. PowerShell `8` or a later major version requires a new compatibility decision.
+- WIN-PCInfo never installs, upgrades, downgrades, repairs, or changes PowerShell. If no eligible runtime is installed, execution ends before collection, network access, elevation, or device changes and explains how to obtain PowerShell from Microsoft's official instructions before retrying.
+- A small Windows PowerShell prerequisite bootstrap may locate and launch an eligible `pwsh` host or provide the same retry guidance. It is not a second assessment engine and performs no collection.
+- Before an Assessment Run begins, a local Runtime Compatibility Check verifies the active host's edition, stable version, architecture, required commands and .NET behavior, trusted built-in module and validator provenance, encoding, cryptography, module loading, and process-control behavior. Passing this check permits an execution attempt; it does not by itself establish a Supported Scenario or Release Evidence.
+- A missing optional mechanism makes only its affected capability unavailable. A missing safety-critical mechanism stops the run as `NotStarted` with a stable reason and practical next step.
+
+The tracked source remains modular so contributors can understand and test it. A deterministic build assembles that source into one primary generated PowerShell application. Developers do not hand-edit the generated application. The exact generated candidate—not an earlier source-only execution—is the artifact that proceeds through release validation and, when applicable, trusted Authenticode signing.
+
+Schemas, catalogs, presentation resources, approved helpers, and other governing non-PowerShell resources may remain separate package files. The primary application authenticates them through a release-bound manifest of normalized identities and exact digests before use. A missing or modified governing resource stops the run; adjacency to an authentic application is not enough to make a resource trusted. An Attested Preview may use the separately governed unsigned fallback, but it must authenticate and attest the same generated candidate and supporting-resource manifest.
+
 ## Coverage and progressive traceability
 
 Initial inventory covers:
@@ -209,6 +223,18 @@ Before Stable `2.0.0`:
 ## Release traceability
 
 Each release tag freezes the exact ledger revision used for that release. The release manifest records the ledger schema version, content hash, and source revision. Historical release claims are derived from that frozen snapshot and are not rewritten when the live ledger changes.
+
+For the runtime and generated package, Release Evidence also records:
+
+- each exact PowerShell runtime version and channel that was tested
+- PowerShell edition and processor architecture
+- the exact built-in JSON/schema validator and other transitive runtime dependencies relied upon
+- every bundled dependency's identity, version, source, digest, license status, and approved compatibility range where a range is used
+- source revision, deterministic build-tool identity, modular-source inputs, generated regions or source map, and the exact generated application digest
+- the authenticated supporting-resource manifest and resource digests
+- modular-source-to-generated-artifact equivalence results, Runtime Compatibility Check results, schema-validator conformance results, and applicable automated and fresh-client validation references
+
+A release may accept an eligible runtime that passes the Runtime Compatibility Check, but a support claim names only the exact runtime and architecture combinations backed by the required Release Evidence. A new runtime, validator, dependency, architecture, or generated-artifact identity receives impact review and all affected validation before it can inherit a claim.
 
 ## Change control
 
