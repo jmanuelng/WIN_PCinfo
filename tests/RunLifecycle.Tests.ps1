@@ -218,9 +218,22 @@ $recoverableFinalizer = {
     }
 }
 
-$cancelled = Invoke-AssessmentRun -RunId 'run:synthetic:lifecycle-cancelled' `
-    -CollectorAdapter $cancelledCollector -FinalizerAdapter $recoverableFinalizer `
-    -CleanupAdapter $cleanup
+$operatorCancellation = [System.Threading.CancellationTokenSource]::new()
+$externallyCancelledCollector = {
+    param([System.Threading.CancellationToken] $CancellationToken)
+
+    if (-not $CancellationToken.WaitHandle.WaitOne(1000)) {
+        throw 'The external cancellation did not reach active collection.'
+    }
+    & $cancelledCollector $CancellationToken
+}.GetNewClosure()
+$operatorCancellation.CancelAfter(25)
+try {
+    $cancelled = Invoke-AssessmentRun -RunId 'run:synthetic:lifecycle-cancelled' `
+        -CollectorAdapter $externallyCancelledCollector -FinalizerAdapter $recoverableFinalizer `
+        -CleanupAdapter $cleanup -CancellationToken $operatorCancellation.Token
+}
+finally { $operatorCancellation.Dispose() }
 
 Assert-RunEqual 30 $cancelled.ExitCode 'Cancelled has one stable exit code'
 Assert-RunEqual 'Cancelled' $cancelled.Terminal.outcome `

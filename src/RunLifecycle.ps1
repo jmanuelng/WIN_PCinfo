@@ -460,9 +460,10 @@ function Invoke-AssessmentRun {
     $cancellationAcknowledgementMilliseconds = -1L
     $finalizationRequired = $false
     $requiredPackageState = ''
-    $runCancellation = [System.Threading.CancellationTokenSource]::CreateLinkedTokenSource(
-        $CancellationToken
-    )
+    # Operator cancellation stops collection/scheduling. Cleanup and permitted
+    # recoverable finalization receive only the independent run deadline so the
+    # cancellation cannot kill the very work needed to leave an honest state.
+    $runCancellation = [System.Threading.CancellationTokenSource]::new()
     $runCancellation.CancelAfter([int] $deadlinePolicy.run.maximumMilliseconds)
     $package = [pscustomobject][ordered]@{
         state = 'Unavailable'
@@ -519,7 +520,7 @@ function Invoke-AssessmentRun {
             $collectionStarted = $true
             $startedOperationCount++
             $collectionCancellation = [System.Threading.CancellationTokenSource]::CreateLinkedTokenSource(
-                $runCancellation.Token
+                $runCancellation.Token, $CancellationToken
             )
             $collectionCancellation.CancelAfter(
                 [int] ($deadlinePolicy.phases | Where-Object phase -eq 'Collection')[0].maximumMilliseconds
@@ -954,19 +955,9 @@ function Invoke-RunLifecycleFixture {
                     -CancellationToken $CancellationToken
             }
             'Cancellation' {
-                $fixtureCancellation =
-                    [System.Threading.CancellationTokenSource]::CreateLinkedTokenSource(
-                        $CancellationToken
-                    )
-                try {
-                    $fixtureCancellation.CancelAfter(200)
-                    Invoke-ApprovedCollectorProcess `
-                        -OperationId 'fixture:synthetic.cooperative-cancel' `
-                        -CancellationToken $fixtureCancellation.Token
-                }
-                finally {
-                    $fixtureCancellation.Dispose()
-                }
+                Invoke-ApprovedCollectorProcess `
+                    -OperationId 'fixture:synthetic.cooperative-cancel' `
+                    -CancellationToken $CancellationToken
             }
             'PackageUnavailable' {
                 Invoke-ApprovedCollectorProcess -OperationId 'op:synthetic.windows.os.success' `
@@ -1001,9 +992,22 @@ function Invoke-RunLifecycleFixture {
         param($ProgressRecord)
         Write-ContractRecord $ProgressRecord -ConvertToJsonCommand $ConvertToJsonCommand
     }.GetNewClosure()
-    $result = Invoke-AssessmentRun -RunId $runId -CollectorAdapter $collectorAdapter `
-        -FinalizerAdapter $unavailableFinalizer -CleanupAdapter $verifiedCleanup `
-        -ProgressAdapter $progressAdapter
+    $fixtureRunCancellation = if ($scenario -eq 'Cancellation') {
+        [System.Threading.CancellationTokenSource]::new()
+    }
+    else { $null }
+    try {
+        if ($null -ne $fixtureRunCancellation) { $fixtureRunCancellation.CancelAfter(200) }
+        $result = Invoke-AssessmentRun -RunId $runId -CollectorAdapter $collectorAdapter `
+            -FinalizerAdapter $unavailableFinalizer -CleanupAdapter $verifiedCleanup `
+            -ProgressAdapter $progressAdapter `
+            -CancellationToken $(if ($null -ne $fixtureRunCancellation) {
+                $fixtureRunCancellation.Token
+            } else { [System.Threading.CancellationToken]::None })
+    }
+    finally {
+        if ($null -ne $fixtureRunCancellation) { $fixtureRunCancellation.Dispose() }
+    }
     foreach ($record in @($result.Records | Where-Object recordType -ne 'win-pcinfo.progress')) {
         Write-ContractRecord $record -ConvertToJsonCommand $ConvertToJsonCommand
     }
