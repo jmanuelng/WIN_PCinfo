@@ -9,7 +9,7 @@ Ordinary execution in this implementation slice still stops before collection. A
 Review the whole summary once. It discloses:
 
 - all 29 release-enabled Product Capabilities, including the selected profile scope, automatically added dependency `CAP-0015`, and release-wide product obligations;
-- the single frozen administrator boundary, maximum of one UAC interaction at the approval boundary, and restricted predefined SYSTEM work, with no later elevation choice or product prompt;
+- the single Privileged Collection Phase, maximum of one UAC interaction at the approval boundary, and restricted predefined SYSTEM work, with no later elevation choice or product prompt;
 - stable PowerShell 7.6-or-later 7.x and built-in-module dependencies, with no planned install or agreement;
 - estimated duration and disk use;
 - the exact network behavior and planned request classes;
@@ -55,4 +55,4 @@ Omit `-AcceptPreparation` to decline. The switch cannot repair an invalid reques
 
 The immutable output contract is documented by [`schemas/preparation-plan.schema.json`](../schemas/preparation-plan.schema.json). Hidden runtime and preparation fixtures are for synthetic validation only and always stop before collection.
 
-The post-approval Administrator seam is explained in [Privileged Collection Plan](privileged-collection-plan.md). Its synthetic fixtures are validation-only and do not change the ordinary Preparation prerequisites.
+The post-approval Privileged Collection Plan is explained in [Privileged Collection Plan](privileged-collection-plan.md). Its synthetic fixtures are validation-only and do not change the ordinary Preparation prerequisites.
