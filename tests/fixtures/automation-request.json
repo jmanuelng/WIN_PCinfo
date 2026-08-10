@@ -1,0 +1,6 @@
+{
+  "contractVersion": "1.0.0",
+  "profile": "ComprehensiveLocalAssessment",
+  "networkMode": "LocalOnly",
+  "acceptPreparation": false
+}

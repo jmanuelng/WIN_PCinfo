@@ -12,3 +12,8 @@
 .env
 .env.*
 *.log
+
+# Reproducible v2 build and test output. These contain no source of truth and
+# are recreated by build/Build.ps1 and tests/Run-Tests.ps1.
+/artifacts/
+/.test-output/
