@@ -12,6 +12,7 @@ $sourcePaths = @(
     'src/ApplicationHeader.ps1'
     'src/Contracts.ps1'
     'src/RuntimeCompatibility.ps1'
+    'src/Preparation.ps1'
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
     'src/ApplicationMain.ps1'
@@ -23,6 +24,53 @@ function Get-Sha256Hex {
         [System.Security.Cryptography.SHA256]::HashData($Bytes)
     ).ToLowerInvariant()
 }
+
+$releaseDefinitionPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1.json'
+$capabilityLedgerPath = Join-Path $repositoryRoot 'docs/spec/capability-ledger.json'
+foreach ($requiredDefinitionPath in @($releaseDefinitionPath, $capabilityLedgerPath)) {
+    if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
+        throw "Preparation definition input is missing: $requiredDefinitionPath"
+    }
+}
+$releaseDefinition = Get-Content -LiteralPath $releaseDefinitionPath -Raw | ConvertFrom-Json -Depth 30
+$capabilityLedger = Get-Content -LiteralPath $capabilityLedgerPath -Raw | ConvertFrom-Json -Depth 30
+$selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
+$releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
+$capabilitiesById = @{}
+foreach ($capability in @($capabilityLedger.capabilities)) { $capabilitiesById[[string] $capability.id] = $capability }
+if (@($releaseEnabledIds | Where-Object { -not $capabilitiesById.ContainsKey([string] $_) }).Count -gt 0) {
+    throw 'The release definition refers to an unknown capability.'
+}
+$dependencyIds = @($selectedIds | ForEach-Object { @($capabilitiesById[[string] $_].dependsOnCapabilityIds) } |
+    Where-Object { $_ -notin $selectedIds } | Sort-Object -Unique)
+$resolvedCapabilities = foreach ($capabilityId in $releaseEnabledIds) {
+    $disposition = if ($capabilityId -in $selectedIds) { 'Selected' }
+        elseif ($capabilityId -in $dependencyIds) { 'DependencyAdded' }
+        else { 'ReleaseInvariant' }
+    [pscustomobject][ordered]@{
+        id = [string] $capabilityId
+        name = [string] $capabilitiesById[[string] $capabilityId].name
+        disposition = $disposition
+        dependsOnCapabilityIds = @($capabilitiesById[[string] $capabilityId].dependsOnCapabilityIds)
+    }
+}
+$preparationDefinition = [pscustomobject][ordered]@{
+    contractVersion = '1.0.0'
+    release = [string] $releaseDefinition.release
+    profileId = [string] $releaseDefinition.profile.id
+    profileName = [string] $releaseDefinition.profile.name
+    capabilities = @($resolvedCapabilities)
+    governingResources = @(
+        foreach ($path in @('docs/spec/releases/2.0.0-preview.1.json', 'docs/spec/capability-ledger.json')) {
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path $repositoryRoot $path))
+            [pscustomobject][ordered]@{ path = $path; sha256 = Get-Sha256Hex -Bytes $bytes }
+        }
+    )
+}
+$preparationJson = $preparationDefinition | ConvertTo-Json -Compress -Depth 30
+$preparationBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($preparationJson)
+$preparationBase64 = [System.Convert]::ToBase64String($preparationBytes)
+$preparationDigest = Get-Sha256Hex -Bytes $preparationBytes
 
 $sourceFiles = foreach ($relativePath in $sourcePaths) {
     $literalPath = Join-Path $repositoryRoot $relativePath
@@ -48,6 +96,10 @@ $sourceInputs = foreach ($sourceFile in $sourceFiles) {
 
 $sections = foreach ($sourceFile in $sourceFiles) {
     $normalizedSource = $sourceFile.text -replace "`r`n", "`n" -replace "`r", "`n"
+    if ($sourceFile.path -eq 'src/Preparation.ps1') {
+        $normalizedSource = $normalizedSource.Replace('__PREPARATION_DEFINITION_BASE64__', $preparationBase64)
+        $normalizedSource = $normalizedSource.Replace('__PREPARATION_DEFINITION_SHA256__', $preparationDigest)
+    }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"
 }
 
@@ -80,6 +132,7 @@ $buildToolDigest = Get-Sha256Hex -Bytes ([System.IO.File]::ReadAllBytes($PSComma
         sha256 = $buildToolDigest
     }
     sourceInputs = $sourceInputs
+    definitionInputs = @($preparationDefinition.governingResources)
     encoding = 'utf-8-bom'
     lineEndings = 'crlf'
 }

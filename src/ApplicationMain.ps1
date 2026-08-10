@@ -65,6 +65,9 @@ else {
     Get-ActiveRuntimeFacts -ModuleFacts $moduleFacts
 }
 
+$usingPreparationFixture = -not [string]::IsNullOrWhiteSpace($PreparationFixturePath)
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
-    -ValidationFixture $usingRuntimeFixture -ConvertToJsonCommand $convertToJsonCommand
+    -Mode $Mode -AcceptPreparation:$AcceptPreparation -PreparationFixturePath $PreparationFixturePath `
+    -ValidationFixture ($usingRuntimeFixture -or $usingPreparationFixture) `
+    -ConvertFromJsonCommand $convertFromJsonCommand -ConvertToJsonCommand $convertToJsonCommand
 exit $applicationExitCode

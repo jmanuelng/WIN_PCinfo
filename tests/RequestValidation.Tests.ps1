@@ -14,12 +14,12 @@ $null = New-Item -ItemType Directory -Path $fixtureDirectory -Force
 $cases = @(
     @{
         Name = 'unknown-security-field'
-        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"acceptPreparation":false,"allowElevation":false,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false},"skipRuntimeCheck":true}'
+        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":false,"allowElevation":true,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"None"},"skipRuntimeCheck":true}'
         Expected = 'REQUEST.UNKNOWN_FIELD'
     }
     @{
         Name = 'unsupported-major'
-        Json = '{"contractVersion":"2.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"acceptPreparation":false,"allowElevation":false,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false}}'
+        Json = '{"contractVersion":"2.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":false,"allowElevation":true,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"None"}}'
         Expected = 'REQUEST.CONTRACT_VERSION_UNSUPPORTED'
     }
     @{
@@ -29,8 +29,38 @@ $cases = @(
     }
     @{
         Name = 'unsupported-network-mode'
-        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"FullOutbound","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"acceptPreparation":false,"allowElevation":false,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false}}'
+        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"FullOutbound","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":false,"allowElevation":true,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"None"}}'
         Expected = 'REQUEST.NETWORK_MODE_UNSUPPORTED'
+    }
+    @{
+        Name = 'local-only-network-conflict'
+        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":true,"allowElevation":true,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"None"}}'
+        Expected = 'REQUEST.NETWORK_CONFLICT'
+    }
+    @{
+        Name = 'connectivity-network-conflict'
+        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"MicrosoftConnectivityEnabled","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":false,"allowElevation":true,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"None"}}'
+        Expected = 'REQUEST.NETWORK_CONFLICT'
+    }
+    @{
+        Name = 'run-anyway-override'
+        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":false,"allowElevation":true,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"RunAnyway"}}'
+        Expected = 'REQUEST.VERIFICATION_OVERRIDE_UNSUPPORTED'
+    }
+    @{
+        Name = 'missing-elevation-authority'
+        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":false,"allowElevation":false,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"None"}}'
+        Expected = 'REQUEST.AUTHORITY_CONFLICT'
+    }
+    @{
+        Name = 'installation-authority-expansion'
+        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":"./WIN-PCInfo-Results","networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":false,"allowElevation":true,"allowInstallation":true,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"None"}}'
+        Expected = 'REQUEST.AUTHORITY_CONFLICT'
+    }
+    @{
+        Name = 'wrong-field-type'
+        Json = '{"contractVersion":"1.0.0","profile":"ComprehensiveLocalAssessment","outputDestination":42,"networkBehavior":"LocalOnly","updateChoice":"NoUpdateCheck","diagnosticLevel":"Standard","automationChoices":{"allowAssessmentNetwork":false,"allowElevation":true,"allowInstallation":false,"allowPersistentChanges":false,"allowStaleRecovery":false,"verificationOverride":"None"}}'
+        Expected = 'REQUEST.FIELD_TYPE_INVALID'
     }
 )
 

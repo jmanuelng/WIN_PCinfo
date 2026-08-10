@@ -1,9 +1,9 @@
 # WIN-PCInfo
 
-WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullet provides a generated launch path and verifies that the active PowerShell host is compatible **before any assessment collection or device change can begin**.
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullet provides a generated launch path, verifies the active PowerShell host, and presents one complete Preparation Summary **before any assessment collection or device change can begin**.
 
 > [!IMPORTANT]
-> The v2 tracer bullet does not collect computer information yet. An eligible host reaches the next preparation boundary and returns `NotStarted` with exit code `20`; an ineligible host returns the same outcome with a stable reason, official Microsoft installation guidance, and a retry step. This is intentional and does not claim that a Preview capability is delivered.
+> The v2 tracer bullet does not collect computer information yet. An eligible host resolves an immutable plan, presents the Preparation Summary, records approval or decline, and still returns `NotStarted` with exit code `20`. An ineligible host returns the same outcome with a stable reason, official Microsoft installation guidance, and a retry step. This is intentional and does not claim that a Preview capability is delivered.
 
 ## Try the v2 launch safely
 
@@ -17,6 +17,8 @@ pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Guided
 ```
 
 The tracked code under `src/` is the source of truth. `build/Build.ps1` deterministically assembles it into the ignored `artifacts/WIN-PCInfo.ps1`; do not edit the generated file.
+
+Before approving anything, read [Preparation Summary and approval](docs/preparation-summary.md). It explains the two network choices, every disclosure in the summary, guided and automation approval, and why neither approval nor validation fixtures can start collection in this implementation slice.
 
 ## Legacy script
 

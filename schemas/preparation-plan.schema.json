@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/preparation-plan.schema.json",
+  "title": "WIN-PCInfo Immutable Preparation Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordType",
+    "contractVersion",
+    "release",
+    "requestDigest",
+    "scope",
+    "privilege",
+    "dependencies",
+    "estimates",
+    "network",
+    "output",
+    "windowsFeatures",
+    "limitations",
+    "sideEffects",
+    "cleanup",
+    "governingResources"
+  ],
+  "properties": {
+    "recordType": { "const": "win-pcinfo.preparation-plan" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "type": "string", "minLength": 1 },
+    "requestDigest": { "$ref": "#/definitions/digest" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileId", "profileName", "capabilities"],
+      "properties": {
+        "profileId": { "const": "comprehensive-local-assessment" },
+        "profileName": { "const": "Comprehensive Local Assessment" },
+        "capabilities": {
+          "type": "array",
+          "minItems": 29,
+          "maxItems": 29,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "disposition", "dependsOnCapabilityIds"],
+            "properties": {
+              "id": { "pattern": "^CAP-[0-9]{4}$" },
+              "name": { "type": "string", "minLength": 1 },
+              "disposition": { "enum": ["Selected", "DependencyAdded", "ReleaseInvariant"] },
+              "dependsOnCapabilityIds": {
+                "type": "array",
+                "items": { "pattern": "^CAP-[0-9]{4}$" },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "privilege": { "type": "object" },
+    "dependencies": { "type": "object" },
+    "estimates": { "type": "object" },
+    "network": {
+      "type": "object",
+      "required": ["behavior", "automaticTelemetry", "authenticatedCloudCollection", "plannedRequests"],
+      "properties": {
+        "behavior": { "enum": ["LocalOnly", "MicrosoftConnectivityEnabled"] },
+        "automaticTelemetry": { "const": false },
+        "authenticatedCloudCollection": { "const": false },
+        "plannedRequests": { "type": "array" }
+      }
+    },
+    "output": { "type": "object" },
+    "windowsFeatures": { "type": "object" },
+    "limitations": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "sideEffects": { "type": "object" },
+    "cleanup": { "type": "object" },
+    "governingResources": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "$ref": "#/definitions/digest" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

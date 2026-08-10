@@ -15,6 +15,7 @@ function Invoke-GeneratedApplication {
     param(
         [Parameter(Mandatory)] [string] $CandidatePath,
         [Parameter(Mandatory)] [string[]] $Arguments,
+        [Parameter()] [AllowEmptyString()] [string] $StandardInput,
         [Parameter()] [string] $PowerShellPath = (Get-Command pwsh -CommandType Application).Source,
         [Parameter()] [string] $WorkingDirectory = (Get-Location).Path
     )
@@ -25,6 +26,7 @@ function Invoke-GeneratedApplication {
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    $startInfo.RedirectStandardInput = $PSBoundParameters.ContainsKey('StandardInput')
     foreach ($argument in @('-NoLogo', '-NoProfile', '-File', $CandidatePath) + $Arguments) {
         $null = $startInfo.ArgumentList.Add($argument)
     }
@@ -33,6 +35,10 @@ function Invoke-GeneratedApplication {
     $process.StartInfo = $startInfo
     try {
         $null = $process.Start()
+        if ($PSBoundParameters.ContainsKey('StandardInput')) {
+            $process.StandardInput.Write($StandardInput)
+            $process.StandardInput.Close()
+        }
         $standardOutput = $process.StandardOutput.ReadToEnd()
         $standardError = $process.StandardError.ReadToEnd()
         $process.WaitForExit()

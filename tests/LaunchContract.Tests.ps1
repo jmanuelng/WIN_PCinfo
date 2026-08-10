@@ -25,12 +25,18 @@ Assert-Equal $guidedTerminal.contractVersion $automationTerminal.contractVersion
 Assert-Equal $guidedTerminal.outcome $automationTerminal.outcome 'both entry adapters use one terminal outcome'
 Assert-Equal $guidedTerminal.reasonCode $automationTerminal.reasonCode 'both entry adapters reach the same engine boundary'
 Assert-Equal $guidedTerminal.requestDigest $automationTerminal.requestDigest 'equivalent guided and automation requests normalize identically'
-Assert-Equal 'SLICE.COLLECTION_NOT_IMPLEMENTED' $guidedTerminal.reasonCode 'the eligible live host reaches preparation without a capability claim'
+Assert-Equal 'PREPARATION.DECLINED' $guidedTerminal.reasonCode `
+    'approval defaults safely to decline after the eligible host presents preparation'
 Assert-Equal $true $guidedTerminal.runtime.eligible 'the installed stable host passes every live compatibility probe'
+Assert-Equal $guidedTerminal.planDigest $automationTerminal.planDigest `
+    'both entry adapters decline the same immutable reviewed plan'
 
-for ($index = 0; $index -lt ($guided.Records.Count - 1); $index++) {
-    $guidedProgress = $guided.Records[$index]
-    $automationProgress = $automation.Records[$index]
+$guidedProgressRecords = @($guided.Records | Where-Object recordType -eq 'win-pcinfo.progress')
+$automationProgressRecords = @($automation.Records | Where-Object recordType -eq 'win-pcinfo.progress')
+Assert-Equal $guidedProgressRecords.Count $automationProgressRecords.Count 'entry paths emit the same progress count'
+for ($index = 0; $index -lt $guidedProgressRecords.Count; $index++) {
+    $guidedProgress = $guidedProgressRecords[$index]
+    $automationProgress = $automationProgressRecords[$index]
     Assert-Equal $guidedProgress.recordType $automationProgress.recordType 'entry paths use the same progress record type'
     Assert-Equal $guidedProgress.phase $automationProgress.phase 'entry paths use the same progress phases'
     Assert-Equal $guidedProgress.state $automationProgress.state 'entry paths use the same progress states'
