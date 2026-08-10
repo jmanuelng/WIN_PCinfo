@@ -26,6 +26,24 @@ function New-NormalizedRequest {
     }
 }
 
+function Write-BootstrapTerminal {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet(
+            'RUNTIME.EDITION_UNSUPPORTED',
+            'RUNTIME.MODULE_LOADING_INCOMPATIBLE',
+            'RUNTIME.VALIDATOR_PROVENANCE_INVALID'
+        )]
+        [string] $ReasonCode
+    )
+
+    # The trusted JSON command is not available at this earliest failure seam.
+    # This template contains only fixed public values, and ValidateSet prevents
+    # machine- or caller-controlled text from entering JSON through replacement.
+    $terminalTemplate = '{"recordType":"win-pcinfo.terminal","contractVersion":"1.0.0","outcome":"NotStarted","exitCode":20,"reasonCode":"__REASON__","phase":"RuntimeCompatibility","collectionStarted":false,"requestDigest":"","validationFixture":false,"cleanup":{"required":false,"verified":true},"guidance":{"microsoftUrl":"https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows","retryStep":"Install or select stable PowerShell 7.6 or later 7.x from Microsoft, then rerun the same WIN-PCInfo command."}}'
+    [System.Console]::Out.WriteLine($terminalTemplate.Replace('__REASON__', $ReasonCode))
+}
+
 function Get-RequestDigest {
     param(
         [Parameter(Mandatory)] $Request,

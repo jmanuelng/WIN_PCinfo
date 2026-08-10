@@ -2,7 +2,7 @@ if ($PSVersionTable.PSEdition -ne 'Core') {
     # Windows PowerShell cannot be trusted to provide the v2 JSON/validator
     # stack. Emit only this fixed public contract record; no ambient serializer,
     # profile function, collection, or relaunch is permitted on the wrong host.
-    [System.Console]::Out.WriteLine('{"recordType":"win-pcinfo.terminal","contractVersion":"1.0.0","outcome":"NotStarted","exitCode":20,"reasonCode":"RUNTIME.EDITION_UNSUPPORTED","phase":"RuntimeCompatibility","collectionStarted":false,"requestDigest":"","validationFixture":false,"cleanup":{"required":false,"verified":true},"guidance":{"microsoftUrl":"https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows","retryStep":"Install or select stable PowerShell 7.6 or later 7.x from Microsoft, then rerun the same WIN-PCInfo command."}}')
+    Write-BootstrapTerminal -ReasonCode 'RUNTIME.EDITION_UNSUPPORTED'
     exit 20
 }
 
@@ -17,8 +17,7 @@ if (-not $moduleFacts.contractCommandProvenance) {
     else {
         'RUNTIME.MODULE_LOADING_INCOMPATIBLE'
     }
-    $bootstrapTerminal = '{"recordType":"win-pcinfo.terminal","contractVersion":"1.0.0","outcome":"NotStarted","exitCode":20,"reasonCode":"__REASON__","phase":"RuntimeCompatibility","collectionStarted":false,"requestDigest":"","validationFixture":false,"cleanup":{"required":false,"verified":true},"guidance":{"microsoftUrl":"https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows","retryStep":"Install or select stable PowerShell 7.6 or later 7.x from Microsoft, then rerun the same WIN-PCInfo command."}}'.Replace('__REASON__', $bootstrapReason)
-    [System.Console]::Out.WriteLine($bootstrapTerminal)
+    Write-BootstrapTerminal -ReasonCode $bootstrapReason
     exit 20
 }
 $convertToJsonCommand = $moduleFacts.convertToJsonCommand

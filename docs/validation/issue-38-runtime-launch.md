@@ -31,7 +31,7 @@ The terminal outcome is intentionally `NotStarted`: the eligible runtime reached
 ## Deterministic build evidence
 
 - Build contract: `win-pcinfo.build-evidence/1.0.0`
-- Generated application SHA-256: `fc161be9afb4a4a4ec88c3d9a7d239933e01dd500a4e1372ae63481676a479bf`
+- Generated application SHA-256: `f714ff843d534b43aa2a1d651ada944d5dece6ed3ba1fd4893b40889d202ca48`
 - Representation: UTF-8 with BOM and CRLF
 - Tracked inputs: `src/ApplicationHeader.ps1`, `src/Contracts.ps1`, `src/RuntimeCompatibility.ps1`, `src/LaunchEngine.ps1`, `src/EntryAdapters.ps1`, and `src/ApplicationMain.ps1`
 - Reproduction: `pwsh -NoLogo -NoProfile -File ./build/Build.ps1`
