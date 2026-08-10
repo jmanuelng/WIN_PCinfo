@@ -6,7 +6,7 @@ This implementation is a tracer bullet. The generated application can exercise t
 
 ## What an operator needs to know
 
-Before approval, WIN-PCInfo evaluates the requested destination without creating the workspace. The destination must be an existing, non-root directory on a ready local fixed NTFS or ReFS volume. Network paths, unavailable or unsupported volumes, existing run targets, and any path whose existing ancestors include a junction, mount point, or symbolic link are rejected with a specific reason. The safe alternative is the initiating user's local application-data area under `WIN-PCInfo\Runs`.
+Before approval, WIN-PCInfo evaluates the requested destination without creating the workspace. The destination must be an existing, non-root directory on a ready local fixed NTFS or ReFS volume. Network paths, unavailable or unsupported volumes, existing run targets, and any path whose existing ancestors include a junction, mount point, or symbolic link are rejected with a specific reason. The safe alternative is the initiating user's existing local application-data directory; the newly created child workspace still carries the fixed `WINPCInfo-Evidence-v1-` prefix and fresh run UUID.
 
 A workspace is never silently redirected. If the requested location is unsafe, preparation stops and presents the restriction and alternative so the operator can submit a new request deliberately.
 
@@ -34,7 +34,7 @@ It has no free-form metadata or evidence field. It cannot contain an Assessment 
 
 An approved collector should return its normal Collector Result Envelope in memory. Temporary Evidence exists only for a collector that cannot do that. This release contract permits at most 16 temporary artifacts and 1 MiB per artifact. Each file receives a generated name inside the workspace, is registered before content is written, and is read only after its path and filesystem identity are reverified.
 
-The ingestion consumer must accept the exact bounded bytes before WIN-PCInfo deletes the temporary file and removes its registration. If ingestion or deletion fails, the file remains registered and cleanup takes precedence over useful partial work.
+Registration, writing, and ingestion must all occur under the exact journal owner process, process-start instant, and initiating-user SID. The ingestion consumer must accept the exact bounded bytes before WIN-PCInfo deletes the temporary file and removes its registration. A later process cannot ingest a prior run's bytes. If ingestion or deletion fails, the file remains registered and cleanup takes precedence over useful partial work.
 
 Deletion here means that the product-owned directory entry is removed and its absence is checked. Windows and the storage device may retain recoverable blocks. WIN-PCInfo makes no forensic secure-erasure claim.
 
@@ -50,8 +50,8 @@ Recovery follows this order:
 4. If that exact owner is live, do nothing and return `NotStarted` with `RECOVERY.LIVE_OWNER`.
 5. If the owner is stale, verify the workspace name, ACL, reparse state, and filesystem identity, then verify every registered artifact is inside it and still has its registered identity.
 6. Remove only artifacts marked `Remove`, then the fixed empty temporary-evidence directory, then an empty workspace. Cleanup has two attempts total—one initial attempt and one idempotent retry—inside a two-second deadline.
-7. Preserve a registered finalized Protected Evidence Package and its access-restricted workspace. Windows Feature state remains observation-only; recovery never enables or disables a feature.
-8. Remove the journal last, only after every cleanup target is absent and every preserved object is still the exact registered object.
+7. Preserve a registered finalized Protected Evidence Package and its access-restricted workspace. Because registered objects remain, report `CleanupIncomplete` and retain the journal with deliberate next-step guidance. Windows Feature state remains observation-only; recovery never enables or disables a feature.
+8. Remove the journal last, only after every registered run-owned object is absent. A preserved package therefore prevents journal removal until the operator moves or finishes handling it and deliberately retries recovery.
 
 Recovery never resumes collection, adopts an unknown directory, recursively deletes a guessed path, removes a finalized package, or changes an existing Windows Feature.
 
@@ -64,6 +64,10 @@ Recovery never resumes collection, adopts an unknown directory, recursively dele
 `RECOVERY.OWNER_UNVERIFIED`, `RECOVERY.JOURNAL_OWNERSHIP_UNVERIFIED`, or `RECOVERY.OWNERSHIP_UNVERIFIED` means identity or access could not be proven. The target and journal remain. Close software only when appropriate, inspect the protected journal locally, and retry; do not manually delete a path whose ownership is uncertain.
 
 `RECOVERY.CLEANUP_FAILED` means a verified owned object remained after both attempts, often because another program still holds it open. Close that program and retry deliberate recovery. The outcome is `CleanupIncomplete`, exit code `60`.
+
+`RECOVERY.FINALIZED_PACKAGE_PRESERVED` means recovery protected a finalized package and its restricted workspace. Move or finish handling the package deliberately, then retry recovery so the now-empty registered workspace and journal can be verified absent. The outcome remains `CleanupIncomplete`, exit code `60`, while those registrations exist.
+
+`RECOVERY.JOURNAL_WRITE_INTERRUPTED` means the fixed atomic-update sibling survived a crash. Recovery leaves both protected journal files and all evidence untouched because it cannot guess which record is authoritative. Inspect and resolve that local journal state deliberately, then retry. The outcome is `CleanupIncomplete`, exit code `60`.
 
 ## Reproduce the public-safe checks
 

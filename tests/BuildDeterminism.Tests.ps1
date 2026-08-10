@@ -27,14 +27,52 @@ Assert-True ($first.sha256 -eq $second.sha256) 'the deterministic artifact diges
 Assert-True ($first.buildContract -eq 'win-pcinfo.build-evidence/1.0.0') 'build evidence is versioned'
 Assert-True ($first.buildTool.path -eq 'build/Build.ps1') 'the build tool has a normalized repository identity'
 Assert-True ($first.buildTool.sha256 -match '^[0-9a-f]{64}$') 'the build tool digest is exact'
-Assert-True ($first.sourceInputs.Count -eq 13) 'every modular source input is recorded'
+$expectedSourcePaths = @(
+    'src/ApplicationHeader.ps1'
+    'src/Contracts.ps1'
+    'src/ContractValidator.ps1'
+    'src/RuntimeCompatibility.ps1'
+    'src/Preparation.ps1'
+    'src/ProcessSupervisor.ps1'
+    'src/PrivilegedCollectionPlan.ps1'
+    'src/SystemCollectionPlan.ps1'
+    'src/EvidenceWorkspace.ps1'
+    'src/RunLifecycle.ps1'
+    'src/LaunchEngine.ps1'
+    'src/EntryAdapters.ps1'
+    'src/ApplicationMain.ps1'
+)
+Assert-True ((@($first.sourceInputs.path | Sort-Object) -join '|') -eq
+    (@($expectedSourcePaths | Sort-Object) -join '|')) `
+    'the exact modular source set is recorded'
 Assert-True (@($first.sourceInputs | Where-Object { $_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count -eq 0) `
     'every modular source input has an exact digest'
 Assert-True ($first.definitionInputs.Count -eq 3) 'all governing preparation resources are recorded'
 Assert-True (@($first.definitionInputs | Where-Object { $_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count -eq 0) `
     'every governing preparation resource has an exact digest'
-Assert-True ($first.applicationManifest.resources.Count -eq 31) `
-    'source, build tool, public schemas, and the release Contract Set are bound into the application manifest'
+$expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
+    'build/Build.ps1'
+    'build/TextCanonicalization.ps1'
+    'schemas/assessment-run-request.schema.json'
+    'schemas/preparation-plan.schema.json'
+    'schemas/assessment-record.schema.json'
+    'schemas/assessment-contract-set.schema.json'
+    'schemas/approved-collector-catalog.schema.json'
+    'schemas/run-lifecycle.schema.json'
+    'schemas/privileged-collection-plan.schema.json'
+    'schemas/system-collection-plan.schema.json'
+    'schemas/evidence-workspace.schema.json'
+    'schemas/run-recovery-journal.schema.json'
+    'docs/spec/releases/2.0.0-preview.1-contract-set.json'
+    'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
+    'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
+    'docs/spec/releases/2.0.0-preview.1-privileged-collection-plan.json'
+    'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
+    'docs/spec/releases/2.0.0-preview.1-evidence-workspace.json'
+)
+Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq
+    (@($expectedApplicationResourcePaths | Sort-Object) -join '|')) `
+    'the exact source, build tool, public schema, and release Contract Set resources are bound into the application manifest'
 Assert-True ($first.applicationManifest.sha256 -match '^[0-9a-f]{64}$') `
     'the application manifest has one exact digest'
 foreach ($resource in @($first.applicationManifest.resources) + @($first.definitionInputs)) {

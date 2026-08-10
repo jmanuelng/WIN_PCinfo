@@ -56,7 +56,7 @@
           "required": ["knownFolder", "relativePath"],
           "properties": {
             "knownFolder": { "const": "LocalApplicationData" },
-            "relativePath": { "const": "WIN-PCInfo\\Runs" }
+            "relativePath": { "const": "." }
           }
         }
       }

@@ -33,6 +33,10 @@ function Get-EvidenceWorkspacePolicy {
         $bytes = [System.Convert]::FromBase64String($script:EvidenceWorkspacePolicyBase64)
         $expectedDigest = $script:EvidenceWorkspacePolicyDigest
     }
+    # The digest binds the release policy to the deterministic application
+    # bytes and detects accidental or post-build mutation. It is not a trust
+    # signature for an unsigned developer build; provenance still comes from
+    # reviewed source and the repository signing/release process.
     if ((Get-EvidenceWorkspaceSha256 -Bytes $bytes) -ne $expectedDigest) {
         throw 'The embedded Evidence Workspace policy failed integrity validation.'
     }
@@ -477,6 +481,9 @@ function Test-EvidenceAccessBoundary {
 function Get-RunRecoveryOwnerState {
     param([Parameter(Mandatory)] $Owner)
 
+    # A PID alone is reusable, so the exact process start instant is part of
+    # ownership. The Windows process table is the observation boundary. If it
+    # cannot be inspected, Ambiguous deliberately forbids destructive cleanup.
     $process = $null
     try {
         $process = [System.Diagnostics.Process]::GetProcessById([int] $Owner.processId)
@@ -534,6 +541,12 @@ function New-StaleRunRecoveryResult {
         guidance = if ($ReasonCode -eq 'RECOVERY.LIVE_OWNER') {
             'Allow the active Assessment Run to finish, then retry deliberate recovery.'
         }
+        elseif ($ReasonCode -eq 'RECOVERY.FINALIZED_PACKAGE_PRESERVED') {
+            'Keep the finalized package protected. Move or finish handling it deliberately, then retry recovery so every registered object can be verified absent.'
+        }
+        elseif ($ReasonCode -eq 'RECOVERY.JOURNAL_WRITE_INTERRUPTED') {
+            'Keep both protected journal files for deliberate local inspection. Resolve the interrupted journal write, then retry recovery without guessing which record is authoritative.'
+        }
         elseif ($Outcome -eq 'CleanupIncomplete') {
             'Close software using the registered artifact, verify ownership, and retry deliberate recovery. Do not delete an ambiguous target.'
         }
@@ -563,13 +576,29 @@ function Invoke-StaleRunRecovery {
     param([Parameter(Mandatory)] [string] $JournalPath)
 
     $journalFullPath = [System.IO.Path]::GetFullPath($JournalPath)
+    $pendingJournalPath = $journalFullPath + '.new'
+    $journalDirectory = [System.IO.Path]::GetDirectoryName($journalFullPath)
+    $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $policy = Get-EvidenceWorkspacePolicy
+    $fixedJournalName = [System.IO.Path]::GetFileName($journalFullPath) -eq
+        [string] $policy.journal.fileName
+    $fixedDirectoryName = [System.IO.Path]::GetFileName($journalDirectory) -match
+        '^WINPCInfo-Recovery-v1-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    if (-not [System.IO.File]::Exists($journalFullPath) -and
+        ([System.IO.File]::Exists($pendingJournalPath) -or
+            [System.IO.Directory]::Exists($pendingJournalPath)) -and
+        $fixedJournalName -and $fixedDirectoryName -and
+        (Test-EvidenceAccessBoundary -LiteralPath $journalDirectory `
+            -ExpectedOwnerSid $currentSid)) {
+        return New-StaleRunRecoveryResult -Outcome 'CleanupIncomplete' `
+            -ReasonCode 'RECOVERY.JOURNAL_WRITE_INTERRUPTED' `
+            -CleanupVerified $false -CleanupAttempts 0
+    }
     try { $journal = Read-RunRecoveryJournal -LiteralPath $journalFullPath }
     catch {
         return New-StaleRunRecoveryResult -Outcome 'CleanupIncomplete' `
             -ReasonCode 'RECOVERY.JOURNAL_INVALID' -CleanupVerified $false -CleanupAttempts 0
     }
-    $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    $journalDirectory = [System.IO.Path]::GetDirectoryName($journalFullPath)
     $expectedJournalDirectory = 'WINPCInfo-Recovery-v1-' + [string] $journal.runId
     if ($currentSid -ne [string] $journal.owner.initiatingUserSid -or
         [System.IO.Path]::GetFileName($journalDirectory) -ne $expectedJournalDirectory -or
@@ -584,6 +613,15 @@ function Invoke-StaleRunRecovery {
     if ($ownerState -eq 'Live') {
         return New-StaleRunRecoveryResult -Outcome 'NotStarted' `
             -ReasonCode 'RECOVERY.LIVE_OWNER' -CleanupVerified $false -CleanupAttempts 0
+    }
+    # Atomic journal updates intentionally use one fixed create-new sibling. If
+    # it survived a crash, neither version can be guessed authoritative. Leave
+    # both protected objects and all evidence untouched for deliberate review.
+    if ([System.IO.File]::Exists($pendingJournalPath) -or
+        [System.IO.Directory]::Exists($pendingJournalPath)) {
+        return New-StaleRunRecoveryResult -Outcome 'CleanupIncomplete' `
+            -ReasonCode 'RECOVERY.JOURNAL_WRITE_INTERRUPTED' `
+            -CleanupVerified $false -CleanupAttempts 0
     }
     if ($ownerState -eq 'Ambiguous') {
         Set-RunRecoveryIncomplete -Journal $journal -JournalPath $journalFullPath `
@@ -634,10 +672,9 @@ function Invoke-StaleRunRecovery {
                 break
             }
         }
-        elseif ($artifact.cleanupAction -eq 'Preserve') {
-            $ownershipVerified = $false
-            break
-        }
+        # A missing Preserve registration means the operator already moved or
+        # finished handling it. Recovery never deletes such an object; absence
+        # merely permits cleanup of the now-empty registered workspace.
     }
     if (-not $ownershipVerified) {
         Set-RunRecoveryIncomplete -Journal $journal -JournalPath $journalFullPath `
@@ -648,6 +685,8 @@ function Invoke-StaleRunRecovery {
 
     $preservedPackages = @($journal.artifacts | Where-Object {
         $_.kind -eq 'ProtectedEvidencePackage' -and $_.cleanupAction -eq 'Preserve' -and $_.finalized
+    } | Where-Object {
+        [System.IO.File]::Exists([string] $_.path)
     })
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $cleanupSucceeded = $false
@@ -719,6 +758,18 @@ function Invoke-StaleRunRecovery {
             -CleanupAttempts $attempt -WorkspacePreserved ($preservedPackages.Count -gt 0)
     }
 
+    # A finalized package is intentionally preserved, but it and its containing
+    # workspace are still registered run-owned objects. Retaining the journal is
+    # therefore the only honest terminal state until the operator deliberately
+    # moves or consumes the package and retries cleanup.
+    if ($preservedPackages.Count -gt 0) {
+        Set-RunRecoveryIncomplete -Journal $journal -JournalPath $journalFullPath `
+            -Attempts $attempt -ReasonCode 'RECOVERY.FINALIZED_PACKAGE_PRESERVED'
+        return New-StaleRunRecoveryResult -Outcome 'CleanupIncomplete' `
+            -ReasonCode 'RECOVERY.FINALIZED_PACKAGE_PRESERVED' `
+            -CleanupVerified $false -CleanupAttempts $attempt -WorkspacePreserved $true
+    }
+
     $journal.cleanup.state = 'Verified'
     $journal.cleanup.attempts = $attempt
     $journal.cleanup.lastReasonCode = 'CLEANUP.VERIFIED'
@@ -757,14 +808,24 @@ function Test-EvidenceArtifactWithinWorkspace {
         )
 }
 
-function Add-TemporaryEvidence {
+function Test-RunRecoveryJournalCurrentOwner {
+    param([Parameter(Mandatory)] $Journal)
+
+    $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    [int] $Journal.owner.processId -eq [int] $PID -and
+        [string] $Journal.owner.initiatingUserSid -eq $currentSid -and
+        (Get-RunRecoveryOwnerState -Owner $Journal.owner) -eq 'Live'
+}
+
+function New-TemporaryEvidenceRegistration {
     param(
         [Parameter(Mandatory)] [string] $JournalPath,
-        [Parameter(Mandatory)] [byte[]] $Content
+        [Parameter(Mandatory)] [int] $ExpectedContentLength
     )
 
     $policy = Get-EvidenceWorkspacePolicy
-    if ($Content.Length -gt [int] $policy.temporaryEvidence.maximumArtifactBytes) {
+    if ($ExpectedContentLength -lt 0 -or
+        $ExpectedContentLength -gt [int] $policy.temporaryEvidence.maximumArtifactBytes) {
         return [pscustomobject][ordered]@{
             state = 'Rejected'
             reasonCode = 'TEMPORARY_EVIDENCE.SIZE_EXCEEDED'
@@ -773,6 +834,14 @@ function Add-TemporaryEvidence {
         }
     }
     $journal = Read-RunRecoveryJournal -LiteralPath $JournalPath
+    if (-not (Test-RunRecoveryJournalCurrentOwner -Journal $journal)) {
+        return [pscustomobject][ordered]@{
+            state = 'Rejected'
+            reasonCode = 'TEMPORARY_EVIDENCE.RUN_OWNER_MISMATCH'
+            artifactId = ''
+            literalPath = ''
+        }
+    }
     if (@($journal.artifacts | Where-Object kind -eq 'TemporaryEvidence').Count -ge
         [int] $policy.temporaryEvidence.maximumArtifactCount) {
         return [pscustomobject][ordered]@{
@@ -811,9 +880,57 @@ function Add-TemporaryEvidence {
     $journal.artifacts = @($journal.artifacts) + $artifact
     Write-RunRecoveryJournal -Journal $journal -LiteralPath $JournalPath
 
+    [pscustomobject][ordered]@{
+        state = 'Registered'
+        reasonCode = 'TEMPORARY_EVIDENCE.REGISTERED'
+        artifactId = $artifactId
+        literalPath = $literalPath
+    }
+}
+
+function Write-RegisteredTemporaryEvidence {
+    param(
+        [Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(Mandatory)] [guid] $ArtifactId,
+        [Parameter(Mandatory)] [byte[]] $Content
+    )
+
+    $policy = Get-EvidenceWorkspacePolicy
+    if ($Content.Length -gt [int] $policy.temporaryEvidence.maximumArtifactBytes) {
+        return [pscustomobject][ordered]@{
+            state = 'Rejected'
+            reasonCode = 'TEMPORARY_EVIDENCE.SIZE_EXCEEDED'
+            artifactId = $ArtifactId.ToString('D')
+            literalPath = ''
+        }
+    }
+    $journal = Read-RunRecoveryJournal -LiteralPath $JournalPath
+    if (-not (Test-RunRecoveryJournalCurrentOwner -Journal $journal)) {
+        return [pscustomobject][ordered]@{
+            state = 'Rejected'
+            reasonCode = 'TEMPORARY_EVIDENCE.RUN_OWNER_MISMATCH'
+            artifactId = $ArtifactId.ToString('D')
+            literalPath = ''
+        }
+    }
+    $artifact = @($journal.artifacts | Where-Object {
+        $_.kind -eq 'TemporaryEvidence' -and $_.artifactId -eq $ArtifactId.ToString('D')
+    })
+    if ($artifact.Count -ne 1 -or
+        -not [System.IO.File]::Exists([string] $artifact[0].path) -or
+        (Get-EvidenceWorkspaceFileSystemIdentity -LiteralPath $artifact[0].path) -ne
+            [string] $artifact[0].fileSystemIdentity) {
+        return [pscustomobject][ordered]@{
+            state = 'Rejected'
+            reasonCode = 'TEMPORARY_EVIDENCE.OWNERSHIP_UNVERIFIED'
+            artifactId = $ArtifactId.ToString('D')
+            literalPath = ''
+        }
+    }
+
     try {
         $stream = [System.IO.FileStream]::new(
-            $literalPath, [System.IO.FileMode]::Open,
+            [string] $artifact[0].path, [System.IO.FileMode]::Open,
             [System.IO.FileAccess]::Write, [System.IO.FileShare]::None,
             4096, [System.IO.FileOptions]::WriteThrough
         )
@@ -832,9 +949,22 @@ function Add-TemporaryEvidence {
     [pscustomobject][ordered]@{
         state = 'Registered'
         reasonCode = 'TEMPORARY_EVIDENCE.REGISTERED'
-        artifactId = $artifactId
-        literalPath = $literalPath
+        artifactId = $ArtifactId.ToString('D')
+        literalPath = [string] $artifact[0].path
     }
+}
+
+function Add-TemporaryEvidence {
+    param(
+        [Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(Mandatory)] [byte[]] $Content
+    )
+
+    $registration = New-TemporaryEvidenceRegistration -JournalPath $JournalPath `
+        -ExpectedContentLength $Content.Length
+    if ($registration.state -ne 'Registered') { return $registration }
+    Write-RegisteredTemporaryEvidence -JournalPath $JournalPath `
+        -ArtifactId $registration.artifactId -Content $Content
 }
 
 function Complete-TemporaryEvidenceIngestion {
@@ -845,6 +975,12 @@ function Complete-TemporaryEvidenceIngestion {
     )
 
     $journal = Read-RunRecoveryJournal -LiteralPath $JournalPath
+    if (-not (Test-RunRecoveryJournalCurrentOwner -Journal $journal)) {
+        return [pscustomobject][ordered]@{
+            state = 'IngestionFailed'
+            reasonCode = 'TEMPORARY_EVIDENCE.RUN_OWNER_MISMATCH'
+        }
+    }
     $workspace = @($journal.artifacts | Where-Object kind -eq 'Workspace')
     $artifact = @($journal.artifacts | Where-Object {
         $_.kind -eq 'TemporaryEvidence' -and $_.artifactId -eq $ArtifactId.ToString('D')
@@ -931,10 +1067,35 @@ function Test-EvidenceWorkspaceDestination {
     try {
         $basePath = [System.IO.Path]::GetFullPath($RequestedBasePath)
         $root = [System.IO.Path]::GetPathRoot($basePath)
-        if ([string]::IsNullOrWhiteSpace($root) -or
-            $basePath.TrimEnd('\') -eq $root.TrimEnd('\') -or
-            -not [System.IO.Directory]::Exists($basePath)) {
-            throw [System.IO.IOException]::new('The destination must be an existing non-root directory.')
+        if ([string]::IsNullOrWhiteSpace($root)) {
+            throw [System.IO.IOException]::new('The destination has no volume root.')
+        }
+        if ($basePath.TrimEnd('\') -eq $root.TrimEnd('\')) {
+            return [pscustomobject][ordered]@{
+                eligible = $false
+                reasonCode = 'WORKSPACE.DESTINATION_ROOT'
+                requestedBasePath = $basePath
+                workspacePath = ''
+                safeAlternative = $safeAlternative
+            }
+        }
+        if ([System.IO.File]::Exists($basePath)) {
+            return [pscustomobject][ordered]@{
+                eligible = $false
+                reasonCode = 'WORKSPACE.DESTINATION_NOT_DIRECTORY'
+                requestedBasePath = $basePath
+                workspacePath = ''
+                safeAlternative = $safeAlternative
+            }
+        }
+        if (-not [System.IO.Directory]::Exists($basePath)) {
+            return [pscustomobject][ordered]@{
+                eligible = $false
+                reasonCode = 'WORKSPACE.DESTINATION_NOT_FOUND'
+                requestedBasePath = $basePath
+                workspacePath = ''
+                safeAlternative = $safeAlternative
+            }
         }
 
         $drive = [System.IO.DriveInfo]::new($root)
@@ -1166,10 +1327,7 @@ function Remove-EvidenceWorkspaceValidationBoundary {
 }
 
 function New-EvidenceWorkspaceFixtureContext {
-    param(
-        [Parameter(Mandatory)] $Boundary,
-        [Parameter()] [switch] $StaleOwner
-    )
+    param([Parameter(Mandatory)] $Boundary)
 
     $workspaceBase = Join-Path $Boundary.CaseRoot 'workspace-base'
     $recoveryBase = Join-Path $Boundary.CaseRoot 'recovery-base'
@@ -1179,32 +1337,35 @@ function New-EvidenceWorkspaceFixtureContext {
         -RunId ([guid]::NewGuid())
     if ($workspace.state -ne 'Created') { throw 'Synthetic workspace creation failed.' }
 
-    $ownerProcess = $null
-    if ($StaleOwner) {
-        $start = [System.Diagnostics.ProcessStartInfo]::new()
-        $start.FileName = Join-Path $PSHOME 'pwsh.exe'
-        $start.UseShellExecute = $false
-        $null = $start.ArgumentList.Add('-NoLogo')
-        $null = $start.ArgumentList.Add('-NoProfile')
-        $null = $start.ArgumentList.Add('-Command')
-        $null = $start.ArgumentList.Add('[System.Threading.Thread]::Sleep(30000)')
-        $ownerProcess = [System.Diagnostics.Process]::Start($start)
-    }
+    $journal = New-RunRecoveryJournal -Workspace $workspace `
+        -RecoveryBasePath $recoveryBase -PlanDigest ('c' * 64) -Phase 'Collection'
+    [pscustomobject]@{ Workspace = $workspace; Journal = $journal }
+}
+
+function Set-EvidenceWorkspaceFixtureOwnerStale {
+    param([Parameter(Mandatory)] [string] $JournalPath)
+
+    $start = [System.Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = Join-Path $PSHOME 'pwsh.exe'
+    $start.UseShellExecute = $false
+    $null = $start.ArgumentList.Add('-NoLogo')
+    $null = $start.ArgumentList.Add('-NoProfile')
+    $null = $start.ArgumentList.Add('-Command')
+    $null = $start.ArgumentList.Add('[System.Threading.Thread]::Sleep(30000)')
+    $ownerProcess = [System.Diagnostics.Process]::Start($start)
     try {
-        $journal = New-RunRecoveryJournal -Workspace $workspace `
-            -RecoveryBasePath $recoveryBase -PlanDigest ('c' * 64) `
-            -Phase 'Collection' -OwnerProcess $ownerProcess
+        $journal = Read-RunRecoveryJournal -LiteralPath $JournalPath
+        $journal.owner.processId = $ownerProcess.Id
+        $journal.owner.processStartUtc = $ownerProcess.StartTime.ToUniversalTime().ToString('O')
+        Write-RunRecoveryJournal -Journal $journal -LiteralPath $JournalPath
     }
     finally {
-        if ($null -ne $ownerProcess) {
-            if (-not $ownerProcess.HasExited) {
-                $ownerProcess.Kill($true)
-                $ownerProcess.WaitForExit()
-            }
-            $ownerProcess.Dispose()
+        if (-not $ownerProcess.HasExited) {
+            $ownerProcess.Kill($true)
+            $ownerProcess.WaitForExit()
         }
+        $ownerProcess.Dispose()
     }
-    [pscustomobject]@{ Workspace = $workspace; Journal = $journal }
 }
 
 function Invoke-EvidenceWorkspaceFixture {
@@ -1259,8 +1420,7 @@ function Invoke-EvidenceWorkspaceFixture {
             $safeAlternativeOffered = -not [string]::IsNullOrWhiteSpace([string] $unsafe.safeAlternative)
         }
         else {
-            $context = New-EvidenceWorkspaceFixtureContext -Boundary $boundary `
-                -StaleOwner:($scenario -ne 'LiveOwner')
+            $context = New-EvidenceWorkspaceFixtureContext -Boundary $boundary
             $workspaceAccessRestricted = Test-EvidenceAccessBoundary `
                 -LiteralPath $context.Workspace.workspacePath `
                 -ExpectedOwnerSid ([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
@@ -1269,12 +1429,16 @@ function Invoke-EvidenceWorkspaceFixture {
                 'InterruptedTemporaryEvidence' {
                     $temporary = Add-TemporaryEvidence -JournalPath $context.Journal.journalPath `
                         -Content ([System.Text.Encoding]::UTF8.GetBytes('synthetic-private-marker'))
+                    Set-EvidenceWorkspaceFixtureOwnerStale `
+                        -JournalPath $context.Journal.journalPath
                     $recoveryResult = Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
                     $temporaryRemoved = -not [System.IO.File]::Exists($temporary.literalPath)
                     $state = 'Recovered'
                     $reasonCode = [string] $recoveryResult.reasonCode
                 }
                 'StaleOwner' {
+                    Set-EvidenceWorkspaceFixtureOwnerStale `
+                        -JournalPath $context.Journal.journalPath
                     $recoveryResult = Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
                     $state = 'Recovered'
                     $reasonCode = [string] $recoveryResult.reasonCode
@@ -1293,6 +1457,8 @@ function Invoke-EvidenceWorkspaceFixture {
                         -Content ([System.Text.Encoding]::UTF8.GetBytes('synthetic-original-marker'))
                     [System.IO.File]::Move($temporary.literalPath, $temporary.literalPath + '.owned-original')
                     [System.IO.File]::WriteAllText($temporary.literalPath, 'synthetic-replacement-marker')
+                    Set-EvidenceWorkspaceFixtureOwnerStale `
+                        -JournalPath $context.Journal.journalPath
                     $recoveryResult = Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
                     $targetRetainedDuringRecovery = [System.IO.File]::Exists($temporary.literalPath)
                     $temporaryRemoved = $false
@@ -1304,12 +1470,16 @@ function Invoke-EvidenceWorkspaceFixture {
                     [System.IO.File]::WriteAllBytes($packagePath, [byte[]](1, 2, 3, 4))
                     Register-FinalizedEvidencePackage -JournalPath $context.Journal.journalPath `
                         -LiteralPath $packagePath | Out-Null
+                    Set-EvidenceWorkspaceFixtureOwnerStale `
+                        -JournalPath $context.Journal.journalPath
                     $recoveryResult = Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
                     $finalizedPackagePreserved = [System.IO.File]::Exists($packagePath)
-                    $state = 'Recovered'
+                    $state = 'Deferred'
                     $reasonCode = [string] $recoveryResult.reasonCode
                 }
                 'WindowsFeatureObservation' {
+                    Set-EvidenceWorkspaceFixtureOwnerStale `
+                        -JournalPath $context.Journal.journalPath
                     $recoveryResult = Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
                     $state = 'ObservedOnly'
                     $reasonCode = 'RECOVERY.WINDOWS_FEATURE_OBSERVED'
@@ -1321,12 +1491,16 @@ function Invoke-EvidenceWorkspaceFixture {
                         $temporary.literalPath, [System.IO.FileMode]::Open,
                         [System.IO.FileAccess]::Read, [System.IO.FileShare]::None
                     )
+                    Set-EvidenceWorkspaceFixtureOwnerStale `
+                        -JournalPath $context.Journal.journalPath
                     $recoveryResult = Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
                     $state = 'CleanupIncomplete'
                     $reasonCode = [string] $recoveryResult.reasonCode
                     $temporaryRemoved = $false
                 }
                 default {
+                    Set-EvidenceWorkspaceFixtureOwnerStale `
+                        -JournalPath $context.Journal.journalPath
                     $recoveryResult = Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
                     $state = 'Validated'
                     $reasonCode = 'WORKSPACE.CREATED'
@@ -1385,6 +1559,15 @@ function Invoke-EvidenceWorkspaceFixture {
             action = 'ObserveOnly'
             changesAttempted = $false
         }
+        guidance = if ($null -ne $recoveryResult) {
+            [string] $recoveryResult.guidance
+        }
+        elseif ($state -eq 'Rejected') {
+            'Choose the offered existing local per-user destination and start a new Assessment Run deliberately.'
+        }
+        else {
+            'No recovery action is required.'
+        }
         validationCleanupVerified = [bool] $validationCleanupVerified
         validation = [pscustomobject][ordered]@{
             mode = 'SyntheticUnelevated'
@@ -1393,7 +1576,9 @@ function Invoke-EvidenceWorkspaceFixture {
     }
     Write-ContractRecord $record -ConvertToJsonCommand $ConvertToJsonCommand
 
-    $terminalReasonCode = if ($state -eq 'CleanupIncomplete') {
+    $cleanupIncomplete = $state -eq 'CleanupIncomplete' -or
+        ($null -ne $recoveryResult -and $recoveryResult.outcome -eq 'CleanupIncomplete')
+    $terminalReasonCode = if ($cleanupIncomplete) {
         $reasonCode
     }
     else { 'WORKSPACE.VALIDATION_COMPLETE' }
@@ -1401,7 +1586,7 @@ function Invoke-EvidenceWorkspaceFixture {
         -RequestDigest $RequestDigest -ValidationFixture $true -RuntimeResult $RuntimeResult `
         -Phase 'Cleanup' -PlanDigest $PlanDigest -PreparationDecision 'Accepted'
     $exitCode = 20
-    if ($state -eq 'CleanupIncomplete' -or -not $validationCleanupVerified) {
+    if ($cleanupIncomplete -or -not $validationCleanupVerified) {
         $terminal.outcome = 'CleanupIncomplete'
         $terminal.exitCode = 60
         $terminal.reasonCode = if (-not $validationCleanupVerified) {

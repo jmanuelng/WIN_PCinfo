@@ -39,7 +39,7 @@ $cases = @(
     @{ Name = 'workspace-stale-owner'; Scenario = 'StaleOwner'; State = 'Recovered'; Reason = 'RECOVERY.STALE_RESIDUE_REMOVED'; Outcome = 'NotStarted'; ExitCode = 20 }
     @{ Name = 'workspace-live-owner'; Scenario = 'LiveOwner'; State = 'Deferred'; Reason = 'RECOVERY.LIVE_OWNER'; Outcome = 'NotStarted'; ExitCode = 20 }
     @{ Name = 'workspace-ambiguous-target'; Scenario = 'AmbiguousTarget'; State = 'CleanupIncomplete'; Reason = 'RECOVERY.OWNERSHIP_UNVERIFIED'; Outcome = 'CleanupIncomplete'; ExitCode = 60 }
-    @{ Name = 'workspace-preserved-package'; Scenario = 'PreservedPackage'; State = 'Recovered'; Reason = 'RECOVERY.STALE_RESIDUE_REMOVED'; Outcome = 'NotStarted'; ExitCode = 20 }
+    @{ Name = 'workspace-preserved-package'; Scenario = 'PreservedPackage'; State = 'Deferred'; Reason = 'RECOVERY.FINALIZED_PACKAGE_PRESERVED'; Outcome = 'CleanupIncomplete'; ExitCode = 60 }
     @{ Name = 'workspace-windows-feature-observation'; Scenario = 'WindowsFeatureObservation'; State = 'ObservedOnly'; Reason = 'RECOVERY.WINDOWS_FEATURE_OBSERVED'; Outcome = 'NotStarted'; ExitCode = 20 }
     @{ Name = 'workspace-cleanup-failure'; Scenario = 'CleanupFailure'; State = 'CleanupIncomplete'; Reason = 'RECOVERY.CLEANUP_FAILED'; Outcome = 'CleanupIncomplete'; ExitCode = 60 }
 )
@@ -69,6 +69,8 @@ foreach ($case in $cases) {
         'validation never claims forensic secure erasure'
     Assert-Equal $false $record.windowsFeatures.changesAttempted `
         'no scenario changes a Windows Feature'
+    Assert-Equal $true (-not [string]::IsNullOrWhiteSpace([string] $record.guidance)) `
+        'every scenario reports an actionable next step'
     Assert-Equal $true $record.validationCleanupVerified `
         'the synthetic validation harness removes even deliberately preserved or failed residue'
     Assert-Equal ($beforeResidue -join '|') ($afterResidue -join '|') `

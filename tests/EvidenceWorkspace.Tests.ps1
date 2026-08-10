@@ -52,9 +52,23 @@ try {
         'a network location is rejected before workspace creation'
     Assert-Equal 'WORKSPACE.DESTINATION_NETWORK' $unsafe.reasonCode `
         'unsafe destination guidance states the exact restriction'
-    Assert-Equal (Join-Path ([System.Environment]::GetFolderPath('LocalApplicationData')) `
-        'WIN-PCInfo\Runs') $unsafe.safeAlternative `
+    Assert-Equal ([System.Environment]::GetFolderPath('LocalApplicationData')) `
+        $unsafe.safeAlternative `
         'rejection supplies one local per-user alternative'
+
+    $missing = New-EvidenceWorkspace -RequestedBasePath (Join-Path $testRoot 'missing') `
+        -RunId ([guid]::NewGuid())
+    Assert-Equal 'WORKSPACE.DESTINATION_NOT_FOUND' $missing.reasonCode `
+        'a nonexistent destination receives its specific restriction'
+    $rootDestination = New-EvidenceWorkspace -RequestedBasePath (
+        [System.IO.Path]::GetPathRoot($testRoot)
+    ) -RunId ([guid]::NewGuid())
+    Assert-Equal 'WORKSPACE.DESTINATION_ROOT' $rootDestination.reasonCode `
+        'a volume root receives its specific restriction'
+    $alternativeDecision = Test-EvidenceWorkspaceDestination `
+        -RequestedBasePath $unsafe.safeAlternative -RunId ([guid]::NewGuid())
+    Assert-Equal $true $alternativeDecision.eligible `
+        'the offered safe alternative is itself immediately eligible'
 
     $recoveryBase = Join-Path $testRoot 'recovery-base'
     $null = [System.IO.Directory]::CreateDirectory($recoveryBase)
@@ -112,6 +126,42 @@ try {
         'an artifact above the release byte ceiling is rejected before file creation'
     Assert-Equal 'TEMPORARY_EVIDENCE.SIZE_EXCEEDED' $tooLarge.reasonCode `
         'the evidence bound has one actionable stable reason'
+
+    $ownerMismatchTemporary = Add-TemporaryEvidence -JournalPath $journalResult.journalPath `
+        -Content ([System.Text.Encoding]::UTF8.GetBytes('same-run-owner-marker'))
+    $start = [System.Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = Join-Path $PSHOME 'pwsh.exe'
+    $start.UseShellExecute = $false
+    $null = $start.ArgumentList.Add('-NoLogo')
+    $null = $start.ArgumentList.Add('-NoProfile')
+    $null = $start.ArgumentList.Add('-Command')
+    $null = $start.ArgumentList.Add('[System.Threading.Thread]::Sleep(30000)')
+    $otherOwner = [System.Diagnostics.Process]::Start($start)
+    try {
+        $ownerMismatchJournal = Read-RunRecoveryJournal -LiteralPath $journalResult.journalPath
+        $ownerMismatchJournal.owner.processId = $otherOwner.Id
+        $ownerMismatchJournal.owner.processStartUtc = `
+            $otherOwner.StartTime.ToUniversalTime().ToString('O')
+        Write-RunRecoveryJournal -Journal $ownerMismatchJournal `
+            -LiteralPath $journalResult.journalPath
+        $ownerMismatch = Complete-TemporaryEvidenceIngestion `
+            -JournalPath $journalResult.journalPath `
+            -ArtifactId $ownerMismatchTemporary.artifactId `
+            -IngestAction { throw 'A later process must not receive the bytes.' }
+        Assert-Equal 'IngestionFailed' $ownerMismatch.state `
+            'a different process cannot ingest evidence from the prior run'
+        Assert-Equal 'TEMPORARY_EVIDENCE.RUN_OWNER_MISMATCH' $ownerMismatch.reasonCode `
+            'same-user process reuse has one stable rejection reason'
+        Assert-Equal $true ([System.IO.File]::Exists($ownerMismatchTemporary.literalPath)) `
+            'owner mismatch leaves evidence registered for cleanup rather than exposing it'
+    }
+    finally {
+        if (-not $otherOwner.HasExited) {
+            $otherOwner.Kill($true)
+            $otherOwner.WaitForExit()
+        }
+        $otherOwner.Dispose()
+    }
 }
 finally {
     if ([System.IO.Directory]::Exists($testRoot)) {
