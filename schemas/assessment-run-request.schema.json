@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/assessment-run-request.schema.json",
+  "title": "WIN-PCInfo Assessment Run Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "profile",
+    "outputDestination",
+    "networkBehavior",
+    "updateChoice",
+    "diagnosticLevel",
+    "automationChoices"
+  ],
+  "properties": {
+    "contractVersion": { "const": "1.0.0" },
+    "profile": { "const": "ComprehensiveLocalAssessment" },
+    "outputDestination": { "type": "string", "minLength": 1, "not": { "pattern": "^(\\\\|//)" } },
+    "networkBehavior": {
+      "enum": ["LocalOnly", "MicrosoftConnectivityEnabled"]
+    },
+    "updateChoice": { "const": "NoUpdateCheck" },
+    "diagnosticLevel": { "const": "Standard" },
+    "automationChoices": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowAssessmentNetwork",
+        "allowElevation",
+        "allowInstallation",
+        "allowPersistentChanges",
+        "allowStaleRecovery",
+        "verificationOverride"
+      ],
+      "properties": {
+        "allowAssessmentNetwork": { "type": "boolean" },
+        "allowElevation": { "const": true },
+        "allowInstallation": { "const": false },
+        "allowPersistentChanges": { "const": false },
+        "allowStaleRecovery": { "const": false },
+        "verificationOverride": { "const": "None" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "networkBehavior": { "const": "LocalOnly" } } },
+      "then": {
+        "properties": {
+          "automationChoices": {
+            "properties": { "allowAssessmentNetwork": { "const": false } }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "automationChoices": {
+            "properties": { "allowAssessmentNetwork": { "const": true } }
+          }
+        }
+      }
+    }
+  ]
+}

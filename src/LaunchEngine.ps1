@@ -2,7 +2,12 @@ function Invoke-WinPCInfoLaunch {
     param(
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $RuntimeFacts,
+        [Parameter(Mandatory)] [bool] $ArtifactTrustValid,
+        [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
+        [Parameter(Mandatory)] [bool] $AcceptPreparation,
+        [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] $ConvertFromJsonCommand,
         [Parameter(Mandatory)] $ConvertToJsonCommand
     )
 
@@ -21,7 +26,9 @@ function Invoke-WinPCInfoLaunch {
 
     Write-ContractRecord (New-ProgressRecord -Sequence 4 -State 'Succeeded' -MessageId 'runtime.check.succeeded' `
         -CompletedUnits 2 -TotalUnits 2) -ConvertToJsonCommand $ConvertToJsonCommand
-    Write-ContractRecord (New-TerminalRecord -ReasonCode 'SLICE.COLLECTION_NOT_IMPLEMENTED' -RequestDigest $requestDigest `
-        -ValidationFixture $ValidationFixture -RuntimeResult $runtime) -ConvertToJsonCommand $ConvertToJsonCommand
-    return 20
+    Invoke-PreparationGate -Request $Request -RuntimeResult $runtime `
+        -ArtifactTrustValid $ArtifactTrustValid `
+        -Mode $Mode -AcceptPreparation $AcceptPreparation -PreparationFixturePath $PreparationFixturePath `
+        -ValidationFixture $ValidationFixture -ConvertFromJsonCommand $ConvertFromJsonCommand `
+        -ConvertToJsonCommand $ConvertToJsonCommand
 }

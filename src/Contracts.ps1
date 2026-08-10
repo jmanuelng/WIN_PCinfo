@@ -17,11 +17,12 @@ function New-NormalizedRequest {
         updateChoice = $UpdateChoice
         diagnosticLevel = $DiagnosticLevel
         automationChoices = [pscustomobject][ordered]@{
-            acceptPreparation = [bool] $AutomationChoices.acceptPreparation
+            allowAssessmentNetwork = [bool] $AutomationChoices.allowAssessmentNetwork
             allowElevation = [bool] $AutomationChoices.allowElevation
             allowInstallation = [bool] $AutomationChoices.allowInstallation
             allowPersistentChanges = [bool] $AutomationChoices.allowPersistentChanges
             allowStaleRecovery = [bool] $AutomationChoices.allowStaleRecovery
+            verificationOverride = [string] $AutomationChoices.verificationOverride
         }
     }
 }
@@ -44,22 +45,42 @@ function Write-BootstrapTerminal {
     [System.Console]::Out.WriteLine($terminalTemplate.Replace('__REASON__', $ReasonCode))
 }
 
+function Get-BytesDigest {
+    param([Parameter(Mandatory)] [byte[]] $Bytes)
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        (($sha256.ComputeHash($Bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
+function Get-ObjectDigest {
+    param(
+        [Parameter(Mandatory)] $Value,
+        [Parameter(Mandatory)] $ConvertToJsonCommand
+    )
+
+    $json = & $ConvertToJsonCommand -InputObject $Value -Compress -Depth 30
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($json)
+    Get-BytesDigest -Bytes $bytes
+}
+
 function Get-RequestDigest {
     param(
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $ConvertToJsonCommand
     )
+    Get-ObjectDigest -Value $Request -ConvertToJsonCommand $ConvertToJsonCommand
+}
 
-    $json = & $ConvertToJsonCommand -InputObject $Request -Compress -Depth 10
-    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($json)
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $hash = $sha256.ComputeHash($bytes)
-        return (($hash | ForEach-Object { $_.ToString('x2') }) -join '')
-    }
-    finally {
-        $sha256.Dispose()
-    }
+function Test-NetworkPathSyntax {
+    param([Parameter(Mandatory)] [string] $Path)
+
+    $Path.StartsWith('\\', [System.StringComparison]::Ordinal) -or
+        $Path.StartsWith('//', [System.StringComparison]::Ordinal)
 }
 
 function New-ProgressRecord {
@@ -94,7 +115,9 @@ function New-TerminalRecord {
         [Parameter()] [AllowEmptyString()] [string] $RequestDigest = '',
         [Parameter()] [bool] $ValidationFixture = $false,
         [Parameter()] $RuntimeResult,
-        [Parameter()] [string] $Phase
+        [Parameter()] [string] $Phase,
+        [Parameter()] [AllowEmptyString()] [string] $PlanDigest = '',
+        [Parameter()] [string] $PreparationDecision
     )
 
     $runtimeEligible = $null -ne $RuntimeResult -and [bool] $RuntimeResult.Eligible
@@ -112,6 +135,13 @@ function New-TerminalRecord {
             required = $false
             verified = $true
         }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PlanDigest)) {
+        $terminal.planDigest = $PlanDigest
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PreparationDecision)) {
+        $terminal.preparationDecision = $PreparationDecision
     }
 
     if ($null -ne $RuntimeResult) {

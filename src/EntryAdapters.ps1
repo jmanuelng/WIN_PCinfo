@@ -1,10 +1,11 @@
 function Get-GuidedRequest {
     $automationChoices = [pscustomobject]@{
-        acceptPreparation = $false
-        allowElevation = $false
+        allowAssessmentNetwork = $false
+        allowElevation = $true
         allowInstallation = $false
         allowPersistentChanges = $false
         allowStaleRecovery = $false
+        verificationOverride = 'None'
     }
     New-NormalizedRequest -ContractVersion '1.0.0' `
         -Profile 'ComprehensiveLocalAssessment' `
@@ -56,6 +57,17 @@ function Get-AutomationRequest {
         throw $exception
     }
 
+    $stringFields = @(
+        'contractVersion', 'profile', 'outputDestination', 'networkBehavior',
+        'updateChoice', 'diagnosticLevel'
+    )
+    if (@($stringFields | Where-Object { $inputRequest.$_ -isnot [string] }).Count -gt 0 -or
+        $inputRequest.automationChoices -isnot [pscustomobject]) {
+        $exception = [System.ArgumentException]::new('The automation request contains a field with an invalid type.')
+        $exception.Data['ReasonCode'] = 'REQUEST.FIELD_TYPE_INVALID'
+        throw $exception
+    }
+
     if ([string] $inputRequest.contractVersion -ne '1.0.0') {
         $exception = [System.ArgumentException]::new('The automation request contract version is unsupported.')
         $exception.Data['ReasonCode'] = 'REQUEST.CONTRACT_VERSION_UNSUPPORTED'
@@ -88,8 +100,8 @@ function Get-AutomationRequest {
     }
 
     $automationFields = @(
-        'acceptPreparation', 'allowElevation', 'allowInstallation',
-        'allowPersistentChanges', 'allowStaleRecovery'
+        'allowAssessmentNetwork', 'allowElevation', 'allowInstallation',
+        'allowPersistentChanges', 'allowStaleRecovery', 'verificationOverride'
     )
     $actualAutomationFields = @($inputRequest.automationChoices.PSObject.Properties.Name)
     if (@($actualAutomationFields | Where-Object { $_ -notin $automationFields }).Count -gt 0) {
@@ -102,9 +114,50 @@ function Get-AutomationRequest {
         $exception.Data['ReasonCode'] = 'REQUEST.REQUIRED_FIELD_MISSING'
         throw $exception
     }
-    if (@($automationFields | Where-Object { $inputRequest.automationChoices.$_ -isnot [bool] }).Count -gt 0) {
+    $booleanAutomationFields = @(
+        'allowAssessmentNetwork', 'allowElevation', 'allowInstallation',
+        'allowPersistentChanges', 'allowStaleRecovery'
+    )
+    if (@($booleanAutomationFields | Where-Object { $inputRequest.automationChoices.$_ -isnot [bool] }).Count -gt 0) {
         $exception = [System.ArgumentException]::new('Automation choices must be true or false.')
         $exception.Data['ReasonCode'] = 'REQUEST.FIELD_TYPE_INVALID'
+        throw $exception
+    }
+    if (Test-NetworkPathSyntax -Path $inputRequest.outputDestination) {
+        # Reject UNC syntax using only request text. This occurs before any path,
+        # drive, provider, or free-space lookup, preserving Local Only even when
+        # an automation caller supplies a remote output location.
+        $exception = [System.ArgumentException]::new('A network output destination is not supported.')
+        $exception.Data['ReasonCode'] = 'REQUEST.OUTPUT_DESTINATION_NETWORK_UNSUPPORTED'
+        throw $exception
+    }
+    if ($inputRequest.automationChoices.verificationOverride -isnot [string]) {
+        $exception = [System.ArgumentException]::new('The verification override must be a string.')
+        $exception.Data['ReasonCode'] = 'REQUEST.FIELD_TYPE_INVALID'
+        throw $exception
+    }
+    if ([string] $inputRequest.automationChoices.verificationOverride -ne 'None') {
+        $exception = [System.ArgumentException]::new('The requested verification override is unsupported.')
+        $exception.Data['ReasonCode'] = 'REQUEST.VERIFICATION_OVERRIDE_UNSUPPORTED'
+        throw $exception
+    }
+    $networkAllowed = [bool] $inputRequest.automationChoices.allowAssessmentNetwork
+    if (($inputRequest.networkBehavior -eq 'LocalOnly' -and $networkAllowed) -or
+        ($inputRequest.networkBehavior -eq 'MicrosoftConnectivityEnabled' -and -not $networkAllowed)) {
+        $exception = [System.ArgumentException]::new('The network behavior conflicts with the automation authority envelope.')
+        $exception.Data['ReasonCode'] = 'REQUEST.NETWORK_CONFLICT'
+        throw $exception
+    }
+    if (-not [bool] $inputRequest.automationChoices.allowElevation -or
+        [bool] $inputRequest.automationChoices.allowInstallation -or
+        [bool] $inputRequest.automationChoices.allowPersistentChanges) {
+        $exception = [System.ArgumentException]::new('The authority choices conflict with this fixed assessment profile.')
+        $exception.Data['ReasonCode'] = 'REQUEST.AUTHORITY_CONFLICT'
+        throw $exception
+    }
+    if ([bool] $inputRequest.automationChoices.allowStaleRecovery) {
+        $exception = [System.ArgumentException]::new('Stale recovery is not enabled in this release slice.')
+        $exception.Data['ReasonCode'] = 'REQUEST.STALE_RECOVERY_UNSUPPORTED'
         throw $exception
     }
 

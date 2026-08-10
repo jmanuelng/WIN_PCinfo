@@ -2,11 +2,11 @@
   "contractVersion": "1.0.0",
   "profile": "ComprehensiveLocalAssessment",
   "outputDestination": "./WIN-PCInfo-Results",
-  "networkBehavior": "LocalOnly",
+  "networkBehavior": "MicrosoftConnectivityEnabled",
   "updateChoice": "NoUpdateCheck",
   "diagnosticLevel": "Standard",
   "automationChoices": {
-    "allowAssessmentNetwork": false,
+    "allowAssessmentNetwork": true,
     "allowElevation": true,
     "allowInstallation": false,
     "allowPersistentChanges": false,

@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
+$preparationFixturePath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 $testOutput = Join-Path $repositoryRoot '.test-output/runtime-matrix'
 $fixtureDirectory = Join-Path $testOutput 'fixtures'
 $workingDirectory = Join-Path $testOutput 'work'
@@ -33,8 +34,8 @@ $eligibleFacts = [ordered]@{
 }
 
 $matrix = @(
-    @{ Name = 'eligible'; Change = @{}; Expected = 'SLICE.COLLECTION_NOT_IMPLEMENTED' }
-    @{ Name = 'later-stable-7x'; Change = @{ version = '7.99.0' }; Expected = 'SLICE.COLLECTION_NOT_IMPLEMENTED' }
+    @{ Name = 'eligible'; Change = @{}; Expected = 'PREPARATION.VALIDATION_ONLY' }
+    @{ Name = 'later-stable-7x'; Change = @{ version = '7.99.0' }; Expected = 'PREPARATION.VALIDATION_ONLY' }
     @{ Name = 'missing'; Change = @{ hostPresent = $false }; Expected = 'RUNTIME.HOST_MISSING' }
     @{ Name = 'prerelease'; Change = @{ version = '7.7.0-preview.1'; prereleaseLabel = 'preview.1' }; Expected = 'RUNTIME.PRERELEASE_UNSUPPORTED' }
     @{ Name = 'wrong-edition'; Change = @{ psEdition = 'Desktop' }; Expected = 'RUNTIME.EDITION_UNSUPPORTED' }
@@ -66,7 +67,8 @@ foreach ($case in $matrix) {
     $result = Invoke-GeneratedApplication -CandidatePath $candidatePath -WorkingDirectory $workingDirectory `
         -Arguments @(
             '-Mode', 'Automation', '-RequestPath', $requestPath,
-            '-RuntimeFixturePath', $fixturePath
+            '-RuntimeFixturePath', $fixturePath, '-AcceptPreparation',
+            '-PreparationFixturePath', $preparationFixturePath
         )
     $after = @(Get-ChildItem -LiteralPath $workingDirectory -Force)
     $sentinelDigestAfter = (Get-FileHash -LiteralPath $sentinelPath -Algorithm SHA256).Hash
