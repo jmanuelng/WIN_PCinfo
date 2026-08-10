@@ -69,6 +69,15 @@ $cases = @(
         Mutate = { param($record) $record.collectorResults[0].collectorId = 'collector:synthetic.other' }
     }
     @{
+        Name = 'scope-collector-not-authorized'
+        Expected = 'CONTRACT.ENVELOPE_INCONSISTENT'
+        Mutate = {
+            param($record)
+            $record.provenance[0].collectorId = 'collector:synthetic.other'
+            $record.collectorResults[0].collectorId = 'collector:synthetic.other'
+        }
+    }
+    @{
         Name = 'orphan-diagnostic'
         Expected = 'CONTRACT.COVERAGE_INCONSISTENT'
         Mutate = {

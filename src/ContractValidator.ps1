@@ -134,6 +134,12 @@ function Get-AssessmentReferenceReason {
     foreach ($item in @($Record.provenance)) { $provenanceById[[string] $item.provenanceId] = $item }
     $observationById = @{}
     foreach ($item in @($Record.observations)) { $observationById[[string] $item.observationId] = $item }
+    $coverageById = @{}
+    foreach ($item in @($Record.coverage)) { $coverageById[[string] $item.coverageId] = $item }
+    $scopeDefinitionById = @{}
+    foreach ($item in @($ContractDefinition.scopeDefinitions)) {
+        $scopeDefinitionById[[string] $item.scopeId] = $item
+    }
     $coverageScopes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     foreach ($item in @($Record.coverage)) {
         if (-not $coverageScopes.Add([string] $item.scopeId)) {
@@ -181,6 +187,24 @@ function Get-AssessmentReferenceReason {
             @($item.coverageIds | Where-Object { -not $identitySets.coverage.Contains([string] $_) }).Count -gt 0 -or
             @($item.diagnosticIds | Where-Object { -not $identitySets.diagnostics.Contains([string] $_) }).Count -gt 0) {
             return 'CONTRACT.REFERENCE_INVALID'
+        }
+        foreach ($scopeId in @($item.intendedScopeIds)) {
+            $scopeDefinition = $scopeDefinitionById[[string] $scopeId]
+            if ($null -ne $scopeDefinition -and
+                [string] $item.collectorId -notin @($scopeDefinition.collectorIds)) {
+                return 'CONTRACT.ENVELOPE_INCONSISTENT'
+            }
+        }
+        foreach ($coverageId in @($item.coverageIds)) {
+            $coverage = $coverageById[[string] $coverageId]
+            $scopeDefinition = $scopeDefinitionById[[string] $coverage.scopeId]
+            if ($null -eq $scopeDefinition) { continue }
+            foreach ($observationId in @($coverage.observationIds)) {
+                $observation = $observationById[[string] $observationId]
+                if ([string] $observation.fieldId -notin @($scopeDefinition.fieldIds)) {
+                    return 'CONTRACT.ENVELOPE_INCONSISTENT'
+                }
+            }
         }
         $envelopeSubjects = [System.Collections.Generic.HashSet[string]]::new(
             [System.StringComparer]::Ordinal

@@ -53,7 +53,7 @@ The admitted field catalog contains no secret-bearing field. An approved `prohib
 ## Deterministic build evidence
 
 - Build contract: `win-pcinfo.build-evidence/1.0.0`
-- Generated application SHA-256: `942f90b26e1156ec07863a2a1b336f9ddbf09efce1d5ca3300f36c8889193c0d`
+- Generated application SHA-256: `693461066f230290e0825e11412fe2072dc4f6f079461a55325e8c11f48e359f`
 - Representation: UTF-8 with BOM and CRLF
 - Modular source inputs: 8
 - Application-manifest resources: 15
