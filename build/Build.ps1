@@ -17,6 +17,7 @@ $sourcePaths = @(
     'src/Preparation.ps1'
     'src/ProcessSupervisor.ps1'
     'src/PrivilegedCollectionPlan.ps1'
+    'src/SystemCollectionPlan.ps1'
     'src/RunLifecycle.ps1'
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
@@ -41,12 +42,15 @@ $runLifecyclePolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-pr
 $runLifecycleSchemaPath = Join-Path $repositoryRoot 'schemas/run-lifecycle.schema.json'
 $privilegedCollectionPlanPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-privileged-collection-plan.json'
 $privilegedCollectionPlanSchemaPath = Join-Path $repositoryRoot 'schemas/privileged-collection-plan.schema.json'
+$systemCollectionPlanPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
+$systemCollectionPlanSchemaPath = Join-Path $repositoryRoot 'schemas/system-collection-plan.schema.json'
 foreach ($requiredDefinitionPath in @(
     $releaseDefinitionPath, $capabilityLedgerPath, $preparationPlanPath,
     $assessmentContractSetPath, $assessmentRecordSchemaPath,
     $approvedCollectorCatalogPath, $approvedCollectorCatalogSchemaPath,
     $runLifecyclePolicyPath, $runLifecycleSchemaPath,
-    $privilegedCollectionPlanPolicyPath, $privilegedCollectionPlanSchemaPath
+    $privilegedCollectionPlanPolicyPath, $privilegedCollectionPlanSchemaPath,
+    $systemCollectionPlanPolicyPath, $systemCollectionPlanSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -79,6 +83,12 @@ $privilegedCollectionPlanPolicyDigest = Get-Sha256Hex -Bytes $privilegedCollecti
 $privilegedCollectionPlanPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
     $privilegedCollectionPlanPolicyBytes
 )
+$systemCollectionPlanPolicyBytes = Get-Utf8LfBytes -LiteralPath $systemCollectionPlanPolicyPath
+$systemCollectionPlanPolicyBase64 = [System.Convert]::ToBase64String($systemCollectionPlanPolicyBytes)
+$systemCollectionPlanPolicyDigest = Get-Sha256Hex -Bytes $systemCollectionPlanPolicyBytes
+$systemCollectionPlanPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+    $systemCollectionPlanPolicyBytes
+)
 if (-not (Test-Json -Json $approvedCollectorCatalogJson -SchemaFile $approvedCollectorCatalogSchemaPath)) {
     throw 'The approved collector catalog does not satisfy its release schema.'
 }
@@ -87,6 +97,9 @@ if (-not (Test-Json -Json $runLifecyclePolicyJson -SchemaFile $runLifecycleSchem
 }
 if (-not (Test-Json -Json $privilegedCollectionPlanPolicyJson -SchemaFile $privilegedCollectionPlanSchemaPath)) {
     throw 'The Privileged Collection Plan policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $systemCollectionPlanPolicyJson -SchemaFile $systemCollectionPlanSchemaPath)) {
+    throw 'The SYSTEM Collection sub-plan policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -124,10 +137,12 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/approved-collector-catalog.schema.json'
     'schemas/run-lifecycle.schema.json'
     'schemas/privileged-collection-plan.schema.json'
+    'schemas/system-collection-plan.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
     'docs/spec/releases/2.0.0-preview.1-privileged-collection-plan.json'
+    'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -230,6 +245,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__PRIVILEGED_COLLECTION_PLAN_POLICY_SHA256__', $privilegedCollectionPlanPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/SystemCollectionPlan.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__SYSTEM_COLLECTION_PLAN_POLICY_BASE64__', $systemCollectionPlanPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__SYSTEM_COLLECTION_PLAN_POLICY_SHA256__', $systemCollectionPlanPolicyDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"

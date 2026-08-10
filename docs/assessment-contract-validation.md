@@ -11,7 +11,7 @@ The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contra
 - how prohibited material is omitted; and
 - whether the definition or a value may appear in a public projection.
 
-Only `field:device.os.display-name` is admitted in this narrow slice. Its source is explicitly `SyntheticContractFixture`; it is not a Windows collector or a claim about the machine running the test. The Contract Set also declares exactly one Evidence Scope, `scope:synthetic.device.os`, and binds that scope to the field, `CAP-0001`, and the approved synthetic collector. A record cannot rename or omit the scope while still claiming closed coverage.
+Only `field:device.os.display-name` is admitted in this Assessment Record tracer bullet. Its source is explicitly `SyntheticContractFixture`; it is not a Windows collector or a claim about the machine running the test. The separate SYSTEM Collection Sub-plan has its own release policy and emits the normal envelope shape through the generated application, but it does not widen this earlier lifecycle fixture or fabricate a globally closed SYSTEM scope before the real lifecycle schedules it.
 
 ## What validation does
 
