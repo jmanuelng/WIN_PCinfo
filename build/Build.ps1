@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'TextCanonicalization.ps1')
 $sourcePaths = @(
     'src/ApplicationHeader.ps1'
     'src/Contracts.ps1'
@@ -64,12 +65,16 @@ $resolvedCapabilities = foreach ($capabilityId in $releaseEnabledIds) {
 }
 $applicationResourcePaths = @($sourcePaths) + @(
     'build/Build.ps1'
+    'build/TextCanonicalization.ps1'
     'schemas/assessment-run-request.schema.json'
     'schemas/preparation-plan.schema.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
-        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $repositoryRoot $path))
+        # Git may materialize text as LF or CRLF. The application manifest binds
+        # the reviewed logical text, while the generated signing representation
+        # remains the separately fixed UTF-8-BOM/CRLF output below.
+        $bytes = Get-Utf8LfBytes -LiteralPath (Join-Path $repositoryRoot $path)
         [pscustomobject][ordered]@{ path = $path; sha256 = Get-Sha256Hex -Bytes $bytes }
     }
 )
@@ -94,7 +99,7 @@ $preparationDefinition = [pscustomobject][ordered]@{
             'docs/spec/capability-ledger.json'
             'docs/spec/releases/2.0.0-preview.1-preparation-plan.json'
         )) {
-            $bytes = [System.IO.File]::ReadAllBytes((Join-Path $repositoryRoot $path))
+            $bytes = Get-Utf8LfBytes -LiteralPath (Join-Path $repositoryRoot $path)
             [pscustomobject][ordered]@{ path = $path; sha256 = Get-Sha256Hex -Bytes $bytes }
         }
     )
