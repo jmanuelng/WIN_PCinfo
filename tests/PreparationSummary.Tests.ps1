@@ -23,6 +23,8 @@ foreach ($result in @($guidedAccepted, $automationAccepted, $automationDeclined)
     Assert-Equal $false $result.Records[-1].collectionStarted 'preparation performs no collection'
     Assert-Equal 1 @($result.Records | Where-Object recordType -eq 'win-pcinfo.preparation-summary').Count `
         'one complete Preparation Summary is presented'
+    Assert-Equal 0 @($result.Records | Where-Object recordType -eq 'win-pcinfo.preparation-plan').Count `
+        'the plan is contained in the summary so disclosures are not repeated'
 }
 
 $guidedSummary = @($guidedAccepted.Records | Where-Object recordType -eq 'win-pcinfo.preparation-summary')[0]
@@ -32,6 +34,9 @@ $automationTerminal = $automationAccepted.Records[-1]
 $declinedTerminal = $automationDeclined.Records[-1]
 
 Assert-Equal 'win-pcinfo.preparation-summary' $guidedSummary.recordType 'the public summary contract is versioned'
+Assert-Equal $true $automationSummary.readyForApproval 'active metadata-only prerequisite checks resolve before approval'
+Assert-Equal 5 $automationSummary.criticalPrerequisites.checks.Count 'all active critical prerequisite classes are reported'
+Assert-Equal 0 $automationSummary.criticalPrerequisites.unresolved.Count 'the accepted path has no unresolved critical prerequisite'
 Assert-Equal $guidedSummary.planDigest $automationSummary.planDigest 'equivalent entry paths resolve one immutable plan'
 Assert-Equal $guidedTerminal.planDigest $automationTerminal.planDigest 'accepted terminals bind to that immutable plan'
 Assert-Equal 'Accepted' $guidedTerminal.preparationDecision 'guided approval is explicit after the summary'
@@ -42,26 +47,33 @@ Assert-Equal 'Declined' $declinedTerminal.preparationDecision 'absence of automa
 Assert-Equal 'PREPARATION.DECLINED' $declinedTerminal.reasonCode 'decline remains NotStarted'
 Assert-Equal $automationTerminal.planDigest $declinedTerminal.planDigest 'the decision cannot mutate the reviewed plan'
 
-Assert-Equal 29 $automationSummary.scope.capabilities.Count 'every release-enabled capability is disclosed'
-Assert-Equal 15 @($automationSummary.scope.capabilities | Where-Object disposition -eq 'Selected').Count `
+Assert-Equal 29 $automationSummary.plan.scope.capabilities.Count 'every release-enabled capability is disclosed'
+Assert-Equal 15 @($automationSummary.plan.scope.capabilities | Where-Object disposition -eq 'Selected').Count `
     'the named profile preserves every explicitly selected capability'
-Assert-Equal 1 @($automationSummary.scope.capabilities | Where-Object disposition -eq 'DependencyAdded').Count `
+Assert-Equal 1 @($automationSummary.plan.scope.capabilities | Where-Object disposition -eq 'DependencyAdded').Count `
     'dependency closure is explicit rather than silently changing scope'
-Assert-Equal 13 @($automationSummary.scope.capabilities | Where-Object disposition -eq 'ReleaseInvariant').Count `
-    'remaining release invariants stay visible rather than silently shrinking'
-Assert-Equal 'CAP-0015' @($automationSummary.scope.capabilities | Where-Object disposition -eq 'DependencyAdded')[0].id `
+Assert-Equal 13 @($automationSummary.plan.scope.capabilities | Where-Object disposition -eq 'ReleaseEnabledProductCapability').Count `
+    'remaining release-enabled Product Capabilities stay visible rather than silently shrinking'
+Assert-Equal 'CAP-0015' @($automationSummary.plan.scope.capabilities | Where-Object disposition -eq 'DependencyAdded')[0].id `
     'the controlled-run dependency is resolved'
 
-Assert-Equal 'LocalOnly' $automationSummary.network.behavior 'local-only behavior is explicit'
-Assert-Equal 0 $automationSummary.network.plannedRequests.Count 'local-only plans no assessment requests'
-Assert-Equal $true $automationSummary.privilege.elevationRequired 'the frozen plan discloses its one elevation boundary'
-Assert-Equal 1 $automationSummary.privilege.maximumUacInteractions 'the privilege ceiling is disclosed once'
-Assert-Equal 0 $automationSummary.dependencies.installations.Count 'preparation plans no dependency installation'
-Assert-Equal 0 $automationSummary.windowsFeatures.changes.Count 'preparation plans no Windows Feature changes'
-Assert-Equal 'LocalPackageProtector' $automationSummary.output.protection.mode 'output protection is disclosed'
-Assert-Equal 'None' $automationSummary.output.recipientProfile.mode 'the optional recipient choice is fixed before collection'
-Assert-Equal $false $automationSummary.sideEffects.performedDuringPreparation `
+Assert-Equal 29 $automationSummary.plan.operations.Count 'every release-enabled capability has one frozen operation or control'
+Assert-Equal 5 $automationSummary.plan.privilege.privilegedOperations.Count 'administrator and SYSTEM work is concrete and frozen'
+Assert-Equal 'LocalOnly' $automationSummary.plan.network.behavior 'local-only behavior is explicit'
+Assert-Equal 0 $automationSummary.plan.network.plannedRequests.Count 'local-only plans no assessment requests'
+Assert-Equal $true $automationSummary.plan.privilege.elevationRequired 'the frozen plan discloses its one elevation boundary'
+Assert-Equal 1 $automationSummary.plan.privilege.maximumUacInteractions 'the privilege ceiling is disclosed once'
+Assert-Equal $false $automationSummary.plan.privilege.laterPromptsAllowed 'no later authority or elevation prompt is permitted'
+Assert-Equal $false $automationSummary.plan.privilege.elevationPromptAfterApprovalAllowed `
+    'the frozen elevation boundary cannot become a later prompt'
+Assert-Equal 0 $automationSummary.plan.dependencies.installations.Count 'preparation plans no dependency installation'
+Assert-Equal 0 $automationSummary.plan.windowsFeatures.changes.Count 'preparation plans no Windows Feature changes'
+Assert-Equal 'LocalPackageProtector' $automationSummary.plan.output.protection.mode 'output protection is disclosed'
+Assert-Equal 'None' $automationSummary.plan.output.recipientProfile.mode 'the optional recipient choice is fixed before collection'
+Assert-Equal $false $automationSummary.plan.sideEffects.performedDuringPreparation `
     'summary and approval occur before all side effects'
-Assert-Equal $true $automationSummary.cleanup.requiredAfterExecution 'later execution cleanup is disclosed upfront'
+Assert-Equal $true $automationSummary.plan.cleanup.requiredAfterExecution 'later execution cleanup is disclosed upfront'
+Assert-Equal 10 $automationSummary.plan.integrity.applicationResources.Count `
+    'the plan is bound to modular source, build, and public schemas'
 
 Write-Output 'PASS: one immutable Preparation Summary gates accepted and declined generated-app paths.'

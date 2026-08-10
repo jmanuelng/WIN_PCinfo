@@ -1,6 +1,6 @@
 # Preparation Summary and approval
 
-WIN-PCInfo prepares one complete plan before it can elevate, install anything, change Windows, contact a network service, collect evidence, or create an output workspace. The generated application prints that immutable plan as `win-pcinfo.preparation-plan`, then prints one beginner-readable `win-pcinfo.preparation-summary`.
+WIN-PCInfo prepares one complete plan before it can elevate, install anything, change Windows, contact a network service, collect evidence, or create an Evidence Workspace. The generated application prints one beginner-readable `win-pcinfo.preparation-summary`; its `plan` field contains the immutable plan so each disclosure appears once.
 
 This implementation slice stops before collection. Approval and decline both end as `NotStarted` with exit code `20`; approval reaches `SLICE.POST_APPROVAL_EXECUTION_NOT_IMPLEMENTED`, while decline returns `PREPARATION.DECLINED`.
 
@@ -8,8 +8,8 @@ This implementation slice stops before collection. Approval and decline both end
 
 Review the whole summary once. It discloses:
 
-- all 29 release-enabled capabilities, including the selected profile scope, automatically added dependency `CAP-0015`, and release-wide product obligations;
-- the single planned administrator boundary, maximum of one UAC interaction, and restricted predefined SYSTEM work;
+- all 29 release-enabled Product Capabilities, including the selected profile scope, automatically added dependency `CAP-0015`, and release-wide product obligations;
+- the single frozen administrator boundary, maximum of one UAC interaction at the approval boundary, and restricted predefined SYSTEM work, with no later elevation choice or product prompt;
 - stable PowerShell 7.6-or-later 7.x and built-in-module dependencies, with no planned install or agreement;
 - estimated duration and disk use;
 - the exact network behavior and planned request classes;
@@ -17,7 +17,7 @@ Review the whole summary once. It discloses:
 - Windows Feature observations, with no feature changes;
 - limitations, later side effects, and cleanup work.
 
-The plan digest appears with the summary and terminal record. If the request or any governed scope changes, the digest changes and the old approval cannot apply. Missing critical prerequisites return `PREPARATION.PREREQUISITE_UNRESOLVED`. A corrupt embedded release definition returns `PREPARATION.INTEGRITY_FAILED`; there is no **Run Anyway** path for a digest, manifest, signature, attestation, or governing-resource failure.
+The plan digest appears with the summary and terminal record. If the request or any governed scope changes, the digest changes and the old approval cannot apply. Preparation checks output-path eligibility, required free disk, local package-protection compatibility, the recipient choice, and the no-Windows-Feature-change boundary without creating files. Missing critical prerequisites return `PREPARATION.PREREQUISITE_UNRESOLVED`. A corrupt embedded release definition or application manifest returns `PREPARATION.INTEGRITY_FAILED`; there is no **Run Anyway** path for a digest, manifest, signature, attestation, or governing-resource failure.
 
 ## Choose network behavior
 

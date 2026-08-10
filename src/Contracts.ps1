@@ -45,6 +45,18 @@ function Write-BootstrapTerminal {
     [System.Console]::Out.WriteLine($terminalTemplate.Replace('__REASON__', $ReasonCode))
 }
 
+function Get-BytesDigest {
+    param([Parameter(Mandatory)] [byte[]] $Bytes)
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        (($sha256.ComputeHash($Bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
 function Get-ObjectDigest {
     param(
         [Parameter(Mandatory)] $Value,
@@ -53,14 +65,7 @@ function Get-ObjectDigest {
 
     $json = & $ConvertToJsonCommand -InputObject $Value -Compress -Depth 30
     $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($json)
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $hash = $sha256.ComputeHash($bytes)
-        return (($hash | ForEach-Object { $_.ToString('x2') }) -join '')
-    }
-    finally {
-        $sha256.Dispose()
-    }
+    Get-BytesDigest -Bytes $bytes
 }
 
 function Get-RequestDigest {

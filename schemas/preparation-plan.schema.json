@@ -10,6 +10,7 @@
     "release",
     "requestDigest",
     "scope",
+    "operations",
     "privilege",
     "dependencies",
     "estimates",
@@ -19,7 +20,8 @@
     "limitations",
     "sideEffects",
     "cleanup",
-    "governingResources"
+    "governingResources",
+    "integrity"
   ],
   "properties": {
     "recordType": { "const": "win-pcinfo.preparation-plan" },
@@ -44,7 +46,7 @@
             "properties": {
               "id": { "pattern": "^CAP-[0-9]{4}$" },
               "name": { "type": "string", "minLength": 1 },
-              "disposition": { "enum": ["Selected", "DependencyAdded", "ReleaseInvariant"] },
+              "disposition": { "enum": ["Selected", "DependencyAdded", "ReleaseEnabledProductCapability"] },
               "dependsOnCapabilityIds": {
                 "type": "array",
                 "items": { "pattern": "^CAP-[0-9]{4}$" },
@@ -55,40 +57,177 @@
         }
       }
     },
-    "privilege": { "type": "object" },
-    "dependencies": { "type": "object" },
-    "estimates": { "type": "object" },
+    "operations": {
+      "type": "array",
+      "minItems": 29,
+      "maxItems": 29,
+      "items": { "$ref": "#/definitions/operation" }
+    },
+    "privilege": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["elevationRequired", "maximumUacInteractions", "standardUserPreparation", "privilegedOperationsFrozen", "systemContext", "laterPromptsAllowed", "approvalBoundary", "elevationConsent", "elevationPromptAfterApprovalAllowed", "privilegedOperations"],
+      "properties": {
+        "elevationRequired": { "const": true },
+        "maximumUacInteractions": { "const": 1 },
+        "standardUserPreparation": { "const": true },
+        "privilegedOperationsFrozen": { "const": true },
+        "systemContext": { "const": "PredefinedRequiredOperationsOnly" },
+        "laterPromptsAllowed": { "const": false },
+        "approvalBoundary": { "const": "PreparationSummary" },
+        "elevationConsent": { "const": "IncludedInPreparationApproval" },
+        "elevationPromptAfterApprovalAllowed": { "const": false },
+        "privilegedOperations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/operation" }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "builtInModulesOnly", "installations", "agreements"],
+      "properties": {
+        "runtime": { "const": "Stable PowerShell 7.6 or later 7.x" },
+        "builtInModulesOnly": { "const": true },
+        "installations": { "type": "array", "maxItems": 0 },
+        "agreements": { "type": "array", "maxItems": 0 }
+      }
+    },
+    "estimates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["durationMinutes", "workspaceDiskMiB", "protectedPackageDiskMiB"],
+      "properties": {
+        "durationMinutes": { "type": "integer", "minimum": 1 },
+        "workspaceDiskMiB": { "type": "integer", "minimum": 1 },
+        "protectedPackageDiskMiB": { "type": "integer", "minimum": 1 }
+      }
+    },
     "network": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["behavior", "automaticTelemetry", "authenticatedCloudCollection", "plannedRequests"],
       "properties": {
         "behavior": { "enum": ["LocalOnly", "MicrosoftConnectivityEnabled"] },
         "automaticTelemetry": { "const": false },
         "authenticatedCloudCollection": { "const": false },
-        "plannedRequests": { "type": "array" }
+        "plannedRequests": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["protocol", "purpose"],
+            "properties": {
+              "protocol": { "enum": ["DNS", "TCP-TLS-HTTP"] },
+              "purpose": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
       }
     },
-    "output": { "type": "object" },
-    "windowsFeatures": { "type": "object" },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["destination", "protection", "recipientProfile"],
+      "properties": {
+        "destination": { "type": "string", "minLength": 1 },
+        "protection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "plaintextSharingArtifactAllowed"],
+          "properties": {
+            "mode": { "const": "LocalPackageProtector" },
+            "plaintextSharingArtifactAllowed": { "const": false }
+          }
+        },
+        "recipientProfile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "selectedBeforeCollection", "maximumRecipients"],
+          "properties": {
+            "mode": { "const": "None" },
+            "selectedBeforeCollection": { "const": true },
+            "maximumRecipients": { "const": 1 }
+          }
+        }
+      }
+    },
+    "windowsFeatures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observationsPlanned", "changes"],
+      "properties": {
+        "observationsPlanned": { "const": true },
+        "changes": { "type": "array", "maxItems": 0 }
+      }
+    },
     "limitations": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-    "sideEffects": { "type": "object" },
-    "cleanup": { "type": "object" },
+    "sideEffects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["performedDuringPreparation", "afterApproval", "deviceConfigurationChanges"],
+      "properties": {
+        "performedDuringPreparation": { "const": false },
+        "afterApproval": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "deviceConfigurationChanges": { "type": "array", "maxItems": 0 }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredAfterExecution", "planned"],
+      "properties": {
+        "requiredAfterExecution": { "const": true },
+        "planned": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
     "governingResources": {
       "type": "array",
-      "minItems": 2,
-      "maxItems": 2,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["path", "sha256"],
-        "properties": {
-          "path": { "type": "string", "minLength": 1 },
-          "sha256": { "$ref": "#/definitions/digest" }
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/definitions/resource" }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["embeddedDefinitionSha256", "applicationManifestSha256", "applicationResources"],
+      "properties": {
+        "embeddedDefinitionSha256": { "$ref": "#/definitions/digest" },
+        "applicationManifestSha256": { "$ref": "#/definitions/digest" },
+        "applicationResources": {
+          "type": "array",
+          "minItems": 10,
+          "items": { "$ref": "#/definitions/resource" }
         }
       }
     }
   },
   "definitions": {
-    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/definitions/digest" }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "capabilityId", "kind", "phase", "context", "network"],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1 },
+        "capabilityId": { "pattern": "^CAP-[0-9]{4}$" },
+        "kind": { "enum": ["Collection", "RunControl", "ReleaseControl"] },
+        "phase": { "type": "string", "minLength": 1 },
+        "context": { "enum": ["StandardUser", "Administrator", "LocalSystem", "NotApplicable"] },
+        "network": { "enum": ["None", "MicrosoftConnectivityEnabledOnly"] }
+      }
+    }
   }
 }

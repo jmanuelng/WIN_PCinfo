@@ -4,20 +4,11 @@
 $script:PreparationDefinitionBase64 = '__PREPARATION_DEFINITION_BASE64__'
 $script:PreparationDefinitionDigest = '__PREPARATION_DEFINITION_SHA256__'
 
-function Get-Sha256HexFromBytes {
-    param([Parameter(Mandatory)] [byte[]] $Bytes)
-
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        (($sha256.ComputeHash($Bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
-    }
-    finally {
-        $sha256.Dispose()
-    }
-}
-
 function Get-PreparationDefinition {
-    param([Parameter(Mandatory)] $ConvertFromJsonCommand)
+    param(
+        [Parameter(Mandatory)] $ConvertFromJsonCommand,
+        [Parameter(Mandatory)] $ConvertToJsonCommand
+    )
 
     try {
         $bytes = [System.Convert]::FromBase64String($script:PreparationDefinitionBase64)
@@ -26,7 +17,7 @@ function Get-PreparationDefinition {
         return [pscustomobject]@{ Valid = $false; ReasonCode = 'PREPARATION.INTEGRITY_FAILED' }
     }
 
-    if ((Get-Sha256HexFromBytes -Bytes $bytes) -ne $script:PreparationDefinitionDigest) {
+    if ((Get-BytesDigest -Bytes $bytes) -ne $script:PreparationDefinitionDigest) {
         return [pscustomobject]@{ Valid = $false; ReasonCode = 'PREPARATION.INTEGRITY_FAILED' }
     }
 
@@ -36,6 +27,15 @@ function Get-PreparationDefinition {
         ) -ErrorAction Stop
     }
     catch {
+        return [pscustomobject]@{ Valid = $false; ReasonCode = 'PREPARATION.INTEGRITY_FAILED' }
+    }
+
+    $manifestBody = [pscustomobject][ordered]@{
+        contractVersion = $definition.applicationManifest.contractVersion
+        resources = @($definition.applicationManifest.resources)
+    }
+    if ((Get-ObjectDigest -Value $manifestBody -ConvertToJsonCommand $ConvertToJsonCommand) -ne
+        [string] $definition.applicationManifest.sha256) {
         return [pscustomobject]@{ Valid = $false; ReasonCode = 'PREPARATION.INTEGRITY_FAILED' }
     }
 
@@ -75,7 +75,59 @@ function Read-PreparationFixture {
 
     [pscustomobject][ordered]@{
         definitionIntegrityValid = [bool] $fixture.definitionIntegrityValid
-        criticalPrerequisitesAvailable = [bool] $fixture.criticalPrerequisitesAvailable
+        prerequisiteChecks = @(
+            [pscustomobject][ordered]@{
+                id = 'synthetic-critical-prerequisites'
+                resolved = [bool] $fixture.criticalPrerequisitesAvailable
+            }
+        )
+    }
+}
+
+function Get-ActivePreparationFacts {
+    param(
+        [Parameter(Mandatory)] $Request,
+        [Parameter(Mandatory)] $RuntimeFacts,
+        [Parameter(Mandatory)] $Definition
+    )
+
+    $outputPathResolved = $false
+    $freeDiskAvailable = $false
+    try {
+        # Full-path and drive resolution is metadata-only: it creates neither
+        # the Evidence Workspace nor its destination. The summary exposes only
+        # the boolean result, never the host's drive identity or free-byte count.
+        $resolvedOutput = [System.IO.Path]::GetFullPath([string] $Request.outputDestination)
+        $root = [System.IO.Path]::GetPathRoot($resolvedOutput)
+        $drive = [System.IO.DriveInfo]::new($root)
+        $outputPathResolved = -not [string]::IsNullOrWhiteSpace($root) -and $drive.IsReady -and
+            -not [System.IO.File]::Exists($resolvedOutput)
+        $requiredBytes = [int64] $Definition.requiredFreeDiskMiB * 1MB
+        $freeDiskAvailable = $outputPathResolved -and $drive.AvailableFreeSpace -ge $requiredBytes
+    }
+    catch {
+        $outputPathResolved = $false
+        $freeDiskAvailable = $false
+    }
+
+    # RuntimeCompatibility already proved exact cryptographic behavior using
+    # disposable synthetic buffers. Preparation consumes only that boolean; it
+    # creates no key, evidence package, protected file, or recipient material.
+    $packageProtectionPlanned = @($Definition.operations | Where-Object {
+        $_.operationId -eq 'protect-evidence-package'
+    }).Count -eq 1
+    [pscustomobject][ordered]@{
+        definitionIntegrityValid = $true
+        prerequisiteChecks = @(
+            [pscustomobject][ordered]@{ id = 'output-destination-eligible'; resolved = $outputPathResolved }
+            [pscustomobject][ordered]@{ id = 'required-free-disk-available'; resolved = $freeDiskAvailable }
+            [pscustomobject][ordered]@{
+                id = 'local-package-protection-compatible'
+                resolved = [bool] $RuntimeFacts.cryptography -and $packageProtectionPlanned
+            }
+            [pscustomobject][ordered]@{ id = 'recipient-profile-resolved'; resolved = $true }
+            [pscustomobject][ordered]@{ id = 'windows-feature-change-not-required'; resolved = $true }
+        )
     }
 }
 
@@ -108,6 +160,7 @@ function New-PreparationPlan {
             profileName = [string] $Definition.profileName
             capabilities = @($Definition.capabilities)
         }
+        operations = @($Definition.operations)
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -119,6 +172,12 @@ function New-PreparationPlan {
             privilegedOperationsFrozen = $true
             systemContext = 'PredefinedRequiredOperationsOnly'
             laterPromptsAllowed = $false
+            approvalBoundary = 'PreparationSummary'
+            elevationConsent = 'IncludedInPreparationApproval'
+            elevationPromptAfterApprovalAllowed = $false
+            privilegedOperations = @($Definition.operations | Where-Object {
+                $_.context -in @('Administrator', 'LocalSystem')
+            })
         }
         dependencies = [pscustomobject][ordered]@{
             runtime = 'Stable PowerShell 7.6 or later 7.x'
@@ -170,7 +229,7 @@ function New-PreparationPlan {
         # future frozen execution plan and cannot be inferred from approval here.
         sideEffects = [pscustomobject][ordered]@{
             performedDuringPreparation = $false
-            afterApproval = @('CreateEvidenceWorkspace', 'RequestOneElevation', 'RunFrozenCollectors', 'ProtectEvidencePackage')
+            afterApproval = @('CreateEvidenceWorkspace', 'ExecuteFrozenStandardPlan', 'ExecuteFrozenPrivilegedPlan', 'ProtectEvidencePackage')
             deviceConfigurationChanges = @()
         }
         cleanup = [pscustomobject][ordered]@{
@@ -178,6 +237,11 @@ function New-PreparationPlan {
             planned = @('RemoveTemporaryDependencyState', 'RemoveEvidenceWorkspaceAfterPackaging', 'VerifyNoTemporaryResidue')
         }
         governingResources = @($Definition.governingResources)
+        integrity = [pscustomobject][ordered]@{
+            embeddedDefinitionSha256 = $script:PreparationDefinitionDigest
+            applicationManifestSha256 = [string] $Definition.applicationManifest.sha256
+            applicationResources = @($Definition.applicationManifest.resources)
+        }
     }
 
     $digest = Get-ObjectDigest -Value $planBody -ConvertToJsonCommand $ConvertToJsonCommand
@@ -190,35 +254,116 @@ function New-PreparationPlan {
 function New-PreparationSummary {
     param(
         [Parameter(Mandatory)] $PlanResult,
-        [Parameter(Mandatory)] [bool] $CriticalPrerequisitesAvailable
+        [Parameter(Mandatory)] [object[]] $PrerequisiteChecks
     )
 
-    $plan = $PlanResult.Plan
+    $unresolved = @($PrerequisiteChecks | Where-Object { -not $_.resolved } | ForEach-Object { $_.id })
     [pscustomobject][ordered]@{
         recordType = 'win-pcinfo.preparation-summary'
         contractVersion = '1.0.0'
         planDigest = $PlanResult.Digest
-        requestDigest = $plan.requestDigest
-        readyForApproval = $CriticalPrerequisitesAvailable
+        requestDigest = $PlanResult.Plan.requestDigest
+        readyForApproval = $unresolved.Count -eq 0
         criticalPrerequisites = [pscustomobject][ordered]@{
-            resolved = $CriticalPrerequisitesAvailable
-            unresolved = if ($CriticalPrerequisitesAvailable) { @() } else { @('PREPARATION_FIXTURE_CRITICAL_PREREQUISITE') }
+            resolved = $unresolved.Count -eq 0
+            checks = @($PrerequisiteChecks)
+            unresolved = $unresolved
         }
-        scope = $plan.scope
-        privilege = $plan.privilege
-        dependencies = $plan.dependencies
-        estimates = $plan.estimates
-        network = $plan.network
-        output = $plan.output
-        windowsFeatures = $plan.windowsFeatures
-        limitations = $plan.limitations
-        sideEffects = $plan.sideEffects
-        cleanup = $plan.cleanup
+        plan = $PlanResult.Plan
         approval = [pscustomobject][ordered]@{
-            instruction = 'Approve exactly this plan once; any later scope, authority, agreement, elevation, or recipient change requires a new run.'
+            instruction = 'Approve this plan and its frozen elevation boundary once; no later prompt may add scope, authority, agreement, elevation, or a recipient.'
             automationSwitch = '-AcceptPreparation'
             guidedToken = 'APPROVE'
             runAnywayAvailable = $false
         }
     }
+}
+
+function Invoke-PreparationGate {
+    param(
+        [Parameter(Mandatory)] $Request,
+        [Parameter(Mandatory)] $RuntimeFacts,
+        [Parameter(Mandatory)] $RuntimeResult,
+        [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
+        [Parameter(Mandatory)] [bool] $AcceptPreparation,
+        [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
+        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] $ConvertFromJsonCommand,
+        [Parameter(Mandatory)] $ConvertToJsonCommand
+    )
+
+    $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
+    $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
+        -ConvertToJsonCommand $ConvertToJsonCommand
+    if (-not $definitionResult.Valid) {
+        Write-ContractRecord (New-TerminalRecord -ReasonCode 'PREPARATION.INTEGRITY_FAILED' `
+            -RequestDigest $requestDigest -ValidationFixture $ValidationFixture -RuntimeResult $RuntimeResult `
+            -Phase 'Preparation') -ConvertToJsonCommand $ConvertToJsonCommand
+        return 20
+    }
+
+    try {
+        $facts = if ([string]::IsNullOrWhiteSpace($PreparationFixturePath)) {
+            Get-ActivePreparationFacts -Request $Request -RuntimeFacts $RuntimeFacts `
+                -Definition $definitionResult.Definition
+        }
+        else {
+            Read-PreparationFixture -LiteralPath $PreparationFixturePath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand
+        }
+    }
+    catch {
+        $fixtureReason = if ($_.Exception.Data.Contains('ReasonCode')) {
+            [string] $_.Exception.Data['ReasonCode']
+        }
+        else { 'PREPARATION.FIXTURE_INVALID' }
+        Write-ContractRecord (New-TerminalRecord -ReasonCode $fixtureReason -RequestDigest $requestDigest `
+            -ValidationFixture $true -RuntimeResult $RuntimeResult -Phase 'Preparation') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return 20
+    }
+
+    # Fixtures can only reduce trust. They cannot make corrupt embedded bytes,
+    # an application manifest, or a governing resource valid and cannot create
+    # a Verification Override for a signature, digest, manifest, or attestation.
+    if (-not $facts.definitionIntegrityValid) {
+        Write-ContractRecord (New-TerminalRecord -ReasonCode 'PREPARATION.INTEGRITY_FAILED' `
+            -RequestDigest $requestDigest -ValidationFixture $ValidationFixture -RuntimeResult $RuntimeResult `
+            -Phase 'Preparation') -ConvertToJsonCommand $ConvertToJsonCommand
+        return 20
+    }
+
+    $planResult = New-PreparationPlan -Request $Request -Definition $definitionResult.Definition `
+        -ConvertToJsonCommand $ConvertToJsonCommand
+    $summary = New-PreparationSummary -PlanResult $planResult -PrerequisiteChecks $facts.prerequisiteChecks
+    Write-ContractRecord $summary -ConvertToJsonCommand $ConvertToJsonCommand
+
+    if (-not $summary.readyForApproval) {
+        Write-ContractRecord (New-TerminalRecord -ReasonCode 'PREPARATION.PREREQUISITE_UNRESOLVED' `
+            -RequestDigest $requestDigest -ValidationFixture $ValidationFixture -RuntimeResult $RuntimeResult `
+            -Phase 'Preparation' -PlanDigest $planResult.Digest -PreparationDecision 'Unavailable') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return 20
+    }
+
+    $accepted = if ($Mode -eq 'Automation') {
+        $AcceptPreparation
+    }
+    else {
+        [string]::Equals([System.Console]::In.ReadLine(), 'APPROVE', [System.StringComparison]::Ordinal)
+    }
+    $decision = if ($accepted) { 'Accepted' } else { 'Declined' }
+    $reasonCode = if ($accepted -and $ValidationFixture) {
+        # Synthetic facts can prove resolution but can never reach collectors.
+        'PREPARATION.VALIDATION_ONLY'
+    }
+    elseif ($accepted) {
+        'SLICE.POST_APPROVAL_EXECUTION_NOT_IMPLEMENTED'
+    }
+    else { 'PREPARATION.DECLINED' }
+    Write-ContractRecord (New-TerminalRecord -ReasonCode $reasonCode -RequestDigest $requestDigest `
+        -ValidationFixture $ValidationFixture -RuntimeResult $RuntimeResult -Phase 'Preparation' `
+        -PlanDigest $planResult.Digest -PreparationDecision $decision) `
+        -ConvertToJsonCommand $ConvertToJsonCommand
+    return 20
 }

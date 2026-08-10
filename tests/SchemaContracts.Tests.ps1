@@ -21,21 +21,21 @@ foreach ($requestPath in @($localRequestPath, $connectivityRequestPath)) {
     }
     $result = Invoke-GeneratedApplication -CandidatePath $candidatePath `
         -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath, '-AcceptPreparation')
-    $plan = @($result.Records | Where-Object recordType -eq 'win-pcinfo.preparation-plan')[0]
     $summary = @($result.Records | Where-Object recordType -eq 'win-pcinfo.preparation-summary')[0]
+    $plan = $summary.plan
     $planJson = $plan | ConvertTo-Json -Compress -Depth 30
     if (-not (Test-Json -Json $planJson -SchemaFile $planSchemaPath)) {
-        throw "The generated $($summary.network.behavior) plan does not satisfy the public plan schema."
+        throw "The generated $($summary.plan.network.behavior) plan does not satisfy the public plan schema."
     }
 
     Assert-Equal $plan.requestDigest $summary.requestDigest 'summary is bound to the schema-valid request'
-    Assert-Equal $plan.scope.capabilities.Count $summary.scope.capabilities.Count `
+    Assert-Equal $plan.scope.capabilities.Count $summary.plan.scope.capabilities.Count `
         'summary discloses the entire schema-valid plan scope'
-    if ($summary.network.behavior -eq 'LocalOnly') {
-        Assert-Equal 0 $summary.network.plannedRequests.Count 'Local Only plans zero assessment requests'
+    if ($summary.plan.network.behavior -eq 'LocalOnly') {
+        Assert-Equal 0 $summary.plan.network.plannedRequests.Count 'Local Only plans zero assessment requests'
     }
     else {
-        Assert-Equal 2 $summary.network.plannedRequests.Count `
+        Assert-Equal 2 $summary.plan.network.plannedRequests.Count `
             'Microsoft Connectivity Enabled names its bounded request classes before approval'
     }
 }

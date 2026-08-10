@@ -29,9 +29,13 @@ Assert-True ($first.buildTool.sha256 -match '^[0-9a-f]{64}$') 'the build tool di
 Assert-True ($first.sourceInputs.Count -eq 7) 'every modular source input is recorded'
 Assert-True (@($first.sourceInputs | Where-Object { $_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count -eq 0) `
     'every modular source input has an exact digest'
-Assert-True ($first.definitionInputs.Count -eq 2) 'both governing preparation resources are recorded'
+Assert-True ($first.definitionInputs.Count -eq 3) 'all governing preparation resources are recorded'
 Assert-True (@($first.definitionInputs | Where-Object { $_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count -eq 0) `
     'every governing preparation resource has an exact digest'
+Assert-True ($first.applicationManifest.resources.Count -eq 10) `
+    'source, build tool, and public schemas are bound into the application manifest'
+Assert-True ($first.applicationManifest.sha256 -match '^[0-9a-f]{64}$') `
+    'the application manifest has one exact digest'
 Assert-True ($firstBytes[0] -eq 0xEF -and $firstBytes[1] -eq 0xBB -and $firstBytes[2] -eq 0xBF) `
     'the signing representation starts with a UTF-8 BOM'
 
