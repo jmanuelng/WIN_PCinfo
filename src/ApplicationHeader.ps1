@@ -36,12 +36,12 @@ param(
     [Parameter(DontShow)]
     [string] $RunFixturePath,
 
-    # Release-owned privilege scenarios exercise the frozen Administrator plan
+    # Release-owned scenarios exercise the immutable Privileged Collection Plan
     # without displaying a real UAC prompt. A fixture can only reduce trust or
     # select one published synthetic fault; it cannot provide worker content,
     # operations, executable paths, identities, or evidence.
     [Parameter(DontShow)]
-    [string] $PrivilegedFixturePath
+    [string] $PrivilegedCollectionFixturePath
 )
 
 Set-StrictMode -Version Latest

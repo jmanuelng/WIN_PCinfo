@@ -1,6 +1,6 @@
-# Frozen Administrator plan
+# Privileged Collection Plan
 
-WIN-PCInfo now has a narrow Privileged Plan Runner that can execute the four Administrator operations already shown in the approved Preparation Summary as one contiguous phase. This is a security tracer bullet: the operations return synthetic status only. They do not collect real device evidence, deliver a Product Capability, or make Preview/Supported claims.
+WIN-PCInfo now has a narrow Privileged Collection Plan runner that can execute the four Administrator operations already shown in the approved Preparation Summary as one contiguous Privileged Collection Phase. The plan is immutable and run-bound. This is a security tracer bullet: the operations return synthetic status only. They do not collect real device evidence, deliver a Product Capability, or make Preview/Supported claims.
 
 The generated application exposes the same contract through hidden synthetic validation fixtures. Ordinary generated execution still cannot reach real collection because Local Package Protector and final package work belongs to later slices. A local development build is also unsigned and therefore fails Preparation integrity before collection. These limitations prevent this security test from becoming an accidental product-completion claim.
 
@@ -13,10 +13,10 @@ After approval:
 1. The coordinator verifies the full Preparation Plan digest and extracts exactly four `Administrator` operations. A mismatch stops before UAC.
 2. If the coordinator already has an eligible Administrator token, it launches the worker directly and requests no elevation.
 3. Otherwise it uses Windows `runas` once. There is no retry and no second product prompt.
-4. The elevated worker joins its own kill-on-close Windows Job Object before connecting or receiving the plan.
+4. Before launch, the coordinator creates and retains a protected kill-on-close Windows Job Object. The elevated worker joins that exact object before connecting or receiving the plan.
 5. Both processes verify the other process and PowerShell artifact through the connected named-pipe handle.
 6. The worker validates the nonce, plan digest, exact ordered operation IDs, and closed empty parameter objects. It runs all four in one phase and returns only operation status.
-7. Both processes close the one-use pipe. The worker Job handle closes, the coordinator verifies its owned processes absent, and standard-user work may continue.
+7. Both processes close the one-use pipe. The coordinator queries its Job Object until the complete owned tree is empty, then closes the handle and permits standard-user work to continue.
 
 If the operator denies UAC, all four privileged operations become explicitly `Unavailable` with `PRIVILEGE.ELEVATION_DENIED`. Safe standard-user work continues and WIN-PCInfo never asks again.
 
@@ -58,8 +58,12 @@ Assessment evidence, user identity facts, package-protector facts, raw errors, p
 
 ## Cancellation, deadlines, and cleanup
 
-Connection and operation waits are finite. One cancellation closes scheduling; if the trusted worker does not finish during the 750 ms grace, the coordinator requests whole-tree termination and waits at most two seconds for the root to disappear. The worker's private kill-on-close Job Object ensures any descendant inherits the same lifetime. This slice's approved operations contain no child-process or file-creation behavior, so the worker root is the complete planned tree and there is no staging directory to remove.
+Connection and operation waits are finite. One cancellation closes scheduling; if the trusted worker does not finish during the 750 ms grace, the coordinator terminates its Job Object and waits at most two seconds for the complete kernel-tracked process list to become empty. The coordinator creates and retains this handle before UAC, so a later high-integrity worker cannot take termination authority away from it. Any descendant inherits the same lifetime. A failed Job query or termination becomes `PRIVILEGE.TERMINATION_INCOMPLETE`; closing the kill-on-close handle remains a final safety action but is never presented as verified absence. This slice creates no staging directory.
 
 Timeout, cancellation, worker loss, wrong-client connection, and altered-plan fixtures all return typed sanitized results. Raw PowerShell or native error text never enters progress, evidence, or terminal output.
 
-See [issue #43 validation evidence](validation/issue-43-privileged-plan.md) for the public-safe test matrix and commands.
+## Automated validation limitation
+
+Repository and generated-application fixtures intentionally remain unelevated, so automated CI cannot honestly claim that a UAC dialog was accepted, denied, or supplied an alternate administrator. Every synthetic privilege result therefore carries `validation.mode = SyntheticUnelevated` and the typed `PRIVILEGE.LIVE_ELEVATION_VALIDATION_UNAVAILABLE` limitation with remediation to repeat the scenario on an approved disposable or controlled Windows client. The live runner uses `runas` at most once and reports a real Windows denial, but this ticket had no supported controlled client on which to record private live evidence.
+
+See [issue #43 validation evidence](validation/issue-43-privileged-collection-plan.md) for the public-safe test matrix and commands.

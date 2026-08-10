@@ -1,7 +1,7 @@
-$script:PrivilegedPlanPolicyBase64 = '__PRIVILEGED_PLAN_POLICY_BASE64__'
-$script:PrivilegedPlanPolicyDigest = '__PRIVILEGED_PLAN_POLICY_SHA256__'
+$script:PrivilegedCollectionPlanPolicyBase64 = '__PRIVILEGED_COLLECTION_PLAN_POLICY_BASE64__'
+$script:PrivilegedCollectionPlanPolicyDigest = '__PRIVILEGED_COLLECTION_PLAN_POLICY_SHA256__'
 
-function Get-PrivilegedPlanSha256 {
+function Get-PrivilegedCollectionPlanSha256 {
     param([Parameter(Mandatory)] [byte[]] $Bytes)
 
     [System.Convert]::ToHexString(
@@ -9,7 +9,7 @@ function Get-PrivilegedPlanSha256 {
     ).ToLowerInvariant()
 }
 
-function Get-PrivilegedPlanPolicy {
+function Get-PrivilegedCollectionPlanPolicy {
     $convertFromJsonCommand = $ExecutionContext.InvokeCommand.GetCommand(
         'ConvertFrom-Json', [System.Management.Automation.CommandTypes]::Cmdlet
     )
@@ -18,20 +18,20 @@ function Get-PrivilegedPlanPolicy {
         throw 'The privilege policy JSON command does not have built-in provenance.'
     }
 
-    if ($script:PrivilegedPlanPolicyBase64 -eq '__PRIVILEGED_PLAN_POLICY_BASE64__') {
+    if ($script:PrivilegedCollectionPlanPolicyBase64 -eq '__PRIVILEGED_COLLECTION_PLAN_POLICY_BASE64__') {
         $repositoryRoot = Split-Path -Parent $PSScriptRoot
         $text = [System.IO.File]::ReadAllText(
-            (Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-privileged-plan.json'),
+            (Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-privileged-collection-plan.json'),
             [System.Text.UTF8Encoding]::new($false, $true)
         ).Replace("`r`n", "`n").Replace("`r", "`n")
         $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($text)
-        $expectedDigest = Get-PrivilegedPlanSha256 -Bytes $bytes
+        $expectedDigest = Get-PrivilegedCollectionPlanSha256 -Bytes $bytes
     }
     else {
-        $bytes = [System.Convert]::FromBase64String($script:PrivilegedPlanPolicyBase64)
-        $expectedDigest = $script:PrivilegedPlanPolicyDigest
+        $bytes = [System.Convert]::FromBase64String($script:PrivilegedCollectionPlanPolicyBase64)
+        $expectedDigest = $script:PrivilegedCollectionPlanPolicyDigest
     }
-    if ((Get-PrivilegedPlanSha256 -Bytes $bytes) -ne $expectedDigest) {
+    if ((Get-PrivilegedCollectionPlanSha256 -Bytes $bytes) -ne $expectedDigest) {
         throw 'The embedded privilege policy failed integrity validation.'
     }
 
@@ -39,10 +39,10 @@ function Get-PrivilegedPlanPolicy {
         [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
     ) -Depth 30 -ErrorAction Stop
     $operationIds = @($policy.operations.operationId)
-    if ($policy.kind -ne 'win-pcinfo.privileged-plan-policy' -or
+    if ($policy.kind -ne 'win-pcinfo.privileged-collection-plan-policy' -or
         $policy.contractVersion -ne '1.0.0' -or
         $policy.release -ne '2.0.0-preview.1' -or
-        $policy.policyId -ne 'win-pcinfo.privileged-plan/1.0.0' -or
+        $policy.policyId -ne 'win-pcinfo.privileged-collection-plan/1.0.0' -or
         $policy.elevation.maximumUacInteractions -ne 1 -or
         @($operationIds).Count -ne 4 -or
         @($operationIds | Sort-Object -Unique).Count -ne 4 -or
@@ -53,7 +53,74 @@ function Get-PrivilegedPlanPolicy {
     $policy
 }
 
-function Get-PrivilegedWorkerSource {
+function Get-PrivilegedCollectionValidationScenario {
+    param([Parameter(Mandatory)] [string] $Name)
+
+    # Validation faults are release-owned data, not scattered control flow.
+    # Keeping the complete behavior tuple here makes a new fixture an explicit
+    # policy decision: the coordinator, worker, and cancellation seam cannot
+    # silently disagree about what the scenario is meant to prove.
+    $defaults = [ordered]@{
+        isFixture = $true
+        alreadyElevated = $false
+        workerPrincipalRelationship = 'SelectedAdministrator'
+        elevationDenied = $false
+        launchUnexpectedClient = $false
+        workerFault = 'None'
+        failureReasonCode = $null
+        cancellationDelayMilliseconds = $null
+    }
+    $scenarios = @{
+        Live = @{
+            isFixture = $false
+            alreadyElevated = $null
+            workerPrincipalRelationship = $null
+        }
+        AcceptedElevation = @{}
+        AlreadyElevated = @{
+            alreadyElevated = $true
+            workerPrincipalRelationship = 'AssessmentOperator'
+        }
+        AlternateAdministrator = @{
+            workerPrincipalRelationship = 'AlternateAdministrator'
+        }
+        ElevationDenied = @{
+            workerPrincipalRelationship = 'NotStarted'
+            elevationDenied = $true
+        }
+        WrongPipeClient = @{
+            launchUnexpectedClient = $true
+            workerFault = 'DelayConnect'
+            failureReasonCode = 'PRIVILEGE.PEER_IDENTITY_INVALID'
+        }
+        AlteredPlan = @{
+            workerPrincipalRelationship = 'NotStarted'
+            failureReasonCode = 'PRIVILEGE.PLAN_INTEGRITY_INVALID'
+        }
+        LostWorker = @{
+            workerFault = 'ExitAfterHello'
+            failureReasonCode = 'PRIVILEGE.WORKER_LOST'
+        }
+        Timeout = @{ workerFault = 'HangAfterPlan' }
+        Cancellation = @{
+            workerFault = 'HangAfterPlan'
+            cancellationDelayMilliseconds = 200
+        }
+    }
+    if (-not $scenarios.ContainsKey($Name)) {
+        throw 'The privileged collection validation scenario is not release-defined.'
+    }
+    $scenario = [ordered]@{ name = $Name }
+    foreach ($property in $defaults.Keys) {
+        $scenario[$property] = if ($scenarios[$Name].ContainsKey($property)) {
+            $scenarios[$Name][$property]
+        }
+        else { $defaults[$property] }
+    }
+    [pscustomobject] $scenario
+}
+
+function Get-PrivilegedCollectionWorkerSource {
     # This is reviewed product source, not caller input. It is encoded directly
     # into the fixed PowerShell launch argument so there is no writable script
     # file to replace between validation and elevation. The worker understands
@@ -74,8 +141,8 @@ try {
         $configurationRoot.EnumerateObject() | ForEach-Object Name
     )
     if ($configurationRoot.ValueKind -ne [System.Text.Json.JsonValueKind]::Object -or
-        $configurationNames.Count -ne 9 -or
-        @($configurationNames | Sort-Object -Unique).Count -ne 9) {
+        $configurationNames.Count -ne 10 -or
+        @($configurationNames | Sort-Object -Unique).Count -ne 10) {
         throw 'The privilege worker configuration is invalid.'
     }
 }
@@ -89,34 +156,9 @@ using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 public static class WinPCInfoPrivilegedWorkerPipe
 {
-    [StructLayout(LayoutKind.Sequential)]
-    private struct JOBOBJECT_BASIC_LIMIT_INFORMATION
-    {
-        public long PerProcessUserTimeLimit, PerJobUserTimeLimit;
-        public uint LimitFlags;
-        public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize;
-        public uint ActiveProcessLimit;
-        public UIntPtr Affinity;
-        public uint PriorityClass, SchedulingClass;
-    }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IO_COUNTERS
-    {
-        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount;
-        public ulong ReadTransferCount, WriteTransferCount, OtherTransferCount;
-    }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
-    {
-        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
-        public IO_COUNTERS IoInfo;
-        public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
-    }
+    private const uint JOB_OBJECT_ASSIGN_PROCESS = 0x0001;
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr CreateJobObject(IntPtr attributes, string name);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetInformationJobObject(IntPtr job, int informationClass,
-        ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION information, uint length);
+    private static extern IntPtr OpenJobObject(uint desiredAccess, bool inheritHandle, string name);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
     [DllImport("kernel32.dll")]
@@ -125,25 +167,17 @@ public static class WinPCInfoPrivilegedWorkerPipe
     private static extern bool CloseHandle(IntPtr handle);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint processId);
-    private static IntPtr ownedJob;
-    public static void OwnProcessTree()
+    public static void JoinOwnedProcessTree(string name)
     {
-        ownedJob = CreateJobObject(IntPtr.Zero, null);
-        if (ownedJob == IntPtr.Zero) throw new InvalidOperationException("Unable to create the worker job.");
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION information = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
-        information.BasicLimitInformation.LimitFlags = 0x00002000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        if (!SetInformationJobObject(ownedJob, 9, ref information,
-            (uint)Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>()) ||
-            !AssignProcessToJobObject(ownedJob, GetCurrentProcess()))
+        IntPtr job = OpenJobObject(JOB_OBJECT_ASSIGN_PROCESS, false, name);
+        if (job == IntPtr.Zero)
+            throw new InvalidOperationException("Unable to open the coordinator-owned worker job.");
+        try
         {
-            CloseHandle(ownedJob);
-            ownedJob = IntPtr.Zero;
-            throw new InvalidOperationException("Unable to own the worker process tree.");
+            if (!AssignProcessToJobObject(job, GetCurrentProcess()))
+                throw new InvalidOperationException("Unable to join the coordinator-owned worker job.");
         }
-    }
-    public static void ReleaseProcessTree()
-    {
-        if (ownedJob != IntPtr.Zero) { CloseHandle(ownedJob); ownedJob = IntPtr.Zero; }
+        finally { CloseHandle(job); }
     }
     public static int GetServerProcessId(PipeStream pipe)
     {
@@ -156,12 +190,14 @@ public static class WinPCInfoPrivilegedWorkerPipe
 "@
 
 # UAC gives the worker more authority than the coordinator, so the worker must
-# own its own descendants. It joins a private kill-on-close Windows Job Object
-# before it connects or executes an operation. Every future descendant inherits
-# that membership; normal exit, crash, or forced termination closes the last Job
-# handle and asks the kernel to remove the complete tree. If nested Job policy is
-# incompatible, the worker fails before the coordinator sends the plan.
-[WinPCInfoPrivilegedWorkerPipe]::OwnProcessTree()
+# join the coordinator's private kill-on-close Windows Job Object before it
+# connects or executes an operation. The standard-user coordinator deliberately
+# retains the controlling handle across UAC; every future worker descendant
+# inherits membership, and the coordinator can terminate and query that kernel
+# object without needing PROCESS_TERMINATE access to a high-integrity process.
+# If nested Job policy or the protected name is incompatible, the worker fails
+# before the coordinator sends the plan.
+[WinPCInfoPrivilegedWorkerPipe]::JoinOwnedProcessTree([string] $configuration.jobName)
 
 function Read-ExactBytes {
     param($Stream, [int] $Count, [System.Threading.CancellationToken] $Token)
@@ -200,7 +236,7 @@ $tokenSource = [System.Threading.CancellationTokenSource]::new($deadline)
 $pipe = $null
 $workerStage = 'Connect'
 try {
-    if ($configuration.scenario -eq 'WrongPipeClient') {
+    if ($configuration.workerFault -eq 'DelayConnect') {
         [System.Threading.Thread]::Sleep(750)
     }
     $pipe = [System.IO.Pipes.NamedPipeClientStream]::new(
@@ -247,7 +283,7 @@ try {
         treeControl = 'WorkerOwnedJobObject'
     } | ConvertTo-Json -Compress
     Write-Frame -Stream $pipe -Json $hello -MaximumBytes $maximumBytes -Token $tokenSource.Token
-    if ($configuration.scenario -eq 'LostWorker') { exit 71 }
+    if ($configuration.workerFault -eq 'ExitAfterHello') { exit 71 }
 
     $workerStage = 'PlanValidation'
     $requestJson = Read-Frame -Stream $pipe -MaximumBytes $maximumBytes -Token $tokenSource.Token
@@ -284,10 +320,27 @@ try {
     finally { $requestDocument.Dispose() }
 
     $workerStage = 'OperationExecution'
-    if ($configuration.scenario -in @('Timeout', 'Cancellation')) {
-        # The validation fault is deliberately uncooperative. It proves the
-        # standard-user coordinator's deadline and hard-stop path instead of
-        # relying on the worker to report its own successful cancellation.
+    if ($configuration.workerFault -eq 'HangAfterPlan') {
+        # This fixed validation fault creates one fixed child and then becomes
+        # deliberately uncooperative. No child path or command crosses the
+        # channel: both are release source, and the child reuses the already
+        # verified PowerShell image. The child automatically inherits Job
+        # membership, so a passing absence check proves tree-wide termination
+        # instead of merely proving that this root process disappeared.
+        $childStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $childStartInfo.FileName = $workerImage
+        $childStartInfo.UseShellExecute = $false
+        $childStartInfo.CreateNoWindow = $true
+        $childStartInfo.WorkingDirectory = [System.IO.Path]::GetDirectoryName($workerImage)
+        foreach ($argument in @(
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand',
+            [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes(
+                '[System.Threading.Thread]::Sleep(10000)'
+            ))
+        )) { $null = $childStartInfo.ArgumentList.Add($argument) }
+        $childStartInfo.Environment.Clear()
+        $childStartInfo.Environment['SystemRoot'] = [System.Environment]::GetFolderPath('Windows')
+        $null = [System.Diagnostics.Process]::Start($childStartInfo)
         [System.Threading.Thread]::Sleep(10000)
     }
     $phaseId = 'phase:synthetic-privileged:primary'
@@ -325,13 +378,12 @@ catch {
 finally {
     if ($null -ne $pipe) { $pipe.Dispose() }
     $tokenSource.Dispose()
-    [WinPCInfoPrivilegedWorkerPipe]::ReleaseProcessTree()
 }
 '@
 }
 
-function Initialize-PrivilegedPlanNativeType {
-    if ('WinPCInfo.PrivilegedPlan.PipePeer' -as [type]) { return }
+function Initialize-PrivilegedCollectionPlanNativeType {
+    if ('WinPCInfo.PrivilegedCollectionPlan.PipePeer' -as [type]) { return }
 
     # Named-pipe ACLs decide who may open the channel, but they do not tell the
     # application which permitted administrator actually connected. Windows
@@ -344,7 +396,7 @@ using System;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-namespace WinPCInfo.PrivilegedPlan
+namespace WinPCInfo.PrivilegedCollectionPlan
 {
     public static class PipePeer
     {
@@ -358,11 +410,142 @@ namespace WinPCInfo.PrivilegedPlan
             return checked((int)processId);
         }
     }
+
+    public sealed class OwnedJob : IDisposable
+    {
+        private const uint JOB_OBJECT_TERMINATE = 0x0008;
+        private const uint JOB_OBJECT_QUERY = 0x0004;
+        private const uint JOB_OBJECT_ASSIGN_PROCESS = 0x0001;
+        private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
+        private const int JobObjectBasicProcessIdList = 3;
+        private const int JobObjectExtendedLimitInformation = 9;
+        private const int ERROR_ALREADY_EXISTS = 183;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SECURITY_ATTRIBUTES
+        {
+            public uint nLength;
+            public IntPtr lpSecurityDescriptor;
+            [MarshalAs(UnmanagedType.Bool)] public bool bInheritHandle;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+        {
+            public long PerProcessUserTimeLimit, PerJobUserTimeLimit;
+            public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass, SchedulingClass;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IO_COUNTERS
+        {
+            public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount;
+            public ulong ReadTransferCount, WriteTransferCount, OtherTransferCount;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+        {
+            public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+            public IO_COUNTERS IoInfo;
+            public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+        }
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(
+            string descriptor, uint revision, out IntPtr securityDescriptor, out uint size);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateJobObject(ref SECURITY_ATTRIBUTES attributes, string name);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetInformationJobObject(IntPtr job, int informationClass,
+            ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION information, uint length);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool QueryInformationJobObject(IntPtr job, int informationClass,
+            IntPtr information, uint length, out uint returnLength);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr LocalFree(IntPtr memory);
+        [DllImport("kernel32.dll")]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        private IntPtr handle;
+        private OwnedJob(IntPtr value) { handle = value; }
+
+        public static OwnedJob Create(string name, string securityDescriptor)
+        {
+            IntPtr descriptor;
+            uint descriptorSize;
+            if (!ConvertStringSecurityDescriptorToSecurityDescriptor(
+                securityDescriptor, 1, out descriptor, out descriptorSize))
+                throw new InvalidOperationException("Unable to protect the worker job.");
+            try
+            {
+                SECURITY_ATTRIBUTES attributes = new SECURITY_ATTRIBUTES();
+                attributes.nLength = (uint)Marshal.SizeOf<SECURITY_ATTRIBUTES>();
+                attributes.lpSecurityDescriptor = descriptor;
+                attributes.bInheritHandle = false;
+                IntPtr job = CreateJobObject(ref attributes, name);
+                if (job == IntPtr.Zero || Marshal.GetLastWin32Error() == ERROR_ALREADY_EXISTS)
+                {
+                    if (job != IntPtr.Zero) CloseHandle(job);
+                    throw new InvalidOperationException("Unable to create a unique worker job.");
+                }
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION information =
+                    new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
+                information.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                    ref information,
+                    (uint)Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>()))
+                {
+                    CloseHandle(job);
+                    throw new InvalidOperationException("Unable to configure worker-tree ownership.");
+                }
+                return new OwnedJob(job);
+            }
+            finally { LocalFree(descriptor); }
+        }
+
+        public bool Terminate()
+        {
+            return handle != IntPtr.Zero && TerminateJobObject(handle, 1);
+        }
+
+        public bool WaitForEmpty(int milliseconds)
+        {
+            if (handle == IntPtr.Zero || milliseconds < 0) return false;
+            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+            do
+            {
+                // 64 KiB can enumerate more processes than this deliberately
+                // tiny worker could reasonably own. Overflow or query failure
+                // is treated as non-empty, never as proof of cleanup.
+                IntPtr buffer = Marshal.AllocHGlobal(65536);
+                try
+                {
+                    uint returned;
+                    if (QueryInformationJobObject(handle, JobObjectBasicProcessIdList,
+                        buffer, 65536, out returned) && Marshal.ReadInt32(buffer, 4) == 0)
+                        return true;
+                }
+                finally { Marshal.FreeHGlobal(buffer); }
+                System.Threading.Thread.Sleep(10);
+            }
+            while (watch.ElapsedMilliseconds < milliseconds);
+            return false;
+        }
+
+        public void Dispose()
+        {
+            if (handle != IntPtr.Zero) { CloseHandle(handle); handle = IntPtr.Zero; }
+        }
+    }
 }
 '@
 }
 
-function ConvertTo-PrivilegedEncodedCommand {
+function ConvertTo-PrivilegedCollectionEncodedCommand {
     param([Parameter(Mandatory)] [string] $Source)
 
     $sourceBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($Source)
@@ -397,7 +580,7 @@ function ConvertTo-PrivilegedEncodedCommand {
     $encoded
 }
 
-function Read-PrivilegedPlanExactBytes {
+function Read-PrivilegedCollectionPlanExactBytes {
     param(
         [Parameter(Mandatory)] $Stream,
         [Parameter(Mandatory)] [int] $Count,
@@ -416,14 +599,14 @@ function Read-PrivilegedPlanExactBytes {
     $bytes
 }
 
-function Read-PrivilegedPlanFrame {
+function Read-PrivilegedCollectionPlanFrame {
     param(
         [Parameter(Mandatory)] $Stream,
         [Parameter(Mandatory)] [int] $MaximumBytes,
         [Parameter(Mandatory)] [System.Threading.CancellationToken] $CancellationToken
     )
 
-    $lengthBytes = Read-PrivilegedPlanExactBytes -Stream $Stream -Count 4 `
+    $lengthBytes = Read-PrivilegedCollectionPlanExactBytes -Stream $Stream -Count 4 `
         -CancellationToken $CancellationToken
     # Every supported Windows architecture is little-endian; BitConverter keeps
     # the fixed 32-bit prefix explicit without asking PowerShell to bind a
@@ -432,12 +615,12 @@ function Read-PrivilegedPlanFrame {
     if ($length -le 0 -or $length -gt $MaximumBytes) {
         throw 'The privilege frame exceeds its release byte bound.'
     }
-    $payload = Read-PrivilegedPlanExactBytes -Stream $Stream -Count $length `
+    $payload = Read-PrivilegedCollectionPlanExactBytes -Stream $Stream -Count $length `
         -CancellationToken $CancellationToken
     [System.Text.UTF8Encoding]::new($false, $true).GetString($payload)
 }
 
-function Write-PrivilegedPlanFrame {
+function Write-PrivilegedCollectionPlanFrame {
     param(
         [Parameter(Mandatory)] $Stream,
         [Parameter(Mandatory)] [string] $Json,
@@ -459,7 +642,7 @@ function Write-PrivilegedPlanFrame {
     $null = $Stream.FlushAsync($CancellationToken).GetAwaiter().GetResult()
 }
 
-function Test-FrozenAdministratorPlan {
+function Test-PrivilegedCollectionPlan {
     param(
         [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $PlanDigest,
@@ -497,7 +680,7 @@ function Test-FrozenAdministratorPlan {
     $true
 }
 
-function New-PrivilegedPlanResult {
+function New-PrivilegedCollectionResult {
     param(
         [Parameter(Mandatory)] [string] $State,
         [Parameter(Mandatory)] [string] $ReasonCode,
@@ -509,7 +692,8 @@ function New-PrivilegedPlanResult {
         [Parameter(Mandatory)] [string] $WorkerPrincipalRelationship,
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Operations,
         [Parameter(Mandatory)] [bool] $ChannelVerified,
-        [Parameter(Mandatory)] [bool] $CleanupVerified
+        [Parameter(Mandatory)] [bool] $CleanupVerified,
+        [Parameter(Mandatory)] [string] $ValidationScenario
     )
 
     $coverageState = switch ($State) {
@@ -519,15 +703,16 @@ function New-PrivilegedPlanResult {
         'Cancelled' { 'Cancelled' }
         default { 'Failed' }
     }
+    $liveValidation = $ValidationScenario -eq 'Live'
     [pscustomobject][ordered]@{
-        recordType = 'win-pcinfo.privileged-phase'
+        recordType = 'win-pcinfo.privileged-collection-phase'
         contractVersion = '1.0.0'
         state = $State
         reasonCode = $ReasonCode
         planDigest = $PlanDigest
         operations = @($Operations)
         coverage = @([pscustomobject][ordered]@{
-            scopeId = 'scope:synthetic.privileged-plan'
+            scopeId = 'scope:synthetic.privileged-collection-plan'
             state = $coverageState
             reasonCode = $ReasonCode
         })
@@ -558,10 +743,61 @@ function New-PrivilegedPlanResult {
             stagingAbsent = $true
             verified = $CleanupVerified
         }
+        validation = [pscustomobject][ordered]@{
+            mode = if ($liveValidation) { 'Live' } else { 'SyntheticUnelevated' }
+            livePathExercised = $liveValidation
+            environmentalLimitation = if ($liveValidation) {
+                $null
+            }
+            else {
+                [pscustomobject][ordered]@{
+                    state = 'NotStarted'
+                    reasonCode = 'PRIVILEGE.LIVE_ELEVATION_VALIDATION_UNAVAILABLE'
+                    remediation = 'Repeat this scenario on an approved disposable or controlled Windows client.'
+                }
+            }
+        }
     }
 }
 
-function Invoke-FrozenPrivilegedPlan {
+function New-PrivilegedCollectionStoppedResult {
+    param(
+        [Parameter(Mandatory)] [string] $State,
+        [Parameter(Mandatory)] [string] $ReasonCode,
+        [Parameter(Mandatory)] [hashtable] $Context,
+        [Parameter()] [bool] $AlreadyElevated = $false,
+        [Parameter()] [int] $UacInteractionCount = 0,
+        [Parameter()] [string] $WorkerPrincipalRelationship = 'NotStarted'
+    )
+
+    New-PrivilegedCollectionResult -State $State -ReasonCode $ReasonCode `
+        -PlanDigest $Context.PlanDigest `
+        -AssessmentUserContext $Context.AssessmentUserContext `
+        -LocalPackageProtector $Context.LocalPackageProtector `
+        -UacInteractionCount $UacInteractionCount -AlreadyElevated $AlreadyElevated `
+        -WorkerPrincipalRelationship $WorkerPrincipalRelationship -Operations @() `
+        -ChannelVerified $false -CleanupVerified $true `
+        -ValidationScenario $Context.ValidationScenario
+}
+
+function Test-PrivilegedCollectionOperationResult {
+    param(
+        [Parameter(Mandatory)] $Operation,
+        [Parameter(Mandatory)] [string] $ExpectedOperationId,
+        [Parameter(Mandatory)] [string] $ExpectedPhaseId
+    )
+
+    $names = @($Operation.PSObject.Properties.Name)
+    $names.Count -eq 3 -and @($names | Sort-Object -Unique).Count -eq 3 -and
+        @($names | Where-Object {
+            $_ -notin @('operationId', 'state', 'phaseId')
+        }).Count -eq 0 -and
+        $Operation.operationId -eq $ExpectedOperationId -and
+        $Operation.state -eq 'Completed' -and
+        $Operation.phaseId -eq $ExpectedPhaseId
+}
+
+function Invoke-PrivilegedCollectionPlan {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] $PreparationPlan,
@@ -581,21 +817,24 @@ function Invoke-FrozenPrivilegedPlan {
             [System.Threading.CancellationToken]::None
     )
 
-    $policy = Get-PrivilegedPlanPolicy
-    if ($ValidationScenario -eq 'AlteredPlan' -or
-        -not (Test-FrozenAdministratorPlan -PreparationPlan $PreparationPlan `
+    $policy = Get-PrivilegedCollectionPlanPolicy
+    $scenario = Get-PrivilegedCollectionValidationScenario -Name $ValidationScenario
+    $resultContext = @{
+        PlanDigest = $PlanDigest
+        AssessmentUserContext = $AssessmentUserContext
+        LocalPackageProtector = $LocalPackageProtector
+        ValidationScenario = $ValidationScenario
+    }
+    if ($scenario.failureReasonCode -eq 'PRIVILEGE.PLAN_INTEGRITY_INVALID' -or
+        -not (Test-PrivilegedCollectionPlan -PreparationPlan $PreparationPlan `
             -PlanDigest $PlanDigest -Policy $policy)) {
-        return New-PrivilegedPlanResult -State 'IntegrityFailed' `
-            -ReasonCode 'PRIVILEGE.PLAN_INTEGRITY_INVALID' -PlanDigest $PlanDigest `
-            -AssessmentUserContext $AssessmentUserContext `
-            -LocalPackageProtector $LocalPackageProtector -UacInteractionCount 0 `
-            -AlreadyElevated $false -WorkerPrincipalRelationship 'NotStarted' `
-            -Operations @() -ChannelVerified $false -CleanupVerified $true
+        return New-PrivilegedCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'PRIVILEGE.PLAN_INTEGRITY_INVALID' -Context $resultContext
     }
 
-    $validationFixture = $ValidationScenario -ne 'Live'
+    $validationFixture = $scenario.isFixture
     $alreadyElevated = if ($validationFixture) {
-        $ValidationScenario -eq 'AlreadyElevated'
+        [bool] $scenario.alreadyElevated
     }
     else {
         $principal = [System.Security.Principal.WindowsPrincipal]::new(
@@ -604,33 +843,26 @@ function Invoke-FrozenPrivilegedPlan {
         $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     $uacInteractionCount = if ($alreadyElevated) { 0 } else { 1 }
-    $workerRelationship = if ($ValidationScenario -eq 'AlternateAdministrator') {
-        'AlternateAdministrator'
+    $workerRelationship = if ($validationFixture) {
+        [string] $scenario.workerPrincipalRelationship
     }
     elseif ($alreadyElevated) { 'AssessmentOperator' }
     else { 'SelectedAdministrator' }
-    if ($ValidationScenario -eq 'ElevationDenied') {
-        return New-PrivilegedPlanResult -State 'Unavailable' `
-            -ReasonCode 'PRIVILEGE.ELEVATION_DENIED' -PlanDigest $PlanDigest `
-            -AssessmentUserContext $AssessmentUserContext `
-            -LocalPackageProtector $LocalPackageProtector `
-            -UacInteractionCount $uacInteractionCount -AlreadyElevated $false `
-            -WorkerPrincipalRelationship 'NotStarted' -Operations @() `
-            -ChannelVerified $false -CleanupVerified $true
+    if ($scenario.elevationDenied) {
+        return New-PrivilegedCollectionStoppedResult -State 'Unavailable' `
+            -ReasonCode 'PRIVILEGE.ELEVATION_DENIED' -Context $resultContext `
+            -UacInteractionCount $uacInteractionCount `
+            -WorkerPrincipalRelationship 'NotStarted'
     }
 
-    Initialize-PrivilegedPlanNativeType
-    $workerSource = (Get-PrivilegedWorkerSource).Replace("`r`n", "`n").Replace("`r", "`n")
+    Initialize-PrivilegedCollectionPlanNativeType
+    $workerSource = (Get-PrivilegedCollectionWorkerSource).Replace("`r`n", "`n").Replace("`r", "`n")
     $workerBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($workerSource)
-    $workerDigest = Get-PrivilegedPlanSha256 -Bytes $workerBytes
+    $workerDigest = Get-PrivilegedCollectionPlanSha256 -Bytes $workerBytes
     if ($workerDigest -ne [string] $policy.worker.payloadSha256) {
-        return New-PrivilegedPlanResult -State 'IntegrityFailed' `
-            -ReasonCode 'PRIVILEGE.WORKER_IDENTITY_INVALID' -PlanDigest $PlanDigest `
-            -AssessmentUserContext $AssessmentUserContext `
-            -LocalPackageProtector $LocalPackageProtector `
-            -UacInteractionCount 0 -AlreadyElevated $alreadyElevated `
-            -WorkerPrincipalRelationship 'NotStarted' -Operations @() `
-            -ChannelVerified $false -CleanupVerified $true
+        return New-PrivilegedCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'PRIVILEGE.WORKER_IDENTITY_INVALID' -Context $resultContext `
+            -AlreadyElevated $alreadyElevated
     }
 
     $approvedExecutable = [System.IO.Path]::GetFullPath((Join-Path $PSHOME 'pwsh.exe'))
@@ -640,39 +872,29 @@ function Invoke-FrozenPrivilegedPlan {
     if (-not $approvedExecutable.Equals(
         $activeExecutable, [System.StringComparison]::OrdinalIgnoreCase
     )) {
-        return New-PrivilegedPlanResult -State 'IntegrityFailed' `
-            -ReasonCode 'PRIVILEGE.EXECUTABLE_IDENTITY_INVALID' -PlanDigest $PlanDigest `
-            -AssessmentUserContext $AssessmentUserContext `
-            -LocalPackageProtector $LocalPackageProtector `
-            -UacInteractionCount 0 -AlreadyElevated $alreadyElevated `
-            -WorkerPrincipalRelationship 'NotStarted' -Operations @() `
-            -ChannelVerified $false -CleanupVerified $true
+        return New-PrivilegedCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'PRIVILEGE.EXECUTABLE_IDENTITY_INVALID' -Context $resultContext `
+            -AlreadyElevated $alreadyElevated
     }
     $authenticodeCommand = $ExecutionContext.InvokeCommand.GetCommand(
         'Get-AuthenticodeSignature', [System.Management.Automation.CommandTypes]::Cmdlet
     )
     if ($null -eq $authenticodeCommand -or
         $authenticodeCommand.ModuleName -ne 'Microsoft.PowerShell.Security') {
-        return New-PrivilegedPlanResult -State 'IntegrityFailed' `
-            -ReasonCode 'PRIVILEGE.EXECUTABLE_IDENTITY_INVALID' -PlanDigest $PlanDigest `
-            -AssessmentUserContext $AssessmentUserContext `
-            -LocalPackageProtector $LocalPackageProtector -UacInteractionCount 0 `
-            -AlreadyElevated $alreadyElevated -WorkerPrincipalRelationship 'NotStarted' `
-            -Operations @() -ChannelVerified $false -CleanupVerified $true
+        return New-PrivilegedCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'PRIVILEGE.EXECUTABLE_IDENTITY_INVALID' -Context $resultContext `
+            -AlreadyElevated $alreadyElevated
     }
     $signature = & $authenticodeCommand -LiteralPath $approvedExecutable -ErrorAction Stop
     if ([string] $signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate -or
         $signature.SignerCertificate.GetNameInfo(
             [System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false
         ) -ne [string] $policy.worker.signerCommonName) {
-        return New-PrivilegedPlanResult -State 'IntegrityFailed' `
-            -ReasonCode 'PRIVILEGE.EXECUTABLE_IDENTITY_INVALID' -PlanDigest $PlanDigest `
-            -AssessmentUserContext $AssessmentUserContext `
-            -LocalPackageProtector $LocalPackageProtector -UacInteractionCount 0 `
-            -AlreadyElevated $alreadyElevated -WorkerPrincipalRelationship 'NotStarted' `
-            -Operations @() -ChannelVerified $false -CleanupVerified $true
+        return New-PrivilegedCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'PRIVILEGE.EXECUTABLE_IDENTITY_INVALID' -Context $resultContext `
+            -AlreadyElevated $alreadyElevated
     }
-    $executableDigest = Get-PrivilegedPlanSha256 -Bytes ([System.IO.File]::ReadAllBytes($approvedExecutable))
+    $executableDigest = Get-PrivilegedCollectionPlanSha256 -Bytes ([System.IO.File]::ReadAllBytes($approvedExecutable))
 
     # The pipe name contains a cryptographically random nonce so it cannot be
     # reused across runs. The nonce is an anti-confusion token, not a password:
@@ -684,9 +906,16 @@ function Invoke-FrozenPrivilegedPlan {
     [System.Security.Cryptography.RandomNumberGenerator]::Fill($nonceBytes)
     $nonce = [System.Convert]::ToHexString($nonceBytes).ToLowerInvariant()
     $pipeName = "$($policy.channel.pipeNamePrefix)$($nonce.Substring(0, 32))"
+    $jobName = "$($policy.channel.jobNamePrefix)$($nonce.Substring(0, 32))"
     $initiatingSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $pipeSecurity = [System.IO.Pipes.PipeSecurity]::new()
     $pipeSecurity.SetSecurityDescriptorSddlForm("D:P(A;;GA;;;$initiatingSid)(A;;GA;;;BA)")
+    # The coordinator creates the Job Object at its own integrity level and
+    # keeps that handle for the whole phase. Its explicit DACL lets either the
+    # initiating identity or the selected local administrator join the worker,
+    # but the random one-use name prevents cross-run reuse. Crucially, UAC does
+    # not take termination authority away from the handle already held here.
+    $ownedJob = $null
     $server = $null
     $worker = $null
     $unexpectedClient = $null
@@ -699,6 +928,9 @@ function Invoke-FrozenPrivilegedPlan {
     $reasonCode = 'PRIVILEGE.CHANNEL_FAILED'
     $failureStage = 'CREATE_CHANNEL'
     try {
+        $ownedJob = [WinPCInfo.PrivilegedCollectionPlan.OwnedJob]::Create(
+            $jobName, "D:P(A;;GA;;;$initiatingSid)(A;;GA;;;BA)"
+        )
         $server = [System.IO.Pipes.NamedPipeServerStreamAcl]::Create(
             $pipeName, [System.IO.Pipes.PipeDirection]::InOut,
             [int] $policy.channel.maximumServerInstances,
@@ -722,7 +954,8 @@ function Invoke-FrozenPrivilegedPlan {
             executableSha256 = $executableDigest
             workerPayloadSha256 = $workerDigest
             planDigest = $PlanDigest
-            scenario = $ValidationScenario
+            workerFault = [string] $scenario.workerFault
+            jobName = $jobName
         }
         $encodedConfiguration = [System.Convert]::ToBase64String(
             [System.Text.UTF8Encoding]::new($false).GetBytes(
@@ -741,7 +974,7 @@ function Invoke-FrozenPrivilegedPlan {
         $launchWorkerSource = $workerSource.Replace(
             '__PRIVILEGED_WORKER_CONFIGURATION__', $encodedConfiguration
         )
-        $encodedWorker = ConvertTo-PrivilegedEncodedCommand -Source $launchWorkerSource
+        $encodedWorker = ConvertTo-PrivilegedCollectionEncodedCommand -Source $launchWorkerSource
         $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
         $startInfo.FileName = $approvedExecutable
         # ShellExecute's runas verb is the Windows UAC boundary. It is selected
@@ -773,7 +1006,7 @@ function Invoke-FrozenPrivilegedPlan {
             throw
         }
 
-        if ($ValidationScenario -eq 'WrongPipeClient') {
+        if ($scenario.launchUnexpectedClient) {
             # The hostile fixture is also fixed source. It can only connect and
             # wait; it receives no plan, identity, or evidence. Starting it
             # while the approved worker deliberately delays proves that the
@@ -811,7 +1044,7 @@ finally { $pipe.Dispose() }
         $failureStage = 'CONNECT_WORKER'
         $null = $server.WaitForConnectionAsync($deadline.Token).GetAwaiter().GetResult()
         $failureStage = 'QUERY_WORKER_PID'
-        $clientProcessId = [WinPCInfo.PrivilegedPlan.PipePeer]::GetClientProcessId($server)
+        $clientProcessId = [WinPCInfo.PrivilegedCollectionPlan.PipePeer]::GetClientProcessId($server)
         if ($clientProcessId -ne $worker.Id) {
             $failureStage = 'PEER_IDENTITY'
             throw 'The connected pipe client is not the owned worker.'
@@ -821,13 +1054,13 @@ finally { $pipe.Dispose() }
         )
         if (-not $clientImage.Equals(
             $approvedExecutable, [System.StringComparison]::OrdinalIgnoreCase
-        ) -or (Get-PrivilegedPlanSha256 -Bytes ([System.IO.File]::ReadAllBytes($clientImage))) -ne
+        ) -or (Get-PrivilegedCollectionPlanSha256 -Bytes ([System.IO.File]::ReadAllBytes($clientImage))) -ne
             $executableDigest) {
             $failureStage = 'PEER_IDENTITY'
             throw 'The connected worker image is not the release-defined executable.'
         }
         $failureStage = 'READ_WORKER_HELLO'
-        $helloJson = Read-PrivilegedPlanFrame -Stream $server `
+        $helloJson = Read-PrivilegedCollectionPlanFrame -Stream $server `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token
         $hello = $helloJson | ConvertFrom-Json -Depth 10
@@ -864,11 +1097,11 @@ finally { $pipe.Dispose() }
         }
         $requestJson = $request | ConvertTo-Json -Compress -Depth 10
         $failureStage = 'SEND_PLAN'
-        Write-PrivilegedPlanFrame -Stream $server -Json $requestJson `
+        Write-PrivilegedCollectionPlanFrame -Stream $server -Json $requestJson `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token
         $failureStage = 'READ_RESULT'
-        $resultJson = Read-PrivilegedPlanFrame -Stream $server `
+        $resultJson = Read-PrivilegedCollectionPlanFrame -Stream $server `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token
         $workerResult = $resultJson | ConvertFrom-Json -Depth 10
@@ -883,13 +1116,22 @@ finally { $pipe.Dispose() }
         }
         for ($index = 0; $index -lt 4; $index++) {
             $operation = $workerResult.operations[$index]
-            if ($operation.operationId -ne $policy.operations[$index].operationId -or
-                $operation.state -ne 'Completed' -or
-                $operation.phaseId -ne $workerResult.phaseId) {
+            if (-not (Test-PrivilegedCollectionOperationResult -Operation $operation `
+                -ExpectedOperationId $policy.operations[$index].operationId `
+                -ExpectedPhaseId $workerResult.phaseId)) {
                 throw 'The privilege worker returned an invalid operation result.'
             }
         }
-        $operations = @($workerResult.operations)
+        # Re-project the closed shape instead of returning deserialized worker
+        # objects. Even a future parser mistake therefore cannot carry an
+        # undeclared credential, command, or evidence property to the caller.
+        $operations = @($workerResult.operations | ForEach-Object {
+            [pscustomobject][ordered]@{
+                operationId = [string] $_.operationId
+                state = [string] $_.state
+                phaseId = [string] $_.phaseId
+            }
+        })
         $channelVerified = $true
         $state = 'Completed'
         $reasonCode = 'PRIVILEGE.COMPLETED'
@@ -907,27 +1149,37 @@ finally { $pipe.Dispose() }
         $reasonCode = if ($failureStage -eq 'ELEVATION_DENIED') {
             'PRIVILEGE.ELEVATION_DENIED'
         }
-        elseif ($ValidationScenario -eq 'WrongPipeClient' -or
-            $failureStage -eq 'PEER_IDENTITY') {
+        elseif ($failureStage -eq 'PEER_IDENTITY') {
             'PRIVILEGE.PEER_IDENTITY_INVALID'
         }
-        elseif ($ValidationScenario -eq 'LostWorker') {
-            'PRIVILEGE.WORKER_LOST'
+        elseif (-not [string]::IsNullOrWhiteSpace([string] $scenario.failureReasonCode)) {
+            [string] $scenario.failureReasonCode
         }
         else { "PRIVILEGE.$failureStage`_FAILED" }
     }
     finally {
         if ($null -ne $server) { $server.Dispose() }
-        if ($null -ne $worker) {
-            if (-not $worker.WaitForExit([int] $policy.deadlines.cancellationGraceMilliseconds)) {
-                try { $worker.Kill($true) } catch {}
-            }
-            $cleanupVerified = $worker.WaitForExit(
-                [int] $policy.deadlines.terminationVerificationMilliseconds
+        # Query the coordinator-owned Job Object, not merely the root Process.
+        # If any worker or descendant remains, terminate the complete kernel-
+        # tracked tree and wait only for the release-owned verification bound.
+        # A failed query/termination is reported as incomplete cleanup; closing
+        # the kill-on-close handle is still a final safety action, but is never
+        # misrepresented as verified absence.
+        if ($null -ne $ownedJob) {
+            $cleanupVerified = $ownedJob.WaitForEmpty(
+                [int] $policy.deadlines.cancellationGraceMilliseconds
             )
-            $worker.Dispose()
+            if (-not $cleanupVerified) {
+                $null = $ownedJob.Terminate()
+                $cleanupVerified = $ownedJob.WaitForEmpty(
+                    [int] $policy.deadlines.terminationVerificationMilliseconds
+                )
+            }
         }
-        else { $cleanupVerified = $true }
+        else {
+            $cleanupVerified = $null -eq $worker
+        }
+        if ($null -ne $worker) { $worker.Dispose() }
         if ($null -ne $unexpectedClient) {
             if (-not $unexpectedClient.HasExited) {
                 try { $unexpectedClient.Kill($true) } catch {}
@@ -938,21 +1190,23 @@ finally { $pipe.Dispose() }
             $unexpectedClient.Dispose()
             $cleanupVerified = $cleanupVerified -and $unexpectedClientAbsent
         }
+        if ($null -ne $ownedJob) { $ownedJob.Dispose() }
         $deadline.Dispose()
     }
     if (-not $cleanupVerified) {
         $state = 'IntegrityFailed'
         $reasonCode = 'PRIVILEGE.TERMINATION_INCOMPLETE'
     }
-    New-PrivilegedPlanResult -State $state -ReasonCode $reasonCode `
+    New-PrivilegedCollectionResult -State $state -ReasonCode $reasonCode `
         -PlanDigest $PlanDigest -AssessmentUserContext $AssessmentUserContext `
         -LocalPackageProtector $LocalPackageProtector `
         -UacInteractionCount $uacInteractionCount -AlreadyElevated $alreadyElevated `
         -WorkerPrincipalRelationship $workerRelationship -Operations $operations `
-        -ChannelVerified $channelVerified -CleanupVerified $cleanupVerified
+        -ChannelVerified $channelVerified -CleanupVerified $cleanupVerified `
+        -ValidationScenario $ValidationScenario
 }
 
-function Read-PrivilegedPlanFixture {
+function Read-PrivilegedCollectionPlanFixture {
     param(
         [Parameter(Mandatory)] [string] $LiteralPath,
         [Parameter(Mandatory)] $ConvertFromJsonCommand
@@ -982,7 +1236,7 @@ function Read-PrivilegedPlanFixture {
         $properties = @($fixture.PSObject.Properties.Name | Sort-Object)
         if ($fixture.contractVersion -ne '1.0.0' -or $properties.Count -ne 2 -or
             $properties[0] -ne 'contractVersion' -or $properties[1] -ne 'scenario' -or
-            $fixture.scenario -notin @((Get-PrivilegedPlanPolicy).validationScenarios)) {
+            $fixture.scenario -notin @((Get-PrivilegedCollectionPlanPolicy).validationScenarios)) {
             throw 'The privilege fixture is outside the release scenario set.'
         }
         $fixture
@@ -996,7 +1250,7 @@ function Read-PrivilegedPlanFixture {
     }
 }
 
-function Invoke-PrivilegedPlanFixture {
+function Invoke-PrivilegedCollectionPlanFixture {
     param(
         [Parameter(Mandatory)] [string] $LiteralPath,
         [Parameter(Mandatory)] $PreparationPlan,
@@ -1006,7 +1260,7 @@ function Invoke-PrivilegedPlanFixture {
     )
 
     try {
-        $fixture = Read-PrivilegedPlanFixture -LiteralPath $LiteralPath `
+        $fixture = Read-PrivilegedCollectionPlanFixture -LiteralPath $LiteralPath `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
     }
     catch {
@@ -1026,13 +1280,18 @@ function Invoke-PrivilegedPlanFixture {
     }
 
     $scenario = [string] $fixture.scenario
-    $fixtureCancellation = if ($scenario -eq 'Cancellation') {
+    $scenarioPolicy = Get-PrivilegedCollectionValidationScenario -Name $scenario
+    $fixtureCancellation = if ($null -ne $scenarioPolicy.cancellationDelayMilliseconds) {
         [System.Threading.CancellationTokenSource]::new()
     }
     else { $null }
     try {
-        if ($null -ne $fixtureCancellation) { $fixtureCancellation.CancelAfter(200) }
-        $privilegeResult = Invoke-FrozenPrivilegedPlan -PreparationPlan $PreparationPlan `
+        if ($null -ne $fixtureCancellation) {
+            $fixtureCancellation.CancelAfter(
+                [int] $scenarioPolicy.cancellationDelayMilliseconds
+            )
+        }
+        $privilegeResult = Invoke-PrivilegedCollectionPlan -PreparationPlan $PreparationPlan `
             -PlanDigest $PlanDigest `
             -AssessmentUserContext 'subject:synthetic-user:primary' `
             -LocalPackageProtector 'protector:synthetic-initiator' `
@@ -1048,7 +1307,7 @@ function Invoke-PrivilegedPlanFixture {
 
     # Elevation denial is an evidence gap, not permission to end unrelated safe
     # work. The synthetic standard-user collector therefore still runs after a
-    # completed or unavailable privileged phase. Integrity failure, timeout, or
+    # completed or unavailable Privileged Collection Phase. Integrity failure, timeout, or
     # cancellation closes scheduling. This generated seam remains honest about
     # packaging: issue #46 has not supplied a real protector, so even useful
     # synthetic collection cannot claim Completed.

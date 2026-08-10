@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot 'src/Contracts.ps1')
-. (Join-Path $repositoryRoot 'src/PrivilegedPlan.ps1')
+. (Join-Path $repositoryRoot 'src/PrivilegedCollectionPlan.ps1')
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
 $convertToJsonCommand = $ExecutionContext.InvokeCommand.GetCommand(
@@ -31,20 +31,20 @@ $planDigest = Get-ObjectDigest -Value $preparationPlan -ConvertToJsonCommand $co
 $assessmentUserContext = 'subject:synthetic-user:primary'
 $localPackageProtector = 'protector:synthetic-initiator'
 
-$accepted = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+$accepted = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'AcceptedElevation'
 
 Assert-Equal 'Completed' $accepted.state `
-    'one accepted synthetic elevation completes the immutable Administrator plan'
+    'one accepted synthetic elevation completes the immutable Privileged Collection Plan'
 Assert-Equal 'PRIVILEGE.COMPLETED' $accepted.reasonCode `
     'accepted elevation returns a stable sanitized reason'
 Assert-Equal 1 $accepted.elevation.uacInteractionCount `
     'a normal launch makes exactly one front-loaded elevation request'
 Assert-Equal 4 @($accepted.operations).Count `
-    'every frozen Administrator operation executes inside one contiguous phase'
+    'every Privileged Collection Plan operation executes inside one contiguous phase'
 Assert-Equal 1 @($accepted.operations.phaseId | Sort-Object -Unique).Count `
-    'all Administrator operations share one privileged phase identity'
+    'all Administrator operations share one Privileged Collection Phase identity'
 Assert-Equal $true $accepted.channel.oneInstance `
     'the local channel uses exactly one server instance'
 Assert-Equal $true $accepted.channel.aclProtected `
@@ -65,12 +65,29 @@ Assert-Equal $localPackageProtector $accepted.identity.localPackageProtector `
     'elevation does not substitute the Local Package Protector'
 Assert-Equal $true $accepted.cleanup.verified `
     'the worker and one-use IPC are absent before the result returns'
+Assert-Equal 'SyntheticUnelevated' $accepted.validation.mode `
+    'automated elevation fixtures identify their unelevated validation seam'
+Assert-Equal 'NotStarted' $accepted.validation.environmentalLimitation.state `
+    'controlled live UAC validation is reported as a typed environmental limitation'
+Assert-Equal 'PRIVILEGE.LIVE_ELEVATION_VALIDATION_UNAVAILABLE' `
+    $accepted.validation.environmentalLimitation.reasonCode `
+    'the missing controlled live-client path has a stable public-safe reason'
+$extraFieldResult = [pscustomobject][ordered]@{
+    operationId = 'observe-firmware-tpm'
+    state = 'Completed'
+    phaseId = $accepted.operations[0].phaseId
+    assessmentEvidence = 'synthetic-but-prohibited'
+}
+Assert-Equal $false (Test-PrivilegedCollectionOperationResult `
+    -Operation $extraFieldResult -ExpectedOperationId 'observe-firmware-tpm' `
+    -ExpectedPhaseId $accepted.operations[0].phaseId) `
+    'a worker result cannot smuggle assessment evidence through an operation object'
 if (($accepted | ConvertTo-Json -Compress -Depth 20) -match
     '(?i)script(text)?|command(text)?|credential|secret|executablePath|pipeName') {
     throw 'The privilege result exposed a prohibited channel or launch value.'
 }
 
-$alreadyElevated = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+$alreadyElevated = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'AlreadyElevated'
 Assert-Equal 'Completed' $alreadyElevated.state `
@@ -80,7 +97,7 @@ Assert-Equal 0 $alreadyElevated.elevation.uacInteractionCount `
 Assert-Equal $true $alreadyElevated.elevation.alreadyElevated `
     'the result distinguishes a reused eligible administrator token from UAC'
 
-$alternateAdministrator = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+$alternateAdministrator = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'AlternateAdministrator'
 Assert-Equal 'Completed' $alternateAdministrator.state `
@@ -93,7 +110,7 @@ Assert-Equal $assessmentUserContext $alternateAdministrator.identity.assessmentU
 Assert-Equal $localPackageProtector $alternateAdministrator.identity.localPackageProtector `
     'the alternate administrator cannot replace the Local Package Protector'
 
-$denied = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+$denied = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'ElevationDenied'
 Assert-Equal 'Unavailable' $denied.state `
@@ -111,7 +128,7 @@ Assert-Equal $true $denied.standardUserWorkMayContinue `
 Assert-Equal $true $denied.cleanup.verified `
     'denial leaves no privileged worker or one-use channel residue'
 
-$wrongClient = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+$wrongClient = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'WrongPipeClient'
 Assert-Equal 'IntegrityFailed' $wrongClient.state `
@@ -123,7 +140,7 @@ Assert-Equal $false $wrongClient.channel.peerProcessVerified `
 Assert-Equal $true $wrongClient.cleanup.verified `
     'the rejected client and expected worker are absent before return'
 
-$alteredPlan = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+$alteredPlan = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'AlteredPlan'
 Assert-Equal 'IntegrityFailed' $alteredPlan.state `
@@ -137,7 +154,7 @@ Assert-Equal 0 @($alteredPlan.operations).Count `
 
 $mutatedPlan = $preparationPlan | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
 $mutatedPlan.privilege.privilegedOperations[0].operationId = 'observe-not-approved'
-$digestMismatch = Invoke-FrozenPrivilegedPlan -PreparationPlan $mutatedPlan `
+$digestMismatch = Invoke-PrivilegedCollectionPlan -PreparationPlan $mutatedPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'AcceptedElevation'
 Assert-Equal 'PRIVILEGE.PLAN_INTEGRITY_INVALID' $digestMismatch.reasonCode `
@@ -145,7 +162,7 @@ Assert-Equal 'PRIVILEGE.PLAN_INTEGRITY_INVALID' $digestMismatch.reasonCode `
 Assert-Equal 0 $digestMismatch.elevation.uacInteractionCount `
     'digest mismatch is rejected before any elevation side effect'
 
-$lostWorker = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+$lostWorker = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'LostWorker'
 Assert-Equal 'IntegrityFailed' $lostWorker.state `
@@ -156,12 +173,12 @@ Assert-Equal $true $lostWorker.cleanup.verified `
     'worker loss still removes the one-use channel and proves the process absent'
 
 $timeoutWatch = [System.Diagnostics.Stopwatch]::StartNew()
-$timedOut = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+$timedOut = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
     -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
     -LocalPackageProtector $localPackageProtector -ValidationScenario 'Timeout'
 $timeoutWatch.Stop()
 Assert-Equal 'TimedOut' $timedOut.state `
-    'the privileged phase deadline is distinct from integrity failure'
+    'the Privileged Collection Phase deadline is distinct from integrity failure'
 Assert-Equal 'TimedOut' $timedOut.coverage[0].state `
     'deadline expiry yields honest timed-out privileged coverage'
 Assert-Equal $true $timedOut.cleanup.verified `
@@ -174,7 +191,7 @@ $operatorCancellation = [System.Threading.CancellationTokenSource]::new()
 try {
     $operatorCancellation.CancelAfter(200)
     $cancelWatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $cancelled = Invoke-FrozenPrivilegedPlan -PreparationPlan $preparationPlan `
+    $cancelled = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
         -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
         -LocalPackageProtector $localPackageProtector -ValidationScenario 'Cancellation' `
         -CancellationToken $operatorCancellation.Token
@@ -182,7 +199,7 @@ try {
 }
 finally { $operatorCancellation.Dispose() }
 Assert-Equal 'Cancelled' $cancelled.state `
-    'operator cancellation stops the active privileged phase'
+    'operator cancellation stops the active Privileged Collection Phase'
 Assert-Equal 'Cancelled' $cancelled.coverage[0].state `
     'cancelled privileged scope cannot look complete or unavailable'
 Assert-Equal $true $cancelled.cleanup.verified `
@@ -191,4 +208,4 @@ if ($cancelWatch.ElapsedMilliseconds -gt 3000) {
     throw "Privilege cancellation exceeded its bounded acknowledgement window: $($cancelWatch.ElapsedMilliseconds) ms."
 }
 
-Write-Output 'PASS: all nine frozen privilege scenarios enforce plan, peer, deadline, cancellation, identity, and cleanup contracts.'
+Write-Output 'PASS: all nine Privileged Collection Plan scenarios enforce plan, peer, deadline, cancellation, identity, and cleanup contracts.'

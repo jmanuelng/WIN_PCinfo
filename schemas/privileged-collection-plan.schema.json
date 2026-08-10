@@ -1,15 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/privileged-plan.schema.json",
-  "title": "WIN-PCInfo frozen privileged-plan policy",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/privileged-collection-plan.schema.json",
+  "title": "WIN-PCInfo Privileged Collection Plan policy",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "contractVersion", "release", "policyId", "elevation", "operations", "channel", "worker", "deadlines", "validationScenarios"],
   "properties": {
-    "kind": { "const": "win-pcinfo.privileged-plan-policy" },
+    "kind": { "const": "win-pcinfo.privileged-collection-plan-policy" },
     "contractVersion": { "const": "1.0.0" },
     "release": { "const": "2.0.0-preview.1" },
-    "policyId": { "const": "win-pcinfo.privileged-plan/1.0.0" },
+    "policyId": { "const": "win-pcinfo.privileged-collection-plan/1.0.0" },
     "elevation": {
       "type": "object",
       "additionalProperties": false,
@@ -35,9 +35,10 @@
     "channel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pipeNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireArtifactDigest", "assessmentEvidenceAllowed"],
+      "required": ["pipeNamePrefix", "jobNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireArtifactDigest", "assessmentEvidenceAllowed"],
       "properties": {
-        "pipeNamePrefix": { "const": "WINPCInfo-PrivilegedPlan-v1-" },
+        "pipeNamePrefix": { "const": "WINPCInfo-PrivilegedCollectionPlan-v1-" },
+        "jobNamePrefix": { "const": "Local\\WINPCInfo-PrivilegedCollectionPlan-v1-" },
         "maximumServerInstances": { "const": 1 },
         "maximumMessageUtf8Bytes": { "type": "integer", "minimum": 256, "maximum": 32768 },
         "nonceBytes": { "type": "integer", "minimum": 32, "maximum": 64 },

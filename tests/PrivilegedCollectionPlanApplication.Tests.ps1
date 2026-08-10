@@ -20,7 +20,7 @@ function Invoke-PrivilegeFixtureApplication {
         '-RequestPath', $requestPath
         '-AcceptPreparation'
         '-PreparationFixturePath', $preparationPath
-        '-PrivilegedFixturePath', (Join-Path $PSScriptRoot "fixtures/$Name.json")
+        '-PrivilegedCollectionFixturePath', (Join-Path $PSScriptRoot "fixtures/$Name.json")
     )
 }
 
@@ -37,7 +37,7 @@ $cases = @(
 )
 foreach ($case in $cases) {
     $result = Invoke-PrivilegeFixtureApplication -Name $case.Name
-    $privilegeRecords = @($result.Records | Where-Object recordType -eq 'win-pcinfo.privileged-phase')
+    $privilegeRecords = @($result.Records | Where-Object recordType -eq 'win-pcinfo.privileged-collection-phase')
     $terminalRecords = @($result.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
     Assert-Equal 1 $privilegeRecords.Count "$($case.Name) emits one sanitized privilege result"
     Assert-Equal 1 $terminalRecords.Count "$($case.Name) emits exactly one terminal result"
@@ -55,6 +55,11 @@ foreach ($case in $cases) {
         "$($case.Name) removes its worker, pipe, and synthetic process residue"
     Assert-Equal $true $terminalRecords[0].validationFixture `
         "$($case.Name) cannot look like real privileged evidence"
+    Assert-Equal 'SyntheticUnelevated' $privilegeRecords[0].validation.mode `
+        "$($case.Name) declares that automated validation did not exercise live UAC"
+    Assert-Equal 'PRIVILEGE.LIVE_ELEVATION_VALIDATION_UNAVAILABLE' `
+        $privilegeRecords[0].validation.environmentalLimitation.reasonCode `
+        "$($case.Name) records the controlled-client limitation with a stable reason"
     if ($result.StandardError) { throw "$($case.Name) wrote stderr: $($result.StandardError)" }
 }
 
@@ -65,7 +70,7 @@ Assert-Equal 'Unavailable' $deniedTerminal.coverage[0].state `
 Assert-Equal 'Complete' $deniedTerminal.coverage[1].state `
     'elevation denial still permits unrelated safe standard-user evidence'
 
-$invalidRoot = Join-Path $repositoryRoot '.test-output/privileged-plan-application'
+$invalidRoot = Join-Path $repositoryRoot '.test-output/privileged-collection-plan-application'
 $null = New-Item -ItemType Directory -Path $invalidRoot -Force
 $invalidPath = Join-Path $invalidRoot 'duplicate-scenario.json'
 [System.IO.File]::WriteAllText(
@@ -78,7 +83,7 @@ $invalid = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments 
     '-RequestPath', $requestPath
     '-AcceptPreparation'
     '-PreparationFixturePath', $preparationPath
-    '-PrivilegedFixturePath', $invalidPath
+    '-PrivilegedCollectionFixturePath', $invalidPath
 )
 Assert-Equal 20 $invalid.ExitCode 'an ambiguous privilege fixture fails before worker launch'
 Assert-Equal 'PRIVILEGE.FIXTURE_INVALID' $invalid.Records[-1].reasonCode `

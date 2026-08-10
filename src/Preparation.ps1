@@ -269,7 +269,7 @@ function New-PreparationPlan {
         # future frozen execution plan and cannot be inferred from approval here.
         sideEffects = [pscustomobject][ordered]@{
             performedDuringPreparation = $false
-            afterApproval = @('CreateEvidenceWorkspace', 'ExecuteFrozenStandardPlan', 'ExecuteFrozenPrivilegedPlan', 'ProtectEvidencePackage')
+            afterApproval = @('CreateEvidenceWorkspace', 'ExecuteFrozenStandardPlan', 'ExecutePrivilegedCollectionPlan', 'ProtectEvidencePackage')
             deviceConfigurationChanges = @()
         }
         cleanup = [pscustomobject][ordered]@{
@@ -335,7 +335,7 @@ function Invoke-PreparationGate {
     $preparationFixturePath = [string] $ValidationContext.PreparationFixturePath
     $contractFixturePath = [string] $ValidationContext.ContractFixturePath
     $runFixturePath = [string] $ValidationContext.RunFixturePath
-    $privilegedFixturePath = [string] $ValidationContext.PrivilegedFixturePath
+    $privilegedCollectionFixturePath = [string] $ValidationContext.PrivilegedCollectionFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -400,7 +400,7 @@ function Invoke-PreparationGate {
     }
     $decision = if ($accepted) { 'Accepted' } else { 'Declined' }
     $selectedExecutionFixtures = @(
-        @($contractFixturePath, $runFixturePath, $privilegedFixturePath) |
+        @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -421,8 +421,8 @@ function Invoke-PreparationGate {
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand
     }
-    if ($accepted -and -not [string]::IsNullOrWhiteSpace($PrivilegedFixturePath)) {
-        return Invoke-PrivilegedPlanFixture -LiteralPath $PrivilegedFixturePath `
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($privilegedCollectionFixturePath)) {
+        return Invoke-PrivilegedCollectionPlanFixture -LiteralPath $privilegedCollectionFixturePath `
             -PreparationPlan $planResult.Plan -PlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand

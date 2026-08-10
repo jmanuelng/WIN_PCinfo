@@ -1,8 +1,8 @@
 {
-  "kind": "win-pcinfo.privileged-plan-policy",
+  "kind": "win-pcinfo.privileged-collection-plan-policy",
   "contractVersion": "1.0.0",
   "release": "2.0.0-preview.1",
-  "policyId": "win-pcinfo.privileged-plan/1.0.0",
+  "policyId": "win-pcinfo.privileged-collection-plan/1.0.0",
   "elevation": {
     "maximumUacInteractions": 1,
     "retryDeniedElevation": false,
@@ -15,7 +15,8 @@
     { "operationId": "observe-certificate-trust", "context": "Administrator", "parameterContract": "ClosedEmptyObject" }
   ],
   "channel": {
-    "pipeNamePrefix": "WINPCInfo-PrivilegedPlan-v1-",
+    "pipeNamePrefix": "WINPCInfo-PrivilegedCollectionPlan-v1-",
+    "jobNamePrefix": "Local\\WINPCInfo-PrivilegedCollectionPlan-v1-",
     "maximumServerInstances": 1,
     "maximumMessageUtf8Bytes": 16384,
     "nonceBytes": 32,
@@ -29,7 +30,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "EncodedReleaseSource",
-    "payloadSha256": "211f4de7b55acde9b8c741bb4f61bdebfdc959aa9d437c321d84b89f9ed829a6"
+    "payloadSha256": "8deb625838e4b7c1cbaa3fa0a7e18413bf317b3a5d329da86d7b51040a9ba9ad"
   },
   "deadlines": {
     "connectMaximumMilliseconds": 5000,
