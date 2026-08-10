@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
+$preparationFixturePath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 $testOutput = Join-Path $repositoryRoot '.test-output/runtime-matrix'
 $fixtureDirectory = Join-Path $testOutput 'fixtures'
 $workingDirectory = Join-Path $testOutput 'work'
@@ -66,7 +67,8 @@ foreach ($case in $matrix) {
     $result = Invoke-GeneratedApplication -CandidatePath $candidatePath -WorkingDirectory $workingDirectory `
         -Arguments @(
             '-Mode', 'Automation', '-RequestPath', $requestPath,
-            '-RuntimeFixturePath', $fixturePath, '-AcceptPreparation'
+            '-RuntimeFixturePath', $fixturePath, '-AcceptPreparation',
+            '-PreparationFixturePath', $preparationFixturePath
         )
     $after = @(Get-ChildItem -LiteralPath $workingDirectory -Force)
     $sentinelDigestAfter = (Get-FileHash -LiteralPath $sentinelPath -Algorithm SHA256).Hash

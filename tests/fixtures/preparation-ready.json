@@ -1,0 +1,11 @@
+{
+  "contractVersion": "1.0.0",
+  "artifactTrustValid": true,
+  "definitionIntegrityValid": true,
+  "outputDestinationEligible": true,
+  "requiredFreeDiskAvailable": true,
+  "localPackageProtectorAvailable": true,
+  "recipientProfileResolved": true,
+  "windowsFeatureChangeNotRequired": true,
+  "resolvedOutputDestination": "C:\\Synthetic\\WIN-PCInfo-Results"
+}

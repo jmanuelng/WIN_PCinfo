@@ -131,8 +131,9 @@
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["destination", "protection", "recipientProfile"],
+      "required": ["requestedDestination", "destination", "protection", "recipientProfile"],
       "properties": {
+        "requestedDestination": { "type": "string", "minLength": 1 },
         "destination": { "type": "string", "minLength": 1 },
         "protection": {
           "type": "object",

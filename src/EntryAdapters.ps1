@@ -123,6 +123,15 @@ function Get-AutomationRequest {
         $exception.Data['ReasonCode'] = 'REQUEST.FIELD_TYPE_INVALID'
         throw $exception
     }
+    if ($inputRequest.outputDestination.StartsWith('\\', [System.StringComparison]::Ordinal) -or
+        $inputRequest.outputDestination.StartsWith('//', [System.StringComparison]::Ordinal)) {
+        # Reject UNC syntax using only request text. This occurs before any path,
+        # drive, provider, or free-space lookup, preserving Local Only even when
+        # an automation caller supplies a remote output location.
+        $exception = [System.ArgumentException]::new('A network output destination is not supported.')
+        $exception.Data['ReasonCode'] = 'REQUEST.OUTPUT_DESTINATION_NETWORK_UNSUPPORTED'
+        throw $exception
+    }
     if ($inputRequest.automationChoices.verificationOverride -isnot [string]) {
         $exception = [System.ArgumentException]::new('The verification override must be a string.')
         $exception.Data['ReasonCode'] = 'REQUEST.FIELD_TYPE_INVALID'

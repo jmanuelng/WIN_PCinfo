@@ -7,16 +7,17 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
+$preparationFixturePath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
 $guidedAccepted = Invoke-GeneratedApplication -CandidatePath $candidatePath `
-    -Arguments @('-Mode', 'Guided') -StandardInput "APPROVE`n"
+    -Arguments @('-Mode', 'Guided', '-PreparationFixturePath', $preparationFixturePath) -StandardInput "APPROVE`n"
 $automationAccepted = Invoke-GeneratedApplication -CandidatePath $candidatePath `
-    -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath, '-AcceptPreparation')
+    -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath, '-AcceptPreparation', '-PreparationFixturePath', $preparationFixturePath)
 $automationDeclined = Invoke-GeneratedApplication -CandidatePath $candidatePath `
-    -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath)
+    -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath, '-PreparationFixturePath', $preparationFixturePath)
 
 foreach ($result in @($guidedAccepted, $automationAccepted, $automationDeclined)) {
     Assert-Equal 20 $result.ExitCode 'preparation cannot claim collection before collectors exist'
@@ -41,8 +42,8 @@ Assert-Equal $guidedSummary.planDigest $automationSummary.planDigest 'equivalent
 Assert-Equal $guidedTerminal.planDigest $automationTerminal.planDigest 'accepted terminals bind to that immutable plan'
 Assert-Equal 'Accepted' $guidedTerminal.preparationDecision 'guided approval is explicit after the summary'
 Assert-Equal 'Accepted' $automationTerminal.preparationDecision 'automation approval requires the separate switch'
-Assert-Equal 'SLICE.POST_APPROVAL_EXECUTION_NOT_IMPLEMENTED' $automationTerminal.reasonCode `
-    'approval reaches the next unimplemented boundary without collection'
+Assert-Equal 'PREPARATION.VALIDATION_ONLY' $automationTerminal.reasonCode `
+    'synthetic approval remains validation-only without collection'
 Assert-Equal 'Declined' $declinedTerminal.preparationDecision 'absence of automation approval safely declines'
 Assert-Equal 'PREPARATION.DECLINED' $declinedTerminal.reasonCode 'decline remains NotStarted'
 Assert-Equal $automationTerminal.planDigest $declinedTerminal.planDigest 'the decision cannot mutate the reviewed plan'
@@ -70,6 +71,8 @@ Assert-Equal 0 $automationSummary.plan.dependencies.installations.Count 'prepara
 Assert-Equal 0 $automationSummary.plan.windowsFeatures.changes.Count 'preparation plans no Windows Feature changes'
 Assert-Equal 'LocalPackageProtector' $automationSummary.plan.output.protection.mode 'output protection is disclosed'
 Assert-Equal 'None' $automationSummary.plan.output.recipientProfile.mode 'the optional recipient choice is fixed before collection'
+Assert-Equal 'C:\Synthetic\WIN-PCInfo-Results' $automationSummary.plan.output.destination `
+    'the plan freezes the absolute destination resolved during preflight'
 Assert-Equal $false $automationSummary.plan.sideEffects.performedDuringPreparation `
     'summary and approval occur before all side effects'
 Assert-Equal $true $automationSummary.plan.cleanup.requiredAfterExecution 'later execution cleanup is disclosed upfront'

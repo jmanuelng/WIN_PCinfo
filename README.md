@@ -3,7 +3,7 @@
 WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullet provides a generated launch path, verifies the active PowerShell host, and presents one complete Preparation Summary **before any assessment collection or device change can begin**.
 
 > [!IMPORTANT]
-> The v2 tracer bullet does not collect computer information yet. An eligible host resolves an immutable plan, presents the Preparation Summary, records approval or decline, and still returns `NotStarted` with exit code `20`. An ineligible host returns the same outcome with a stable reason, official Microsoft installation guidance, and a retry step. This is intentional and does not claim that a Preview capability is delivered.
+> The v2 tracer bullet does not collect computer information yet. A trusted generated artifact on an eligible host resolves an immutable plan only when every safety-critical prerequisite is available, presents the Preparation Summary, records approval or decline, and still returns `NotStarted` with exit code `20`. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate; it cannot self-assert release provenance. This is intentional and does not claim that a Preview capability is delivered.
 
 ## Try the v2 launch safely
 

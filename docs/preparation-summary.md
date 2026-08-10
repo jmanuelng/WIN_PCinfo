@@ -2,7 +2,7 @@
 
 WIN-PCInfo prepares one complete plan before it can elevate, install anything, change Windows, contact a network service, collect evidence, or create an Evidence Workspace. The generated application prints one beginner-readable `win-pcinfo.preparation-summary`; its `plan` field contains the immutable plan so each disclosure appears once.
 
-This implementation slice stops before collection. Approval and decline both end as `NotStarted` with exit code `20`; approval reaches `SLICE.POST_APPROVAL_EXECUTION_NOT_IMPLEMENTED`, while decline returns `PREPARATION.DECLINED`.
+This implementation slice stops before collection. A trusted artifact's approval and decline both end as `NotStarted` with exit code `20`; approval reaches the next unimplemented execution boundary, while decline returns `PREPARATION.DECLINED`. The repository's local development build is unsigned, so normal use fails `PREPARATION.INTEGRITY_FAILED` before a summary. Synthetic tests model a trusted artifact only in validation-only runs, which end as `PREPARATION.VALIDATION_ONLY` and can never collect.
 
 ## What the summary tells you
 
@@ -17,7 +17,7 @@ Review the whole summary once. It discloses:
 - Windows Feature observations, with no feature changes;
 - limitations, later side effects, and cleanup work.
 
-The plan digest appears with the summary and terminal record. If the request or any governed scope changes, the digest changes and the old approval cannot apply. Preparation checks output-path eligibility, required free disk, local package-protection compatibility, the recipient choice, and the no-Windows-Feature-change boundary without creating files. Missing critical prerequisites return `PREPARATION.PREREQUISITE_UNRESOLVED`. A corrupt embedded release definition or application manifest returns `PREPARATION.INTEGRITY_FAILED`; there is no **Run Anyway** path for a digest, manifest, signature, attestation, or governing-resource failure.
+The plan digest appears with the summary and terminal record. If the request or any governed scope changes, the digest changes and the old approval cannot apply. The plan records the absolute local destination resolved during preflight, not a relative path that could later move. Preparation rejects UNC and mapped-network storage before readiness/free-space access, then checks output-path eligibility, required free disk, Local Package Protector availability, the recipient choice, and the no-Windows-Feature-change boundary without creating files. Missing critical prerequisites return `PREPARATION.PREREQUISITE_UNRESOLVED`. An unsigned or invalidly signed application, corrupt embedded release definition, or invalid application manifest returns `PREPARATION.INTEGRITY_FAILED`; there is no **Run Anyway** path for a digest, manifest, signature, attestation, or governing-resource failure.
 
 ## Choose network behavior
 
@@ -29,7 +29,7 @@ In automation, `networkBehavior` and `automationChoices.allowAssessmentNetwork` 
 
 ## Guided approval
 
-Build and launch with stable PowerShell Core 7.6 or later 7.x:
+Build and inspect the fail-closed development path with stable PowerShell Core 7.6 or later 7.x. A future trusted release artifact uses the same command and can reach the summary after all prerequisites, including the Local Package Protector, are present:
 
 ```powershell
 pwsh -NoLogo -NoProfile -File ./build/Build.ps1
@@ -42,7 +42,7 @@ After reading the emitted Preparation Summary, type exactly `APPROVE` and press 
 
 Start from [`tests/fixtures/automation-request.json`](../tests/fixtures/automation-request.json) for Local Only or [`tests/fixtures/automation-request-connectivity.json`](../tests/fixtures/automation-request-connectivity.json) for Microsoft Connectivity Enabled. The public request schema is [`schemas/assessment-run-request.schema.json`](../schemas/assessment-run-request.schema.json).
 
-Approval requires the separate switch in addition to the validated request:
+For a trusted release artifact with every prerequisite present, approval requires the separate switch in addition to the validated request:
 
 ```powershell
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 `

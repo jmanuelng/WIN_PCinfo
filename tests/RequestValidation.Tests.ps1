@@ -42,6 +42,7 @@ $cases = @(
     @{ Name = 'missing-elevation-authority'; Mutate = { param($r) $r.automationChoices.allowElevation = $false }; Expected = 'REQUEST.AUTHORITY_CONFLICT' }
     @{ Name = 'installation-authority-expansion'; Mutate = { param($r) $r.automationChoices.allowInstallation = $true }; Expected = 'REQUEST.AUTHORITY_CONFLICT' }
     @{ Name = 'wrong-field-type'; Mutate = { param($r) $r.outputDestination = 42 }; Expected = 'REQUEST.FIELD_TYPE_INVALID' }
+    @{ Name = 'unc-output-destination'; Mutate = { param($r) $r.outputDestination = '\\server\share\results' }; Expected = 'REQUEST.OUTPUT_DESTINATION_NETWORK_UNSUPPORTED' }
 )
 
 foreach ($case in $cases) {

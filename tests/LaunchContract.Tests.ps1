@@ -7,13 +7,15 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
+$preparationFixturePath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
-$guided = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @('-Mode', 'Guided')
+$guided = Invoke-GeneratedApplication -CandidatePath $candidatePath `
+    -Arguments @('-Mode', 'Guided', '-PreparationFixturePath', $preparationFixturePath)
 $automation = Invoke-GeneratedApplication -CandidatePath $candidatePath `
-    -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath)
+    -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath, '-PreparationFixturePath', $preparationFixturePath)
 
 $guidedTerminal = $guided.Records[-1]
 $automationTerminal = $automation.Records[-1]

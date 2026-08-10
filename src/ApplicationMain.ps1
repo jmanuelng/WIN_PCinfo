@@ -22,6 +22,8 @@ if (-not $moduleFacts.contractCommandProvenance) {
 }
 $convertToJsonCommand = $moduleFacts.convertToJsonCommand
 $convertFromJsonCommand = $moduleFacts.convertFromJsonCommand
+$artifactTrustValid = Test-ApplicationArtifactTrust -LiteralPath $PSCommandPath `
+    -AuthenticodeCommand $moduleFacts.authenticodeCommand
 
 Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'RequestValidation' -State 'Started' `
     -MessageId 'request.validation.started' -CompletedUnits 0 -TotalUnits 2) `
@@ -68,6 +70,7 @@ else {
 $usingPreparationFixture = -not [string]::IsNullOrWhiteSpace($PreparationFixturePath)
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
     -Mode $Mode -AcceptPreparation:$AcceptPreparation -PreparationFixturePath $PreparationFixturePath `
+    -ArtifactTrustValid $artifactTrustValid `
     -ValidationFixture ($usingRuntimeFixture -or $usingPreparationFixture) `
     -ConvertFromJsonCommand $convertFromJsonCommand -ConvertToJsonCommand $convertToJsonCommand
 exit $applicationExitCode

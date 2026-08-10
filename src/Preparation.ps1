@@ -4,6 +4,24 @@
 $script:PreparationDefinitionBase64 = '__PREPARATION_DEFINITION_BASE64__'
 $script:PreparationDefinitionDigest = '__PREPARATION_DEFINITION_SHA256__'
 
+function Test-ApplicationArtifactTrust {
+    param(
+        [Parameter(Mandatory)] [string] $LiteralPath,
+        [Parameter(Mandatory)] $AuthenticodeCommand
+    )
+
+    # The running generated application, not modular source or an embedded
+    # checksum, is the trust object. Authenticode binds every script byte to the
+    # external Windows trust decision, so editing code and its embedded digest
+    # together cannot preserve eligibility. Unsigned development builds fail
+    # closed; synthetic fixtures may model trust only in validation-only runs.
+    try {
+        $signature = & $AuthenticodeCommand -LiteralPath ([System.IO.Path]::GetFullPath($LiteralPath)) -ErrorAction Stop
+        [string] $signature.Status -eq 'Valid' -and $null -ne $signature.SignerCertificate
+    }
+    catch { $false }
+}
+
 function Get-PreparationDefinition {
     param(
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
@@ -61,25 +79,34 @@ function Read-PreparationFixture {
         throw $exception
     }
 
-    $fields = @('contractVersion', 'definitionIntegrityValid', 'criticalPrerequisitesAvailable')
+    $fields = @(
+        'contractVersion', 'artifactTrustValid', 'definitionIntegrityValid',
+        'outputDestinationEligible', 'requiredFreeDiskAvailable',
+        'localPackageProtectorAvailable', 'recipientProfileResolved',
+        'windowsFeatureChangeNotRequired', 'resolvedOutputDestination'
+    )
     $actual = @($fixture.PSObject.Properties.Name)
     if (@($actual | Where-Object { $_ -notin $fields }).Count -gt 0 -or
         @($fields | Where-Object { $_ -notin $actual }).Count -gt 0 -or
         [string] $fixture.contractVersion -ne '1.0.0' -or
-        $fixture.definitionIntegrityValid -isnot [bool] -or
-        $fixture.criticalPrerequisitesAvailable -isnot [bool]) {
+        @($fields[1..7] | Where-Object { $fixture.$_ -isnot [bool] }).Count -gt 0 -or
+        $fixture.resolvedOutputDestination -isnot [string] -or
+        [string]::IsNullOrWhiteSpace([string] $fixture.resolvedOutputDestination)) {
         $exception = [System.ArgumentException]::new('The preparation fixture contract is invalid.')
         $exception.Data['ReasonCode'] = 'PREPARATION.FIXTURE_INVALID'
         throw $exception
     }
 
     [pscustomobject][ordered]@{
+        artifactTrustValid = [bool] $fixture.artifactTrustValid
         definitionIntegrityValid = [bool] $fixture.definitionIntegrityValid
+        resolvedOutputDestination = [string] $fixture.resolvedOutputDestination
         prerequisiteChecks = @(
-            [pscustomobject][ordered]@{
-                id = 'synthetic-critical-prerequisites'
-                resolved = [bool] $fixture.criticalPrerequisitesAvailable
-            }
+            [pscustomobject][ordered]@{ id = 'output-destination-eligible'; resolved = [bool] $fixture.outputDestinationEligible }
+            [pscustomobject][ordered]@{ id = 'required-free-disk-available'; resolved = [bool] $fixture.requiredFreeDiskAvailable }
+            [pscustomobject][ordered]@{ id = 'local-package-protector-available'; resolved = [bool] $fixture.localPackageProtectorAvailable }
+            [pscustomobject][ordered]@{ id = 'recipient-profile-resolved'; resolved = [bool] $fixture.recipientProfileResolved }
+            [pscustomobject][ordered]@{ id = 'windows-feature-change-not-required'; resolved = [bool] $fixture.windowsFeatureChangeNotRequired }
         )
     }
 }
@@ -88,22 +115,32 @@ function Get-ActivePreparationFacts {
     param(
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $RuntimeFacts,
-        [Parameter(Mandatory)] $Definition
+        [Parameter(Mandatory)] $Definition,
+        [Parameter(Mandatory)] [bool] $ArtifactTrustValid
     )
 
     $outputPathResolved = $false
     $freeDiskAvailable = $false
+    $resolvedOutput = ''
     try {
         # Full-path and drive resolution is metadata-only: it creates neither
         # the Evidence Workspace nor its destination. The summary exposes only
         # the boolean result, never the host's drive identity or free-byte count.
         $resolvedOutput = [System.IO.Path]::GetFullPath([string] $Request.outputDestination)
         $root = [System.IO.Path]::GetPathRoot($resolvedOutput)
-        $drive = [System.IO.DriveInfo]::new($root)
-        $outputPathResolved = -not [string]::IsNullOrWhiteSpace($root) -and $drive.IsReady -and
-            -not [System.IO.File]::Exists($resolvedOutput)
-        $requiredBytes = [int64] $Definition.requiredFreeDiskMiB * 1MB
-        $freeDiskAvailable = $outputPathResolved -and $drive.AvailableFreeSpace -ge $requiredBytes
+        $networkPath = $resolvedOutput.StartsWith('\\', [System.StringComparison]::Ordinal) -or
+            $resolvedOutput.StartsWith('//', [System.StringComparison]::Ordinal)
+        if (-not $networkPath -and -not [string]::IsNullOrWhiteSpace($root)) {
+            $drive = [System.IO.DriveInfo]::new($root)
+            # DriveType consults the local Windows volume map. IsReady and free
+            # space are read only after Fixed proves that UNC and mapped-network
+            # storage cannot trigger SMB or another storage request preapproval.
+            if ($drive.DriveType -eq [System.IO.DriveType]::Fixed) {
+                $outputPathResolved = $drive.IsReady -and -not [System.IO.File]::Exists($resolvedOutput)
+                $requiredBytes = [int64] $Definition.requiredFreeDiskMiB * 1MB
+                $freeDiskAvailable = $outputPathResolved -and $drive.AvailableFreeSpace -ge $requiredBytes
+            }
+        }
     }
     catch {
         $outputPathResolved = $false
@@ -113,17 +150,19 @@ function Get-ActivePreparationFacts {
     # RuntimeCompatibility already proved exact cryptographic behavior using
     # disposable synthetic buffers. Preparation consumes only that boolean; it
     # creates no key, evidence package, protected file, or recipient material.
-    $packageProtectionPlanned = @($Definition.operations | Where-Object {
-        $_.operationId -eq 'protect-evidence-package'
-    }).Count -eq 1
     [pscustomobject][ordered]@{
+        artifactTrustValid = $ArtifactTrustValid
         definitionIntegrityValid = $true
+        resolvedOutputDestination = $resolvedOutput
         prerequisiteChecks = @(
             [pscustomobject][ordered]@{ id = 'output-destination-eligible'; resolved = $outputPathResolved }
             [pscustomobject][ordered]@{ id = 'required-free-disk-available'; resolved = $freeDiskAvailable }
             [pscustomobject][ordered]@{
-                id = 'local-package-protection-compatible'
-                resolved = [bool] $RuntimeFacts.cryptography -and $packageProtectionPlanned
+                id = 'local-package-protector-available'
+                # The cryptographic primitive alone is not the initiating-user-
+                # bound Local Package Protector. That component is delivered by
+                # a later slice, so a real run remains NotStarted until it exists.
+                resolved = $false
             }
             [pscustomobject][ordered]@{ id = 'recipient-profile-resolved'; resolved = $true }
             [pscustomobject][ordered]@{ id = 'windows-feature-change-not-required'; resolved = $true }
@@ -135,6 +174,7 @@ function New-PreparationPlan {
     param(
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $Definition,
+        [Parameter(Mandatory)] $PreparationFacts,
         [Parameter(Mandatory)] $ConvertToJsonCommand
     )
 
@@ -201,7 +241,8 @@ function New-PreparationPlan {
         # Protector owns local cryptographic access; a future verified Recipient
         # Profile may add zero or one recipient through a new reviewed plan.
         output = [pscustomobject][ordered]@{
-            destination = [string] $Request.outputDestination
+            requestedDestination = [string] $Request.outputDestination
+            destination = [string] $PreparationFacts.resolvedOutputDestination
             protection = [pscustomobject][ordered]@{
                 mode = 'LocalPackageProtector'
                 plaintextSharingArtifactAllowed = $false
@@ -284,6 +325,7 @@ function Invoke-PreparationGate {
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $RuntimeFacts,
         [Parameter(Mandatory)] $RuntimeResult,
+        [Parameter(Mandatory)] [bool] $ArtifactTrustValid,
         [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
         [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
@@ -305,7 +347,7 @@ function Invoke-PreparationGate {
     try {
         $facts = if ([string]::IsNullOrWhiteSpace($PreparationFixturePath)) {
             Get-ActivePreparationFacts -Request $Request -RuntimeFacts $RuntimeFacts `
-                -Definition $definitionResult.Definition
+                -Definition $definitionResult.Definition -ArtifactTrustValid $ArtifactTrustValid
         }
         else {
             Read-PreparationFixture -LiteralPath $PreparationFixturePath `
@@ -326,7 +368,7 @@ function Invoke-PreparationGate {
     # Fixtures can only reduce trust. They cannot make corrupt embedded bytes,
     # an application manifest, or a governing resource valid and cannot create
     # a Verification Override for a signature, digest, manifest, or attestation.
-    if (-not $facts.definitionIntegrityValid) {
+    if (-not $facts.artifactTrustValid -or -not $facts.definitionIntegrityValid) {
         Write-ContractRecord (New-TerminalRecord -ReasonCode 'PREPARATION.INTEGRITY_FAILED' `
             -RequestDigest $requestDigest -ValidationFixture $ValidationFixture -RuntimeResult $RuntimeResult `
             -Phase 'Preparation') -ConvertToJsonCommand $ConvertToJsonCommand
@@ -334,6 +376,7 @@ function Invoke-PreparationGate {
     }
 
     $planResult = New-PreparationPlan -Request $Request -Definition $definitionResult.Definition `
+        -PreparationFacts $facts `
         -ConvertToJsonCommand $ConvertToJsonCommand
     $summary = New-PreparationSummary -PlanResult $planResult -PrerequisiteChecks $facts.prerequisiteChecks
     Write-ContractRecord $summary -ConvertToJsonCommand $ConvertToJsonCommand
