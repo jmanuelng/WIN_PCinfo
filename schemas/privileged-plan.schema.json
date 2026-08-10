@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/privileged-plan.schema.json",
+  "title": "WIN-PCInfo frozen privileged-plan policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "elevation", "operations", "channel", "worker", "deadlines", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.privileged-plan-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.privileged-plan/1.0.0" },
+    "elevation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximumUacInteractions", "retryDeniedElevation", "alreadyElevatedDisposition"],
+      "properties": {
+        "maximumUacInteractions": { "const": 1 },
+        "retryDeniedElevation": { "const": false },
+        "alreadyElevatedDisposition": { "const": "AlreadyElevatedNoPrompt" }
+      }
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        { "$ref": "#/$defs/firmwareTpm" },
+        { "$ref": "#/$defs/localAdministrators" },
+        { "$ref": "#/$defs/effectivePolicy" },
+        { "$ref": "#/$defs/certificateTrust" }
+      ],
+      "items": false
+    },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pipeNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireArtifactDigest", "assessmentEvidenceAllowed"],
+      "properties": {
+        "pipeNamePrefix": { "const": "WINPCInfo-PrivilegedPlan-v1-" },
+        "maximumServerInstances": { "const": 1 },
+        "maximumMessageUtf8Bytes": { "type": "integer", "minimum": 256, "maximum": 32768 },
+        "nonceBytes": { "type": "integer", "minimum": 32, "maximum": 64 },
+        "acl": { "const": "InitiatingUserAndAdministrators" },
+        "requirePeerProcessId": { "const": true },
+        "requireArtifactDigest": { "const": true },
+        "assessmentEvidenceAllowed": { "const": false }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executableResolver", "executableFileName", "signerCommonName", "payloadKind", "payloadSha256"],
+      "properties": {
+        "executableResolver": { "const": "ActivePowerShellHost" },
+        "executableFileName": { "const": "pwsh.exe" },
+        "signerCommonName": { "const": "Microsoft Corporation" },
+        "payloadKind": { "const": "EncodedReleaseSource" },
+        "payloadSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "deadlines": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connectMaximumMilliseconds", "operationMaximumMilliseconds", "cancellationGraceMilliseconds", "terminationVerificationMilliseconds"],
+      "properties": {
+        "connectMaximumMilliseconds": { "type": "integer", "minimum": 100, "maximum": 10000 },
+        "operationMaximumMilliseconds": { "type": "integer", "minimum": 100, "maximum": 60000 },
+        "cancellationGraceMilliseconds": { "type": "integer", "minimum": 100, "maximum": 2000 },
+        "terminationVerificationMilliseconds": { "type": "integer", "minimum": 100, "maximum": 5000 }
+      }
+    },
+    "validationScenarios": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "prefixItems": [
+        { "const": "AcceptedElevation" },
+        { "const": "AlreadyElevated" },
+        { "const": "AlternateAdministrator" },
+        { "const": "ElevationDenied" },
+        { "const": "WrongPipeClient" },
+        { "const": "AlteredPlan" },
+        { "const": "LostWorker" },
+        { "const": "Timeout" },
+        { "const": "Cancellation" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "context", "parameterContract"],
+      "properties": {
+        "operationId": { "type": "string" },
+        "context": { "const": "Administrator" },
+        "parameterContract": { "const": "ClosedEmptyObject" }
+      }
+    },
+    "firmwareTpm": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-firmware-tpm" } } }] },
+    "localAdministrators": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-local-administrators" } } }] },
+    "effectivePolicy": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-effective-policy" } } }] },
+    "certificateTrust": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-certificate-trust" } } }] }
+  }
+}

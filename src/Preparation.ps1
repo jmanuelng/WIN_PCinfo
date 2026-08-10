@@ -335,6 +335,7 @@ function Invoke-PreparationGate {
     $preparationFixturePath = [string] $ValidationContext.PreparationFixturePath
     $contractFixturePath = [string] $ValidationContext.ContractFixturePath
     $runFixturePath = [string] $ValidationContext.RunFixturePath
+    $privilegedFixturePath = [string] $ValidationContext.PrivilegedFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -398,8 +399,11 @@ function Invoke-PreparationGate {
         [string]::Equals([System.Console]::In.ReadLine(), 'APPROVE', [System.StringComparison]::Ordinal)
     }
     $decision = if ($accepted) { 'Accepted' } else { 'Declined' }
-    if ($accepted -and -not [string]::IsNullOrWhiteSpace($ContractFixturePath) -and
-        -not [string]::IsNullOrWhiteSpace($RunFixturePath)) {
+    $selectedExecutionFixtures = @(
+        @($contractFixturePath, $runFixturePath, $privilegedFixturePath) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
+    )
+    if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
         Write-ContractRecord (New-TerminalRecord -ReasonCode 'PREPARATION.FIXTURE_CONFLICT' `
             -RequestDigest $requestDigest -ValidationFixture $true -RuntimeResult $RuntimeResult `
             -Phase 'Preparation' -PlanDigest $planResult.Digest -PreparationDecision $decision) `
@@ -414,6 +418,12 @@ function Invoke-PreparationGate {
     }
     if ($accepted -and -not [string]::IsNullOrWhiteSpace($RunFixturePath)) {
         return Invoke-RunLifecycleFixture -LiteralPath $RunFixturePath `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($PrivilegedFixturePath)) {
+        return Invoke-PrivilegedPlanFixture -LiteralPath $PrivilegedFixturePath `
+            -PreparationPlan $planResult.Plan -PlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand
     }

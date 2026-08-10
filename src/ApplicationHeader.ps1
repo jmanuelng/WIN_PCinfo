@@ -34,7 +34,14 @@ param(
     # synthetic collector, but it cannot select commands, paths, device evidence,
     # or a production package finalizer. The terminal remains visibly fixture-only.
     [Parameter(DontShow)]
-    [string] $RunFixturePath
+    [string] $RunFixturePath,
+
+    # Release-owned privilege scenarios exercise the frozen Administrator plan
+    # without displaying a real UAC prompt. A fixture can only reduce trust or
+    # select one published synthetic fault; it cannot provide worker content,
+    # operations, executable paths, identities, or evidence.
+    [Parameter(DontShow)]
+    [string] $PrivilegedFixturePath
 )
 
 Set-StrictMode -Version Latest

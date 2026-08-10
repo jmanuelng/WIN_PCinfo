@@ -52,7 +52,7 @@ Clone or download the repository, open it in stable PowerShell 7.6-or-later, and
 pwsh -NoLogo -NoProfile -File ./build/Build.ps1
 ```
 
-The build reads the six tracked modules in a fixed order and writes `artifacts/WIN-PCInfo.ps1` as UTF-8 with BOM and CRLF line endings. Its versioned build-evidence object includes the build-tool digest, every source path and digest, and the generated SHA-256 digest. Identical source bytes produce identical application bytes regardless of the chosen output directory.
+The build reads the eleven tracked modules in a fixed order and writes `artifacts/WIN-PCInfo.ps1` as UTF-8 with BOM and CRLF line endings. Its versioned build-evidence object includes the build-tool digest, every source path and digest, and the generated SHA-256 digest. Identical source bytes produce identical application bytes regardless of the chosen output directory.
 
 The generated file is ignored because it is reproducible. Review and edit files under `src/`, then rebuild; never hand-edit the artifact.
 

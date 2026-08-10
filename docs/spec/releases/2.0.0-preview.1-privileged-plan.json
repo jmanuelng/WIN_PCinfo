@@ -1,0 +1,51 @@
+{
+  "kind": "win-pcinfo.privileged-plan-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.privileged-plan/1.0.0",
+  "elevation": {
+    "maximumUacInteractions": 1,
+    "retryDeniedElevation": false,
+    "alreadyElevatedDisposition": "AlreadyElevatedNoPrompt"
+  },
+  "operations": [
+    { "operationId": "observe-firmware-tpm", "context": "Administrator", "parameterContract": "ClosedEmptyObject" },
+    { "operationId": "observe-local-administrators", "context": "Administrator", "parameterContract": "ClosedEmptyObject" },
+    { "operationId": "observe-effective-policy", "context": "Administrator", "parameterContract": "ClosedEmptyObject" },
+    { "operationId": "observe-certificate-trust", "context": "Administrator", "parameterContract": "ClosedEmptyObject" }
+  ],
+  "channel": {
+    "pipeNamePrefix": "WINPCInfo-PrivilegedPlan-v1-",
+    "maximumServerInstances": 1,
+    "maximumMessageUtf8Bytes": 16384,
+    "nonceBytes": 32,
+    "acl": "InitiatingUserAndAdministrators",
+    "requirePeerProcessId": true,
+    "requireArtifactDigest": true,
+    "assessmentEvidenceAllowed": false
+  },
+  "worker": {
+    "executableResolver": "ActivePowerShellHost",
+    "executableFileName": "pwsh.exe",
+    "signerCommonName": "Microsoft Corporation",
+    "payloadKind": "EncodedReleaseSource",
+    "payloadSha256": "211f4de7b55acde9b8c741bb4f61bdebfdc959aa9d437c321d84b89f9ed829a6"
+  },
+  "deadlines": {
+    "connectMaximumMilliseconds": 5000,
+    "operationMaximumMilliseconds": 5000,
+    "cancellationGraceMilliseconds": 750,
+    "terminationVerificationMilliseconds": 2000
+  },
+  "validationScenarios": [
+    "AcceptedElevation",
+    "AlreadyElevated",
+    "AlternateAdministrator",
+    "ElevationDenied",
+    "WrongPipeClient",
+    "AlteredPlan",
+    "LostWorker",
+    "Timeout",
+    "Cancellation"
+  ]
+}
