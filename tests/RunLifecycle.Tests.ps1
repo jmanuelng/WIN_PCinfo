@@ -65,7 +65,7 @@ $collector = {
     }
 }
 $testFinalizer = {
-    param($AssessmentRecord)
+    param($AssessmentRecord, [System.Threading.CancellationToken] $CancellationToken)
 
     [pscustomobject][ordered]@{
         state = 'Verified'
@@ -77,7 +77,7 @@ $testFinalizer = {
     }
 }
 $cleanup = {
-    param([string] $RunId)
+    param([string] $RunId, [System.Threading.CancellationToken] $CancellationToken)
 
     [pscustomobject][ordered]@{
         state = 'VerifiedAbsent'
@@ -183,7 +183,7 @@ $cancelledCollector = {
     $result
 }
 $recoverableFinalizer = {
-    param($AssessmentRecord)
+    param($AssessmentRecord, [System.Threading.CancellationToken] $CancellationToken)
 
     [pscustomobject][ordered]@{
         state = 'RecoverableProtected'
@@ -291,7 +291,7 @@ if (($workerLoss.Records | ConvertTo-Json -Compress -Depth 30) -match 'private w
 Write-Output 'PASS: worker loss fails integrity with explicit coverage and no private diagnostic text.'
 
 $failedCleanup = {
-    param([string] $RunId)
+    param([string] $RunId, [System.Threading.CancellationToken] $CancellationToken)
 
     throw 'synthetic private cleanup failure detail'
 }
@@ -317,8 +317,28 @@ if (($cleanupIncomplete.Records | ConvertTo-Json -Compress -Depth 30) -match 'pr
 
 Write-Output 'PASS: cleanup failure takes precedence and the protected Assessment Record agrees with the terminal outcome.'
 
+$blockingCleanup = {
+    param([string] $RunId, [System.Threading.CancellationToken] $CancellationToken)
+
+    Start-Sleep -Seconds 30
+    throw 'an over-budget cleanup must never reach this point'
+}
+$cleanupDeadlineWatch = [System.Diagnostics.Stopwatch]::StartNew()
+$cleanupDeadline = Invoke-AssessmentRun -RunId 'run:synthetic:lifecycle-cleanup-deadline' `
+    -CollectorAdapter $collector -FinalizerAdapter $testFinalizer -CleanupAdapter $blockingCleanup
+$cleanupDeadlineWatch.Stop()
+
+Assert-RunEqual 60 $cleanupDeadline.ExitCode 'an over-budget cleanup remains CleanupIncomplete'
+Assert-RunEqual $false $cleanupDeadline.Terminal.cleanup.verified `
+    'a stopped cleanup adapter cannot claim that owned residue is absent'
+if ($cleanupDeadlineWatch.ElapsedMilliseconds -ge 6000) {
+    throw "Bounded cleanup took $($cleanupDeadlineWatch.ElapsedMilliseconds) ms."
+}
+
+Write-Output 'PASS: cleanup cancellation and hard stop are bounded by the release phase deadline.'
+
 $failedFinalizer = {
-    param($AssessmentRecord)
+    param($AssessmentRecord, [System.Threading.CancellationToken] $CancellationToken)
 
     throw 'synthetic private package failure detail'
 }
@@ -342,6 +362,29 @@ if (($integrityFailed.Records | ConvertTo-Json -Compress -Depth 30) -match 'priv
 }
 
 Write-Output 'PASS: package integrity failure takes precedence and no provisional record is exposed as complete.'
+
+$blockingFinalizer = {
+    param($AssessmentRecord, [System.Threading.CancellationToken] $CancellationToken)
+
+    Start-Sleep -Seconds 30
+    throw 'an over-budget finalizer must never reach this point'
+}
+$packageDeadlineWatch = [System.Diagnostics.Stopwatch]::StartNew()
+$packageDeadline = Invoke-AssessmentRun -RunId 'run:synthetic:lifecycle-package-deadline' `
+    -CollectorAdapter $collector -FinalizerAdapter $blockingFinalizer -CleanupAdapter $cleanup
+$packageDeadlineWatch.Stop()
+
+Assert-RunEqual 50 $packageDeadline.ExitCode 'an over-budget finalizer fails package integrity'
+Assert-RunEqual 'IntegrityFailed' $packageDeadline.Terminal.outcome `
+    'package deadline expiry cannot expose a useful completion'
+Assert-RunEqual 0 @($packageDeadline.Records | Where-Object {
+    $_.recordType -eq 'win-pcinfo.assessment-record'
+}).Count 'a timed-out finalizer cannot expose its provisional Assessment Record'
+if ($packageDeadlineWatch.ElapsedMilliseconds -ge 6000) {
+    throw "Bounded packaging took $($packageDeadlineWatch.ElapsedMilliseconds) ms."
+}
+
+Write-Output 'PASS: package cancellation and hard stop are bounded by the release phase deadline.'
 
 $lockReadyName = "Local\WINPCInfo-Lifecycle-Ready-$([System.Guid]::NewGuid().ToString('N'))"
 $lockReleaseName = "Local\WINPCInfo-Lifecycle-Release-$([System.Guid]::NewGuid().ToString('N'))"

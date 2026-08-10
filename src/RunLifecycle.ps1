@@ -69,6 +69,28 @@ function Get-AssessmentRunDeadlinePolicy {
     }
 }
 
+function Get-CollectorLifecycleTransition {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('Completed', 'Failed', 'Cancelled', 'TimedOut')]
+        [string] $SupervisionOutcome
+    )
+
+    $transitions = @{
+        Completed = @('Completed', 'Succeeded', 'collection.synthetic.succeeded', 'RUN.COMPLETED')
+        Failed = @('CompletedWithGaps', 'Failed', 'collection.synthetic.isolated-failure', 'RUN.COMPLETED_WITH_GAPS')
+        Cancelled = @('Cancelled', 'Failed', 'collection.synthetic.cancelled', 'RUN.CANCELLED')
+        TimedOut = @('TimedOut', 'Failed', 'collection.synthetic.timed-out', 'RUN.TIMED_OUT')
+    }
+    $transition = $transitions[$SupervisionOutcome]
+    [pscustomobject][ordered]@{
+        outcome = $transition[0]
+        progressState = $transition[1]
+        progressMessageId = $transition[2]
+        reasonCode = $transition[3]
+    }
+}
+
 function New-AssessmentProgressEvent {
     param(
         [Parameter(Mandatory)]
@@ -228,6 +250,91 @@ function ConvertTo-SanitizedPackageState {
     }
 }
 
+function Invoke-BoundedLifecycleAdapter {
+    param(
+        [Parameter(Mandatory)] [scriptblock] $Adapter,
+        [Parameter(Mandatory)] $InputValue,
+        [Parameter(Mandatory)] [System.Threading.CancellationToken] $RunCancellationToken,
+        [Parameter(Mandatory)] [ValidateRange(1, 60000)] [int] $MaximumMilliseconds,
+        [Parameter(Mandatory)] [ValidateRange(1, 10000)] [int] $TerminationMilliseconds
+    )
+
+    # An adapter runs in an isolated in-process pipeline. This lets the
+    # orchestrator cancel and stop the adapter without aborting its own pipeline
+    # or trusting the adapter to honor cancellation. The adapter still receives
+    # the linked token so cooperative implementations can leave state cleanly.
+    $adapterCancellation = [System.Threading.CancellationTokenSource]::CreateLinkedTokenSource(
+        $RunCancellationToken
+    )
+    $powerShell = [powershell]::Create()
+    $completed = $false
+    $stopped = $false
+    try {
+        $wrapper = @'
+param($LifecycleAdapter, $LifecycleInput, $LifecycleCancellationToken)
+& $LifecycleAdapter $LifecycleInput $LifecycleCancellationToken
+'@
+        $null = $powerShell.AddScript($wrapper).AddArgument($Adapter).
+            AddArgument($InputValue).AddArgument($adapterCancellation.Token)
+        $asyncResult = $powerShell.BeginInvoke()
+
+        # Fire slightly before the public ceiling so stop verification and the
+        # next structured progress event do not themselves cross that ceiling.
+        $activeBudget = [Math]::Max(1, $MaximumMilliseconds - 250)
+        $adapterCancellation.CancelAfter($activeBudget)
+        $waitResult = [System.Threading.WaitHandle]::WaitAny(
+            @($asyncResult.AsyncWaitHandle, $adapterCancellation.Token.WaitHandle),
+            $activeBudget
+        )
+        if ($waitResult -eq 0) {
+            $completed = $true
+            try {
+                $output = @($powerShell.EndInvoke($asyncResult))
+                if ($powerShell.HadErrors -or $output.Count -ne 1) {
+                    return [pscustomobject][ordered]@{
+                        completed = $true
+                        succeeded = $false
+                        terminationVerified = $true
+                        result = $null
+                    }
+                }
+                return [pscustomobject][ordered]@{
+                    completed = $true
+                    succeeded = $true
+                    terminationVerified = $true
+                    result = $output[0]
+                }
+            }
+            catch {
+                return [pscustomobject][ordered]@{
+                    completed = $true
+                    succeeded = $false
+                    terminationVerified = $true
+                    result = $null
+                }
+            }
+        }
+
+        $adapterCancellation.Cancel()
+        try {
+            $stopResult = $powerShell.BeginStop($null, $null)
+            $stopped = $stopResult.AsyncWaitHandle.WaitOne($TerminationMilliseconds)
+            if ($stopped) { $powerShell.EndStop($stopResult) }
+        }
+        catch { $stopped = $false }
+        [pscustomobject][ordered]@{
+            completed = $false
+            succeeded = $false
+            terminationVerified = $stopped
+            result = $null
+        }
+    }
+    finally {
+        $adapterCancellation.Dispose()
+        if ($completed -or $stopped) { $powerShell.Dispose() }
+    }
+}
+
 function Invoke-AssessmentRun {
     [CmdletBinding()]
     param(
@@ -355,25 +462,15 @@ function Invoke-AssessmentRun {
                 -not $collectorResult.Supervision.temporaryArtifactsAbsent) {
                 throw 'The collector did not return a complete clean synthetic result.'
             }
-            $recordOutcome = switch ($collectorResult.Supervision.outcome) {
-                'Completed' { 'Completed' }
-                'Failed' { 'CompletedWithGaps' }
-                'Cancelled' { 'Cancelled' }
-                'TimedOut' { 'TimedOut' }
-            }
+            $collectionTransition = Get-CollectorLifecycleTransition `
+                -SupervisionOutcome $collectorResult.Supervision.outcome
+            $recordOutcome = $collectionTransition.outcome
             if ($recordOutcome -eq 'Cancelled') {
                 $cancellationAcknowledgementMilliseconds = $watch.ElapsedMilliseconds
                 & $addProgress 'Cancellation' 'Acknowledged' 'cancellation.acknowledged' 1 3
             }
-            $collectionMessage = switch ($recordOutcome) {
-                'Completed' { 'collection.synthetic.succeeded' }
-                'CompletedWithGaps' { 'collection.synthetic.isolated-failure' }
-                'Cancelled' { 'collection.synthetic.cancelled' }
-                'TimedOut' { 'collection.synthetic.timed-out' }
-            }
-            & $addProgress 'Collection' `
-                $(if ($recordOutcome -eq 'Completed') { 'Succeeded' } else { 'Failed' }) `
-                $collectionMessage 2 3
+            & $addProgress 'Collection' $collectionTransition.progressState `
+                $collectionTransition.progressMessageId 2 3
 
             if (@($collectorResult.Observations).Count -eq 0 -and
                 $recordOutcome -in @('Cancelled', 'TimedOut')) {
@@ -427,12 +524,7 @@ function Invoke-AssessmentRun {
                     }
                     $finalizationRequired = $true
                     $outcome = $recordOutcome
-                    $reasonCode = switch ($outcome) {
-                        'Completed' { 'RUN.COMPLETED' }
-                        'CompletedWithGaps' { 'RUN.COMPLETED_WITH_GAPS' }
-                        'Cancelled' { 'RUN.CANCELLED' }
-                        'TimedOut' { 'RUN.TIMED_OUT' }
-                    }
+                    $reasonCode = $collectionTransition.reasonCode
                 }
             }
         }
@@ -468,12 +560,28 @@ function Invoke-AssessmentRun {
     }
     finally {
         if ($lockOwned) {
+            & $addProgress 'Cleanup' 'Started' 'cleanup.started' 2 3
             try {
-                $cleanup = ConvertTo-SanitizedCleanupState -Result (& $CleanupAdapter $RunId)
+                $remainingRunMilliseconds = [Math]::Max(
+                    1, [int] $deadlinePolicy.run.maximumMilliseconds - [int] $watch.ElapsedMilliseconds
+                )
+                $cleanupMaximumMilliseconds = [Math]::Min(
+                    $remainingRunMilliseconds,
+                    [int] ($deadlinePolicy.phases | Where-Object phase -eq 'Cleanup')[0].maximumMilliseconds
+                )
+                $cleanupInvocation = Invoke-BoundedLifecycleAdapter -Adapter $CleanupAdapter `
+                    -InputValue $RunId -RunCancellationToken $runCancellation.Token `
+                    -MaximumMilliseconds $cleanupMaximumMilliseconds `
+                    -TerminationMilliseconds $deadlinePolicy.process.terminationVerificationMilliseconds
+                $cleanup = ConvertTo-SanitizedCleanupState -Result $(
+                    if ($cleanupInvocation.succeeded) { $cleanupInvocation.result } else { $null }
+                )
             }
             catch {
                 $cleanup = ConvertTo-SanitizedCleanupState -Result $null
             }
+            & $addProgress 'Cleanup' $(if ($cleanup.verified) { 'Succeeded' } else { 'Failed' }) `
+                $(if ($cleanup.verified) { 'cleanup.verified' } else { 'cleanup.incomplete' }) 3 3
         }
         if (-not [bool] $cleanup.verified) {
             $outcome = 'CleanupIncomplete'
@@ -538,8 +646,21 @@ function Invoke-AssessmentRun {
         else {
             & $addProgress 'Packaging' 'Started' 'package.finalization.started' 2 3
             try {
+                $remainingRunMilliseconds = [Math]::Max(
+                    1, [int] $deadlinePolicy.run.maximumMilliseconds - [int] $watch.ElapsedMilliseconds
+                )
+                $packagingMaximumMilliseconds = [Math]::Min(
+                    $remainingRunMilliseconds,
+                    [int] ($deadlinePolicy.phases | Where-Object phase -eq 'Packaging')[0].maximumMilliseconds
+                )
+                $finalizerInvocation = Invoke-BoundedLifecycleAdapter -Adapter $FinalizerAdapter `
+                    -InputValue $assessmentRecord -RunCancellationToken $runCancellation.Token `
+                    -MaximumMilliseconds $packagingMaximumMilliseconds `
+                    -TerminationMilliseconds $deadlinePolicy.process.terminationVerificationMilliseconds
                 $package = ConvertTo-SanitizedPackageState `
-                    -Result (& $FinalizerAdapter $assessmentRecord) `
+                    -Result $(if ($finalizerInvocation.succeeded) {
+                        $finalizerInvocation.result
+                    } else { $null }) `
                     -RequiredState $requiredPackageState
             }
             catch {
@@ -575,11 +696,14 @@ function Invoke-AssessmentRun {
             }
             $outcome = 'CleanupIncomplete'
             $reasonCode = 'RUN.CLEANUP_INCOMPLETE'
+            $assessmentRecord = $null
+            $package = ConvertTo-SanitizedPackageState -Result $null -RequiredState 'Verified'
         }
     }
     if ($null -ne $mutex) { $mutex.Dispose() }
-    & $addProgress 'Cleanup' $(if ($cleanup.verified) { 'Succeeded' } else { 'Failed' }) `
-        $(if ($cleanup.verified) { 'cleanup.verified' } else { 'cleanup.incomplete' }) 3 3
+    if (-not $lockOwned) {
+        & $addProgress 'RunControl' 'Succeeded' 'run.no-owned-cleanup-required' 3 3
+    }
     $runCancellation.Dispose()
 
     if ($null -ne $assessmentRecord) { $records.Add($assessmentRecord) }
@@ -763,7 +887,7 @@ function Invoke-RunLifecycleFixture {
         }
     }.GetNewClosure()
     $unavailableFinalizer = {
-        param($AssessmentRecord)
+        param($AssessmentRecord, [System.Threading.CancellationToken] $CancellationToken)
 
         # Ticket #46 supplies the real Protected Package finalizer. Until then,
         # the generated artifact must fail integrity instead of manufacturing a
@@ -776,7 +900,7 @@ function Invoke-RunLifecycleFixture {
         }
     }
     $verifiedCleanup = {
-        param([string] $RunId)
+        param([string] $RunId, [System.Threading.CancellationToken] $CancellationToken)
 
         [pscustomobject][ordered]@{
             state = 'VerifiedAbsent'

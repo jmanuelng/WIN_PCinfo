@@ -46,7 +46,7 @@ This tracer bullet has no persistent recovery journal because its approved colle
 
 One cancellation token crosses the orchestrator/collector seam. The Process Supervisor signals the collector's run-unique Windows event, waits only through the release grace, and then escalates to bounded Job Object termination when necessary. The lifecycle emits one `Acknowledged` progress event, closes further scheduling, retains matching `Cancelled` coverage, and proceeds directly to cleanup without another prompt.
 
-Run Control, Collection, Packaging, Cleanup, the synthetic operation, and its process each have a positive finite deadline. The operation has `maximumAttempts: 1`; there is no automatic retry. The orchestrator supplies linked deadline cancellation to the collector. Package and cleanup adapters must implement their own bounded contract because forcibly aborting in-process cryptographic or cleanup work could corrupt state; an adapter exception or invalid result is converted into `IntegrityFailed` or `CleanupIncomplete` without copying private exception text.
+Run Control, Collection, Packaging, Cleanup, the synthetic operation, and its process each have a positive finite deadline. The operation has `maximumAttempts: 1`; there is no automatic retry. The orchestrator supplies linked deadline cancellation to the collector and invokes package and cleanup adapters in isolated pipelines with both a linked token and a release-owned maximum. An adapter that ignores cancellation is stopped within the process termination-verification budget. An exception, invalid result, timeout, or unverified stop becomes `IntegrityFailed` for packaging or `CleanupIncomplete` for cleanup without copying private exception text.
 
 ## Package and terminal honesty
 

@@ -21,6 +21,8 @@ The generated application integrates the same module after request validation an
 | live concurrent launch | `NotStarted` / 20 | real separate process owns the device-wide mutex; second launch schedules nothing and owner exits normally |
 | abandoned owner | `NotStarted` / 20 | real abandoned mutex enters cleanup-only recovery; collection does not resume |
 | cleanup exception | `CleanupIncomplete` / 60 | cleanup failure overrides complete evidence; final protected record and terminal agree |
+| cleanup deadline | `CleanupIncomplete` / 60 | an over-budget cleanup adapter is cancelled/stopped and residue stays uncertain |
+| package deadline | `IntegrityFailed` / 50 | an over-budget finalizer is cancelled/stopped and no provisional record is exposed |
 
 The focused test records first-progress time, maximum active heartbeat gap, and cancellation-acknowledgement time from a monotonic stopwatch. It asserts the five-second, ten-second, and two-second budgets respectively. The generated cancellation fixture exercises the actual named-event cooperative-cancellation path.
 

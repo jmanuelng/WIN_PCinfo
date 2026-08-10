@@ -13,8 +13,8 @@
     "phases": [
       { "phase": "RunControl", "maximumMilliseconds": 5000 },
       { "phase": "Collection", "maximumMilliseconds": 10000 },
-      { "phase": "Packaging", "maximumMilliseconds": 10000 },
-      { "phase": "Cleanup", "maximumMilliseconds": 10000 }
+      { "phase": "Packaging", "maximumMilliseconds": 2000 },
+      { "phase": "Cleanup", "maximumMilliseconds": 2000 }
     ],
     "operation": {
       "operationId": "op:synthetic.windows.os.success",

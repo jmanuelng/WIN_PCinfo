@@ -326,15 +326,16 @@ function Invoke-PreparationGate {
         [Parameter(Mandatory)] [bool] $ArtifactTrustValid,
         [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
-        [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
-        [Parameter()] [AllowEmptyString()] [string] $ContractFixturePath,
-        [Parameter()] [AllowEmptyString()] [string] $RunFixturePath,
-        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] $ValidationContext,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
         [Parameter(Mandatory)] $ConvertToJsonCommand,
         [Parameter(Mandatory)] $TestJsonCommand
     )
 
+    $preparationFixturePath = [string] $ValidationContext.PreparationFixturePath
+    $contractFixturePath = [string] $ValidationContext.ContractFixturePath
+    $runFixturePath = [string] $ValidationContext.RunFixturePath
+    $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
         -ConvertToJsonCommand $ConvertToJsonCommand
