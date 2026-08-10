@@ -1,0 +1,78 @@
+{
+  "kind": "win-pcinfo.approved-collector-catalog",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "limits": {
+    "maximumArgumentCount": 8,
+    "maximumArgumentUtf8Bytes": 1024,
+    "maximumEnvironmentVariables": 4,
+    "maximumEnvironmentValueUtf8Bytes": 1024
+  },
+  "collectors": [
+    {
+      "collectorId": "collector:synthetic.windows.os",
+      "collectorVersion": "1.0.0",
+      "purpose": "Exercise the Process Supervisor with synthetic Unicode evidence without claiming device collection.",
+      "executable": {
+        "resolver": "ActivePowerShellHost",
+        "fileName": "pwsh.exe",
+        "signerCommonName": "Microsoft Corporation"
+      },
+      "payload": {
+        "kind": "EmbeddedReleaseSource",
+        "fileName": "SyntheticCollector.ps1",
+        "sha256": "452ca6c2d0d80f57988e0e9fa030307c18e12cbece7d753813bd5432df1da50a"
+      },
+      "workingBoundary": {
+        "kind": "RunOwnedTemporary",
+        "rootName": "WIN-PCInfo/ProcessSupervisor",
+        "removeBeforeReturn": true
+      },
+      "environment": {
+        "inheritParent": false,
+        "variables": [
+          { "name": "SystemRoot", "valueSource": "WindowsDirectory" },
+          { "name": "TEMP", "valueSource": "RunDirectory" },
+          { "name": "TMP", "valueSource": "RunDirectory" },
+          { "name": "WINPCINFO_CANCEL_PATH", "valueSource": "CancellationMarkerPath" }
+        ]
+      },
+      "treeControl": {
+        "mode": "WindowsJobObjectRequired",
+        "startSuspendedBeforeAssignment": true,
+        "killOnClose": true,
+        "incompatibleDisposition": "NotStarted"
+      },
+      "operations": [
+        {
+          "operationId": "op:synthetic.windows.os.success",
+          "arguments": [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            "{RunOwnedCollectorPath}",
+            "-Operation",
+            "Success"
+          ],
+          "deadlineMilliseconds": 5000,
+          "standardOutputMaximumBytes": 4096,
+          "standardErrorMaximumBytes": 4096,
+          "cancellationGraceMilliseconds": 750,
+          "intendedScopeIds": ["scope:synthetic.device.os"],
+          "subjectIds": ["subject:synthetic-device:primary"]
+        }
+      ]
+    }
+  ],
+  "validationFixtures": [
+    { "fixtureId": "wrong-executable", "operationMode": "Success", "fault": "ExecutableIdentityMismatch" },
+    { "fixtureId": "invalid-argument", "operationMode": "Success", "fault": "SecretShapedArgument" },
+    { "fixtureId": "excess-output", "operationMode": "ExcessOutput", "fault": "OutputLimitExceeded" },
+    { "fixtureId": "timeout", "operationMode": "Timeout", "fault": "DeadlineExceeded", "deadlineMilliseconds": 200 },
+    { "fixtureId": "cooperative-cancel", "operationMode": "CooperativeCancel", "fault": "CancellationRequested" },
+    { "fixtureId": "hard-cancel", "operationMode": "HardCancel", "fault": "CancellationGraceExceeded" },
+    { "fixtureId": "child-process", "operationMode": "ChildProcess", "fault": "None" },
+    { "fixtureId": "incompatible-child", "operationMode": "Success", "fault": "JobAssignmentIncompatible" }
+  ]
+}
