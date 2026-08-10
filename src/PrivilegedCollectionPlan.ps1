@@ -602,7 +602,7 @@ function Wait-PrivilegedCollectionOwnedTreeAbsent {
     $false
 }
 
-function Read-PrivilegedCollectionPlanExactBytes {
+function Read-BoundedCollectionChannelExactBytes {
     param(
         [Parameter(Mandatory)] $Stream,
         [Parameter(Mandatory)] [int] $Count,
@@ -615,34 +615,34 @@ function Read-PrivilegedCollectionPlanExactBytes {
         $read = $Stream.ReadAsync(
             $bytes, $offset, $Count - $offset, $CancellationToken
         ).GetAwaiter().GetResult()
-        if ($read -eq 0) { throw 'The privilege channel closed before a complete frame.' }
+        if ($read -eq 0) { throw 'The collection channel closed before a complete frame.' }
         $offset += $read
     }
     $bytes
 }
 
-function Read-PrivilegedCollectionPlanFrame {
+function Read-BoundedCollectionChannelFrame {
     param(
         [Parameter(Mandatory)] $Stream,
         [Parameter(Mandatory)] [int] $MaximumBytes,
         [Parameter(Mandatory)] [System.Threading.CancellationToken] $CancellationToken
     )
 
-    $lengthBytes = Read-PrivilegedCollectionPlanExactBytes -Stream $Stream -Count 4 `
+    $lengthBytes = Read-BoundedCollectionChannelExactBytes -Stream $Stream -Count 4 `
         -CancellationToken $CancellationToken
     # Every supported Windows architecture is little-endian; BitConverter keeps
     # the fixed 32-bit prefix explicit without asking PowerShell to bind a
     # byref-like Span<T>, which it intentionally cannot marshal.
     $length = [System.BitConverter]::ToInt32($lengthBytes, 0)
     if ($length -le 0 -or $length -gt $MaximumBytes) {
-        throw 'The privilege frame exceeds its release byte bound.'
+        throw 'The collection frame exceeds its release byte bound.'
     }
-    $payload = Read-PrivilegedCollectionPlanExactBytes -Stream $Stream -Count $length `
+    $payload = Read-BoundedCollectionChannelExactBytes -Stream $Stream -Count $length `
         -CancellationToken $CancellationToken
     [System.Text.UTF8Encoding]::new($false, $true).GetString($payload)
 }
 
-function Write-PrivilegedCollectionPlanFrame {
+function Write-BoundedCollectionChannelFrame {
     param(
         [Parameter(Mandatory)] $Stream,
         [Parameter(Mandatory)] [string] $Json,
@@ -652,7 +652,7 @@ function Write-PrivilegedCollectionPlanFrame {
 
     $payload = [System.Text.UTF8Encoding]::new($false).GetBytes($Json)
     if ($payload.Length -le 0 -or $payload.Length -gt $MaximumBytes) {
-        throw 'The privilege frame exceeds its release byte bound.'
+        throw 'The collection frame exceeds its release byte bound.'
     }
     $lengthBytes = [System.BitConverter]::GetBytes([int] $payload.Length)
     $null = $Stream.WriteAsync(
@@ -1082,7 +1082,7 @@ finally { $pipe.Dispose() }
             throw 'The connected worker image is not the release-defined executable.'
         }
         $failureStage = 'READ_WORKER_HELLO'
-        $helloJson = Read-PrivilegedCollectionPlanFrame -Stream $server `
+        $helloJson = Read-BoundedCollectionChannelFrame -Stream $server `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token
         $hello = $helloJson | ConvertFrom-Json -Depth 10
@@ -1119,11 +1119,11 @@ finally { $pipe.Dispose() }
         }
         $requestJson = $request | ConvertTo-Json -Compress -Depth 10
         $failureStage = 'SEND_PLAN'
-        Write-PrivilegedCollectionPlanFrame -Stream $server -Json $requestJson `
+        Write-BoundedCollectionChannelFrame -Stream $server -Json $requestJson `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token
         $failureStage = 'READ_RESULT'
-        $resultJson = Read-PrivilegedCollectionPlanFrame -Stream $server `
+        $resultJson = Read-BoundedCollectionChannelFrame -Stream $server `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token
         $workerResult = $resultJson | ConvertFrom-Json -Depth 10

@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/system-collection-plan.schema.json",
+  "title": "WIN-PCInfo SYSTEM Collection sub-plan policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "operations", "activation", "channel", "treeControl", "deadlines", "security", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.system-collection-plan-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.system-collection-plan/1.0.0" },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "prefixItems": [{ "$ref": "#/$defs/operation" }],
+      "items": false
+    },
+    "activation": { "$ref": "#/$defs/activation" },
+    "channel": { "$ref": "#/$defs/channel" },
+    "treeControl": { "$ref": "#/$defs/treeControl" },
+    "deadlines": { "$ref": "#/$defs/deadlines" },
+    "security": { "$ref": "#/$defs/security" },
+    "validationScenarios": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "prefixItems": [
+        { "const": "SyntheticSuccess" },
+        { "const": "UnknownOperation" },
+        { "const": "InvalidParameters" },
+        { "const": "ActivationFailure" },
+        { "const": "WorkerLost" },
+        { "const": "Cancellation" },
+        { "const": "Timeout" },
+        { "const": "Denied" },
+        { "const": "AbnormalCleanup" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "collectorId", "collectorVersion", "requiredExecutionContext", "administratorSufficient", "source", "authorityProof", "parameters", "intendedScopeIds", "subjectIds", "result"],
+      "properties": {
+        "operationId": { "const": "op:windows.mdm-bridge.device-manageability" },
+        "collectorId": { "const": "collector:windows.mdm-bridge.device-manageability" },
+        "collectorVersion": { "const": "1.0.0" },
+        "requiredExecutionContext": { "const": "LocalSystem" },
+        "administratorSufficient": { "const": false },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceId", "interface", "namespace", "className", "access"],
+          "properties": {
+            "sourceId": { "const": "source:windows.mdm-bridge.device-manageability" },
+            "interface": { "const": "WindowsMdmBridgeWmiProvider" },
+            "namespace": { "const": "Root\\cimv2\\mdm\\dmmap" },
+            "className": { "const": "MDM_DeviceManageability_Provider01_01" },
+            "access": { "const": "ReadOnlyPresence" }
+          }
+        },
+        "authorityProof": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "url", "requirement"],
+          "properties": {
+            "kind": { "const": "MicrosoftDocumentation" },
+            "url": { "const": "https://learn.microsoft.com/en-us/windows/client-management/using-powershell-scripting-with-the-wmi-bridge-provider" },
+            "requirement": { "const": "DeviceSettingsRequireLocalSystem" }
+          }
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "required", "additionalProperties", "queryKind"],
+          "properties": {
+            "type": { "const": "object" },
+            "required": { "type": "array", "prefixItems": [{ "const": "queryKind" }], "items": false },
+            "additionalProperties": { "const": false },
+            "queryKind": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "const", "maximumUtf8Bytes"],
+              "properties": {
+                "type": { "const": "string" },
+                "const": { "const": "DeviceManageabilityAvailability" },
+                "maximumUtf8Bytes": { "const": 64 }
+              }
+            }
+          }
+        },
+        "intendedScopeIds": { "type": "array", "prefixItems": [{ "const": "scope:device.mdm-policy.system" }], "items": false },
+        "subjectIds": { "type": "array", "prefixItems": [{ "const": "subject:synthetic-device:primary" }], "items": false },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fieldId", "valueType", "maximumObservations"],
+          "properties": {
+            "fieldId": { "const": "field:device.mdm-bridge.provider-available" },
+            "valueType": { "const": "Boolean" },
+            "maximumObservations": { "const": 1 }
+          }
+        }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "taskNamePrefix", "createDisposition", "principal", "logonType", "runLevel", "deleteAfterTerminal", "executableResolver", "executableFileName", "signerCommonName", "payloadKind", "payloadSha256"],
+      "properties": {
+        "kind": { "const": "TransientTaskSchedulerCom" },
+        "taskNamePrefix": { "const": "WINPCInfo-SystemCollection-v1-" },
+        "createDisposition": { "const": "CreateNewOnly" },
+        "principal": { "const": "LocalSystem" },
+        "logonType": { "const": "ServiceAccount" },
+        "runLevel": { "const": "Highest" },
+        "deleteAfterTerminal": { "const": true },
+        "executableResolver": { "const": "ActivePowerShellHost" },
+        "executableFileName": { "const": "pwsh.exe" },
+        "signerCommonName": { "const": "Microsoft Corporation" },
+        "payloadKind": { "const": "EncodedReleaseSource" },
+        "payloadSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pipeNamePrefix", "jobNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireLocalSystemSid", "requireArtifactDigest", "assessmentEvidenceAllowed"],
+      "properties": {
+        "pipeNamePrefix": { "const": "WINPCInfo-SystemCollection-v1-" },
+        "jobNamePrefix": { "const": "Global\\WINPCInfo-SystemCollection-v1-" },
+        "maximumServerInstances": { "const": 1 },
+        "maximumMessageUtf8Bytes": { "type": "integer", "minimum": 256, "maximum": 16384 },
+        "nonceBytes": { "type": "integer", "minimum": 32, "maximum": 64 },
+        "acl": { "const": "InitiatingAdministratorAndLocalSystem" },
+        "requirePeerProcessId": { "const": true },
+        "requireLocalSystemSid": { "const": true },
+        "requireArtifactDigest": { "const": true },
+        "assessmentEvidenceAllowed": { "const": false }
+      }
+    },
+    "treeControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "workerJoinsBeforePlan", "killOnClose", "unownedExecutionAllowed"],
+      "properties": {
+        "mode": { "const": "WindowsJobObjectRequired" },
+        "workerJoinsBeforePlan": { "const": true },
+        "killOnClose": { "const": true },
+        "unownedExecutionAllowed": { "const": false }
+      }
+    },
+    "deadlines": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activationMaximumMilliseconds", "operationMaximumMilliseconds", "cancellationGraceMilliseconds", "terminationVerificationMilliseconds", "cleanupMaximumMilliseconds"],
+      "properties": {
+        "activationMaximumMilliseconds": { "type": "integer", "minimum": 100, "maximum": 10000 },
+        "operationMaximumMilliseconds": { "type": "integer", "minimum": 100, "maximum": 60000 },
+        "cancellationGraceMilliseconds": { "type": "integer", "minimum": 100, "maximum": 2000 },
+        "terminationVerificationMilliseconds": { "type": "integer", "minimum": 100, "maximum": 5000 },
+        "cleanupMaximumMilliseconds": { "type": "integer", "minimum": 100, "maximum": 5000 }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assessmentUserContextAllowed", "localPackageProtectorAllowed", "recipientProfileAllowed", "credentialMaterialAllowed", "packageKeyAllowed", "callerExecutablePathAllowed", "callerScriptAllowed", "callerCommandAllowed"],
+      "properties": {
+        "assessmentUserContextAllowed": { "const": false },
+        "localPackageProtectorAllowed": { "const": false },
+        "recipientProfileAllowed": { "const": false },
+        "credentialMaterialAllowed": { "const": false },
+        "packageKeyAllowed": { "const": false },
+        "callerExecutablePathAllowed": { "const": false },
+        "callerScriptAllowed": { "const": false },
+        "callerCommandAllowed": { "const": false }
+      }
+    }
+  }
+}

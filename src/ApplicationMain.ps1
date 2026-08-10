@@ -71,13 +71,16 @@ $usingPreparationFixture = -not [string]::IsNullOrWhiteSpace($PreparationFixture
 $usingContractFixture = -not [string]::IsNullOrWhiteSpace($ContractFixturePath)
 $usingRunFixture = -not [string]::IsNullOrWhiteSpace($RunFixturePath)
 $usingPrivilegedCollectionFixture = -not [string]::IsNullOrWhiteSpace($PrivilegedCollectionFixturePath)
+$usingSystemCollectionFixture = -not [string]::IsNullOrWhiteSpace($SystemCollectionFixturePath)
 $validationContext = [pscustomobject][ordered]@{
     PreparationFixturePath = $PreparationFixturePath
     ContractFixturePath = $ContractFixturePath
     RunFixturePath = $RunFixturePath
     PrivilegedCollectionFixturePath = $PrivilegedCollectionFixturePath
+    SystemCollectionFixturePath = $SystemCollectionFixturePath
     IsFixture = ($usingRuntimeFixture -or $usingPreparationFixture -or
-        $usingContractFixture -or $usingRunFixture -or $usingPrivilegedCollectionFixture)
+        $usingContractFixture -or $usingRunFixture -or $usingPrivilegedCollectionFixture -or
+        $usingSystemCollectionFixture)
 }
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
     -Mode $Mode -AcceptPreparation:$AcceptPreparation -ValidationContext $validationContext `

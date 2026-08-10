@@ -2,6 +2,8 @@
 
 WIN-PCInfo now has a narrow Privileged Collection Plan runner that can execute the four Administrator operations already shown in the approved Preparation Summary as one contiguous Privileged Collection Phase. The plan is immutable and run-bound. This is a security tracer bullet: the operations return synthetic status only. They do not collect real device evidence, deliver a Product Capability, or make Preview/Supported claims.
 
+The prepared LocalSystem operation is not added to this administrator worker. It is reduced again into a separate [SYSTEM Collection Sub-plan](system-collection-sub-plan.md), because Administrator and LocalSystem are different Windows trust contexts. This keeps the four-operation administrator interface unchanged and prevents a SYSTEM-only source from silently widening it.
+
 The generated application exposes the same contract through hidden synthetic validation fixtures. Ordinary generated execution still cannot reach real collection because Local Package Protector and final package work belongs to later slices. A local development build is also unsigned and therefore fails Preparation integrity before collection. These limitations prevent this security test from becoming an accidental product-completion claim.
 
 ## What happens at elevation

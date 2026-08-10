@@ -55,4 +55,4 @@ Omit `-AcceptPreparation` to decline. The switch cannot repair an invalid reques
 
 The immutable output contract is documented by [`schemas/preparation-plan.schema.json`](../schemas/preparation-plan.schema.json). Hidden runtime and preparation fixtures are for synthetic validation only and always stop before collection.
 
-The post-approval Privileged Collection Plan is explained in [Privileged Collection Plan](privileged-collection-plan.md). Its synthetic fixtures are validation-only and do not change the ordinary Preparation prerequisites.
+The post-approval Privileged Collection Plan is explained in [Privileged Collection Plan](privileged-collection-plan.md). Its one LocalSystem operation is further reduced to the separate [SYSTEM Collection Sub-plan](system-collection-sub-plan.md). Both synthetic fixture families are validation-only and do not change the ordinary Preparation prerequisites.

@@ -506,6 +506,36 @@ function Get-AssessmentFieldReason {
     return $null
 }
 
+function Get-AssessmentRecordSemanticReason {
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] $ContractDefinition
+    )
+
+    # Schema validation establishes shape; this shared semantic pass proves the
+    # graph is closed over the selected release-owned field and scope profile.
+    # Keeping it generic lets narrow collector slices validate a normal
+    # Assessment Record without weakening the earlier tracer-bullet profile.
+    $prohibitedFieldPattern = '(?i)(?:^|[.:/_-])(?:password|passphrase|credential|token|private[-_]?key|recovery[-_]?key|license[-_]?key|pfx|secret)(?:$|[.:/_-])'
+    if (@($Record.observations | Where-Object {
+        [string] $_.fieldId -match $prohibitedFieldPattern
+    }).Count -gt 0) {
+        return 'CONTRACT.PRIVACY_VIOLATION'
+    }
+    $reason = Get-AssessmentReferenceReason -Record $Record `
+        -ContractDefinition $ContractDefinition
+    if ($reason) { return $reason }
+    $reason = Get-RecommendationGraphReason -Record $Record
+    if ($reason) { return $reason }
+    $reason = Get-AssessmentStateReason -Record $Record `
+        -ContractDefinition $ContractDefinition
+    if ($reason) { return $reason }
+    $reason = Get-AssessmentFieldReason -Record $Record `
+        -ContractDefinition $ContractDefinition
+    if ($reason) { return $reason }
+    $null
+}
+
 function New-ContractValidationRecord {
     param(
         [Parameter(Mandatory)] [string] $ReasonCode,
@@ -598,32 +628,10 @@ function Test-AssessmentContract {
         # deliberately narrow: only field identities in the embedded Contract Set
         # may be admitted. A secret-bearing identity fails closed with a public
         # marker; neither the value nor a digest of it is returned or logged.
-        $prohibitedFieldPattern = '(?i)(?:^|[.:/_-])(?:password|passphrase|credential|token|private[-_]?key|recovery[-_]?key|license[-_]?key|pfx|secret)(?:$|[.:/_-])'
-        if (@($record.observations | Where-Object { [string] $_.fieldId -match $prohibitedFieldPattern }).Count -gt 0) {
-            return New-ContractValidationRecord -ReasonCode 'CONTRACT.PRIVACY_VIOLATION' `
-                -SchemaDraft ([string] $contract.Definition.schemaDraft)
-        }
-        $referenceReason = Get-AssessmentReferenceReason -Record $record `
+        $semanticReason = Get-AssessmentRecordSemanticReason -Record $record `
             -ContractDefinition $contract.Definition
-        if ($referenceReason) {
-            return New-ContractValidationRecord -ReasonCode $referenceReason `
-                -SchemaDraft ([string] $contract.Definition.schemaDraft)
-        }
-        $graphReason = Get-RecommendationGraphReason -Record $record
-        if ($graphReason) {
-            return New-ContractValidationRecord -ReasonCode $graphReason `
-                -SchemaDraft ([string] $contract.Definition.schemaDraft)
-        }
-        $stateReason = Get-AssessmentStateReason -Record $record `
-            -ContractDefinition $contract.Definition
-        if ($stateReason) {
-            return New-ContractValidationRecord -ReasonCode $stateReason `
-                -SchemaDraft ([string] $contract.Definition.schemaDraft)
-        }
-        $fieldReason = Get-AssessmentFieldReason -Record $record `
-            -ContractDefinition $contract.Definition
-        if ($fieldReason) {
-            return New-ContractValidationRecord -ReasonCode $fieldReason `
+        if ($semanticReason) {
+            return New-ContractValidationRecord -ReasonCode $semanticReason `
                 -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
     }

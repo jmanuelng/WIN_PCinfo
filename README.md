@@ -1,6 +1,6 @@
 # WIN-PCInfo
 
-WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, validate synthetic evidence, supervise one approved synthetic collector, and drive it to one honest terminal outcome.
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, validate synthetic evidence, supervise approved synthetic work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, and drive each validation path to one honest terminal outcome.
 
 > [!IMPORTANT]
 > The v2 tracer bullets do not collect computer information yet. Ordinary execution still stops safely after Preparation because the real Protected Evidence Package finalizer is not implemented. Strict hidden validation fixtures can run only the release-owned synthetic collector and can demonstrate timeout, cancellation, or package-integrity failure; they remain visibly synthetic and cannot create device evidence or a capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance.
@@ -25,6 +25,8 @@ To understand how one synthetic source becomes a typed observation, Collector Re
 To understand how WIN-PCInfo launches one predefined synthetic collector without exposing a shell or plug-in path, read [Process Supervisor](docs/process-supervisor.md). It explains the release-owned executable catalog, suspended Windows Job Object assignment, bounded output, cooperative and hard cancellation, untrusted-output privacy, and verified cleanup.
 
 To understand the finite Assessment Run state machine, stable exit codes, structured progress and heartbeat budgets, device-wide Active Run Lock, cleanup-only crash recovery, package-integrity gate, and failure precedence, read [Assessment Run lifecycle](docs/run-lifecycle.md).
+
+To understand why one device-level Windows MDM WMI Bridge source requires LocalSystem, and how WIN-PCInfo prevents that narrow need from becoming a SYSTEM command channel, read [SYSTEM Collection Sub-plan](docs/system-collection-sub-plan.md). It explains the frozen catalog, typed plan, transient activation, exact provenance, evidence confinement, privacy boundary, cleanup proof, and current controlled-client validation limitation.
 
 ## Legacy script
 

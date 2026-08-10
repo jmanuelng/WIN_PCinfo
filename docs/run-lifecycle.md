@@ -6,6 +6,8 @@ Ordinary generated execution still stops safely after preparation because the re
 
 Issue #43 adds a separate generated privilege fixture seam before this finalizer exists. It proves one immutable Privileged Collection Plan in one contiguous Privileged Collection Phase and then permits the safe synthetic standard-user collector only after privilege completion or denial. Its terminal still fails package integrity rather than claiming completion. See [Privileged Collection Plan](privileged-collection-plan.md).
 
+Issue #44 adds the generated SYSTEM fixture seam. It derives one separate SYSTEM Collection Sub-plan from the already approved Preparation Plan, runs only its cataloged synthetic operation, and then continues safe standard-user work after a confined activation failure, denial, verified worker loss, or timeout. Operator cancellation and integrity or cleanup uncertainty still close scheduling. The terminal remains package-integrity failed unless cancellation or cleanup has higher precedence. See [SYSTEM Collection Sub-plan](system-collection-sub-plan.md).
+
 ## What an operator can rely on
 
 Every accepted run ends with one of these stable outcomes and its matching process exit code:

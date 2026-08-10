@@ -336,6 +336,7 @@ function Invoke-PreparationGate {
     $contractFixturePath = [string] $ValidationContext.ContractFixturePath
     $runFixturePath = [string] $ValidationContext.RunFixturePath
     $privilegedCollectionFixturePath = [string] $ValidationContext.PrivilegedCollectionFixturePath
+    $systemCollectionFixturePath = [string] $ValidationContext.SystemCollectionFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -400,7 +401,8 @@ function Invoke-PreparationGate {
     }
     $decision = if ($accepted) { 'Accepted' } else { 'Declined' }
     $selectedExecutionFixtures = @(
-        @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath) |
+        @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath,
+            $systemCollectionFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -424,6 +426,12 @@ function Invoke-PreparationGate {
     if ($accepted -and -not [string]::IsNullOrWhiteSpace($privilegedCollectionFixturePath)) {
         return Invoke-PrivilegedCollectionPlanFixture -LiteralPath $privilegedCollectionFixturePath `
             -PreparationPlan $planResult.Plan -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($systemCollectionFixturePath)) {
+        return Invoke-SystemCollectionPlanFixture -LiteralPath $systemCollectionFixturePath `
+            -PreparationPlan $planResult.Plan -PreparationPlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand
     }

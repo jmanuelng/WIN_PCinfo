@@ -1,0 +1,100 @@
+{
+  "kind": "win-pcinfo.system-collection-plan-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.system-collection-plan/1.0.0",
+  "operations": [
+    {
+      "operationId": "op:windows.mdm-bridge.device-manageability",
+      "collectorId": "collector:windows.mdm-bridge.device-manageability",
+      "collectorVersion": "1.0.0",
+      "requiredExecutionContext": "LocalSystem",
+      "administratorSufficient": false,
+      "source": {
+        "sourceId": "source:windows.mdm-bridge.device-manageability",
+        "interface": "WindowsMdmBridgeWmiProvider",
+        "namespace": "Root\\cimv2\\mdm\\dmmap",
+        "className": "MDM_DeviceManageability_Provider01_01",
+        "access": "ReadOnlyPresence"
+      },
+      "authorityProof": {
+        "kind": "MicrosoftDocumentation",
+        "url": "https://learn.microsoft.com/en-us/windows/client-management/using-powershell-scripting-with-the-wmi-bridge-provider",
+        "requirement": "DeviceSettingsRequireLocalSystem"
+      },
+      "parameters": {
+        "type": "object",
+        "required": ["queryKind"],
+        "additionalProperties": false,
+        "queryKind": { "type": "string", "const": "DeviceManageabilityAvailability", "maximumUtf8Bytes": 64 }
+      },
+      "intendedScopeIds": ["scope:device.mdm-policy.system"],
+      "subjectIds": ["subject:synthetic-device:primary"],
+      "result": {
+        "fieldId": "field:device.mdm-bridge.provider-available",
+        "valueType": "Boolean",
+        "maximumObservations": 1
+      }
+    }
+  ],
+  "activation": {
+    "kind": "TransientTaskSchedulerCom",
+    "taskNamePrefix": "WINPCInfo-SystemCollection-v1-",
+    "createDisposition": "CreateNewOnly",
+    "principal": "LocalSystem",
+    "logonType": "ServiceAccount",
+    "runLevel": "Highest",
+    "deleteAfterTerminal": true,
+    "executableResolver": "ActivePowerShellHost",
+    "executableFileName": "pwsh.exe",
+    "signerCommonName": "Microsoft Corporation",
+    "payloadKind": "EncodedReleaseSource",
+    "payloadSha256": "477285bbcdf337328ffc8fd402e16abc1c2297b27b7bc8ff5dceda6495e6641f"
+  },
+  "channel": {
+    "pipeNamePrefix": "WINPCInfo-SystemCollection-v1-",
+    "jobNamePrefix": "Global\\WINPCInfo-SystemCollection-v1-",
+    "maximumServerInstances": 1,
+    "maximumMessageUtf8Bytes": 8192,
+    "nonceBytes": 32,
+    "acl": "InitiatingAdministratorAndLocalSystem",
+    "requirePeerProcessId": true,
+    "requireLocalSystemSid": true,
+    "requireArtifactDigest": true,
+    "assessmentEvidenceAllowed": false
+  },
+  "treeControl": {
+    "mode": "WindowsJobObjectRequired",
+    "workerJoinsBeforePlan": true,
+    "killOnClose": true,
+    "unownedExecutionAllowed": false
+  },
+  "deadlines": {
+    "activationMaximumMilliseconds": 5000,
+    "operationMaximumMilliseconds": 5000,
+    "cancellationGraceMilliseconds": 750,
+    "terminationVerificationMilliseconds": 2000,
+    "cleanupMaximumMilliseconds": 3000
+  },
+  "security": {
+    "assessmentUserContextAllowed": false,
+    "localPackageProtectorAllowed": false,
+    "recipientProfileAllowed": false,
+    "credentialMaterialAllowed": false,
+    "packageKeyAllowed": false,
+    "callerExecutablePathAllowed": false,
+    "callerScriptAllowed": false,
+    "callerCommandAllowed": false
+  },
+  "validationScenarios": [
+    "SyntheticSuccess",
+    "UnknownOperation",
+    "InvalidParameters",
+    "ActivationFailure",
+    "WorkerLost",
+    "Cancellation",
+    "Timeout",
+    "Denied",
+    "AbnormalCleanup"
+  ]
+}

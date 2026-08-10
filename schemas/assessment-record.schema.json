@@ -36,7 +36,7 @@
       "properties": {
         "runId": { "$ref": "#/$defs/id" },
         "outcome": { "enum": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"] },
-        "validationFixture": { "const": true }
+        "validationFixture": { "type": "boolean" }
       }
     },
     "subjects": {
@@ -120,7 +120,7 @@
         "sourceId": { "$ref": "#/$defs/id" },
         "collectorId": { "$ref": "#/$defs/id" },
         "collectorVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-        "executionContext": { "const": "Synthetic" },
+        "executionContext": { "enum": ["Synthetic", "LocalSystem"] },
         "collectedAt": { "$ref": "#/$defs/timestamp" },
         "sourceLocale": { "type": "string", "minLength": 2, "maxLength": 35 }
       }
@@ -189,7 +189,7 @@
         "subjectIds": { "$ref": "#/$defs/idArray" },
         "startedAt": { "$ref": "#/$defs/timestamp" },
         "completedAt": { "$ref": "#/$defs/timestamp" },
-        "executionContext": { "const": "Synthetic" },
+        "executionContext": { "enum": ["Synthetic", "LocalSystem"] },
         "attempts": { "type": "integer", "minimum": 1, "maximum": 3 },
         "observationIds": { "$ref": "#/$defs/idArray" },
         "coverageIds": { "$ref": "#/$defs/idArray" },

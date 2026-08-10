@@ -41,7 +41,13 @@ param(
     # select one published synthetic fault; it cannot provide worker content,
     # operations, executable paths, identities, or evidence.
     [Parameter(DontShow)]
-    [string] $PrivilegedCollectionFixturePath
+    [string] $PrivilegedCollectionFixturePath,
+
+    # The generated artifact accepts only one release-owned SYSTEM validation
+    # scenario name. It cannot provide an operation, parameter, executable,
+    # script, command, identity, credential, evidence value, or task name.
+    [Parameter(DontShow)]
+    [string] $SystemCollectionFixturePath
 )
 
 Set-StrictMode -Version Latest
