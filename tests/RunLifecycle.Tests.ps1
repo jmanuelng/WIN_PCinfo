@@ -19,7 +19,31 @@ function Assert-RunEqual {
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot 'src/Contracts.ps1')
 . (Join-Path $repositoryRoot 'src/ContractValidator.ps1')
+. (Join-Path $repositoryRoot 'src/ProcessSupervisor.ps1')
 . (Join-Path $repositoryRoot 'src/RunLifecycle.ps1')
+
+$uncooperativeAdapter = {
+    param($InputValue, [System.Threading.CancellationToken] $CancellationToken)
+
+    [System.Threading.Thread]::Sleep(5000)
+    [pscustomobject]@{ verified = $true }
+}
+$boundaryWatch = [System.Diagnostics.Stopwatch]::StartNew()
+$boundaryResult = Invoke-BoundedLifecycleAdapter -Adapter $uncooperativeAdapter `
+    -InputValue 'synthetic-boundary-probe' `
+    -RunCancellationToken ([System.Threading.CancellationToken]::None) `
+    -MaximumMilliseconds 1000 -TerminationMilliseconds 500
+$boundaryWatch.Stop()
+
+Assert-RunEqual $false $boundaryResult.completed `
+    'an uncooperative adapter cannot outlive its operation and be called complete'
+Assert-RunEqual $true $boundaryResult.terminationVerified `
+    'the Job Object must prove the complete uncooperative adapter tree absent'
+if ($boundaryWatch.ElapsedMilliseconds -ge 1500) {
+    throw "The uncooperative adapter boundary took $($boundaryWatch.ElapsedMilliseconds) ms."
+}
+
+Write-Output 'PASS: an uncooperative adapter tree is forcibly terminated and proved absent inside its deadline.'
 
 $collector = {
     param([System.Threading.CancellationToken] $CancellationToken)
@@ -320,7 +344,7 @@ Write-Output 'PASS: cleanup failure takes precedence and the protected Assessmen
 $blockingCleanup = {
     param([string] $RunId, [System.Threading.CancellationToken] $CancellationToken)
 
-    Start-Sleep -Seconds 30
+    [System.Threading.Thread]::Sleep(30000)
     throw 'an over-budget cleanup must never reach this point'
 }
 $cleanupDeadlineWatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -366,7 +390,7 @@ Write-Output 'PASS: package integrity failure takes precedence and no provisiona
 $blockingFinalizer = {
     param($AssessmentRecord, [System.Threading.CancellationToken] $CancellationToken)
 
-    Start-Sleep -Seconds 30
+    [System.Threading.Thread]::Sleep(30000)
     throw 'an over-budget finalizer must never reach this point'
 }
 $packageDeadlineWatch = [System.Diagnostics.Stopwatch]::StartNew()

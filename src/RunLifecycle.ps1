@@ -69,6 +69,27 @@ function Get-AssessmentRunDeadlinePolicy {
     }
 }
 
+function Get-RemainingLifecyclePhaseBudget {
+    param(
+        [Parameter(Mandatory)] $DeadlinePolicy,
+        [Parameter(Mandatory)]
+        [ValidateSet('RunControl', 'Collection', 'Packaging', 'Cleanup')]
+        [string] $Phase,
+        [Parameter(Mandatory)] [long] $ElapsedMilliseconds
+    )
+
+    $phasePolicies = @($DeadlinePolicy.phases | Where-Object phase -eq $Phase)
+    if ($phasePolicies.Count -ne 1) {
+        throw "Lifecycle phase deadline is not closed: $Phase"
+    }
+    $remainingRunMilliseconds = [Math]::Max(
+        1, [long] $DeadlinePolicy.run.maximumMilliseconds - $ElapsedMilliseconds
+    )
+    [int] [Math]::Min(
+        $remainingRunMilliseconds, [long] $phasePolicies[0].maximumMilliseconds
+    )
+}
+
 function Get-CollectorLifecycleTransition {
     param(
         [Parameter(Mandatory)]
@@ -259,79 +280,141 @@ function Invoke-BoundedLifecycleAdapter {
         [Parameter(Mandatory)] [ValidateRange(1, 10000)] [int] $TerminationMilliseconds
     )
 
-    # An adapter runs in an isolated in-process pipeline. This lets the
-    # orchestrator cancel and stop the adapter without aborting its own pipeline
-    # or trusting the adapter to honor cancellation. The adapter still receives
-    # the linked token so cooperative implementations can leave state cleanly.
-    $adapterCancellation = [System.Threading.CancellationTokenSource]::CreateLinkedTokenSource(
-        $RunCancellationToken
+    $notStartedResult = [pscustomobject][ordered]@{
+        completed = $false
+        succeeded = $false
+        terminationVerified = $true
+        result = $null
+    }
+    if ($MaximumMilliseconds -le 2) { return $notStartedResult }
+
+    # The adapter boundary is a suspended child assigned to a kill-on-close Job
+    # Object before its first instruction runs. Unlike an in-process runspace,
+    # this boundary can prove an uncooperative adapter and every descendant
+    # absent before the lifecycle releases its Active Run Lock.
+    if (-not (Get-Command Initialize-ProcessSupervisorNativeType `
+            -CommandType Function -ErrorAction SilentlyContinue)) {
+        return $notStartedResult
+    }
+    Initialize-ProcessSupervisorNativeType
+
+    $schedulingMargin = [Math]::Min(250, [Math]::Floor($MaximumMilliseconds / 4))
+    $terminationBudget = [Math]::Min(
+        $TerminationMilliseconds,
+        [Math]::Max(1, [Math]::Floor(($MaximumMilliseconds - $schedulingMargin) / 2))
     )
-    $powerShell = [powershell]::Create()
-    $completed = $false
-    $stopped = $false
+    $activeBudget = [Math]::Max(
+        1, $MaximumMilliseconds - $schedulingMargin - $terminationBudget
+    )
+
+    $adapterBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($Adapter.ToString())
+    $inputBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
+        [System.Management.Automation.PSSerializer]::Serialize($InputValue, 30)
+    )
+    if ($adapterBytes.Length -gt 8192 -or $inputBytes.Length -gt 24576) {
+        return $notStartedResult
+    }
+    $childScript = @'
+$ErrorActionPreference = 'Stop'
+try {
+    $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+    $adapterText = $utf8.GetString(
+        [System.Convert]::FromBase64String($env:WINPCINFO_LIFECYCLE_ADAPTER)
+    )
+    $inputXml = $utf8.GetString(
+        [System.Convert]::FromBase64String($env:WINPCINFO_LIFECYCLE_INPUT)
+    )
+    $adapter = [scriptblock]::Create($adapterText)
+    $inputValue = [System.Management.Automation.PSSerializer]::Deserialize($inputXml)
+    $adapterCancellation = [System.Threading.CancellationTokenSource]::new()
+    $adapterCancellation.CancelAfter([int] $env:WINPCINFO_LIFECYCLE_BUDGET)
     try {
-        $wrapper = @'
-param($LifecycleAdapter, $LifecycleInput, $LifecycleCancellationToken)
-& $LifecycleAdapter $LifecycleInput $LifecycleCancellationToken
-'@
-        $null = $powerShell.AddScript($wrapper).AddArgument($Adapter).
-            AddArgument($InputValue).AddArgument($adapterCancellation.Token)
-        $asyncResult = $powerShell.BeginInvoke()
-
-        # Fire slightly before the public ceiling so stop verification and the
-        # next structured progress event do not themselves cross that ceiling.
-        $activeBudget = [Math]::Max(1, $MaximumMilliseconds - 250)
-        $adapterCancellation.CancelAfter($activeBudget)
-        $waitResult = [System.Threading.WaitHandle]::WaitAny(
-            @($asyncResult.AsyncWaitHandle, $adapterCancellation.Token.WaitHandle),
-            $activeBudget
+        $values = @(& $adapter $inputValue $adapterCancellation.Token)
+        if ($values.Count -ne 1) { throw 'Adapter returned an invalid result count.' }
+        $outputXml = [System.Management.Automation.PSSerializer]::Serialize($values[0], 30)
+        [System.Console]::Out.Write(
+            [System.Convert]::ToBase64String($utf8.GetBytes($outputXml))
         )
-        if ($waitResult -eq 0) {
-            $completed = $true
-            try {
-                $output = @($powerShell.EndInvoke($asyncResult))
-                if ($powerShell.HadErrors -or $output.Count -ne 1) {
-                    return [pscustomobject][ordered]@{
-                        completed = $true
-                        succeeded = $false
-                        terminationVerified = $true
-                        result = $null
-                    }
-                }
-                return [pscustomobject][ordered]@{
-                    completed = $true
-                    succeeded = $true
-                    terminationVerified = $true
-                    result = $output[0]
-                }
-            }
-            catch {
-                return [pscustomobject][ordered]@{
-                    completed = $true
-                    succeeded = $false
-                    terminationVerified = $true
-                    result = $null
-                }
+    }
+    finally { $adapterCancellation.Dispose() }
+}
+catch {
+    [System.Console]::Error.Write('Lifecycle adapter failed.')
+    exit 1
+}
+'@
+    $encodedChildScript = [System.Convert]::ToBase64String(
+        [System.Text.Encoding]::Unicode.GetBytes($childScript)
+    )
+    $approvedExecutable = [System.IO.Path]::GetFullPath((Join-Path $PSHOME 'pwsh.exe'))
+    if (-not [System.IO.File]::Exists($approvedExecutable) -or
+        -not [string]::Equals(
+            $approvedExecutable, [System.Environment]::ProcessPath,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )) {
+        return $notStartedResult
+    }
+    $environment = [System.Collections.Generic.Dictionary[string,string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    $environment['SystemRoot'] = [System.Environment]::GetFolderPath('Windows')
+    $environment['WINPCINFO_LIFECYCLE_ADAPTER'] = [System.Convert]::ToBase64String($adapterBytes)
+    $environment['WINPCINFO_LIFECYCLE_INPUT'] = [System.Convert]::ToBase64String($inputBytes)
+    $environment['WINPCINFO_LIFECYCLE_BUDGET'] = [string] [Math]::Max(1, $activeBudget - 250)
+    $cancellationEventName = "Local\WINPCInfo-LifecycleAdapter-$([System.Guid]::NewGuid().ToString('N'))"
+    [bool] $createdCancellationEvent = $false
+    $cancellationEvent = $null
+    try {
+        $cancellationEvent = [System.Threading.EventWaitHandle]::new(
+            $false, [System.Threading.EventResetMode]::ManualReset,
+            $cancellationEventName, [ref] $createdCancellationEvent
+        )
+        if (-not $createdCancellationEvent) { return $notStartedResult }
+        $native = [WinPCInfo.ProcessSupervisor.NativeRunner]::Run(
+            $approvedExecutable,
+            @('-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $encodedChildScript),
+            $PSHOME, $environment, $activeBudget, 32768, 4096,
+            $RunCancellationToken, $cancellationEvent, 1, $terminationBudget, $false
+        )
+        $terminationVerified = -not $native.Started -or [bool] $native.CompleteOwnedTreeAbsent
+        $completed = $native.Started -and
+            $native.FailureStage -eq [WinPCInfo.ProcessSupervisor.NativeFailureStage]::None
+        if (-not $completed -or $native.ExitCode -ne 0 -or -not $terminationVerified -or
+            $native.StandardOutputExceeded -or $native.StandardErrorExceeded -or
+            $native.StandardErrorBytes -ne 0) {
+            return [pscustomobject][ordered]@{
+                completed = $completed
+                succeeded = $false
+                terminationVerified = $terminationVerified
+                result = $null
             }
         }
-
-        $adapterCancellation.Cancel()
         try {
-            $stopResult = $powerShell.BeginStop($null, $null)
-            $stopped = $stopResult.AsyncWaitHandle.WaitOne($TerminationMilliseconds)
-            if ($stopped) { $powerShell.EndStop($stopResult) }
+            $outputBase64 = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+                $native.StandardOutput
+            )
+            $outputXml = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+                [System.Convert]::FromBase64String($outputBase64)
+            )
+            $result = [System.Management.Automation.PSSerializer]::Deserialize($outputXml)
+            [pscustomobject][ordered]@{
+                completed = $true
+                succeeded = $true
+                terminationVerified = $true
+                result = $result
+            }
         }
-        catch { $stopped = $false }
-        [pscustomobject][ordered]@{
-            completed = $false
-            succeeded = $false
-            terminationVerified = $stopped
-            result = $null
+        catch {
+            [pscustomobject][ordered]@{
+                completed = $true
+                succeeded = $false
+                terminationVerified = $true
+                result = $null
+            }
         }
     }
     finally {
-        $adapterCancellation.Dispose()
-        if ($completed -or $stopped) { $powerShell.Dispose() }
+        if ($null -ne $cancellationEvent) { $cancellationEvent.Dispose() }
     }
 }
 
@@ -562,13 +645,9 @@ function Invoke-AssessmentRun {
         if ($lockOwned) {
             & $addProgress 'Cleanup' 'Started' 'cleanup.started' 2 3
             try {
-                $remainingRunMilliseconds = [Math]::Max(
-                    1, [int] $deadlinePolicy.run.maximumMilliseconds - [int] $watch.ElapsedMilliseconds
-                )
-                $cleanupMaximumMilliseconds = [Math]::Min(
-                    $remainingRunMilliseconds,
-                    [int] ($deadlinePolicy.phases | Where-Object phase -eq 'Cleanup')[0].maximumMilliseconds
-                )
+                $cleanupMaximumMilliseconds = Get-RemainingLifecyclePhaseBudget `
+                    -DeadlinePolicy $deadlinePolicy -Phase 'Cleanup' `
+                    -ElapsedMilliseconds $watch.ElapsedMilliseconds
                 $cleanupInvocation = Invoke-BoundedLifecycleAdapter -Adapter $CleanupAdapter `
                     -InputValue $RunId -RunCancellationToken $runCancellation.Token `
                     -MaximumMilliseconds $cleanupMaximumMilliseconds `
@@ -646,17 +725,22 @@ function Invoke-AssessmentRun {
         else {
             & $addProgress 'Packaging' 'Started' 'package.finalization.started' 2 3
             try {
-                $remainingRunMilliseconds = [Math]::Max(
-                    1, [int] $deadlinePolicy.run.maximumMilliseconds - [int] $watch.ElapsedMilliseconds
-                )
-                $packagingMaximumMilliseconds = [Math]::Min(
-                    $remainingRunMilliseconds,
-                    [int] ($deadlinePolicy.phases | Where-Object phase -eq 'Packaging')[0].maximumMilliseconds
-                )
+                $packagingMaximumMilliseconds = Get-RemainingLifecyclePhaseBudget `
+                    -DeadlinePolicy $deadlinePolicy -Phase 'Packaging' `
+                    -ElapsedMilliseconds $watch.ElapsedMilliseconds
                 $finalizerInvocation = Invoke-BoundedLifecycleAdapter -Adapter $FinalizerAdapter `
                     -InputValue $assessmentRecord -RunCancellationToken $runCancellation.Token `
                     -MaximumMilliseconds $packagingMaximumMilliseconds `
                     -TerminationMilliseconds $deadlinePolicy.process.terminationVerificationMilliseconds
+                if (-not $finalizerInvocation.terminationVerified) {
+                    $cleanup = [pscustomobject][ordered]@{
+                        state = 'AdapterTreeAbsenceUncertain'
+                        verified = $false
+                        reasonCode = 'CLEANUP.ADAPTER_TREE_ABSENCE_UNCERTAIN'
+                    }
+                    $outcome = 'CleanupIncomplete'
+                    $reasonCode = 'RUN.CLEANUP_INCOMPLETE'
+                }
                 $package = ConvertTo-SanitizedPackageState `
                     -Result $(if ($finalizerInvocation.succeeded) {
                         $finalizerInvocation.result
@@ -670,10 +754,14 @@ function Invoke-AssessmentRun {
             if ($null -eq $package -or -not [bool] $package.verified -or
                 $package.state -ne $requiredPackageState) {
                 & $addProgress 'Packaging' 'Failed' 'package.finalization.failed' 2 3
+                $assessmentRecord = $null
                 if ([bool] $cleanup.verified) {
                     $outcome = 'IntegrityFailed'
                     $reasonCode = 'RUN.PACKAGE_INTEGRITY_FAILED'
-                    $assessmentRecord = $null
+                }
+                else {
+                    $outcome = 'CleanupIncomplete'
+                    $reasonCode = 'RUN.CLEANUP_INCOMPLETE'
                 }
             }
             else {
