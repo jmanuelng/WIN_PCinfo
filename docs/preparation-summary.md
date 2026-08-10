@@ -2,14 +2,14 @@
 
 WIN-PCInfo prepares one complete plan before it can elevate, install anything, change Windows, contact a network service, collect evidence, or create an Evidence Workspace. The generated application prints one beginner-readable `win-pcinfo.preparation-summary`; its `plan` field contains the immutable plan so each disclosure appears once.
 
-Ordinary execution in this implementation slice still stops before collection. A trusted artifact's ordinary approval and decline both end as `NotStarted` with exit code `20`; approval reaches the unimplemented real-package boundary, while decline returns `PREPARATION.DECLINED`. The repository's local development build is unsigned, so normal use fails `PREPARATION.INTEGRITY_FAILED` before a summary. Strict hidden lifecycle validation fixtures may cross Preparation only to run the release-owned synthetic collector; they cannot select real collection, device mutation, elevation, network access, or a package finalizer.
+Ordinary execution in this implementation slice still stops before collection. A trusted artifact's ordinary approval and decline both end as `NotStarted` with exit code `20`; approval reaches the unimplemented real-package boundary, while decline returns `PREPARATION.DECLINED`. The repository's local development build is unsigned, so normal use fails `PREPARATION.INTEGRITY_FAILED` before a summary. Strict hidden lifecycle and privilege validation fixtures may cross Preparation only to run release-owned synthetic operations. Privilege fixtures exercise the immutable Privileged Collection Plan, protected local channel, and synthetic elevation outcomes without displaying UAC; they cannot select real collection, device mutation, network access, identities, executable or script content, evidence, or a package finalizer.
 
 ## What the summary tells you
 
 Review the whole summary once. It discloses:
 
 - all 29 release-enabled Product Capabilities, including the selected profile scope, automatically added dependency `CAP-0015`, and release-wide product obligations;
-- the single frozen administrator boundary, maximum of one UAC interaction at the approval boundary, and restricted predefined SYSTEM work, with no later elevation choice or product prompt;
+- the single Privileged Collection Phase, maximum of one UAC interaction at the approval boundary, and restricted predefined SYSTEM work, with no later elevation choice or product prompt;
 - stable PowerShell 7.6-or-later 7.x and built-in-module dependencies, with no planned install or agreement;
 - estimated duration and disk use;
 - the exact network behavior and planned request classes;
@@ -54,3 +54,5 @@ pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 `
 Omit `-AcceptPreparation` to decline. The switch cannot repair an invalid request, missing prerequisite, or integrity failure. It cannot approve later input, new authority, a new agreement, another elevation, or a recipient change; those require a new request and plan.
 
 The immutable output contract is documented by [`schemas/preparation-plan.schema.json`](../schemas/preparation-plan.schema.json). Hidden runtime and preparation fixtures are for synthetic validation only and always stop before collection.
+
+The post-approval Privileged Collection Plan is explained in [Privileged Collection Plan](privileged-collection-plan.md). Its synthetic fixtures are validation-only and do not change the ordinary Preparation prerequisites.

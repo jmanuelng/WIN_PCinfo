@@ -16,6 +16,7 @@ $sourcePaths = @(
     'src/RuntimeCompatibility.ps1'
     'src/Preparation.ps1'
     'src/ProcessSupervisor.ps1'
+    'src/PrivilegedCollectionPlan.ps1'
     'src/RunLifecycle.ps1'
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
@@ -38,11 +39,14 @@ $approvedCollectorCatalogPath = Join-Path $repositoryRoot 'docs/spec/releases/2.
 $approvedCollectorCatalogSchemaPath = Join-Path $repositoryRoot 'schemas/approved-collector-catalog.schema.json'
 $runLifecyclePolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
 $runLifecycleSchemaPath = Join-Path $repositoryRoot 'schemas/run-lifecycle.schema.json'
+$privilegedCollectionPlanPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-privileged-collection-plan.json'
+$privilegedCollectionPlanSchemaPath = Join-Path $repositoryRoot 'schemas/privileged-collection-plan.schema.json'
 foreach ($requiredDefinitionPath in @(
     $releaseDefinitionPath, $capabilityLedgerPath, $preparationPlanPath,
     $assessmentContractSetPath, $assessmentRecordSchemaPath,
     $approvedCollectorCatalogPath, $approvedCollectorCatalogSchemaPath,
-    $runLifecyclePolicyPath, $runLifecycleSchemaPath
+    $runLifecyclePolicyPath, $runLifecycleSchemaPath,
+    $privilegedCollectionPlanPolicyPath, $privilegedCollectionPlanSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -69,11 +73,20 @@ $runLifecyclePolicyDigest = Get-Sha256Hex -Bytes $runLifecyclePolicyBytes
 $runLifecyclePolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
     $runLifecyclePolicyBytes
 )
+$privilegedCollectionPlanPolicyBytes = Get-Utf8LfBytes -LiteralPath $privilegedCollectionPlanPolicyPath
+$privilegedCollectionPlanPolicyBase64 = [System.Convert]::ToBase64String($privilegedCollectionPlanPolicyBytes)
+$privilegedCollectionPlanPolicyDigest = Get-Sha256Hex -Bytes $privilegedCollectionPlanPolicyBytes
+$privilegedCollectionPlanPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+    $privilegedCollectionPlanPolicyBytes
+)
 if (-not (Test-Json -Json $approvedCollectorCatalogJson -SchemaFile $approvedCollectorCatalogSchemaPath)) {
     throw 'The approved collector catalog does not satisfy its release schema.'
 }
 if (-not (Test-Json -Json $runLifecyclePolicyJson -SchemaFile $runLifecycleSchemaPath)) {
     throw 'The run lifecycle policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $privilegedCollectionPlanPolicyJson -SchemaFile $privilegedCollectionPlanSchemaPath)) {
+    throw 'The Privileged Collection Plan policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -110,9 +123,11 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/assessment-contract-set.schema.json'
     'schemas/approved-collector-catalog.schema.json'
     'schemas/run-lifecycle.schema.json'
+    'schemas/privileged-collection-plan.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
+    'docs/spec/releases/2.0.0-preview.1-privileged-collection-plan.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -207,6 +222,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__RUN_LIFECYCLE_POLICY_SHA256__', $runLifecyclePolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/PrivilegedCollectionPlan.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__PRIVILEGED_COLLECTION_PLAN_POLICY_BASE64__', $privilegedCollectionPlanPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__PRIVILEGED_COLLECTION_PLAN_POLICY_SHA256__', $privilegedCollectionPlanPolicyDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"
