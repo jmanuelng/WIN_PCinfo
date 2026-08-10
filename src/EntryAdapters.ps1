@@ -16,14 +16,17 @@ function Get-GuidedRequest {
 }
 
 function Get-AutomationRequest {
-    param([Parameter(Mandatory)] [string] $LiteralPath)
+    param(
+        [Parameter(Mandatory)] [string] $LiteralPath,
+        [Parameter(Mandatory)] $ConvertFromJsonCommand
+    )
 
     $requestText = [System.IO.File]::ReadAllText(
         [System.IO.Path]::GetFullPath($LiteralPath),
         [System.Text.UTF8Encoding]::new($false, $true)
     )
     try {
-        $inputRequest = $requestText | ConvertFrom-Json -ErrorAction Stop
+        $inputRequest = & $ConvertFromJsonCommand -InputObject $requestText -ErrorAction Stop
     }
     catch {
         $exception = [System.ArgumentException]::new('The automation request is not valid JSON.')

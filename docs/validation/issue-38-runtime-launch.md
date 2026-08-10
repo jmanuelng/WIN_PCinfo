@@ -31,7 +31,7 @@ The terminal outcome is intentionally `NotStarted`: the eligible runtime reached
 ## Deterministic build evidence
 
 - Build contract: `win-pcinfo.build-evidence/1.0.0`
-- Generated application SHA-256: `9db65051508e1fe688d8e05df935de76828ac47e7b4ed46966c334529381e6c5`
+- Generated application SHA-256: `fc161be9afb4a4a4ec88c3d9a7d239933e01dd500a4e1372ae63481676a479bf`
 - Representation: UTF-8 with BOM and CRLF
 - Tracked inputs: `src/ApplicationHeader.ps1`, `src/Contracts.ps1`, `src/RuntimeCompatibility.ps1`, `src/LaunchEngine.ps1`, `src/EntryAdapters.ps1`, and `src/ApplicationMain.ps1`
 - Reproduction: `pwsh -NoLogo -NoProfile -File ./build/Build.ps1`
@@ -44,7 +44,7 @@ This runtime slice is a **Security-sensitive Change** because it establishes pro
 
 The documented security review considered these public-safe threats and failure modes:
 
-- **Profile or module-path shadowing:** required modules load only from literal `$PSHOME` manifests. Expected command identities, Microsoft Authenticode signatures on manifests and referenced binary payloads, and the `Test-Json` origin must agree. Failure returns a distinct module-loading, command, or validator-provenance reason.
+- **Profile or module-path shadowing:** required modules load only from literal `$PSHOME` manifests. Expected command identities, Microsoft Authenticode signatures on manifests and referenced binary payloads, and the `Test-Json` origin must agree. Request parsing, fixture parsing, request hashing, progress, and terminal serialization invoke the verified `CommandInfo` objects directly instead of ambient command names. Failure returns a distinct module-loading, command, or validator-provenance reason.
 - **Malformed or ambiguous text:** strict UTF-8 rejects invalid byte sequences; the exact signed PowerShell JSON commands and the .NET JSON path round-trip multilingual text; standard output must be UTF-8. Failure stops before collection.
 - **Unavailable or incompatible cryptography:** fixed synthetic SHA-256 and AES-GCM known behavior is exercised without real evidence or durable key material. Buffers are cleared where controllable; failure stops before collection.
 - **Unbounded or orphaned child work:** the probe uses a literal current-host executable, literal arguments, redirected bounded channels, a finite wait, a known exit code, and a second child that must be hard-terminated within the deadline. Cleanup falls back to direct termination if the tree-aware operation fails.

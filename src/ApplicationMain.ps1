@@ -1,5 +1,32 @@
+if ($PSVersionTable.PSEdition -ne 'Core') {
+    # Windows PowerShell cannot be trusted to provide the v2 JSON/validator
+    # stack. Emit only this fixed public contract record; no ambient serializer,
+    # profile function, collection, or relaunch is permitted on the wrong host.
+    [System.Console]::Out.WriteLine('{"recordType":"win-pcinfo.terminal","contractVersion":"1.0.0","outcome":"NotStarted","exitCode":20,"reasonCode":"RUNTIME.EDITION_UNSUPPORTED","phase":"RuntimeCompatibility","collectionStarted":false,"requestDigest":"","validationFixture":false,"cleanup":{"required":false,"verified":true},"guidance":{"microsoftUrl":"https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows","retryStep":"Install or select stable PowerShell 7.6 or later 7.x from Microsoft, then rerun the same WIN-PCInfo command."}}')
+    exit 20
+}
+
+$moduleFacts = Get-BuiltInModuleCompatibilityFacts
+if (-not $moduleFacts.contractCommandProvenance) {
+    # A structured failure must not invoke an ambient JSON command after the
+    # trusted serializer boundary fails. This literal contains only fixed public
+    # contract values; it cannot include request or machine-controlled text.
+    $bootstrapReason = if ($moduleFacts.moduleLoading) {
+        'RUNTIME.VALIDATOR_PROVENANCE_INVALID'
+    }
+    else {
+        'RUNTIME.MODULE_LOADING_INCOMPATIBLE'
+    }
+    $bootstrapTerminal = '{"recordType":"win-pcinfo.terminal","contractVersion":"1.0.0","outcome":"NotStarted","exitCode":20,"reasonCode":"__REASON__","phase":"RuntimeCompatibility","collectionStarted":false,"requestDigest":"","validationFixture":false,"cleanup":{"required":false,"verified":true},"guidance":{"microsoftUrl":"https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows","retryStep":"Install or select stable PowerShell 7.6 or later 7.x from Microsoft, then rerun the same WIN-PCInfo command."}}'.Replace('__REASON__', $bootstrapReason)
+    [System.Console]::Out.WriteLine($bootstrapTerminal)
+    exit 20
+}
+$convertToJsonCommand = $moduleFacts.convertToJsonCommand
+$convertFromJsonCommand = $moduleFacts.convertFromJsonCommand
+
 Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'RequestValidation' -State 'Started' `
-    -MessageId 'request.validation.started' -CompletedUnits 0 -TotalUnits 2)
+    -MessageId 'request.validation.started' -CompletedUnits 0 -TotalUnits 2) `
+    -ConvertToJsonCommand $convertToJsonCommand
 try {
     $request = if ($Mode -eq 'Automation') {
         if ([string]::IsNullOrWhiteSpace($RequestPath)) {
@@ -7,7 +34,7 @@ try {
             $exception.Data['ReasonCode'] = 'REQUEST.PATH_REQUIRED'
             throw $exception
         }
-        Get-AutomationRequest -LiteralPath $RequestPath
+        Get-AutomationRequest -LiteralPath $RequestPath -ConvertFromJsonCommand $convertFromJsonCommand
     }
     else {
         Get-GuidedRequest
@@ -21,21 +48,24 @@ catch {
         'REQUEST.UNREADABLE'
     }
     Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'RequestValidation' -State 'Failed' `
-        -MessageId 'request.validation.failed' -CompletedUnits 0 -TotalUnits 2)
-    Write-ContractRecord (New-TerminalRecord -ReasonCode $reasonCode -Phase 'RequestValidation')
+        -MessageId 'request.validation.failed' -CompletedUnits 0 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord (New-TerminalRecord -ReasonCode $reasonCode -Phase 'RequestValidation') `
+        -ConvertToJsonCommand $convertToJsonCommand
     exit 20
 }
 Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'RequestValidation' -State 'Succeeded' `
-    -MessageId 'request.validation.succeeded' -CompletedUnits 1 -TotalUnits 2)
+    -MessageId 'request.validation.succeeded' -CompletedUnits 1 -TotalUnits 2) `
+    -ConvertToJsonCommand $convertToJsonCommand
 
 $usingRuntimeFixture = -not [string]::IsNullOrWhiteSpace($RuntimeFixturePath)
 $runtimeFacts = if ($usingRuntimeFixture) {
-    Read-RuntimeFixture -LiteralPath $RuntimeFixturePath
+    Read-RuntimeFixture -LiteralPath $RuntimeFixturePath -ConvertFromJsonCommand $convertFromJsonCommand
 }
 else {
-    Get-ActiveRuntimeFacts
+    Get-ActiveRuntimeFacts -ModuleFacts $moduleFacts
 }
 
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
-    -ValidationFixture $usingRuntimeFixture
+    -ValidationFixture $usingRuntimeFixture -ConvertToJsonCommand $convertToJsonCommand
 exit $applicationExitCode

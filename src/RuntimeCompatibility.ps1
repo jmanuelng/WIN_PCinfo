@@ -94,23 +94,30 @@ function Get-BuiltInModuleCompatibilityFacts {
     # exact module objects. The trust anchor is the installed PowerShell host's
     # Security cmdlet plus Windows Authenticode; a compromised runtime itself is
     # outside self-attestation and must be handled by release verification.
-    $moduleRoot = [System.IO.Path]::GetFullPath((Join-Path $PSHOME 'Modules'))
+    $moduleRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSHOME, 'Modules'))
     $manifests = [ordered]@{
-        'Microsoft.PowerShell.Security' = Join-Path $moduleRoot 'Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1'
-        'Microsoft.PowerShell.Utility' = Join-Path $moduleRoot 'Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1'
-        'Microsoft.PowerShell.Management' = Join-Path $moduleRoot 'Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1'
+        'Microsoft.PowerShell.Security' = [System.IO.Path]::Combine($moduleRoot, 'Microsoft.PowerShell.Security', 'Microsoft.PowerShell.Security.psd1')
+        'Microsoft.PowerShell.Utility' = [System.IO.Path]::Combine($moduleRoot, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Utility.psd1')
+        'Microsoft.PowerShell.Management' = [System.IO.Path]::Combine($moduleRoot, 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Management.psd1')
     }
     $payloads = [ordered]@{
-        'Microsoft.PowerShell.Security' = Join-Path $PSHOME 'Microsoft.PowerShell.Security.dll'
-        'Microsoft.PowerShell.Utility' = Join-Path $PSHOME 'Microsoft.PowerShell.Commands.Utility.dll'
-        'Microsoft.PowerShell.Management' = Join-Path $PSHOME 'Microsoft.PowerShell.Commands.Management.dll'
+        'Microsoft.PowerShell.Security' = [System.IO.Path]::Combine($PSHOME, 'Microsoft.PowerShell.Security.dll')
+        'Microsoft.PowerShell.Utility' = [System.IO.Path]::Combine($PSHOME, 'Microsoft.PowerShell.Commands.Utility.dll')
+        'Microsoft.PowerShell.Management' = [System.IO.Path]::Combine($PSHOME, 'Microsoft.PowerShell.Commands.Management.dll')
     }
 
     $modules = [ordered]@{}
     $moduleLoading = $true
     try {
+        $importModuleCommand = $ExecutionContext.InvokeCommand.GetCommand(
+            'Import-Module',
+            [System.Management.Automation.CommandTypes]::Cmdlet
+        )
+        if ($null -eq $importModuleCommand -or $importModuleCommand.Source -ne 'Microsoft.PowerShell.Core') {
+            throw 'The core module loader identity is invalid.'
+        }
         foreach ($moduleName in $manifests.Keys) {
-            $module = Import-Module -Name $manifests[$moduleName] -PassThru -Force -ErrorAction Stop
+            $module = & $importModuleCommand -Name $manifests[$moduleName] -PassThru -Force -ErrorAction Stop
             $resolvedManifest = [System.IO.Path]::GetFullPath($manifests[$moduleName])
             if ($module.Name -ne $moduleName -or [System.IO.Path]::GetFullPath($module.Path) -ne $resolvedManifest) {
                 throw "Built-in module identity mismatch: $moduleName"
@@ -148,6 +155,7 @@ function Get-BuiltInModuleCompatibilityFacts {
     }
 
     $validatorProvenance = $false
+    $contractCommandProvenance = $false
     if ($moduleLoading) {
         try {
         $signatureCommand = $modules['Microsoft.PowerShell.Security'].ExportedCommands['Get-AuthenticodeSignature']
@@ -163,6 +171,11 @@ function Get-BuiltInModuleCompatibilityFacts {
                     throw "Built-in module signature is not valid: $signedPath"
             }
         }
+            $convertToJson = $modules['Microsoft.PowerShell.Utility'].ExportedCommands['ConvertTo-Json']
+            $convertFromJson = $modules['Microsoft.PowerShell.Utility'].ExportedCommands['ConvertFrom-Json']
+            $contractCommandProvenance = $null -ne $convertToJson -and $null -ne $convertFromJson -and
+                $convertToJson.ModuleName -eq 'Microsoft.PowerShell.Utility' -and
+                $convertFromJson.ModuleName -eq 'Microsoft.PowerShell.Utility'
             $validator = $modules['Microsoft.PowerShell.Utility'].ExportedCommands['Test-Json']
             $validatorProvenance = $null -ne $validator -and $validator.CommandType -eq 'Cmdlet' -and
                 $validator.ModuleName -eq 'Microsoft.PowerShell.Utility'
@@ -175,6 +188,7 @@ function Get-BuiltInModuleCompatibilityFacts {
     [pscustomobject]@{
         requiredCommands = $requiredCommands
         validatorProvenance = $validatorProvenance
+        contractCommandProvenance = $contractCommandProvenance
         moduleLoading = $moduleLoading
         convertToJsonCommand = if ($moduleLoading) { $modules['Microsoft.PowerShell.Utility'].ExportedCommands['ConvertTo-Json'] } else { $null }
         convertFromJsonCommand = if ($moduleLoading) { $modules['Microsoft.PowerShell.Utility'].ExportedCommands['ConvertFrom-Json'] } else { $null }
@@ -258,6 +272,8 @@ function Get-RuntimeCompatibilityPolicy {
 }
 
 function Get-ActiveRuntimeFacts {
+    param([Parameter(Mandatory)] $ModuleFacts)
+
     $version = $PSVersionTable.PSVersion
     $facts = [ordered]@{
         hostPresent = $true
@@ -282,14 +298,13 @@ function Get-ActiveRuntimeFacts {
         return [pscustomobject] $facts
     }
 
-    $moduleFacts = Get-BuiltInModuleCompatibilityFacts
-    $facts.requiredCommands = $moduleFacts.requiredCommands
-    $facts.validatorProvenance = $moduleFacts.validatorProvenance
-    $facts.moduleLoading = $moduleFacts.moduleLoading
-    if ($moduleFacts.requiredCommands) {
+    $facts.requiredCommands = $ModuleFacts.requiredCommands
+    $facts.validatorProvenance = $ModuleFacts.validatorProvenance
+    $facts.moduleLoading = $ModuleFacts.moduleLoading
+    if ($ModuleFacts.requiredCommands) {
         $facts.encoding = Test-Utf8RuntimeBehavior `
-            -ConvertToJsonCommand $moduleFacts.convertToJsonCommand `
-            -ConvertFromJsonCommand $moduleFacts.convertFromJsonCommand
+            -ConvertToJsonCommand $ModuleFacts.convertToJsonCommand `
+            -ConvertFromJsonCommand $ModuleFacts.convertFromJsonCommand
     }
     $facts.cryptography = Test-CryptographyRuntimeBehavior
     $facts.processControl = Test-ProcessControlBehavior
@@ -297,13 +312,16 @@ function Get-ActiveRuntimeFacts {
 }
 
 function Read-RuntimeFixture {
-    param([Parameter(Mandatory)] [string] $LiteralPath)
+    param(
+        [Parameter(Mandatory)] [string] $LiteralPath,
+        [Parameter(Mandatory)] $ConvertFromJsonCommand
+    )
 
     $fixtureText = [System.IO.File]::ReadAllText(
         [System.IO.Path]::GetFullPath($LiteralPath),
         [System.Text.UTF8Encoding]::new($false, $true)
     )
-    $fixtureText | ConvertFrom-Json
+    & $ConvertFromJsonCommand -InputObject $fixtureText
 }
 
 function Test-RuntimeCompatibility {

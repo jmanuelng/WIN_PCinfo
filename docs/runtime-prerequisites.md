@@ -30,6 +30,8 @@ These checks are the exact `win-pcinfo.runtime-compatibility/1.0.0` policy. That
 
 The module check trusts the installed PowerShell Security cmdlet and Windows Authenticode as its local trust anchor. A hostile replacement of the running PowerShell engine itself cannot be disproved by that same process; operators and release validation must separately verify the PowerShell installation and WIN-PCInfo release provenance. Any missing file, identity mismatch, invalid signature, untrusted signer, or ambiguous command makes the runtime ineligible.
 
+After verification, the application invokes the exact `ConvertFrom-Json` and `ConvertTo-Json` command objects from that Utility module for request input and every structured output. It does not resolve those contract operations again through ambient functions, aliases, profiles, or module-path discovery.
+
 ## Install PowerShell yourself when needed
 
 WIN-PCInfo never installs, upgrades, downgrades, repairs, or changes PowerShell. Follow Microsoft's [Installing PowerShell on Windows](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) instructions, choose a stable PowerShell 7 release, and complete any installation decisions yourself.

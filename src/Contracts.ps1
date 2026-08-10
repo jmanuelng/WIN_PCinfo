@@ -27,9 +27,12 @@ function New-NormalizedRequest {
 }
 
 function Get-RequestDigest {
-    param([Parameter(Mandatory)] $Request)
+    param(
+        [Parameter(Mandatory)] $Request,
+        [Parameter(Mandatory)] $ConvertToJsonCommand
+    )
 
-    $json = $Request | ConvertTo-Json -Compress -Depth 10
+    $json = & $ConvertToJsonCommand -InputObject $Request -Compress -Depth 10
     $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($json)
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
     try {
@@ -112,9 +115,12 @@ function New-TerminalRecord {
 }
 
 function Write-ContractRecord {
-    param([Parameter(Mandatory)] $Record)
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] $ConvertToJsonCommand
+    )
 
     # Contract records use stdout directly so invoking the Engine from another
     # PowerShell function cannot accidentally capture progress as a return value.
-    [System.Console]::Out.WriteLine(($Record | ConvertTo-Json -Compress -Depth 20))
+    [System.Console]::Out.WriteLine((& $ConvertToJsonCommand -InputObject $Record -Compress -Depth 20))
 }
