@@ -327,9 +327,11 @@ function Invoke-PreparationGate {
         [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
         [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
+        [Parameter()] [AllowEmptyString()] [string] $ContractFixturePath,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
-        [Parameter(Mandatory)] $ConvertToJsonCommand
+        [Parameter(Mandatory)] $ConvertToJsonCommand,
+        [Parameter(Mandatory)] $TestJsonCommand
     )
 
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
@@ -394,6 +396,12 @@ function Invoke-PreparationGate {
         [string]::Equals([System.Console]::In.ReadLine(), 'APPROVE', [System.StringComparison]::Ordinal)
     }
     $decision = if ($accepted) { 'Accepted' } else { 'Declined' }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($ContractFixturePath)) {
+        return Invoke-ContractFixtureValidation -LiteralPath $ContractFixturePath `
+            -RuntimeResult $RuntimeResult -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand -ConvertToJsonCommand $ConvertToJsonCommand `
+            -TestJsonCommand $TestJsonCommand
+    }
     $reasonCode = if ($accepted -and $ValidationFixture) {
         # Synthetic facts can prove resolution but can never reach collectors.
         'PREPARATION.VALIDATION_ONLY'

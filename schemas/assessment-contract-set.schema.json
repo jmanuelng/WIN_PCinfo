@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/assessment-contract-set.schema.json",
+  "title": "WIN-PCInfo Assessment Contract Set",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "schemaDraft", "requiredFeatures", "limits", "schemas", "fieldDefinitions", "vocabularies"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.assessment-contract-set" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "schemaDraft": { "const": "2020-12" },
+    "requiredFeatures": { "const": ["closed-scope-coverage", "evidence-references", "prohibited-material-omission"] },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximumDocumentUtf8Bytes", "maximumJsonDepth", "maximumSafeInteger", "maximumStringUtf8Bytes", "maximumArrayItems"],
+      "properties": {
+        "maximumDocumentUtf8Bytes": { "type": "integer", "minimum": 1024, "maximum": 1048576 },
+        "maximumJsonDepth": { "type": "integer", "minimum": 4, "maximum": 64 },
+        "maximumSafeInteger": { "const": 9007199254740991 },
+        "maximumStringUtf8Bytes": { "type": "integer", "minimum": 64, "maximum": 8192 },
+        "maximumArrayItems": { "type": "integer", "minimum": 1, "maximum": 1024 }
+      }
+    },
+    "schemas": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["documentKind", "path"],
+        "properties": {
+          "documentKind": { "enum": ["AssessmentContractSet", "AssessmentRecord"] },
+          "path": { "type": "string", "pattern": "^schemas/[a-z0-9-]+\\.schema\\.json$" }
+        }
+      }
+    },
+    "fieldDefinitions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/fieldDefinition" }
+    },
+    "vocabularies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverageStates", "observationValueStates", "findingOutcomes", "runOutcomes", "diagnosticPhases"],
+      "properties": {
+        "coverageStates": { "$ref": "#/$defs/vocabulary" },
+        "observationValueStates": { "$ref": "#/$defs/vocabulary" },
+        "findingOutcomes": { "$ref": "#/$defs/vocabulary" },
+        "runOutcomes": { "$ref": "#/$defs/vocabulary" },
+        "diagnosticPhases": { "$ref": "#/$defs/vocabulary" }
+      }
+    }
+  },
+  "$defs": {
+    "vocabulary": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+    },
+    "fieldDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fieldId", "capabilityIds", "purpose", "source", "valueType", "sensitivity", "bounds", "redaction", "publicEligibility"],
+      "properties": {
+        "fieldId": { "type": "string", "pattern": "^field:[a-z0-9.-]+$" },
+        "capabilityIds": { "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "pattern": "^CAP-[0-9]{4}$" } },
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceId", "kind", "authoritativeIdentity"],
+          "properties": {
+            "sourceId": { "type": "string", "pattern": "^source:[a-z0-9.-]+$" },
+            "kind": { "const": "SyntheticContractFixture" },
+            "authoritativeIdentity": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
+        },
+        "valueType": { "enum": ["String", "Boolean", "Integer"] },
+        "sensitivity": { "enum": ["PublicDefinition", "RestrictedDiagnosticEvidence"] },
+        "bounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maximumUtf8Bytes", "maximumOccurrencesPerSubject"],
+          "properties": {
+            "maximumUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 8192 },
+            "maximumOccurrencesPerSubject": { "type": "integer", "minimum": 1, "maximum": 64 }
+          }
+        },
+        "redaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["behavior", "publicProjection"],
+          "properties": {
+            "behavior": { "const": "OmitProhibitedMaterial" },
+            "publicProjection": { "enum": ["DefinitionOnly", "EligibleSyntheticValue"] }
+          }
+        },
+        "publicEligibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["definition", "values"],
+          "properties": {
+            "definition": { "const": true },
+            "values": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

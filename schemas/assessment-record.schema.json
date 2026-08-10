@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/assessment-record.schema.json",
+  "title": "WIN-PCInfo Assessment Record tracer-bullet contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordType",
+    "contractVersion",
+    "requiredFeatures",
+    "run",
+    "subjects",
+    "provenance",
+    "observations",
+    "coverage",
+    "diagnostics",
+    "collectorResults",
+    "findings",
+    "recommendations",
+    "recommendationRelationships"
+  ],
+  "properties": {
+    "recordType": { "const": "win-pcinfo.assessment-record" },
+    "contractVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "requiredFeatures": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "outcome", "validationFixture"],
+      "properties": {
+        "runId": { "$ref": "#/$defs/id" },
+        "outcome": { "enum": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"] },
+        "validationFixture": { "const": true }
+      }
+    },
+    "subjects": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["subjectId", "kind"],
+        "properties": {
+          "subjectId": { "$ref": "#/$defs/id" },
+          "kind": { "enum": ["Device", "User", "Application", "Interface", "OtherSynthetic"] }
+        }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/provenance" }
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/observation" }
+    },
+    "coverage": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/coverage" }
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/diagnostic" }
+    },
+    "collectorResults": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/collectorEnvelope" }
+    },
+    "findings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "recommendations": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/recommendation" }
+    },
+    "recommendationRelationships": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/recommendationRelationship" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z][A-Za-z0-9._:/-]*$" },
+    "reasonCode": { "type": "string", "minLength": 3, "maxLength": 96, "pattern": "^[A-Z][A-Z0-9_]*(?:\\.[A-Z][A-Z0-9_]*)+$" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "idArray": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provenanceId", "fieldId", "subjectId", "sourceId", "collectorId", "collectorVersion", "executionContext", "collectedAt", "sourceLocale"],
+      "properties": {
+        "provenanceId": { "$ref": "#/$defs/id" },
+        "fieldId": { "$ref": "#/$defs/id" },
+        "subjectId": { "$ref": "#/$defs/id" },
+        "sourceId": { "$ref": "#/$defs/id" },
+        "collectorId": { "$ref": "#/$defs/id" },
+        "collectorVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "executionContext": { "const": "Synthetic" },
+        "collectedAt": { "$ref": "#/$defs/timestamp" },
+        "sourceLocale": { "type": "string", "minLength": 2, "maxLength": 35 }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observationId", "fieldId", "subjectId", "provenanceId", "valueState"],
+      "properties": {
+        "observationId": { "$ref": "#/$defs/id" },
+        "fieldId": { "$ref": "#/$defs/id" },
+        "subjectId": { "$ref": "#/$defs/id" },
+        "provenanceId": { "$ref": "#/$defs/id" },
+        "valueState": { "enum": ["ObservedValue", "ObservedAbsent", "SourceReportedUnknown"] },
+        "value": { "type": ["string", "boolean", "integer"] }
+      },
+      "dependentSchemas": {
+        "value": { "properties": { "valueState": { "const": "ObservedValue" } } }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverageId", "scopeId", "state", "observationIds", "diagnosticIds"],
+      "properties": {
+        "coverageId": { "$ref": "#/$defs/id" },
+        "scopeId": { "$ref": "#/$defs/id" },
+        "state": { "enum": ["Complete", "Partial", "NotApplicable", "Unavailable", "Constrained", "Unsupported", "Denied", "Malformed", "TimedOut", "Cancelled", "ProhibitedMaterialBlocked", "Failed", "NotAttempted"] },
+        "reasonCode": { "$ref": "#/$defs/reasonCode" },
+        "observationIds": { "$ref": "#/$defs/idArray" },
+        "diagnosticIds": { "$ref": "#/$defs/idArray" }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["diagnosticId", "scopeId", "phase", "reasonCode", "operatorMessageId"],
+      "properties": {
+        "diagnosticId": { "$ref": "#/$defs/id" },
+        "scopeId": { "$ref": "#/$defs/id" },
+        "phase": { "enum": ["Collection", "Interpretation", "Protection", "Packaging"] },
+        "reasonCode": { "$ref": "#/$defs/reasonCode" },
+        "operatorMessageId": { "$ref": "#/$defs/id" },
+        "prohibitedMaterial": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["encountered", "retained", "hashed"],
+          "properties": {
+            "encountered": { "const": true },
+            "retained": { "const": false },
+            "hashed": { "const": false }
+          }
+        }
+      }
+    },
+    "collectorEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["envelopeId", "collectorId", "collectorVersion", "operationId", "intendedScopeIds", "subjectIds", "startedAt", "completedAt", "executionContext", "attempts", "observationIds", "coverageIds", "diagnosticIds"],
+      "properties": {
+        "envelopeId": { "$ref": "#/$defs/id" },
+        "collectorId": { "$ref": "#/$defs/id" },
+        "collectorVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "operationId": { "$ref": "#/$defs/id" },
+        "intendedScopeIds": { "$ref": "#/$defs/idArray" },
+        "subjectIds": { "$ref": "#/$defs/idArray" },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" },
+        "executionContext": { "const": "Synthetic" },
+        "attempts": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "observationIds": { "$ref": "#/$defs/idArray" },
+        "coverageIds": { "$ref": "#/$defs/idArray" },
+        "diagnosticIds": { "$ref": "#/$defs/idArray" }
+      }
+    },
+    "evidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observationId", "fieldId", "subjectId"],
+      "properties": {
+        "observationId": { "$ref": "#/$defs/id" },
+        "fieldId": { "$ref": "#/$defs/id" },
+        "subjectId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["findingId", "ruleId", "targetSubjectId", "outcome", "evidenceReferences"],
+      "properties": {
+        "findingId": { "$ref": "#/$defs/id" },
+        "ruleId": { "$ref": "#/$defs/id" },
+        "targetSubjectId": { "$ref": "#/$defs/id" },
+        "outcome": { "enum": ["ExpectedCondition", "NeedsAttention", "Informational", "Indeterminate", "NotApplicable"] },
+        "reasonCode": { "$ref": "#/$defs/reasonCode" },
+        "evidenceReferences": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/evidenceReference" }
+        }
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recommendationId", "definitionId", "kind", "findingIds"],
+      "properties": {
+        "recommendationId": { "$ref": "#/$defs/id" },
+        "definitionId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["AssessmentRecommendation", "TenantSideDiscoveryTask"] },
+        "findingIds": { "$ref": "#/$defs/idArray" }
+      }
+    },
+    "recommendationRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relationshipId", "fromRecommendationId", "toRecommendationId", "kind"],
+      "properties": {
+        "relationshipId": { "$ref": "#/$defs/id" },
+        "fromRecommendationId": { "$ref": "#/$defs/id" },
+        "toRecommendationId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["Requires", "Enables", "ConflictsWith"] }
+      }
+    }
+  }
+}

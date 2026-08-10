@@ -12,6 +12,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $sourcePaths = @(
     'src/ApplicationHeader.ps1'
     'src/Contracts.ps1'
+    'src/ContractValidator.ps1'
     'src/RuntimeCompatibility.ps1'
     'src/Preparation.ps1'
     'src/LaunchEngine.ps1'
@@ -29,7 +30,12 @@ function Get-Sha256Hex {
 $releaseDefinitionPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1.json'
 $capabilityLedgerPath = Join-Path $repositoryRoot 'docs/spec/capability-ledger.json'
 $preparationPlanPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-preparation-plan.json'
-foreach ($requiredDefinitionPath in @($releaseDefinitionPath, $capabilityLedgerPath, $preparationPlanPath)) {
+$assessmentContractSetPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-contract-set.json'
+$assessmentRecordSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-record.schema.json'
+foreach ($requiredDefinitionPath in @(
+    $releaseDefinitionPath, $capabilityLedgerPath, $preparationPlanPath,
+    $assessmentContractSetPath, $assessmentRecordSchemaPath
+)) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
     }
@@ -37,6 +43,12 @@ foreach ($requiredDefinitionPath in @($releaseDefinitionPath, $capabilityLedgerP
 $releaseDefinition = Get-Content -LiteralPath $releaseDefinitionPath -Raw | ConvertFrom-Json -Depth 30
 $capabilityLedger = Get-Content -LiteralPath $capabilityLedgerPath -Raw | ConvertFrom-Json -Depth 30
 $preparationPlan = Get-Content -LiteralPath $preparationPlanPath -Raw | ConvertFrom-Json -Depth 30
+$assessmentContractSetBytes = Get-Utf8LfBytes -LiteralPath $assessmentContractSetPath
+$assessmentRecordSchemaBytes = Get-Utf8LfBytes -LiteralPath $assessmentRecordSchemaPath
+$assessmentContractSetBase64 = [System.Convert]::ToBase64String($assessmentContractSetBytes)
+$assessmentRecordSchemaBase64 = [System.Convert]::ToBase64String($assessmentRecordSchemaBytes)
+$assessmentContractSetDigest = Get-Sha256Hex -Bytes $assessmentContractSetBytes
+$assessmentRecordSchemaDigest = Get-Sha256Hex -Bytes $assessmentRecordSchemaBytes
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
 $capabilitiesById = @{}
@@ -68,6 +80,9 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'build/TextCanonicalization.ps1'
     'schemas/assessment-run-request.schema.json'
     'schemas/preparation-plan.schema.json'
+    'schemas/assessment-record.schema.json'
+    'schemas/assessment-contract-set.schema.json'
+    'docs/spec/releases/2.0.0-preview.1-contract-set.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -141,6 +156,12 @@ $sections = foreach ($sourceFile in $sourceFiles) {
     if ($sourceFile.path -eq 'src/Preparation.ps1') {
         $normalizedSource = $normalizedSource.Replace('__PREPARATION_DEFINITION_BASE64__', $preparationBase64)
         $normalizedSource = $normalizedSource.Replace('__PREPARATION_DEFINITION_SHA256__', $preparationDigest)
+    }
+    if ($sourceFile.path -eq 'src/ContractValidator.ps1') {
+        $normalizedSource = $normalizedSource.Replace('__ASSESSMENT_CONTRACT_SET_BASE64__', $assessmentContractSetBase64)
+        $normalizedSource = $normalizedSource.Replace('__ASSESSMENT_CONTRACT_SET_SHA256__', $assessmentContractSetDigest)
+        $normalizedSource = $normalizedSource.Replace('__ASSESSMENT_RECORD_SCHEMA_BASE64__', $assessmentRecordSchemaBase64)
+        $normalizedSource = $normalizedSource.Replace('__ASSESSMENT_RECORD_SCHEMA_SHA256__', $assessmentRecordSchemaDigest)
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"
 }

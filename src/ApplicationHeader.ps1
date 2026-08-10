@@ -22,7 +22,13 @@ param(
     # Synthetic validation facts can force fail-closed preparation paths but
     # cannot add scope, authority, network access, or permission to collect.
     [Parameter(DontShow)]
-    [string] $PreparationFixturePath
+    [string] $PreparationFixturePath,
+
+    # This input is reserved for synthetic contract conformance fixtures. Its
+    # presence marks the invocation validation-only and can never authorize a
+    # collector, real Assessment Record, or Product Capability claim.
+    [Parameter(DontShow)]
+    [string] $ContractFixturePath
 )
 
 Set-StrictMode -Version Latest

@@ -1,0 +1,75 @@
+{
+  "kind": "win-pcinfo.assessment-contract-set",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "schemaDraft": "2020-12",
+  "requiredFeatures": [
+    "closed-scope-coverage",
+    "evidence-references",
+    "prohibited-material-omission"
+  ],
+  "limits": {
+    "maximumDocumentUtf8Bytes": 32768,
+    "maximumJsonDepth": 16,
+    "maximumSafeInteger": 9007199254740991,
+    "maximumStringUtf8Bytes": 1024,
+    "maximumArrayItems": 64
+  },
+  "schemas": [
+    {
+      "documentKind": "AssessmentContractSet",
+      "path": "schemas/assessment-contract-set.schema.json"
+    },
+    {
+      "documentKind": "AssessmentRecord",
+      "path": "schemas/assessment-record.schema.json"
+    }
+  ],
+  "fieldDefinitions": [
+    {
+      "fieldId": "field:device.os.display-name",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Demonstrate the release contract from one approved synthetic Windows source without claiming device collection.",
+      "source": {
+        "sourceId": "source:synthetic.windows.os",
+        "kind": "SyntheticContractFixture",
+        "authoritativeIdentity": "Release-owned synthetic Windows operating-system fixture"
+      },
+      "valueType": "String",
+      "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": {
+        "maximumUtf8Bytes": 256,
+        "maximumOccurrencesPerSubject": 1
+      },
+      "redaction": {
+        "behavior": "OmitProhibitedMaterial",
+        "publicProjection": "DefinitionOnly"
+      },
+      "publicEligibility": {
+        "definition": true,
+        "values": false
+      }
+    }
+  ],
+  "vocabularies": {
+    "coverageStates": [
+      "Complete",
+      "Partial",
+      "NotApplicable",
+      "Unavailable",
+      "Constrained",
+      "Unsupported",
+      "Denied",
+      "Malformed",
+      "TimedOut",
+      "Cancelled",
+      "ProhibitedMaterialBlocked",
+      "Failed",
+      "NotAttempted"
+    ],
+    "observationValueStates": ["ObservedValue", "ObservedAbsent", "SourceReportedUnknown"],
+    "findingOutcomes": ["ExpectedCondition", "NeedsAttention", "Informational", "Indeterminate", "NotApplicable"],
+    "runOutcomes": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"],
+    "diagnosticPhases": ["Collection", "Interpretation", "Protection", "Packaging"]
+  }
+}

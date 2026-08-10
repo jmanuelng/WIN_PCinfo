@@ -6,9 +6,11 @@ function Invoke-WinPCInfoLaunch {
         [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
         [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
+        [Parameter()] [AllowEmptyString()] [string] $ContractFixturePath,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
-        [Parameter(Mandatory)] $ConvertToJsonCommand
+        [Parameter(Mandatory)] $ConvertToJsonCommand,
+        [Parameter(Mandatory)] $TestJsonCommand
     )
 
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
@@ -29,6 +31,7 @@ function Invoke-WinPCInfoLaunch {
     Invoke-PreparationGate -Request $Request -RuntimeResult $runtime `
         -ArtifactTrustValid $ArtifactTrustValid `
         -Mode $Mode -AcceptPreparation $AcceptPreparation -PreparationFixturePath $PreparationFixturePath `
+        -ContractFixturePath $ContractFixturePath `
         -ValidationFixture $ValidationFixture -ConvertFromJsonCommand $ConvertFromJsonCommand `
-        -ConvertToJsonCommand $ConvertToJsonCommand
+        -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
 }
