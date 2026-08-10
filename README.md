@@ -1,9 +1,9 @@
 # WIN-PCInfo
 
-WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullet provides a generated launch path, verifies the active PowerShell host, and presents one complete Preparation Summary **before any assessment collection or device change can begin**.
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, and validate one entirely synthetic Assessment Record against the release Contract Set.
 
 > [!IMPORTANT]
-> The v2 tracer bullet does not collect computer information yet. A trusted generated artifact on an eligible host resolves an immutable plan only when every safety-critical prerequisite is available, presents the Preparation Summary, records approval or decline, and still returns `NotStarted` with exit code `20`. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate; it cannot self-assert release provenance. This is intentional and does not claim that a Preview capability is delivered.
+> The v2 tracer bullets do not collect computer information yet. A trusted generated artifact on an eligible host resolves an immutable plan only when every safety-critical prerequisite is available, presents the Preparation Summary, records approval or decline, and still returns `NotStarted` with exit code `20`. Synthetic contract validation also ends `NotStarted`; it cannot become device evidence or a capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance.
 
 ## Try the v2 launch safely
 
@@ -19,6 +19,8 @@ pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Guided
 The tracked code under `src/` is the source of truth. `build/Build.ps1` deterministically assembles it into the ignored `artifacts/WIN-PCInfo.ps1`; do not edit the generated file.
 
 Before approving anything, read [Preparation Summary and approval](docs/preparation-summary.md). It explains the two network choices, every disclosure in the summary, guided and automation approval, and why neither approval nor validation fixtures can start collection in this implementation slice.
+
+To understand how one synthetic source becomes a typed observation, Collector Result Envelope, closed Evidence Coverage State, diagnostic, finding, recommendation, and canonical Assessment Record, read [Assessment Contract validation](docs/assessment-contract-validation.md). It explains the Draft 2020-12 schema, semantic reason codes, I-JSON-style safety rules, and Secret Exclusion boundary in beginner-friendly terms.
 
 ## Legacy script
 

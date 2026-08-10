@@ -192,6 +192,7 @@ function Get-BuiltInModuleCompatibilityFacts {
         moduleLoading = $moduleLoading
         convertToJsonCommand = if ($moduleLoading) { $modules['Microsoft.PowerShell.Utility'].ExportedCommands['ConvertTo-Json'] } else { $null }
         convertFromJsonCommand = if ($moduleLoading) { $modules['Microsoft.PowerShell.Utility'].ExportedCommands['ConvertFrom-Json'] } else { $null }
+        testJsonCommand = if ($moduleLoading) { $modules['Microsoft.PowerShell.Utility'].ExportedCommands['Test-Json'] } else { $null }
         authenticodeCommand = if ($moduleLoading) { $modules['Microsoft.PowerShell.Security'].ExportedCommands['Get-AuthenticodeSignature'] } else { $null }
     }
 }

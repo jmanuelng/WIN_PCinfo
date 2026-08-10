@@ -1,0 +1,109 @@
+{
+  "recordType": "win-pcinfo.assessment-record",
+  "contractVersion": "1.0.0",
+  "requiredFeatures": [
+    "closed-scope-coverage",
+    "evidence-references",
+    "prohibited-material-omission"
+  ],
+  "run": {
+    "runId": "run:synthetic:multilingual-001",
+    "outcome": "CompletedWithGaps",
+    "validationFixture": true
+  },
+  "subjects": [
+    {
+      "subjectId": "subject:synthetic-device:primary",
+      "kind": "Device"
+    }
+  ],
+  "provenance": [
+    {
+      "provenanceId": "provenance:synthetic-os:001",
+      "fieldId": "field:device.os.display-name",
+      "subjectId": "subject:synthetic-device:primary",
+      "sourceId": "source:synthetic.windows.os",
+      "collectorId": "collector:synthetic.windows.os",
+      "collectorVersion": "1.0.0",
+      "executionContext": "Synthetic",
+      "collectedAt": "2000-01-01T00:00:00Z",
+      "sourceLocale": "fr-FR"
+    }
+  ],
+  "observations": [
+    {
+      "observationId": "observation:synthetic-os-name:001",
+      "fieldId": "field:device.os.display-name",
+      "subjectId": "subject:synthetic-device:primary",
+      "provenanceId": "provenance:synthetic-os:001",
+      "valueState": "ObservedValue",
+      "value": "Windows 11 Entreprise – édition 日本語"
+    }
+  ],
+  "coverage": [
+    {
+      "coverageId": "coverage:synthetic-device-os:001",
+      "scopeId": "scope:synthetic.device.os",
+      "state": "ProhibitedMaterialBlocked",
+      "reasonCode": "PRIVACY.PROHIBITED_MATERIAL_BLOCKED",
+      "observationIds": ["observation:synthetic-os-name:001"],
+      "diagnosticIds": ["diagnostic:synthetic-secret-blocked:001"]
+    }
+  ],
+  "diagnostics": [
+    {
+      "diagnosticId": "diagnostic:synthetic-secret-blocked:001",
+      "scopeId": "scope:synthetic.device.os",
+      "phase": "Collection",
+      "reasonCode": "PRIVACY.PROHIBITED_MATERIAL_BLOCKED",
+      "operatorMessageId": "privacy.prohibited-material-blocked",
+      "prohibitedMaterial": {
+        "encountered": true,
+        "retained": false,
+        "hashed": false
+      }
+    }
+  ],
+  "collectorResults": [
+    {
+      "envelopeId": "envelope:synthetic-windows-os:001",
+      "collectorId": "collector:synthetic.windows.os",
+      "collectorVersion": "1.0.0",
+      "operationId": "op:synthetic.windows.os",
+      "intendedScopeIds": ["scope:synthetic.device.os"],
+      "subjectIds": ["subject:synthetic-device:primary"],
+      "startedAt": "2000-01-01T00:00:00Z",
+      "completedAt": "2000-01-01T00:00:01Z",
+      "executionContext": "Synthetic",
+      "attempts": 1,
+      "observationIds": ["observation:synthetic-os-name:001"],
+      "coverageIds": ["coverage:synthetic-device-os:001"],
+      "diagnosticIds": ["diagnostic:synthetic-secret-blocked:001"]
+    }
+  ],
+  "findings": [
+    {
+      "findingId": "finding:synthetic-os-observed:001",
+      "ruleId": "rule:synthetic.os-observed/1.0.0",
+      "targetSubjectId": "subject:synthetic-device:primary",
+      "outcome": "Indeterminate",
+      "reasonCode": "FINDING.COVERAGE_INCOMPLETE",
+      "evidenceReferences": [
+        {
+          "observationId": "observation:synthetic-os-name:001",
+          "fieldId": "field:device.os.display-name",
+          "subjectId": "subject:synthetic-device:primary"
+        }
+      ]
+    }
+  ],
+  "recommendations": [
+    {
+      "recommendationId": "recommendation:synthetic-follow-up:001",
+      "definitionId": "recommendation:synthetic-follow-up/1.0.0",
+      "kind": "TenantSideDiscoveryTask",
+      "findingIds": ["finding:synthetic-os-observed:001"]
+    }
+  ],
+  "recommendationRelationships": []
+}
