@@ -522,7 +522,9 @@ function Test-AssessmentContract {
                 -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         try {
-            $document = [System.Text.Json.JsonDocument]::Parse($json)
+            $parseOptions = [System.Text.Json.JsonDocumentOptions]::new()
+            $parseOptions.MaxDepth = [int] $contract.Definition.limits.maximumDocumentUtf8Bytes
+            $document = [System.Text.Json.JsonDocument]::Parse($json, $parseOptions)
         }
         catch {
             return New-ContractValidationRecord -ReasonCode 'CONTRACT.JSON_INVALID' `

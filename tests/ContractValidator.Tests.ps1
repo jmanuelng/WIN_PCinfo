@@ -101,7 +101,7 @@ Assert-Equal 'CONTRACT.SIZE_EXCEEDED' $oversizeValidation.reasonCode `
 Write-Output 'PASS: the Contract Validator enforces its release-owned UTF-8 byte ceiling.'
 
 $depthPath = Join-Path $generatedFixtureRoot 'depth-exceeded.json'
-$depthText = ('{"x":' * 17) + 'true' + ('}' * 17)
+$depthText = ('{"x":' * 65) + 'true' + ('}' * 65)
 [System.IO.File]::WriteAllText($depthPath, $depthText, [System.Text.UTF8Encoding]::new($false))
 $depth = Invoke-ContractFixture -LiteralPath $depthPath
 $depthValidation = $depth.Validation
