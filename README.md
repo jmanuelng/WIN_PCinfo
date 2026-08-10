@@ -22,6 +22,8 @@ Before approving anything, read [Preparation Summary and approval](docs/preparat
 
 To understand how one synthetic source becomes a typed observation, Collector Result Envelope, closed Evidence Coverage State, diagnostic, finding, recommendation, and canonical Assessment Record, read [Assessment Contract validation](docs/assessment-contract-validation.md). It explains the Draft 2020-12 schema, semantic reason codes, I-JSON-style safety rules, and Secret Exclusion boundary in beginner-friendly terms.
 
+To understand how WIN-PCInfo launches one predefined synthetic collector without exposing a shell or plug-in path, read [Process Supervisor](docs/process-supervisor.md). It explains the release-owned executable catalog, suspended Windows Job Object assignment, bounded output, cooperative and hard cancellation, untrusted-output privacy, and verified cleanup.
+
 ## Legacy script
 
 `ComputerInfo.ps1` is the legacy implementation and remains available as an outcome and migration reference. It gathers Windows information, but it does **not** implement the v2 safety, privacy, lifecycle, evidence-protection, or runtime contracts. Do not treat its behavior as the v2 launch path.

@@ -15,6 +15,7 @@ $sourcePaths = @(
     'src/ContractValidator.ps1'
     'src/RuntimeCompatibility.ps1'
     'src/Preparation.ps1'
+    'src/ProcessSupervisor.ps1'
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
     'src/ApplicationMain.ps1'
@@ -32,9 +33,12 @@ $capabilityLedgerPath = Join-Path $repositoryRoot 'docs/spec/capability-ledger.j
 $preparationPlanPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-preparation-plan.json'
 $assessmentContractSetPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-contract-set.json'
 $assessmentRecordSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-record.schema.json'
+$approvedCollectorCatalogPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
+$approvedCollectorCatalogSchemaPath = Join-Path $repositoryRoot 'schemas/approved-collector-catalog.schema.json'
 foreach ($requiredDefinitionPath in @(
     $releaseDefinitionPath, $capabilityLedgerPath, $preparationPlanPath,
-    $assessmentContractSetPath, $assessmentRecordSchemaPath
+    $assessmentContractSetPath, $assessmentRecordSchemaPath,
+    $approvedCollectorCatalogPath, $approvedCollectorCatalogSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -49,6 +53,15 @@ $assessmentContractSetBase64 = [System.Convert]::ToBase64String($assessmentContr
 $assessmentRecordSchemaBase64 = [System.Convert]::ToBase64String($assessmentRecordSchemaBytes)
 $assessmentContractSetDigest = Get-Sha256Hex -Bytes $assessmentContractSetBytes
 $assessmentRecordSchemaDigest = Get-Sha256Hex -Bytes $assessmentRecordSchemaBytes
+$approvedCollectorCatalogBytes = Get-Utf8LfBytes -LiteralPath $approvedCollectorCatalogPath
+$approvedCollectorCatalogBase64 = [System.Convert]::ToBase64String($approvedCollectorCatalogBytes)
+$approvedCollectorCatalogDigest = Get-Sha256Hex -Bytes $approvedCollectorCatalogBytes
+$approvedCollectorCatalogJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+    $approvedCollectorCatalogBytes
+)
+if (-not (Test-Json -Json $approvedCollectorCatalogJson -SchemaFile $approvedCollectorCatalogSchemaPath)) {
+    throw 'The approved collector catalog does not satisfy its release schema.'
+}
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
 $capabilitiesById = @{}
@@ -82,7 +95,9 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/preparation-plan.schema.json'
     'schemas/assessment-record.schema.json'
     'schemas/assessment-contract-set.schema.json'
+    'schemas/approved-collector-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
+    'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -162,6 +177,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         $normalizedSource = $normalizedSource.Replace('__ASSESSMENT_CONTRACT_SET_SHA256__', $assessmentContractSetDigest)
         $normalizedSource = $normalizedSource.Replace('__ASSESSMENT_RECORD_SCHEMA_BASE64__', $assessmentRecordSchemaBase64)
         $normalizedSource = $normalizedSource.Replace('__ASSESSMENT_RECORD_SCHEMA_SHA256__', $assessmentRecordSchemaDigest)
+    }
+    if ($sourceFile.path -eq 'src/ProcessSupervisor.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__APPROVED_COLLECTOR_CATALOG_BASE64__', $approvedCollectorCatalogBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__APPROVED_COLLECTOR_CATALOG_SHA256__', $approvedCollectorCatalogDigest
+        )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"
 }

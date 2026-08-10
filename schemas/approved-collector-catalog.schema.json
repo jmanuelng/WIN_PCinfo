@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/approved-collector-catalog.schema.json",
+  "title": "WIN-PCInfo Approved Collector Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "limits", "collectors", "validationFixtures"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.approved-collector-catalog" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximumArgumentCount", "maximumArgumentUtf8Bytes", "maximumEnvironmentVariables", "maximumEnvironmentValueUtf8Bytes"],
+      "properties": {
+        "maximumArgumentCount": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "maximumArgumentUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "maximumEnvironmentVariables": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "maximumEnvironmentValueUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 16384 }
+      }
+    },
+    "collectors": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": { "$ref": "#/$defs/collector" }
+    },
+    "validationFixtures": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/validationFixture" }
+    }
+  },
+  "$defs": {
+    "boundedName": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collectorId", "collectorVersion", "purpose", "executable", "payload", "workingBoundary", "environment", "treeControl", "operations"],
+      "properties": {
+        "collectorId": { "const": "collector:synthetic.windows.os" },
+        "collectorVersion": { "const": "1.0.0" },
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "executable": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resolver", "fileName", "signerCommonName"],
+          "properties": {
+            "resolver": { "const": "ActivePowerShellHost" },
+            "fileName": { "const": "pwsh.exe" },
+            "signerCommonName": { "const": "Microsoft Corporation" }
+          }
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "encoding", "sha256"],
+          "properties": {
+            "kind": { "const": "EncodedReleaseSource" },
+            "encoding": { "const": "PowerShellEncodedCommandUtf16Le" },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        },
+        "workingBoundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "writesAllowed"],
+          "properties": {
+            "kind": { "const": "ActivePowerShellHome" },
+            "writesAllowed": { "const": false }
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inheritParent", "variables"],
+          "properties": {
+            "inheritParent": { "const": false },
+            "variables": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "prefixItems": [
+                { "$ref": "#/$defs/systemRootEnvironment" },
+                { "$ref": "#/$defs/cancellationEventEnvironment" },
+                { "$ref": "#/$defs/operationModeEnvironment" },
+                { "$ref": "#/$defs/encodedPayloadEnvironment" }
+              ],
+              "items": false
+            }
+          }
+        },
+        "treeControl": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "startSuspendedBeforeAssignment", "killOnClose", "incompatibleDisposition"],
+          "properties": {
+            "mode": { "const": "WindowsJobObjectRequired" },
+            "startSuspendedBeforeAssignment": { "const": true },
+            "killOnClose": { "const": true },
+            "incompatibleDisposition": { "const": "NotStarted" }
+          }
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/operation" }
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "arguments", "deadlineMilliseconds", "standardOutputMaximumBytes", "standardErrorMaximumBytes", "cancellationGraceMilliseconds", "terminationVerificationMilliseconds", "intendedScopeIds", "subjectIds"],
+      "properties": {
+        "operationId": { "const": "op:synthetic.windows.os.success" },
+        "arguments": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "const": "-NoLogo" },
+            { "const": "-NoProfile" },
+            { "const": "-NonInteractive" },
+            { "const": "-EncodedCommand" },
+            { "const": "{EncodedCollectorPayload}" }
+          ],
+          "items": false
+        },
+        "deadlineMilliseconds": { "type": "integer", "minimum": 100, "maximum": 60000 },
+        "standardOutputMaximumBytes": { "type": "integer", "minimum": 256, "maximum": 65536 },
+        "standardErrorMaximumBytes": { "type": "integer", "minimum": 256, "maximum": 65536 },
+        "cancellationGraceMilliseconds": { "type": "integer", "minimum": 100, "maximum": 2000 },
+        "terminationVerificationMilliseconds": { "type": "integer", "minimum": 100, "maximum": 5000 },
+        "intendedScopeIds": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "const": "scope:synthetic.device.os" } },
+        "subjectIds": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "const": "subject:synthetic-device:primary" } }
+      }
+    },
+    "validationFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixtureId", "operationMode", "fault"],
+      "properties": {
+        "fixtureId": { "$ref": "#/$defs/boundedName" },
+        "operationMode": { "enum": ["Success", "ExcessOutput", "Timeout", "CooperativeCancel", "HardCancel", "ChildProcess"] },
+        "fault": { "enum": ["None", "ExecutableIdentityMismatch", "SecretShapedArgument", "OutputLimitExceeded", "DeadlineExceeded", "CancellationRequested", "CancellationGraceExceeded", "JobAssignmentIncompatible"] },
+        "deadlineMilliseconds": { "type": "integer", "minimum": 100, "maximum": 60000 }
+      }
+    },
+    "systemRootEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "valueSource"],
+      "properties": { "name": { "const": "SystemRoot" }, "valueSource": { "const": "WindowsDirectory" } }
+    },
+    "cancellationEventEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "valueSource"],
+      "properties": { "name": { "const": "WINPCINFO_CANCEL_EVENT" }, "valueSource": { "const": "CancellationEventName" } }
+    },
+    "operationModeEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "valueSource"],
+      "properties": { "name": { "const": "WINPCINFO_OPERATION_MODE" }, "valueSource": { "const": "OperationMode" } }
+    },
+    "encodedPayloadEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "valueSource"],
+      "properties": { "name": { "const": "WINPCINFO_ENCODED_PAYLOAD" }, "valueSource": { "const": "EncodedPayload" } }
+    }
+  }
+}
