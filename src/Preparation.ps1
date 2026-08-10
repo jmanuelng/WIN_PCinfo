@@ -114,7 +114,6 @@ function Read-PreparationFixture {
 function Get-ActivePreparationFacts {
     param(
         [Parameter(Mandatory)] $Request,
-        [Parameter(Mandatory)] $RuntimeFacts,
         [Parameter(Mandatory)] $Definition,
         [Parameter(Mandatory)] [bool] $ArtifactTrustValid
     )
@@ -128,8 +127,7 @@ function Get-ActivePreparationFacts {
         # the boolean result, never the host's drive identity or free-byte count.
         $resolvedOutput = [System.IO.Path]::GetFullPath([string] $Request.outputDestination)
         $root = [System.IO.Path]::GetPathRoot($resolvedOutput)
-        $networkPath = $resolvedOutput.StartsWith('\\', [System.StringComparison]::Ordinal) -or
-            $resolvedOutput.StartsWith('//', [System.StringComparison]::Ordinal)
+        $networkPath = Test-NetworkPathSyntax -Path $resolvedOutput
         if (-not $networkPath -and -not [string]::IsNullOrWhiteSpace($root)) {
             $drive = [System.IO.DriveInfo]::new($root)
             # DriveType consults the local Windows volume map. IsReady and free
@@ -147,9 +145,10 @@ function Get-ActivePreparationFacts {
         $freeDiskAvailable = $false
     }
 
-    # RuntimeCompatibility already proved exact cryptographic behavior using
-    # disposable synthetic buffers. Preparation consumes only that boolean; it
-    # creates no key, evidence package, protected file, or recipient material.
+    # This slice has no initiating-user-bound Local Package Protector. Generic
+    # runtime cryptography is not substituted for that domain component: the
+    # real prerequisite remains unresolved without creating a key, package,
+    # protected file, or recipient material.
     [pscustomobject][ordered]@{
         artifactTrustValid = $ArtifactTrustValid
         definitionIntegrityValid = $true
@@ -323,7 +322,6 @@ function New-PreparationSummary {
 function Invoke-PreparationGate {
     param(
         [Parameter(Mandatory)] $Request,
-        [Parameter(Mandatory)] $RuntimeFacts,
         [Parameter(Mandatory)] $RuntimeResult,
         [Parameter(Mandatory)] [bool] $ArtifactTrustValid,
         [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
@@ -346,8 +344,8 @@ function Invoke-PreparationGate {
 
     try {
         $facts = if ([string]::IsNullOrWhiteSpace($PreparationFixturePath)) {
-            Get-ActivePreparationFacts -Request $Request -RuntimeFacts $RuntimeFacts `
-                -Definition $definitionResult.Definition -ArtifactTrustValid $ArtifactTrustValid
+            Get-ActivePreparationFacts -Request $Request -Definition $definitionResult.Definition `
+                -ArtifactTrustValid $ArtifactTrustValid
         }
         else {
             Read-PreparationFixture -LiteralPath $PreparationFixturePath `

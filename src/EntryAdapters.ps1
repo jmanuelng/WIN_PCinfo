@@ -123,8 +123,7 @@ function Get-AutomationRequest {
         $exception.Data['ReasonCode'] = 'REQUEST.FIELD_TYPE_INVALID'
         throw $exception
     }
-    if ($inputRequest.outputDestination.StartsWith('\\', [System.StringComparison]::Ordinal) -or
-        $inputRequest.outputDestination.StartsWith('//', [System.StringComparison]::Ordinal)) {
+    if (Test-NetworkPathSyntax -Path $inputRequest.outputDestination) {
         # Reject UNC syntax using only request text. This occurs before any path,
         # drive, provider, or free-space lookup, preserving Local Only even when
         # an automation caller supplies a remote output location.

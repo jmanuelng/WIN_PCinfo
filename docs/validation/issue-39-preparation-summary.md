@@ -21,15 +21,15 @@ The tracked synthetic requests and public-safe preparation fixture produced thes
 
 | Fixture | Network behavior | Planned request classes | Request SHA-256 | Plan SHA-256 | Accepted terminal reason |
 | --- | --- | ---: | --- | --- | --- |
-| `automation-request.json` | `LocalOnly` | 0 | `090ef945d67afbd3400a7d242e6931f9dc1fbbee8ae25ddf1315aa6010afa1c2` | `880873ac7dc96129a079a9d567a30e04d42cc14960e0cef7e0334aa9b45a92ae` | `PREPARATION.VALIDATION_ONLY` |
-| `automation-request-connectivity.json` | `MicrosoftConnectivityEnabled` | 2 | `5a5ac1ca9a6f1c8840c88492274c8684e1f1e4eb5b466bac19bc98f740adbe2e` | `026ff7b7abfa8f63fb775546fdb96c518fee439b036fcb4234115e8610897ac2` | `PREPARATION.VALIDATION_ONLY` |
+| `automation-request.json` | `LocalOnly` | 0 | `090ef945d67afbd3400a7d242e6931f9dc1fbbee8ae25ddf1315aa6010afa1c2` | `2b04ec113806d1ed04d55b51635d91fa8c0073f6da64714f3093b58d38f9cf98` | `PREPARATION.VALIDATION_ONLY` |
+| `automation-request-connectivity.json` | `MicrosoftConnectivityEnabled` | 2 | `5a5ac1ca9a6f1c8840c88492274c8684e1f1e4eb5b466bac19bc98f740adbe2e` | `76a86395a85ea7e64a08a2d0dd0d3dc4c499d0087cad2da5a7b08ee53b26f45e` | `PREPARATION.VALIDATION_ONLY` |
 
 Every successful preparation sequence emitted request-validation progress, runtime-validation progress, one Preparation Summary containing one immutable plan, and one `NotStarted` terminal. The summary disclosed scope, privilege, dependencies, estimates, network behavior, protected output, fixed recipient choice, Windows Feature behavior, limitations, later side effects, cleanup, and the exact approval instruction exactly once.
 
 ## Deterministic definition and build evidence
 
 - Build contract: `win-pcinfo.build-evidence/1.0.0`
-- Generated application SHA-256: `b619b8d609e7449743485973f688037a1eae074ca3e72e715b0187f2ca4256fc`
+- Generated application SHA-256: `f71aa3548ac7dd4844be31d89a65f7b4928898ef76779cf50f0c249d39de7402`
 - Representation: UTF-8 with BOM and CRLF
 - Governing release-definition SHA-256: `0d00048b445d803504813a34fbd3af4693c4d003d1a0e981651e11d4d8281913`
 - Governing capability-ledger SHA-256: `295997eb8ed1bd4915b6799e532b51a6f75d392bd11b3ec2bde7f82c41a93039`

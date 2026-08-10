@@ -26,7 +26,7 @@ function Invoke-WinPCInfoLaunch {
 
     Write-ContractRecord (New-ProgressRecord -Sequence 4 -State 'Succeeded' -MessageId 'runtime.check.succeeded' `
         -CompletedUnits 2 -TotalUnits 2) -ConvertToJsonCommand $ConvertToJsonCommand
-    Invoke-PreparationGate -Request $Request -RuntimeFacts $RuntimeFacts -RuntimeResult $runtime `
+    Invoke-PreparationGate -Request $Request -RuntimeResult $runtime `
         -ArtifactTrustValid $ArtifactTrustValid `
         -Mode $Mode -AcceptPreparation $AcceptPreparation -PreparationFixturePath $PreparationFixturePath `
         -ValidationFixture $ValidationFixture -ConvertFromJsonCommand $ConvertFromJsonCommand `

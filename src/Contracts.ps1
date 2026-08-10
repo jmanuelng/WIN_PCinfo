@@ -76,6 +76,13 @@ function Get-RequestDigest {
     Get-ObjectDigest -Value $Request -ConvertToJsonCommand $ConvertToJsonCommand
 }
 
+function Test-NetworkPathSyntax {
+    param([Parameter(Mandatory)] [string] $Path)
+
+    $Path.StartsWith('\\', [System.StringComparison]::Ordinal) -or
+        $Path.StartsWith('//', [System.StringComparison]::Ordinal)
+}
+
 function New-ProgressRecord {
     param(
         [Parameter(Mandatory)] [int] $Sequence,
