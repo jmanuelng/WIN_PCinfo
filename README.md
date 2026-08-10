@@ -26,6 +26,8 @@ To understand how WIN-PCInfo launches one predefined synthetic collector without
 
 To understand the finite Assessment Run state machine, stable exit codes, structured progress and heartbeat budgets, device-wide Active Run Lock, cleanup-only crash recovery, package-integrity gate, and failure precedence, read [Assessment Run lifecycle](docs/run-lifecycle.md).
 
+To understand where restricted evidence may exist, what the non-secret Run Recovery Journal records, and why stale recovery refuses ambiguous deletion, read [Evidence Workspace and Stale-run Recovery](docs/evidence-workspace-recovery.md). It includes beginner steps, privacy limits, ordinary-deletion guidance, and recovery troubleshooting.
+
 To understand why one device-level Windows MDM WMI Bridge source requires LocalSystem, and how WIN-PCInfo prevents that narrow need from becoming a SYSTEM command channel, read [SYSTEM Collection Sub-plan](docs/system-collection-sub-plan.md). It explains the frozen catalog, typed plan, transient activation, exact provenance, evidence confinement, privacy boundary, cleanup proof, and current controlled-client validation limitation.
 
 ## Legacy script

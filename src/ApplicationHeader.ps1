@@ -47,7 +47,13 @@ param(
     # scenario name. It cannot provide an operation, parameter, executable,
     # script, command, identity, credential, evidence value, or task name.
     [Parameter(DontShow)]
-    [string] $SystemCollectionFixturePath
+    [string] $SystemCollectionFixturePath,
+
+    # A release-owned workspace/recovery scenario may select one synthetic
+    # fault only. It cannot supply a destination, cleanup target, identity,
+    # journal field, evidence value, process, command, or Windows Feature.
+    [Parameter(DontShow)]
+    [string] $EvidenceWorkspaceFixturePath
 )
 
 Set-StrictMode -Version Latest

@@ -67,4 +67,29 @@ foreach ($case in $cases) {
     Assert-Equal $false $terminal.collectionStarted "$($case.Name) cannot collect"
 }
 
+$staleRecoveryRequest = New-ValidRequestFixture
+$staleRecoveryRequest.automationChoices.allowStaleRecovery = $true
+$staleRecoveryPath = Join-Path $fixtureDirectory 'deliberate-stale-recovery.json'
+[System.IO.File]::WriteAllText(
+    $staleRecoveryPath,
+    ($staleRecoveryRequest | ConvertTo-Json -Compress -Depth 10),
+    [System.Text.UTF8Encoding]::new($false)
+)
+$staleRecoveryResult = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+    '-Mode', 'Automation'
+    '-RequestPath', $staleRecoveryPath
+    '-PreparationFixturePath', (Join-Path $PSScriptRoot 'fixtures/preparation-ready.json')
+)
+$staleRecoverySummary = @($staleRecoveryResult.Records | Where-Object {
+    $_.recordType -eq 'win-pcinfo.preparation-summary'
+})
+Assert-Equal 1 $staleRecoverySummary.Count `
+    'a deliberate stale-recovery request reaches the Preparation Summary'
+Assert-Equal $true $staleRecoverySummary[0].plan.cleanup.staleRunRecovery.requested `
+    'the operator sees that cleanup-only recovery was deliberately requested'
+Assert-Equal 'CleanupOnly' $staleRecoverySummary[0].plan.cleanup.staleRunRecovery.mode `
+    'preparation cannot convert recovery into collection resume'
+Assert-Equal 'PREPARATION.DECLINED' $staleRecoveryResult.Records[-1].reasonCode `
+    'absence of approval still prevents every post-preparation side effect'
+
 Write-Output "PASS: generated application rejected $($cases.Count) invalid automation requests through the terminal contract."

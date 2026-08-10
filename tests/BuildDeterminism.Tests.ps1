@@ -27,13 +27,13 @@ Assert-True ($first.sha256 -eq $second.sha256) 'the deterministic artifact diges
 Assert-True ($first.buildContract -eq 'win-pcinfo.build-evidence/1.0.0') 'build evidence is versioned'
 Assert-True ($first.buildTool.path -eq 'build/Build.ps1') 'the build tool has a normalized repository identity'
 Assert-True ($first.buildTool.sha256 -match '^[0-9a-f]{64}$') 'the build tool digest is exact'
-Assert-True ($first.sourceInputs.Count -eq 12) 'every modular source input is recorded'
+Assert-True ($first.sourceInputs.Count -eq 13) 'every modular source input is recorded'
 Assert-True (@($first.sourceInputs | Where-Object { $_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count -eq 0) `
     'every modular source input has an exact digest'
 Assert-True ($first.definitionInputs.Count -eq 3) 'all governing preparation resources are recorded'
 Assert-True (@($first.definitionInputs | Where-Object { $_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count -eq 0) `
     'every governing preparation resource has an exact digest'
-Assert-True ($first.applicationManifest.resources.Count -eq 27) `
+Assert-True ($first.applicationManifest.resources.Count -eq 31) `
     'source, build tool, public schemas, and the release Contract Set are bound into the application manifest'
 Assert-True ($first.applicationManifest.sha256 -match '^[0-9a-f]{64}$') `
     'the application manifest has one exact digest'

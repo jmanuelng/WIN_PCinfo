@@ -18,6 +18,7 @@ $sourcePaths = @(
     'src/ProcessSupervisor.ps1'
     'src/PrivilegedCollectionPlan.ps1'
     'src/SystemCollectionPlan.ps1'
+    'src/EvidenceWorkspace.ps1'
     'src/RunLifecycle.ps1'
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
@@ -44,13 +45,18 @@ $privilegedCollectionPlanPolicyPath = Join-Path $repositoryRoot 'docs/spec/relea
 $privilegedCollectionPlanSchemaPath = Join-Path $repositoryRoot 'schemas/privileged-collection-plan.schema.json'
 $systemCollectionPlanPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
 $systemCollectionPlanSchemaPath = Join-Path $repositoryRoot 'schemas/system-collection-plan.schema.json'
+$evidenceWorkspacePolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-evidence-workspace.json'
+$evidenceWorkspaceSchemaPath = Join-Path $repositoryRoot 'schemas/evidence-workspace.schema.json'
+$runRecoveryJournalSchemaPath = Join-Path $repositoryRoot 'schemas/run-recovery-journal.schema.json'
 foreach ($requiredDefinitionPath in @(
     $releaseDefinitionPath, $capabilityLedgerPath, $preparationPlanPath,
     $assessmentContractSetPath, $assessmentRecordSchemaPath,
     $approvedCollectorCatalogPath, $approvedCollectorCatalogSchemaPath,
     $runLifecyclePolicyPath, $runLifecycleSchemaPath,
     $privilegedCollectionPlanPolicyPath, $privilegedCollectionPlanSchemaPath,
-    $systemCollectionPlanPolicyPath, $systemCollectionPlanSchemaPath
+    $systemCollectionPlanPolicyPath, $systemCollectionPlanSchemaPath,
+    $evidenceWorkspacePolicyPath, $evidenceWorkspaceSchemaPath,
+    $runRecoveryJournalSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -89,6 +95,15 @@ $systemCollectionPlanPolicyDigest = Get-Sha256Hex -Bytes $systemCollectionPlanPo
 $systemCollectionPlanPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
     $systemCollectionPlanPolicyBytes
 )
+$evidenceWorkspacePolicyBytes = Get-Utf8LfBytes -LiteralPath $evidenceWorkspacePolicyPath
+$evidenceWorkspacePolicyBase64 = [System.Convert]::ToBase64String($evidenceWorkspacePolicyBytes)
+$evidenceWorkspacePolicyDigest = Get-Sha256Hex -Bytes $evidenceWorkspacePolicyBytes
+$evidenceWorkspacePolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+    $evidenceWorkspacePolicyBytes
+)
+$runRecoveryJournalSchemaBytes = Get-Utf8LfBytes -LiteralPath $runRecoveryJournalSchemaPath
+$runRecoveryJournalSchemaBase64 = [System.Convert]::ToBase64String($runRecoveryJournalSchemaBytes)
+$runRecoveryJournalSchemaDigest = Get-Sha256Hex -Bytes $runRecoveryJournalSchemaBytes
 if (-not (Test-Json -Json $approvedCollectorCatalogJson -SchemaFile $approvedCollectorCatalogSchemaPath)) {
     throw 'The approved collector catalog does not satisfy its release schema.'
 }
@@ -100,6 +115,9 @@ if (-not (Test-Json -Json $privilegedCollectionPlanPolicyJson -SchemaFile $privi
 }
 if (-not (Test-Json -Json $systemCollectionPlanPolicyJson -SchemaFile $systemCollectionPlanSchemaPath)) {
     throw 'The SYSTEM Collection sub-plan policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $evidenceWorkspacePolicyJson -SchemaFile $evidenceWorkspaceSchemaPath)) {
+    throw 'The Evidence Workspace policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -138,11 +156,14 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/run-lifecycle.schema.json'
     'schemas/privileged-collection-plan.schema.json'
     'schemas/system-collection-plan.schema.json'
+    'schemas/evidence-workspace.schema.json'
+    'schemas/run-recovery-journal.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
     'docs/spec/releases/2.0.0-preview.1-privileged-collection-plan.json'
     'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
+    'docs/spec/releases/2.0.0-preview.1-evidence-workspace.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -253,6 +274,20 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__SYSTEM_COLLECTION_PLAN_POLICY_SHA256__', $systemCollectionPlanPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/EvidenceWorkspace.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__EVIDENCE_WORKSPACE_POLICY_BASE64__', $evidenceWorkspacePolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__EVIDENCE_WORKSPACE_POLICY_SHA256__', $evidenceWorkspacePolicyDigest
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__RUN_RECOVERY_JOURNAL_SCHEMA_BASE64__', $runRecoveryJournalSchemaBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__RUN_RECOVERY_JOURNAL_SCHEMA_SHA256__', $runRecoveryJournalSchemaDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"
