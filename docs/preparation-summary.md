@@ -2,7 +2,7 @@
 
 WIN-PCInfo prepares one complete plan before it can elevate, install anything, change Windows, contact a network service, collect evidence, or create an Evidence Workspace. The generated application prints one beginner-readable `win-pcinfo.preparation-summary`; its `plan` field contains the immutable plan so each disclosure appears once.
 
-This implementation slice stops before collection. A trusted artifact's approval and decline both end as `NotStarted` with exit code `20`; approval reaches the next unimplemented execution boundary, while decline returns `PREPARATION.DECLINED`. The repository's local development build is unsigned, so normal use fails `PREPARATION.INTEGRITY_FAILED` before a summary. Synthetic tests model a trusted artifact only in validation-only runs, which end as `PREPARATION.VALIDATION_ONLY` and can never collect.
+Ordinary execution in this implementation slice still stops before collection. A trusted artifact's ordinary approval and decline both end as `NotStarted` with exit code `20`; approval reaches the unimplemented real-package boundary, while decline returns `PREPARATION.DECLINED`. The repository's local development build is unsigned, so normal use fails `PREPARATION.INTEGRITY_FAILED` before a summary. Strict hidden lifecycle validation fixtures may cross Preparation only to run the release-owned synthetic collector; they cannot select real collection, device mutation, elevation, network access, or a package finalizer.
 
 ## What the summary tells you
 

@@ -1,9 +1,9 @@
 # WIN-PCInfo
 
-WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, and validate one entirely synthetic Assessment Record against the release Contract Set.
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, validate synthetic evidence, supervise one approved synthetic collector, and drive it to one honest terminal outcome.
 
 > [!IMPORTANT]
-> The v2 tracer bullets do not collect computer information yet. A trusted generated artifact on an eligible host resolves an immutable plan only when every safety-critical prerequisite is available, presents the Preparation Summary, records approval or decline, and still returns `NotStarted` with exit code `20`. Synthetic contract validation also ends `NotStarted`; it cannot become device evidence or a capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance.
+> The v2 tracer bullets do not collect computer information yet. Ordinary execution still stops safely after Preparation because the real Protected Evidence Package finalizer is not implemented. Strict hidden validation fixtures can run only the release-owned synthetic collector and can demonstrate timeout, cancellation, or package-integrity failure; they remain visibly synthetic and cannot create device evidence or a capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance.
 
 ## Try the v2 launch safely
 
@@ -23,6 +23,8 @@ Before approving anything, read [Preparation Summary and approval](docs/preparat
 To understand how one synthetic source becomes a typed observation, Collector Result Envelope, closed Evidence Coverage State, diagnostic, finding, recommendation, and canonical Assessment Record, read [Assessment Contract validation](docs/assessment-contract-validation.md). It explains the Draft 2020-12 schema, semantic reason codes, I-JSON-style safety rules, and Secret Exclusion boundary in beginner-friendly terms.
 
 To understand how WIN-PCInfo launches one predefined synthetic collector without exposing a shell or plug-in path, read [Process Supervisor](docs/process-supervisor.md). It explains the release-owned executable catalog, suspended Windows Job Object assignment, bounded output, cooperative and hard cancellation, untrusted-output privacy, and verified cleanup.
+
+To understand the finite Assessment Run state machine, stable exit codes, structured progress and heartbeat budgets, device-wide Active Run Lock, cleanup-only crash recovery, package-integrity gate, and failure precedence, read [Assessment Run lifecycle](docs/run-lifecycle.md).
 
 ## Legacy script
 

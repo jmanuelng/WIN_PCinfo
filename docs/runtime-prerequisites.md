@@ -10,7 +10,7 @@ No launch in this slice collects device evidence, makes an assessment network re
 
 `NotStarted` and process exit code `20` are therefore expected for both eligible and ineligible hosts:
 
-- On an eligible host, reason `SLICE.COLLECTION_NOT_IMPLEMENTED` means the runtime passed and the application reached the next safe boundary.
+- On an eligible host, reason `SLICE.POST_APPROVAL_EXECUTION_NOT_IMPLEMENTED` means runtime and Preparation passed but ordinary execution reached the next safe boundary before real collection/package finalization.
 - On an ineligible host, a `RUNTIME.*` reason identifies the failed check and the terminal record includes the official Microsoft installation page and a retry step.
 
 This behavior does not create a Preview Release or a supported-capability claim.
@@ -113,7 +113,7 @@ All current paths end as `NotStarted` / `20`. Common stable reasons are:
 | `RUNTIME.CRYPTOGRAPHY_INCOMPATIBLE` | Required SHA-256 or AES-GCM behavior did not pass. | Use an eligible stable PowerShell installation and retry. |
 | `RUNTIME.MODULE_LOADING_INCOMPATIBLE` | Literal built-in module loading did not pass. | Verify or repair PowerShell outside WIN-PCInfo, then retry. |
 | `RUNTIME.PROCESS_CONTROL_INCOMPATIBLE` | Bounded child-process control did not pass. | Close modified sessions, verify the PowerShell installation, and retry. |
-| `SLICE.COLLECTION_NOT_IMPLEMENTED` | Runtime checks passed; this tracer bullet intentionally stops before collection. | Wait for the dependent assessment slice; do not treat this as completed assessment evidence. |
+| `SLICE.POST_APPROVAL_EXECUTION_NOT_IMPLEMENTED` | Runtime and Preparation passed; ordinary execution intentionally stops before real collection and package finalization. | Do not treat this as completed assessment evidence. The synthetic lifecycle path is validation-only. |
 
 ## Validate a contribution
 

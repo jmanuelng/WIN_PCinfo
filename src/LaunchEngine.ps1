@@ -5,9 +5,7 @@ function Invoke-WinPCInfoLaunch {
         [Parameter(Mandatory)] [bool] $ArtifactTrustValid,
         [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
-        [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
-        [Parameter()] [AllowEmptyString()] [string] $ContractFixturePath,
-        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] $ValidationContext,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
         [Parameter(Mandatory)] $ConvertToJsonCommand,
         [Parameter(Mandatory)] $TestJsonCommand
@@ -22,7 +20,8 @@ function Invoke-WinPCInfoLaunch {
         Write-ContractRecord (New-ProgressRecord -Sequence 4 -State 'Failed' -MessageId 'runtime.check.failed' `
             -CompletedUnits 1 -TotalUnits 2) -ConvertToJsonCommand $ConvertToJsonCommand
         Write-ContractRecord (New-TerminalRecord -ReasonCode $runtime.ReasonCode -RequestDigest $requestDigest `
-            -ValidationFixture $ValidationFixture -RuntimeResult $runtime) -ConvertToJsonCommand $ConvertToJsonCommand
+            -ValidationFixture $ValidationContext.IsFixture -RuntimeResult $runtime) `
+            -ConvertToJsonCommand $ConvertToJsonCommand
         return 20
     }
 
@@ -30,8 +29,7 @@ function Invoke-WinPCInfoLaunch {
         -CompletedUnits 2 -TotalUnits 2) -ConvertToJsonCommand $ConvertToJsonCommand
     Invoke-PreparationGate -Request $Request -RuntimeResult $runtime `
         -ArtifactTrustValid $ArtifactTrustValid `
-        -Mode $Mode -AcceptPreparation $AcceptPreparation -PreparationFixturePath $PreparationFixturePath `
-        -ContractFixturePath $ContractFixturePath `
-        -ValidationFixture $ValidationFixture -ConvertFromJsonCommand $ConvertFromJsonCommand `
+        -Mode $Mode -AcceptPreparation $AcceptPreparation -ValidationContext $ValidationContext `
+        -ConvertFromJsonCommand $ConvertFromJsonCommand `
         -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
 }

@@ -326,14 +326,16 @@ function Invoke-PreparationGate {
         [Parameter(Mandatory)] [bool] $ArtifactTrustValid,
         [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
-        [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
-        [Parameter()] [AllowEmptyString()] [string] $ContractFixturePath,
-        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] $ValidationContext,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
         [Parameter(Mandatory)] $ConvertToJsonCommand,
         [Parameter(Mandatory)] $TestJsonCommand
     )
 
+    $preparationFixturePath = [string] $ValidationContext.PreparationFixturePath
+    $contractFixturePath = [string] $ValidationContext.ContractFixturePath
+    $runFixturePath = [string] $ValidationContext.RunFixturePath
+    $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
         -ConvertToJsonCommand $ConvertToJsonCommand
@@ -396,11 +398,24 @@ function Invoke-PreparationGate {
         [string]::Equals([System.Console]::In.ReadLine(), 'APPROVE', [System.StringComparison]::Ordinal)
     }
     $decision = if ($accepted) { 'Accepted' } else { 'Declined' }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($ContractFixturePath) -and
+        -not [string]::IsNullOrWhiteSpace($RunFixturePath)) {
+        Write-ContractRecord (New-TerminalRecord -ReasonCode 'PREPARATION.FIXTURE_CONFLICT' `
+            -RequestDigest $requestDigest -ValidationFixture $true -RuntimeResult $RuntimeResult `
+            -Phase 'Preparation' -PlanDigest $planResult.Digest -PreparationDecision $decision) `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return 20
+    }
     if ($accepted -and -not [string]::IsNullOrWhiteSpace($ContractFixturePath)) {
         return Invoke-ContractFixtureValidation -LiteralPath $ContractFixturePath `
             -RuntimeResult $RuntimeResult -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand -ConvertToJsonCommand $ConvertToJsonCommand `
             -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($RunFixturePath)) {
+        return Invoke-RunLifecycleFixture -LiteralPath $RunFixturePath `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand
     }
     $reasonCode = if ($accepted -and $ValidationFixture) {
         # Synthetic facts can prove resolution but can never reach collectors.

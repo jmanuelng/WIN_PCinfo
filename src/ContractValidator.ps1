@@ -12,10 +12,33 @@ function Get-EmbeddedAssessmentContractSet {
     # application trust gate supplies the publisher/integrity boundary. These
     # digests detect substitution inside that trusted artifact; they do not let
     # modified code self-attest. Any mismatch stops validation and collection.
-    $contractBytes = [System.Convert]::FromBase64String($script:AssessmentContractSetBase64)
-    $schemaBytes = [System.Convert]::FromBase64String($script:AssessmentRecordSchemaBase64)
-    if ((Get-BytesDigest -Bytes $contractBytes) -ne $script:AssessmentContractSetDigest -or
-        (Get-BytesDigest -Bytes $schemaBytes) -ne $script:AssessmentRecordSchemaDigest) {
+    if ($script:AssessmentContractSetBase64 -eq '__ASSESSMENT_CONTRACT_SET_BASE64__') {
+        # Modular source tests use the reviewed repository resources. The
+        # deterministic build replaces these sentinels with the exact canonical
+        # bytes and digests, so the generated application never trusts mutable
+        # sidecars. This branch is a developer test seam, not runtime discovery.
+        $repositoryRoot = Split-Path -Parent $PSScriptRoot
+        $contractText = [System.IO.File]::ReadAllText(
+            (Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-contract-set.json'),
+            [System.Text.UTF8Encoding]::new($false, $true)
+        ).Replace("`r`n", "`n").Replace("`r", "`n")
+        $schemaText = [System.IO.File]::ReadAllText(
+            (Join-Path $repositoryRoot 'schemas/assessment-record.schema.json'),
+            [System.Text.UTF8Encoding]::new($false, $true)
+        ).Replace("`r`n", "`n").Replace("`r", "`n")
+        $contractBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($contractText)
+        $schemaBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($schemaText)
+        $expectedContractDigest = Get-BytesDigest -Bytes $contractBytes
+        $expectedSchemaDigest = Get-BytesDigest -Bytes $schemaBytes
+    }
+    else {
+        $contractBytes = [System.Convert]::FromBase64String($script:AssessmentContractSetBase64)
+        $schemaBytes = [System.Convert]::FromBase64String($script:AssessmentRecordSchemaBase64)
+        $expectedContractDigest = $script:AssessmentContractSetDigest
+        $expectedSchemaDigest = $script:AssessmentRecordSchemaDigest
+    }
+    if ((Get-BytesDigest -Bytes $contractBytes) -ne $expectedContractDigest -or
+        (Get-BytesDigest -Bytes $schemaBytes) -ne $expectedSchemaDigest) {
         throw 'The embedded Assessment Contract Set failed its integrity check.'
     }
 
