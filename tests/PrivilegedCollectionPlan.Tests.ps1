@@ -208,4 +208,19 @@ if ($cancelWatch.ElapsedMilliseconds -gt 3000) {
     throw "Privilege cancellation exceeded its bounded acknowledgement window: $($cancelWatch.ElapsedMilliseconds) ms."
 }
 
+$preCancelled = [System.Threading.CancellationTokenSource]::new()
+try {
+    $preCancelled.Cancel()
+    $preCancelledResult = Invoke-PrivilegedCollectionPlan -PreparationPlan $preparationPlan `
+        -PlanDigest $planDigest -AssessmentUserContext $assessmentUserContext `
+        -LocalPackageProtector $localPackageProtector `
+        -ValidationScenario 'AcceptedElevation' `
+        -CancellationToken $preCancelled.Token
+}
+finally { $preCancelled.Dispose() }
+Assert-Equal 'Cancelled' $preCancelledResult.state `
+    'cancellation already requested at launch still returns one typed result'
+Assert-Equal $true $preCancelledResult.cleanup.workerTreeAbsent `
+    'launch-time cancellation proves both the root process and Job process list absent'
+
 Write-Output 'PASS: all nine Privileged Collection Plan scenarios enforce plan, peer, deadline, cancellation, identity, and cleanup contracts.'

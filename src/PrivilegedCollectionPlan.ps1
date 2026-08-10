@@ -512,28 +512,20 @@ namespace WinPCInfo.PrivilegedCollectionPlan
             return handle != IntPtr.Zero && TerminateJobObject(handle, 1);
         }
 
-        public bool WaitForEmpty(int milliseconds)
+        public bool IsEmpty()
         {
-            if (handle == IntPtr.Zero || milliseconds < 0) return false;
-            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
-            do
+            if (handle == IntPtr.Zero) return false;
+            // 64 KiB can enumerate more processes than this deliberately tiny
+            // worker could reasonably own. Overflow or query failure is
+            // treated as non-empty, never as proof of cleanup.
+            IntPtr buffer = Marshal.AllocHGlobal(65536);
+            try
             {
-                // 64 KiB can enumerate more processes than this deliberately
-                // tiny worker could reasonably own. Overflow or query failure
-                // is treated as non-empty, never as proof of cleanup.
-                IntPtr buffer = Marshal.AllocHGlobal(65536);
-                try
-                {
-                    uint returned;
-                    if (QueryInformationJobObject(handle, JobObjectBasicProcessIdList,
-                        buffer, 65536, out returned) && Marshal.ReadInt32(buffer, 4) == 0)
-                        return true;
-                }
-                finally { Marshal.FreeHGlobal(buffer); }
-                System.Threading.Thread.Sleep(10);
+                uint returned;
+                return QueryInformationJobObject(handle, JobObjectBasicProcessIdList,
+                    buffer, 65536, out returned) && Marshal.ReadInt32(buffer, 4) == 0;
             }
-            while (watch.ElapsedMilliseconds < milliseconds);
-            return false;
+            finally { Marshal.FreeHGlobal(buffer); }
         }
 
         public void Dispose()
@@ -578,6 +570,36 @@ function ConvertTo-PrivilegedCollectionEncodedCommand {
         throw 'The reviewed privilege bootstrap exceeds the Windows launch bound.'
     }
     $encoded
+}
+
+function Wait-PrivilegedCollectionOwnedTreeAbsent {
+    param(
+        [Parameter()] $OwnedJob,
+        [Parameter()] [AllowNull()] [System.Diagnostics.Process] $WorkerRoot,
+        [Parameter(Mandatory)] [ValidateRange(0, 10000)] [int] $MaximumMilliseconds
+    )
+
+    # A worker must open and join the named Job after process launch. An
+    # immediate cancellation can reach cleanup while that startup is still in
+    # flight, so an empty Job alone is not yet proof: the launched root may not
+    # have joined it. Require both the kernel Job list and the original Process
+    # handle to report absence inside one shared finite window.
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    do {
+        $jobEmpty = $null -eq $OwnedJob -or $OwnedJob.IsEmpty()
+        $rootExited = if ($null -eq $WorkerRoot) {
+            $true
+        }
+        else {
+            try { $WorkerRoot.HasExited }
+            catch { $false }
+        }
+        if ($jobEmpty -and $rootExited) { return $true }
+        if ($watch.ElapsedMilliseconds -ge $MaximumMilliseconds) { break }
+        [System.Threading.Thread]::Sleep(10)
+    }
+    while ($true)
+    $false
 }
 
 function Read-PrivilegedCollectionPlanExactBytes {
@@ -1165,19 +1187,24 @@ finally { $pipe.Dispose() }
         # A failed query/termination is reported as incomplete cleanup; closing
         # the kill-on-close handle is still a final safety action, but is never
         # misrepresented as verified absence.
-        if ($null -ne $ownedJob) {
-            $cleanupVerified = $ownedJob.WaitForEmpty(
-                [int] $policy.deadlines.cancellationGraceMilliseconds
-            )
-            if (-not $cleanupVerified) {
-                $null = $ownedJob.Terminate()
-                $cleanupVerified = $ownedJob.WaitForEmpty(
-                    [int] $policy.deadlines.terminationVerificationMilliseconds
-                )
+        $cleanupVerified = Wait-PrivilegedCollectionOwnedTreeAbsent `
+            -OwnedJob $ownedJob -WorkerRoot $worker `
+            -MaximumMilliseconds ([int] $policy.deadlines.cancellationGraceMilliseconds)
+        if (-not $cleanupVerified) {
+            if ($null -ne $ownedJob) { $null = $ownedJob.Terminate() }
+            # Process.Kill is only a secondary best effort for the pre-Job
+            # assignment race. It may be denied across UAC integrity levels,
+            # so the result depends solely on the subsequent bounded absence
+            # proof, never on whether Kill returned without throwing.
+            if ($null -ne $worker) {
+                try {
+                    if (-not $worker.HasExited) { $worker.Kill($true) }
+                }
+                catch {}
             }
-        }
-        else {
-            $cleanupVerified = $null -eq $worker
+            $cleanupVerified = Wait-PrivilegedCollectionOwnedTreeAbsent `
+                -OwnedJob $ownedJob -WorkerRoot $worker `
+                -MaximumMilliseconds ([int] $policy.deadlines.terminationVerificationMilliseconds)
         }
         if ($null -ne $worker) { $worker.Dispose() }
         if ($null -ne $unexpectedClient) {
