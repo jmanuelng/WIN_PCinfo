@@ -89,4 +89,4 @@ foreach ($case in $matrix) {
     }
 }
 
-Write-Output "PASS: generated application enforced $($matrix.Count) runtime compatibility fixtures without collection or mutation."
+Write-Output "PASS: generated application enforced $($matrix.Count) runtime fixtures without collection or working-directory mutation."

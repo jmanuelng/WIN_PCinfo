@@ -23,10 +23,12 @@ Use an already installed PowerShell host with all of these properties:
 - The version is stable PowerShell 7.6.0 or later in the 7.x family. Preview, release-candidate, daily, and PowerShell 8-or-later hosts are not eligible.
 - The process architecture is x64, x86, or ARM64. Architecture eligibility is not the same as a Supported Scenario claim; support requires separate release evidence.
 - Required Core commands and commands exported by the literal built-in Utility and Management modules are available with their expected identities.
-- The Utility, Management, and Security module manifests under the active runtime's literal `$PSHOME` tree have valid Microsoft Authenticode signatures, and `Microsoft.PowerShell.Utility\Test-Json` comes from that verified Utility module.
+- The Utility, Management, and Security module manifests and referenced binary payloads under the active runtime's literal `$PSHOME` tree have valid Microsoft Authenticode signatures, and `Microsoft.PowerShell.Utility\Test-Json` comes from that verified Utility module.
 - Strict UTF-8 decoding, JSON Unicode round trips, UTF-8 standard output, SHA-256, AES-256-GCM, literal module loading, and bounded child-process start/wait/exit/hard-termination behavior work as expected.
 
 These checks are the exact `win-pcinfo.runtime-compatibility/1.0.0` policy. That policy admits Core, stable versions from 7.6.0 up to but excluding 8.0.0, the three named architectures, and the named safety behavior. The range follows the governing decision that a newer stable 7.x host may attempt compatibility checks; passing does not create Release Evidence or a support claim for an unvalidated patch. A missing safety mechanism fails closed before assessment work instead of silently selecting a weaker fallback.
+
+The module check trusts the installed PowerShell Security cmdlet and Windows Authenticode as its local trust anchor. A hostile replacement of the running PowerShell engine itself cannot be disproved by that same process; operators and release validation must separately verify the PowerShell installation and WIN-PCInfo release provenance. Any missing file, identity mismatch, invalid signature, untrusted signer, or ambiguous command makes the runtime ineligible.
 
 ## Install PowerShell yourself when needed
 
