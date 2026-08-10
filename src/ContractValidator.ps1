@@ -523,7 +523,11 @@ function Test-AssessmentContract {
         }
         try {
             $parseOptions = [System.Text.Json.JsonDocumentOptions]::new()
-            $parseOptions.MaxDepth = [int] $contract.Definition.limits.maximumDocumentUtf8Bytes
+            # Each nested container needs at least one opening and one closing UTF-8 byte.
+            $maximumRepresentableJsonDepth = [int] [Math]::Floor(
+                [int] $contract.Definition.limits.maximumDocumentUtf8Bytes / 2
+            )
+            $parseOptions.MaxDepth = $maximumRepresentableJsonDepth
             $document = [System.Text.Json.JsonDocument]::Parse($json, $parseOptions)
         }
         catch {
