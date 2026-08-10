@@ -155,12 +155,6 @@ function Get-AutomationRequest {
         $exception.Data['ReasonCode'] = 'REQUEST.AUTHORITY_CONFLICT'
         throw $exception
     }
-    if ([bool] $inputRequest.automationChoices.allowStaleRecovery) {
-        $exception = [System.ArgumentException]::new('Stale recovery is not enabled in this release slice.')
-        $exception.Data['ReasonCode'] = 'REQUEST.STALE_RECOVERY_UNSUPPORTED'
-        throw $exception
-    }
-
     New-NormalizedRequest -ContractVersion $inputRequest.contractVersion `
         -Profile $inputRequest.profile `
         -OutputDestination $inputRequest.outputDestination `

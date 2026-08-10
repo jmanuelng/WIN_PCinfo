@@ -275,6 +275,11 @@ function New-PreparationPlan {
         cleanup = [pscustomobject][ordered]@{
             requiredAfterExecution = $true
             planned = @('RemoveTemporaryDependencyState', 'RemoveEvidenceWorkspaceAfterPackaging', 'VerifyNoTemporaryResidue')
+            staleRunRecovery = [pscustomobject][ordered]@{
+                requested = [bool] $Request.automationChoices.allowStaleRecovery
+                mode = 'CleanupOnly'
+                collectionResumeAllowed = $false
+            }
         }
         governingResources = @($Definition.governingResources)
         integrity = [pscustomobject][ordered]@{
@@ -337,6 +342,7 @@ function Invoke-PreparationGate {
     $runFixturePath = [string] $ValidationContext.RunFixturePath
     $privilegedCollectionFixturePath = [string] $ValidationContext.PrivilegedCollectionFixturePath
     $systemCollectionFixturePath = [string] $ValidationContext.SystemCollectionFixturePath
+    $evidenceWorkspaceFixturePath = [string] $ValidationContext.EvidenceWorkspaceFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -402,7 +408,7 @@ function Invoke-PreparationGate {
     $decision = if ($accepted) { 'Accepted' } else { 'Declined' }
     $selectedExecutionFixtures = @(
         @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath,
-            $systemCollectionFixturePath) |
+            $systemCollectionFixturePath, $evidenceWorkspaceFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -434,6 +440,13 @@ function Invoke-PreparationGate {
             -PreparationPlan $planResult.Plan -PreparationPlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($evidenceWorkspaceFixturePath)) {
+        return Invoke-EvidenceWorkspaceFixture -LiteralPath $evidenceWorkspaceFixturePath `
+            -RuntimeResult $RuntimeResult -RequestDigest $requestDigest `
+            -PlanDigest $planResult.Digest -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand `
+            -RecoveryAuthorized ([bool] $Request.automationChoices.allowStaleRecovery)
     }
     $reasonCode = if ($accepted -and $ValidationFixture) {
         # Synthetic facts can prove resolution but can never reach collectors.

@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/evidence-workspace.schema.json",
+  "title": "WIN-PCInfo Evidence Workspace policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "workspace", "temporaryEvidence", "journal", "recovery", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.evidence-workspace-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.evidence-workspace/1.0.0" },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directoryNamePrefix", "newPerRun", "rejectExistingTarget", "rejectReparsePoints", "allowedDriveTypes", "allowedFileSystems", "access", "safeAlternative"],
+      "properties": {
+        "directoryNamePrefix": { "const": "WINPCInfo-Run-v1-" },
+        "newPerRun": { "const": true },
+        "rejectExistingTarget": { "const": true },
+        "rejectReparsePoints": { "const": true },
+        "allowedDriveTypes": {
+          "type": "array",
+          "prefixItems": [{ "const": "Fixed" }],
+          "items": false,
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "allowedFileSystems": {
+          "type": "array",
+          "prefixItems": [{ "const": "NTFS" }, { "const": "ReFS" }],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "access": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["owner", "allowedPrincipals", "protectedDacl", "inheritanceAllowed"],
+          "properties": {
+            "owner": { "const": "InitiatingUser" },
+            "allowedPrincipals": {
+              "type": "array",
+              "prefixItems": [{ "const": "InitiatingUser" }, { "const": "LocalSystem" }],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "protectedDacl": { "const": true },
+            "inheritanceAllowed": { "const": false }
+          }
+        },
+        "safeAlternative": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["knownFolder", "relativePath"],
+          "properties": {
+            "knownFolder": { "const": "LocalApplicationData" },
+            "relativePath": { "const": "." }
+          }
+        }
+      }
+    },
+    "temporaryEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directoryName", "maximumArtifactBytes", "maximumArtifactCount", "ingestWithinSameRun", "removeAfterIngestion", "secureErasureClaim"],
+      "properties": {
+        "directoryName": { "const": "temporary-evidence" },
+        "maximumArtifactBytes": { "const": 1048576 },
+        "maximumArtifactCount": { "const": 16 },
+        "ingestWithinSameRun": { "const": true },
+        "removeAfterIngestion": { "const": true },
+        "secureErasureClaim": { "const": false }
+      }
+    },
+    "journal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "contractVersion", "directoryName", "fileName", "maximumUtf8Bytes", "allowedPayloadFields", "prohibitedContent"],
+      "properties": {
+        "kind": { "const": "win-pcinfo.run-recovery-journal" },
+        "contractVersion": { "const": "1.0.0" },
+        "directoryName": { "const": "recovery" },
+        "fileName": { "const": "run-recovery.json" },
+        "maximumUtf8Bytes": { "const": 32768 },
+        "allowedPayloadFields": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "runId" }, { "const": "planDigest" }, { "const": "phase" },
+            { "const": "owner" }, { "const": "artifacts" }, { "const": "cleanup" }
+          ],
+          "items": false,
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "prohibitedContent": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "AssessmentObservation" }, { "const": "AssessmentRecord" },
+            { "const": "AssessmentSubject" }, { "const": "Credential" },
+            { "const": "Secret" }, { "const": "RecipientProfile" },
+            { "const": "CrossRunTrackingIdentity" }
+          ],
+          "items": false,
+          "minItems": 7,
+          "maxItems": 7
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "liveOwnerAction", "ambiguousTargetAction", "finalizedPackageAction", "windowsFeatureAction", "maximumCleanupAttempts", "cleanupDeadlineMilliseconds", "removeJournalAfterVerifiedAbsence"],
+      "properties": {
+        "mode": { "const": "CleanupOnly" },
+        "liveOwnerAction": { "const": "DoNotDisturb" },
+        "ambiguousTargetAction": { "const": "LeaveAndReportCleanupIncomplete" },
+        "finalizedPackageAction": { "const": "Preserve" },
+        "windowsFeatureAction": { "const": "ObserveOnly" },
+        "maximumCleanupAttempts": { "const": 2 },
+        "cleanupDeadlineMilliseconds": { "const": 2000 },
+        "removeJournalAfterVerifiedAbsence": { "const": true }
+      }
+    },
+    "validationScenarios": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "EligibleDestination" }, { "const": "UnsafeDestination" },
+        { "const": "InterruptedTemporaryEvidence" }, { "const": "StaleOwner" },
+        { "const": "LiveOwner" }, { "const": "AmbiguousTarget" },
+        { "const": "PreservedPackage" }, { "const": "WindowsFeatureObservation" },
+        { "const": "CleanupFailure" }
+      ],
+      "items": false,
+      "minItems": 9,
+      "maxItems": 9
+    }
+  }
+}

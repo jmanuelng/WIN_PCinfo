@@ -1,0 +1,70 @@
+{
+  "kind": "win-pcinfo.evidence-workspace-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.evidence-workspace/1.0.0",
+  "workspace": {
+    "directoryNamePrefix": "WINPCInfo-Run-v1-",
+    "newPerRun": true,
+    "rejectExistingTarget": true,
+    "rejectReparsePoints": true,
+    "allowedDriveTypes": ["Fixed"],
+    "allowedFileSystems": ["NTFS", "ReFS"],
+    "access": {
+      "owner": "InitiatingUser",
+      "allowedPrincipals": ["InitiatingUser", "LocalSystem"],
+      "protectedDacl": true,
+      "inheritanceAllowed": false
+    },
+    "safeAlternative": {
+      "knownFolder": "LocalApplicationData",
+      "relativePath": "."
+    }
+  },
+  "temporaryEvidence": {
+    "directoryName": "temporary-evidence",
+    "maximumArtifactBytes": 1048576,
+    "maximumArtifactCount": 16,
+    "ingestWithinSameRun": true,
+    "removeAfterIngestion": true,
+    "secureErasureClaim": false
+  },
+  "journal": {
+    "kind": "win-pcinfo.run-recovery-journal",
+    "contractVersion": "1.0.0",
+    "directoryName": "recovery",
+    "fileName": "run-recovery.json",
+    "maximumUtf8Bytes": 32768,
+    "allowedPayloadFields": ["runId", "planDigest", "phase", "owner", "artifacts", "cleanup"],
+    "prohibitedContent": [
+      "AssessmentObservation",
+      "AssessmentRecord",
+      "AssessmentSubject",
+      "Credential",
+      "Secret",
+      "RecipientProfile",
+      "CrossRunTrackingIdentity"
+    ]
+  },
+  "recovery": {
+    "mode": "CleanupOnly",
+    "liveOwnerAction": "DoNotDisturb",
+    "ambiguousTargetAction": "LeaveAndReportCleanupIncomplete",
+    "finalizedPackageAction": "Preserve",
+    "windowsFeatureAction": "ObserveOnly",
+    "maximumCleanupAttempts": 2,
+    "cleanupDeadlineMilliseconds": 2000,
+    "removeJournalAfterVerifiedAbsence": true
+  },
+  "validationScenarios": [
+    "EligibleDestination",
+    "UnsafeDestination",
+    "InterruptedTemporaryEvidence",
+    "StaleOwner",
+    "LiveOwner",
+    "AmbiguousTarget",
+    "PreservedPackage",
+    "WindowsFeatureObservation",
+    "CleanupFailure"
+  ]
+}

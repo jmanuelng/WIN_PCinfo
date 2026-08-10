@@ -76,7 +76,11 @@ Assert-Equal 'C:\Synthetic\WIN-PCInfo-Results' $automationSummary.plan.output.de
 Assert-Equal $false $automationSummary.plan.sideEffects.performedDuringPreparation `
     'summary and approval occur before all side effects'
 Assert-Equal $true $automationSummary.plan.cleanup.requiredAfterExecution 'later execution cleanup is disclosed upfront'
-Assert-Equal 27 $automationSummary.plan.integrity.applicationResources.Count `
+Assert-Equal $false $automationSummary.plan.cleanup.staleRunRecovery.requested `
+    'cleanup-only stale recovery is never inferred without the request choice'
+Assert-Equal $false $automationSummary.plan.cleanup.staleRunRecovery.collectionResumeAllowed `
+    'the Preparation Summary cannot promise collection resume after recovery'
+Assert-Equal 31 $automationSummary.plan.integrity.applicationResources.Count `
     'the plan is bound to modular source, build, public schemas, and the release Contract Set'
 
 Write-Output 'PASS: one immutable Preparation Summary gates accepted and declined generated-app paths.'

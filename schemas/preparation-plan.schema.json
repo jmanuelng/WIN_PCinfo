@@ -179,10 +179,20 @@
     "cleanup": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["requiredAfterExecution", "planned"],
+      "required": ["requiredAfterExecution", "planned", "staleRunRecovery"],
       "properties": {
         "requiredAfterExecution": { "const": true },
-        "planned": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        "planned": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "staleRunRecovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested", "mode", "collectionResumeAllowed"],
+          "properties": {
+            "requested": { "type": "boolean" },
+            "mode": { "const": "CleanupOnly" },
+            "collectionResumeAllowed": { "const": false }
+          }
+        }
       }
     },
     "governingResources": {

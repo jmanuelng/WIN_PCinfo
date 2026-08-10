@@ -38,7 +38,7 @@
         "allowElevation": { "const": true },
         "allowInstallation": { "const": false },
         "allowPersistentChanges": { "const": false },
-        "allowStaleRecovery": { "const": false },
+        "allowStaleRecovery": { "type": "boolean" },
         "verificationOverride": { "const": "None" }
       }
     }

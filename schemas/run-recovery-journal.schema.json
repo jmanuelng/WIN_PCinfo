@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/run-recovery-journal.schema.json",
+  "title": "WIN-PCInfo Run Recovery Journal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "runId", "planDigest", "phase", "owner", "artifacts", "cleanup"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.run-recovery-journal" },
+    "contractVersion": { "const": "1.0.0" },
+    "runId": { "type": "string", "format": "uuid" },
+    "planDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "phase": { "enum": ["Preparation", "Collection", "Packaging", "Cleanup", "Terminal"] },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["processId", "processStartUtc", "initiatingUserSid"],
+      "properties": {
+        "processId": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "processStartUtc": { "type": "string", "format": "date-time" },
+        "initiatingUserSid": { "type": "string", "pattern": "^S-1-[0-9-]+$", "maxLength": 184 }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 18,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifactId", "kind", "path", "fileSystemIdentity", "cleanupAction", "finalized"],
+        "properties": {
+          "artifactId": { "type": "string", "format": "uuid" },
+          "kind": { "enum": ["Workspace", "TemporaryEvidence", "ProtectedEvidencePackage"] },
+          "path": { "type": "string", "minLength": 3, "maxLength": 1024 },
+          "fileSystemIdentity": { "type": "string", "pattern": "^[0-9a-f]{8}:[0-9a-f]{8}:[0-9a-f]{8}$" },
+          "cleanupAction": { "enum": ["Remove", "RemoveWhenEmpty", "Preserve"] },
+          "finalized": { "type": "boolean" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "ProtectedEvidencePackage" } }, "required": ["kind"] },
+            "then": { "properties": { "cleanupAction": { "const": "Preserve" }, "finalized": { "const": true } } }
+          }
+        ]
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "attempts", "lastReasonCode"],
+      "properties": {
+        "state": { "enum": ["Pending", "InProgress", "Verified", "Incomplete"] },
+        "attempts": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "lastReasonCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_.]+$", "maxLength": 128 }
+      }
+    }
+  }
+}
