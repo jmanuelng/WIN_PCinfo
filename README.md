@@ -1,18 +1,36 @@
-# WIN_PCinfo - Detailed Computer Information PowerShell Script
+# WIN-PCInfo
 
-## Description
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullet provides a generated launch path and verifies that the active PowerShell host is compatible **before any assessment collection or device change can begin**.
 
-`WIN_PCinfo` repository contains a comprehensive PowerShell script named `ComputerInfo.ps1` that gathers a wide range of information about a Windows computer. I use it as a tool to perform a Windows device review as a first step on Microsoft Intune projects. Extract basic and complete computer information using various Windows Management Instrumentation (WMI) classes and the "systeminfo" command. Additionally, the script retrieves license, activation information using Software Licensing Management Tool, network device info, account details, makes dns validations and more.
+> [!IMPORTANT]
+> The v2 tracer bullet does not collect computer information yet. An eligible host reaches the next preparation boundary and returns `NotStarted` with exit code `20`; an ineligible host returns the same outcome with a stable reason, official Microsoft installation guidance, and a retry step. This is intentional and does not claim that a Preview capability is delivered.
 
-It collects a comprehensive set of information from a device, allows understanding of current environment and helps identify potential issues that might cause problems during a Microsoft Intune project, this based on my experience.
+## Try the v2 launch safely
+
+You need stable PowerShell Core 7.6 or a later 7.x version. WIN-PCInfo does not install, repair, or change PowerShell for you. See [Runtime prerequisites and safe launch](docs/runtime-prerequisites.md) for beginner-friendly installation, verification, guided and automation examples, troubleshooting, and the complete compatibility boundary.
+
+From a PowerShell 7.6-or-later console:
+
+```powershell
+pwsh -NoLogo -NoProfile -File ./build/Build.ps1
+pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Guided
+```
+
+The tracked code under `src/` is the source of truth. `build/Build.ps1` deterministically assembles it into the ignored `artifacts/WIN-PCInfo.ps1`; do not edit the generated file.
+
+## Legacy script
+
+`ComputerInfo.ps1` is the legacy implementation and remains available as an outcome and migration reference. It gathers Windows information, but it does **not** implement the v2 safety, privacy, lifecycle, evidence-protection, or runtime contracts. Do not treat its behavior as the v2 launch path.
+
+The legacy instructions and feature inventory below describe only that script.
 
 ## Version 2 specification
 
-The root script documents the current legacy release. WIN-PCInfo v2 is being defined through a public, decision-led specification before implementation begins.
+WIN-PCInfo v2 is defined through a public, decision-led specification and is now being implemented as narrow, verifiable vertical slices.
 
 Start with the [v2 capability-ledger rulebook](docs/spec/capability-ledger.md) to understand how legacy and new capabilities are classified, prioritized, selected for previews, and traced into release evidence. The broader route is indexed in the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
 
-## Features
+## Legacy features
 
 The `ComputerInfo.ps1` script collects the following information:
 
@@ -30,19 +48,19 @@ The `ComputerInfo.ps1` script collects the following information:
 
 All collected data is written to CSV files for easy analysis and record-keeping.
 
-## Usage
+## Legacy usage
 
 To use the `ComputerInfo.ps1` script, follow these steps:
 
 1. Clone the `WIN_PCinfo` repository or download the `ComputerInfo.ps1` script directly.
 
-2. Open a PowerShell console with administrative privileges.
+2. Review the legacy script and its side effects in a controlled test environment before deciding whether to run it. It does not provide the v2 safety gate.
 
 3. Navigate to the directory where you saved the `ComputerInfo.ps1` script.
 
 4. Run the script by typing `.\ComputerInfo.ps1` and pressing Enter.
 
-The script will begin collecting information and will create CSV files in the current directory for each category of information. If the computer is a laptop, an HTML file with a detailed battery report will also be created.
+The legacy script begins collecting immediately and creates several output files. Prefer the v2 generated launch path when evaluating current v2 work.
 
 ## Contributing
 

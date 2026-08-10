@@ -1,0 +1,15 @@
+{
+  "contractVersion": "1.0.0",
+  "profile": "ComprehensiveLocalAssessment",
+  "outputDestination": "./WIN-PCInfo-Results",
+  "networkBehavior": "LocalOnly",
+  "updateChoice": "NoUpdateCheck",
+  "diagnosticLevel": "Standard",
+  "automationChoices": {
+    "acceptPreparation": false,
+    "allowElevation": false,
+    "allowInstallation": false,
+    "allowPersistentChanges": false,
+    "allowStaleRecovery": false
+  }
+}
