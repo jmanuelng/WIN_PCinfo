@@ -182,11 +182,18 @@ function Get-AssessmentReferenceReason {
             @($item.diagnosticIds | Where-Object { -not $identitySets.diagnostics.Contains([string] $_) }).Count -gt 0) {
             return 'CONTRACT.REFERENCE_INVALID'
         }
+        $envelopeSubjects = [System.Collections.Generic.HashSet[string]]::new(
+            [System.StringComparer]::Ordinal
+        )
+        foreach ($subjectId in @($item.subjectIds)) {
+            $null = $envelopeSubjects.Add([string] $subjectId)
+        }
         foreach ($observationId in @($item.observationIds)) {
             $observation = $observationById[[string] $observationId]
             $origin = $provenanceById[[string] $observation.provenanceId]
             if ([string] $origin.collectorId -ne [string] $item.collectorId -or
-                [string] $origin.collectorVersion -ne [string] $item.collectorVersion) {
+                [string] $origin.collectorVersion -ne [string] $item.collectorVersion -or
+                -not $envelopeSubjects.Contains([string] $origin.subjectId)) {
                 return 'CONTRACT.ENVELOPE_INCONSISTENT'
             }
         }
@@ -239,10 +246,10 @@ function Get-RecommendationGraphReason {
         $inDegree[$id] = 0
     }
     foreach ($relationship in @($Record.recommendationRelationships)) {
-        if ([string] $relationship.kind -eq 'ConflictsWith') { continue }
         $from = [string] $relationship.fromRecommendationId
         $to = [string] $relationship.toRecommendationId
         if ($from -eq $to) { return 'CONTRACT.GRAPH_INVALID' }
+        if ([string] $relationship.kind -eq 'ConflictsWith') { continue }
         $adjacency[$from].Add($to)
         $inDegree[$to] = [int] $inDegree[$to] + 1
     }
@@ -266,7 +273,16 @@ function Get-RecommendationGraphReason {
 }
 
 function Get-AssessmentStateReason {
-    param([Parameter(Mandatory)] $Record)
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] $ContractDefinition
+    )
+
+    $declaredScopes = @($ContractDefinition.scopeDefinitions.scopeId | ForEach-Object { [string] $_ } | Sort-Object -Unique)
+    $reportedScopes = @($Record.coverage.scopeId | ForEach-Object { [string] $_ } | Sort-Object -Unique)
+    if (@(Compare-Object -ReferenceObject $declaredScopes -DifferenceObject $reportedScopes).Count -gt 0) {
+        return 'CONTRACT.COVERAGE_INCONSISTENT'
+    }
 
     $diagnosticById = @{}
     foreach ($diagnostic in @($Record.diagnostics)) {
@@ -364,9 +380,44 @@ function Get-AssessmentStateReason {
     }
 
     $hasCoverageGap = @($Record.coverage | Where-Object state -ne 'Complete').Count -gt 0
-    if (([string] $Record.run.outcome -eq 'Completed' -and $hasCoverageGap) -or
-        ([string] $Record.run.outcome -eq 'CompletedWithGaps' -and -not $hasCoverageGap)) {
-        return 'CONTRACT.RUN_STATE_INCONSISTENT'
+    switch ([string] $Record.run.outcome) {
+        'Completed' {
+            if ($hasCoverageGap) { return 'CONTRACT.RUN_STATE_INCONSISTENT' }
+        }
+        'CompletedWithGaps' {
+            if (-not $hasCoverageGap) { return 'CONTRACT.RUN_STATE_INCONSISTENT' }
+        }
+        'NotStarted' {
+            $postStartRecords = @($Record.subjects).Count + @($Record.provenance).Count +
+                @($Record.observations).Count + @($Record.collectorResults).Count +
+                @($Record.findings).Count + @($Record.recommendations).Count +
+                @($Record.recommendationRelationships).Count
+            if ($postStartRecords -gt 0 -or
+                @($Record.coverage | Where-Object state -ne 'NotAttempted').Count -gt 0) {
+                return 'CONTRACT.RUN_STATE_INCONSISTENT'
+            }
+        }
+        'Cancelled' {
+            if (@($Record.coverage | Where-Object state -eq 'Cancelled').Count -eq 0) {
+                return 'CONTRACT.RUN_STATE_INCONSISTENT'
+            }
+        }
+        'TimedOut' {
+            if (@($Record.coverage | Where-Object state -eq 'TimedOut').Count -eq 0) {
+                return 'CONTRACT.RUN_STATE_INCONSISTENT'
+            }
+        }
+        'IntegrityFailed' {
+            if (@($Record.diagnostics | Where-Object reasonCode -match '(^|\.)INTEGRITY([_.]|$)').Count -eq 0) {
+                return 'CONTRACT.RUN_STATE_INCONSISTENT'
+            }
+        }
+        'CleanupIncomplete' {
+            if (@($Record.diagnostics | Where-Object phase -eq 'Cleanup').Count -eq 0) {
+                return 'CONTRACT.RUN_STATE_INCONSISTENT'
+            }
+        }
+        default { return 'CONTRACT.RUN_STATE_INCONSISTENT' }
     }
 
     return $null
@@ -408,6 +459,24 @@ function Get-AssessmentFieldReason {
     return $null
 }
 
+function New-ContractValidationRecord {
+    param(
+        [Parameter(Mandatory)] [string] $ReasonCode,
+        [Parameter()] [bool] $Accepted = $false,
+        [Parameter()] [string] $SchemaDraft = '2020-12'
+    )
+
+    [pscustomobject][ordered]@{
+        recordType = 'win-pcinfo.contract-validation'
+        contractVersion = '1.0.0'
+        accepted = $Accepted
+        reasonCode = $ReasonCode
+        documentKind = 'AssessmentRecord'
+        schemaDraft = $SchemaDraft
+        validationFixture = $true
+    }
+}
+
 function Test-AssessmentContract {
     param(
         [Parameter(Mandatory)] [byte[]] $Utf8Bytes,
@@ -418,70 +487,35 @@ function Test-AssessmentContract {
     try {
         $contract = Get-EmbeddedAssessmentContractSet -ConvertFromJsonCommand $ConvertFromJsonCommand
         if ($Utf8Bytes.Length -gt [int] $contract.Definition.limits.maximumDocumentUtf8Bytes) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = 'CONTRACT.SIZE_EXCEEDED'
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode 'CONTRACT.SIZE_EXCEEDED' `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         try {
             $json = [System.Text.UTF8Encoding]::new($false, $true).GetString($Utf8Bytes)
         }
         catch {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = 'CONTRACT.UTF8_INVALID'
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode 'CONTRACT.UTF8_INVALID' `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         try {
             $document = [System.Text.Json.JsonDocument]::Parse($json)
         }
         catch {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = 'CONTRACT.JSON_INVALID'
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode 'CONTRACT.JSON_INVALID' `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         $duplicateReason = Get-JsonLexicalSafetyReason -Element $document.RootElement `
             -Limits $contract.Definition.limits
         $document.Dispose()
         if ($duplicateReason) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = $duplicateReason
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode $duplicateReason `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         $schemaAccepted = & $TestJsonCommand -Json $json -Schema $contract.AssessmentRecordSchema `
             -ErrorAction SilentlyContinue
         if (-not $schemaAccepted) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = 'CONTRACT.SCHEMA_INVALID'
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode 'CONTRACT.SCHEMA_INVALID' `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         $record = & $ConvertFromJsonCommand -InputObject $json -Depth 30
         try {
@@ -493,30 +527,16 @@ function Test-AssessmentContract {
             $contractVersion = [version] '1.0.0'
         }
         if ($null -eq $recordVersion -or $recordVersion.Major -ne $contractVersion.Major) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = 'CONTRACT.VERSION_INCOMPATIBLE'
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode 'CONTRACT.VERSION_INCOMPATIBLE' `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         $unsupportedFeatures = @(
             $record.requiredFeatures |
                 Where-Object { [string] $_ -notin @($contract.Definition.requiredFeatures) }
         )
         if ($unsupportedFeatures.Count -gt 0) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = 'CONTRACT.REQUIRED_FEATURE_UNSUPPORTED'
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode 'CONTRACT.REQUIRED_FEATURE_UNSUPPORTED' `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         # Threat: a collector or future producer could label credential material
         # as an ordinary observation and thereby create a second copy in the
@@ -527,88 +547,39 @@ function Test-AssessmentContract {
         # marker; neither the value nor a digest of it is returned or logged.
         $prohibitedFieldPattern = '(?i)(?:^|[.:/_-])(?:password|passphrase|credential|token|private[-_]?key|recovery[-_]?key|license[-_]?key|pfx|secret)(?:$|[.:/_-])'
         if (@($record.observations | Where-Object { [string] $_.fieldId -match $prohibitedFieldPattern }).Count -gt 0) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = 'CONTRACT.PRIVACY_VIOLATION'
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode 'CONTRACT.PRIVACY_VIOLATION' `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         $referenceReason = Get-AssessmentReferenceReason -Record $record `
             -ContractDefinition $contract.Definition
         if ($referenceReason) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = $referenceReason
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode $referenceReason `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         $graphReason = Get-RecommendationGraphReason -Record $record
         if ($graphReason) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = $graphReason
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode $graphReason `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
-        $stateReason = Get-AssessmentStateReason -Record $record
+        $stateReason = Get-AssessmentStateReason -Record $record `
+            -ContractDefinition $contract.Definition
         if ($stateReason) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = $stateReason
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode $stateReason `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
         $fieldReason = Get-AssessmentFieldReason -Record $record `
             -ContractDefinition $contract.Definition
         if ($fieldReason) {
-            return [pscustomobject][ordered]@{
-                recordType = 'win-pcinfo.contract-validation'
-                contractVersion = '1.0.0'
-                accepted = $false
-                reasonCode = $fieldReason
-                documentKind = 'AssessmentRecord'
-                schemaDraft = [string] $contract.Definition.schemaDraft
-                validationFixture = $true
-            }
+            return New-ContractValidationRecord -ReasonCode $fieldReason `
+                -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
     }
     catch {
-        return [pscustomobject][ordered]@{
-            recordType = 'win-pcinfo.contract-validation'
-            contractVersion = '1.0.0'
-            accepted = $false
-            reasonCode = 'CONTRACT.VALIDATOR_FAILED'
-            documentKind = 'AssessmentRecord'
-            schemaDraft = '2020-12'
-            validationFixture = $true
-        }
+        return New-ContractValidationRecord -ReasonCode 'CONTRACT.VALIDATOR_FAILED'
     }
 
-    [pscustomobject][ordered]@{
-        recordType = 'win-pcinfo.contract-validation'
-        contractVersion = '1.0.0'
-        accepted = $true
-        reasonCode = 'CONTRACT.ACCEPTED'
-        documentKind = 'AssessmentRecord'
-        schemaDraft = [string] $contract.Definition.schemaDraft
-        validationFixture = $true
-    }
+    New-ContractValidationRecord -ReasonCode 'CONTRACT.ACCEPTED' -Accepted $true `
+        -SchemaDraft ([string] $contract.Definition.schemaDraft)
 }
 
 function Invoke-ContractFixtureValidation {
@@ -633,15 +604,7 @@ function Invoke-ContractFixtureValidation {
             -ConvertFromJsonCommand $ConvertFromJsonCommand -TestJsonCommand $TestJsonCommand
     }
     catch {
-        $validation = [pscustomobject][ordered]@{
-            recordType = 'win-pcinfo.contract-validation'
-            contractVersion = '1.0.0'
-            accepted = $false
-            reasonCode = 'CONTRACT.UNREADABLE'
-            documentKind = 'AssessmentRecord'
-            schemaDraft = '2020-12'
-            validationFixture = $true
-        }
+        $validation = New-ContractValidationRecord -ReasonCode 'CONTRACT.UNREADABLE'
     }
 
     Write-ContractRecord $validation -ConvertToJsonCommand $ConvertToJsonCommand

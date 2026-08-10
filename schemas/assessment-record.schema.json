@@ -161,7 +161,7 @@
       "properties": {
         "diagnosticId": { "$ref": "#/$defs/id" },
         "scopeId": { "$ref": "#/$defs/id" },
-        "phase": { "enum": ["Collection", "Interpretation", "Protection", "Packaging"] },
+        "phase": { "enum": ["Collection", "Interpretation", "Protection", "Packaging", "Cleanup"] },
         "reasonCode": { "$ref": "#/$defs/reasonCode" },
         "operatorMessageId": { "$ref": "#/$defs/id" },
         "prohibitedMaterial": {

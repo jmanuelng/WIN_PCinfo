@@ -11,7 +11,7 @@ The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contra
 - how prohibited material is omitted; and
 - whether the definition or a value may appear in a public projection.
 
-Only `field:device.os.display-name` is admitted in this narrow slice. Its source is explicitly `SyntheticContractFixture`; it is not a Windows collector or a claim about the machine running the test.
+Only `field:device.os.display-name` is admitted in this narrow slice. Its source is explicitly `SyntheticContractFixture`; it is not a Windows collector or a claim about the machine running the test. The Contract Set also declares exactly one Evidence Scope, `scope:synthetic.device.os`, and binds that scope to the field, `CAP-0001`, and the approved synthetic collector. A record cannot rename or omit the scope while still claiming closed coverage.
 
 ## What validation does
 
@@ -37,7 +37,7 @@ The synthetic record demonstrates five different kinds of state:
 - `Indeterminate` says a rule cannot reach an evidence-backed finding.
 - `CompletedWithGaps` describes the overall synthetic run.
 
-One state never substitutes for another. For example, a diagnostic is not an observation, `ObservedAbsent` is not a collection failure, and `Completed` is invalid while any Evidence Scope has a gap.
+One state never substitutes for another. For example, a diagnostic is not an observation, `ObservedAbsent` is not a collection failure, and `Completed` is invalid while any Evidence Scope has a gap. `NotStarted` cannot contain post-start evidence; `Cancelled` and `TimedOut` require their matching coverage state; `IntegrityFailed` requires an integrity diagnostic; and `CleanupIncomplete` requires a cleanup diagnostic.
 
 ## Secret exclusion
 

@@ -12,16 +12,30 @@ $contractFixturePath = Join-Path $PSScriptRoot 'fixtures/contract-positive.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
-$result = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $contractFixturePath
-)
+
+function Invoke-ContractFixture {
+    param([Parameter(Mandatory)] [string] $LiteralPath)
+
+    $run = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Mode', 'Automation',
+        '-RequestPath', $requestPath,
+        '-AcceptPreparation',
+        '-PreparationFixturePath', $preparationFixturePath,
+        '-ContractFixturePath', $LiteralPath
+    )
+    $records = @($run.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')
+    [pscustomobject]@{
+        Run = $run
+        Records = $records
+        Validation = if ($records.Count -eq 1) { $records[0] } else { $null }
+    }
+}
+
+$positive = Invoke-ContractFixture -LiteralPath $contractFixturePath
+$result = $positive.Run
 
 Assert-Equal 20 $result.ExitCode 'contract fixtures never authorize real collection'
-$validation = @($result.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')
+$validation = $positive.Records
 Assert-Equal 1 $validation.Count 'the exported Contract Validator emits one public result'
 Assert-Equal $true $validation[0].accepted 'the complete multilingual synthetic record is accepted'
 Assert-Equal 'CONTRACT.ACCEPTED' $validation[0].reasonCode 'acceptance uses a stable project semantic reason'
@@ -37,14 +51,8 @@ Assert-Equal $true $terminal.validationFixture 'synthetic validation remains vis
 Write-Output 'PASS: one multilingual synthetic Assessment Record crosses the exported Contract Validator seam.'
 
 $malformedPath = Join-Path $PSScriptRoot 'fixtures/contract-malformed.json'
-$malformed = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $malformedPath
-)
-$malformedValidation = @($malformed.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$malformed = Invoke-ContractFixture -LiteralPath $malformedPath
+$malformedValidation = $malformed.Validation
 Assert-Equal $false $malformedValidation.accepted 'malformed JSON is rejected before interpretation'
 Assert-Equal 'CONTRACT.JSON_INVALID' $malformedValidation.reasonCode `
     'malformed JSON has a stable project reason instead of parser text'
@@ -52,14 +60,8 @@ Assert-Equal 'CONTRACT.JSON_INVALID' $malformedValidation.reasonCode `
 Write-Output 'PASS: malformed JSON fails closed at the exported Contract Validator seam.'
 
 $duplicatePath = Join-Path $PSScriptRoot 'fixtures/contract-duplicate-property.json'
-$duplicate = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $duplicatePath
-)
-$duplicateValidation = @($duplicate.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$duplicate = Invoke-ContractFixture -LiteralPath $duplicatePath
+$duplicateValidation = $duplicate.Validation
 Assert-Equal $false $duplicateValidation.accepted 'duplicate property names are never last-value-wins'
 Assert-Equal 'CONTRACT.DUPLICATE_PROPERTY' $duplicateValidation.reasonCode `
     'duplicate property rejection is stable and independent of the JSON converter'
@@ -70,14 +72,8 @@ $generatedFixtureRoot = Join-Path $repositoryRoot '.test-output/contract-validat
 $null = New-Item -ItemType Directory -Path $generatedFixtureRoot -Force
 $invalidUtf8Path = Join-Path $generatedFixtureRoot 'invalid-utf8.json'
 [System.IO.File]::WriteAllBytes($invalidUtf8Path, [byte[]] @(0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xc3, 0x28, 0x22, 0x7d))
-$invalidUtf8 = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $invalidUtf8Path
-)
-$invalidUtf8Validation = @($invalidUtf8.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$invalidUtf8 = Invoke-ContractFixture -LiteralPath $invalidUtf8Path
+$invalidUtf8Validation = $invalidUtf8.Validation
 Assert-Equal $false $invalidUtf8Validation.accepted 'non-UTF-8 bytes are rejected'
 Assert-Equal 'CONTRACT.UTF8_INVALID' $invalidUtf8Validation.reasonCode `
     'encoding failure is distinguished from malformed JSON'
@@ -85,14 +81,8 @@ Assert-Equal 'CONTRACT.UTF8_INVALID' $invalidUtf8Validation.reasonCode `
 Write-Output 'PASS: invalid UTF-8 fails closed before JSON parsing.'
 
 $invalidUnicodePath = Join-Path $PSScriptRoot 'fixtures/contract-invalid-unicode.json'
-$invalidUnicode = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $invalidUnicodePath
-)
-$invalidUnicodeValidation = @($invalidUnicode.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$invalidUnicode = Invoke-ContractFixture -LiteralPath $invalidUnicodePath
+$invalidUnicodeValidation = $invalidUnicode.Validation
 Assert-Equal $false $invalidUnicodeValidation.accepted 'unpaired Unicode surrogates are rejected'
 Assert-Equal 'CONTRACT.UNICODE_INVALID' $invalidUnicodeValidation.reasonCode `
     'invalid Unicode is distinguished from valid multilingual content'
@@ -102,14 +92,8 @@ Write-Output 'PASS: invalid Unicode fails closed while multilingual UTF-8 remain
 $oversizePath = Join-Path $generatedFixtureRoot 'oversize.json'
 $oversizeText = '{"syntheticPadding":"' + ('x' * 32768) + '"}'
 [System.IO.File]::WriteAllText($oversizePath, $oversizeText, [System.Text.UTF8Encoding]::new($false))
-$oversize = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $oversizePath
-)
-$oversizeValidation = @($oversize.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$oversize = Invoke-ContractFixture -LiteralPath $oversizePath
+$oversizeValidation = $oversize.Validation
 Assert-Equal $false $oversizeValidation.accepted 'oversize input is rejected before full parsing'
 Assert-Equal 'CONTRACT.SIZE_EXCEEDED' $oversizeValidation.reasonCode `
     'the release-owned byte ceiling has a stable reason'
@@ -119,14 +103,8 @@ Write-Output 'PASS: the Contract Validator enforces its release-owned UTF-8 byte
 $depthPath = Join-Path $generatedFixtureRoot 'depth-exceeded.json'
 $depthText = ('{"x":' * 17) + 'true' + ('}' * 17)
 [System.IO.File]::WriteAllText($depthPath, $depthText, [System.Text.UTF8Encoding]::new($false))
-$depth = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $depthPath
-)
-$depthValidation = @($depth.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$depth = Invoke-ContractFixture -LiteralPath $depthPath
+$depthValidation = $depth.Validation
 Assert-Equal $false $depthValidation.accepted 'deeply nested input is rejected'
 Assert-Equal 'CONTRACT.DEPTH_EXCEEDED' $depthValidation.reasonCode `
     'the release-owned depth ceiling has a stable reason'
@@ -135,14 +113,8 @@ Write-Output 'PASS: the Contract Validator enforces its release-owned JSON depth
 
 $numberPath = Join-Path $generatedFixtureRoot 'unsafe-number.json'
 [System.IO.File]::WriteAllText($numberPath, '{"syntheticNumber":9007199254740992}', [System.Text.UTF8Encoding]::new($false))
-$number = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $numberPath
-)
-$numberValidation = @($number.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$number = Invoke-ContractFixture -LiteralPath $numberPath
+$numberValidation = $number.Validation
 Assert-Equal $false $numberValidation.accepted 'integers outside the I-JSON interoperable range are rejected'
 Assert-Equal 'CONTRACT.NUMBER_INVALID' $numberValidation.reasonCode `
     'unsafe numeric precision has a stable reason'
@@ -157,14 +129,8 @@ $incompatibleMajorRecord.contractVersion = '2.0.0'
     ($incompatibleMajorRecord | ConvertTo-Json -Compress -Depth 30),
     [System.Text.UTF8Encoding]::new($false)
 )
-$incompatibleMajor = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $incompatibleMajorPath
-)
-$incompatibleMajorValidation = @($incompatibleMajor.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$incompatibleMajor = Invoke-ContractFixture -LiteralPath $incompatibleMajorPath
+$incompatibleMajorValidation = $incompatibleMajor.Validation
 Assert-Equal $false $incompatibleMajorValidation.accepted 'an incompatible major version is rejected'
 Assert-Equal 'CONTRACT.VERSION_INCOMPATIBLE' $incompatibleMajorValidation.reasonCode `
     'major-version incompatibility is distinct from malformed shape'
@@ -179,14 +145,8 @@ $unsupportedFeatureRecord.requiredFeatures += 'future-meaning-required'
     ($unsupportedFeatureRecord | ConvertTo-Json -Compress -Depth 30),
     [System.Text.UTF8Encoding]::new($false)
 )
-$unsupportedFeature = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $unsupportedFeaturePath
-)
-$unsupportedFeatureValidation = @($unsupportedFeature.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$unsupportedFeature = Invoke-ContractFixture -LiteralPath $unsupportedFeaturePath
+$unsupportedFeatureValidation = $unsupportedFeature.Validation
 Assert-Equal $false $unsupportedFeatureValidation.accepted 'unknown required meaning is not ignored'
 Assert-Equal 'CONTRACT.REQUIRED_FEATURE_UNSUPPORTED' $unsupportedFeatureValidation.reasonCode `
     'unsupported Required Contract Features fail independently of version syntax'
@@ -202,18 +162,12 @@ $prohibitedSecretRecord.observations[0].value = 'SYNTHETIC-SECRET-LIKE-DO-NOT-US
     ($prohibitedSecretRecord | ConvertTo-Json -Compress -Depth 30),
     [System.Text.UTF8Encoding]::new($false)
 )
-$prohibitedSecret = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $prohibitedSecretPath
-)
-$prohibitedSecretValidation = @($prohibitedSecret.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$prohibitedSecret = Invoke-ContractFixture -LiteralPath $prohibitedSecretPath
+$prohibitedSecretValidation = $prohibitedSecret.Validation
 Assert-Equal $false $prohibitedSecretValidation.accepted 'a secret-bearing field cannot enter evidence'
 Assert-Equal 'CONTRACT.PRIVACY_VIOLATION' $prohibitedSecretValidation.reasonCode `
     'Prohibited Secret Material is rejected without copying or hashing it into output'
-if ($prohibitedSecret.StandardOutput -match 'SYNTHETIC-SECRET-LIKE-DO-NOT-USE') {
+if ($prohibitedSecret.Run.StandardOutput -match 'SYNTHETIC-SECRET-LIKE-DO-NOT-USE') {
     throw 'The public validation stream copied the rejected secret-like fixture value.'
 }
 
@@ -227,14 +181,8 @@ $invalidReferenceRecord.findings[0].evidenceReferences[0].observationId = 'obser
     ($invalidReferenceRecord | ConvertTo-Json -Compress -Depth 30),
     [System.Text.UTF8Encoding]::new($false)
 )
-$invalidReference = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $invalidReferencePath
-)
-$invalidReferenceValidation = @($invalidReference.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$invalidReference = Invoke-ContractFixture -LiteralPath $invalidReferencePath
+$invalidReferenceValidation = $invalidReference.Validation
 Assert-Equal $false $invalidReferenceValidation.accepted 'dangling evidence references are rejected'
 Assert-Equal 'CONTRACT.REFERENCE_INVALID' $invalidReferenceValidation.reasonCode `
     'reference failure is distinct from a missing observation value'
@@ -268,14 +216,8 @@ $invalidGraphRecord.recommendationRelationships = @(
     ($invalidGraphRecord | ConvertTo-Json -Compress -Depth 30),
     [System.Text.UTF8Encoding]::new($false)
 )
-$invalidGraph = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $invalidGraphPath
-)
-$invalidGraphValidation = @($invalidGraph.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$invalidGraph = Invoke-ContractFixture -LiteralPath $invalidGraphPath
+$invalidGraphValidation = $invalidGraph.Validation
 Assert-Equal $false $invalidGraphValidation.accepted 'cyclic recommendation dependencies are rejected'
 Assert-Equal 'CONTRACT.GRAPH_INVALID' $invalidGraphValidation.reasonCode `
     'a valid-reference graph can still fail its acyclic semantic contract'
@@ -290,14 +232,8 @@ $inconsistentCoverageRecord.coverage[0].state = 'Complete'
     ($inconsistentCoverageRecord | ConvertTo-Json -Compress -Depth 30),
     [System.Text.UTF8Encoding]::new($false)
 )
-$inconsistentCoverage = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $inconsistentCoveragePath
-)
-$inconsistentCoverageValidation = @($inconsistentCoverage.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$inconsistentCoverage = Invoke-ContractFixture -LiteralPath $inconsistentCoveragePath
+$inconsistentCoverageValidation = $inconsistentCoverage.Validation
 Assert-Equal $false $inconsistentCoverageValidation.accepted 'Complete coverage cannot retain a failure reason and diagnostic'
 Assert-Equal 'CONTRACT.COVERAGE_INCONSISTENT' $inconsistentCoverageValidation.reasonCode `
     'coverage inconsistency is not collapsed into observation or run state'
@@ -312,14 +248,8 @@ $fieldBoundRecord.observations[0].value = 'x' * 257
     ($fieldBoundRecord | ConvertTo-Json -Compress -Depth 30),
     [System.Text.UTF8Encoding]::new($false)
 )
-$fieldBound = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
-    '-Mode', 'Automation',
-    '-RequestPath', $requestPath,
-    '-AcceptPreparation',
-    '-PreparationFixturePath', $preparationFixturePath,
-    '-ContractFixturePath', $fieldBoundPath
-)
-$fieldBoundValidation = @($fieldBound.Records | Where-Object recordType -eq 'win-pcinfo.contract-validation')[0]
+$fieldBound = Invoke-ContractFixture -LiteralPath $fieldBoundPath
+$fieldBoundValidation = $fieldBound.Validation
 Assert-Equal $false $fieldBoundValidation.accepted 'an admitted field cannot exceed its own release bound'
 Assert-Equal 'CONTRACT.FIELD_BOUND_EXCEEDED' $fieldBoundValidation.reasonCode `
     'field bounds are enforced separately from the whole-document safety ceiling'

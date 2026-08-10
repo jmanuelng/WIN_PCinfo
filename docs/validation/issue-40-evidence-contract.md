@@ -16,7 +16,7 @@ The terminal remains `NotStarted` / exit `20` with `SLICE.CONTRACT_VALIDATION_CO
 
 ## Contract and fixture matrix
 
-The release Contract Set admits one field from `source:synthetic.windows.os`. Its Evidence Field Definition binds `CAP-0001`, purpose, stable source identity, `String` type, Restricted Diagnostic Evidence sensitivity, 256-byte/one-per-subject bounds, prohibited-material omission, public definition eligibility, and non-public value eligibility.
+The release Contract Set admits one field from `source:synthetic.windows.os`. Its Evidence Field Definition binds `CAP-0001`, purpose, stable source identity, `String` type, Restricted Diagnostic Evidence sensitivity, 256-byte/one-per-subject bounds, prohibited-material omission, public definition eligibility, and non-public value eligibility. It separately declares `scope:synthetic.device.os`, binds that scope to the field and approved collector, and requires the record to report the exact release-declared scope set.
 
 The positive fixture carries a French locale and multilingual value through Observation Provenance, one `ObservedValue` Assessment Observation, one `ProhibitedMaterialBlocked` Evidence Coverage State, an approved omission-only diagnostic marker, one Collector Result Envelope, an `Indeterminate` Assessment Finding, a Tenant-side Discovery Task, the canonical Assessment Record, and the release Contract Set.
 
@@ -34,6 +34,8 @@ Generated-application validation covers:
 | dangling or ambiguous references / envelope mismatch | `CONTRACT.REFERENCE_INVALID` / `CONTRACT.REFERENCE_AMBIGUOUS` / `CONTRACT.ENVELOPE_INCONSISTENT` |
 | cyclic recommendation dependency | `CONTRACT.GRAPH_INVALID` |
 | coverage, observation, finding, or run-state conflict | the corresponding stable `CONTRACT.*_INCONSISTENT` reason |
+| undeclared/omitted scope, orphan diagnostic, or incomplete envelope coverage | `CONTRACT.COVERAGE_INCONSISTENT` |
+| envelope collector or subject not bound to its observation provenance | `CONTRACT.ENVELOPE_INCONSISTENT` |
 | prohibited secret-like field | `CONTRACT.PRIVACY_VIOLATION`, with the synthetic value absent from application output |
 
 Every fixture is synthetic. The positive record uses only package-local synthetic identities and fixed year-2000 timestamps. Invalid cases are either small tracked lexical fixtures or deterministic mutations of that positive record under `.test-output`; no native Windows or assessment source is read.
@@ -42,7 +44,7 @@ Every fixture is synthetic. The positive record uses only package-local syntheti
 
 Both public schemas declare `https://json-schema.org/draft/2020-12/schema`. `AssessmentContractSet.Tests.ps1` validates the actual Contract Set and positive record through PowerShell `Test-Json`, then runs an applicable `prefixItems` accept/reject dialect probe. This is evidence for the Draft 2020-12 behavior used by this Contract Set, not a claim that WIN-PCInfo republishes or reruns the complete upstream JSON Schema conformance suite.
 
-After schema acceptance, the exported validator checks contract major compatibility, Required Contract Features, privacy, release field definitions and bounds, unique identities, exact references, Collector Result Envelope closure, Evidence Coverage State closure, state combinations, and an acyclic recommendation graph. Schema errors and semantic errors remain distinct.
+After schema acceptance, the exported validator checks contract major compatibility, Required Contract Features, privacy, release field and scope definitions, field bounds, unique identities, exact references, Collector Result Envelope closure, Evidence Coverage State closure, state combinations, and recommendation graph validity. `NotStarted`, `Cancelled`, `TimedOut`, `IntegrityFailed`, and `CleanupIncomplete` each have a separate evidence/diagnostic consistency rule. Schema errors and semantic errors remain distinct.
 
 ## Secret Exclusion and public output
 
@@ -51,13 +53,13 @@ The admitted field catalog contains no secret-bearing field. An approved `prohib
 ## Deterministic build evidence
 
 - Build contract: `win-pcinfo.build-evidence/1.0.0`
-- Generated application SHA-256: `cd8f2aee1b134c8dd9f5c2bd75fc00acd7d294c3547ff863dbc261935cefa36b`
+- Generated application SHA-256: `942f90b26e1156ec07863a2a1b336f9ddbf09efce1d5ca3300f36c8889193c0d`
 - Representation: UTF-8 with BOM and CRLF
 - Modular source inputs: 8
 - Application-manifest resources: 15
-- Contract Set SHA-256: `2c5114630a5aba21805eea34f41b387324a352a65fa90f08896ebe68e75fcc33`
-- Contract Set schema SHA-256: `8607d784fa99da75d3ee39bb766cf7404b045c2217783afdac5c1b1f4d2203e3`
-- Assessment Record schema SHA-256: `aac2f516fd8c5e2965c413ced6915e0853c5f2b068dd81af6e0b8ae4a5dfd9a7`
+- Contract Set SHA-256: `51d1fe45086cab58f629c7ffbb82b0d5233982e850e4312c91e6139166deccf6`
+- Contract Set schema SHA-256: `df40852930596cb8f3d62021148c82e3f465b8aa9f1206fdcafa02acae086def`
+- Assessment Record schema SHA-256: `1d98e45eaad47b9b96feae0a51949ebbd38d3b468829f781dc11ada30afdf5ac`
 - Positive fixture SHA-256: `5cf6726daa5027749ffec8d1a6396a48f86d35bcced00a281c6a1cbf21ef6b48`
 - Reproduction: `pwsh -NoLogo -NoProfile -File ./build/Build.ps1`
 

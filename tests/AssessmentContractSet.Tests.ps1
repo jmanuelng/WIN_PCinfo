@@ -19,6 +19,7 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
 Assert-Equal 1 @($contractSet.fieldDefinitions).Count 'this narrow tracer bullet admits one field'
+Assert-Equal 1 @($contractSet.scopeDefinitions).Count 'this narrow tracer bullet declares one closed Evidence Scope'
 
 $definition = $contractSet.fieldDefinitions[0]
 Assert-Equal 'field:device.os.display-name' $definition.fieldId 'the admitted field identity is release-bound'
@@ -36,6 +37,11 @@ $releaseDefinition = Get-Content -LiteralPath $releaseDefinitionPath -Raw | Conv
 if (@($definition.capabilityIds | Where-Object { $_ -notin $releaseDefinition.releaseEnabledCapabilityIds }).Count -gt 0) {
     throw 'Every Evidence Field Definition must resolve to a release-enabled Product Capability.'
 }
+$scopeDefinition = $contractSet.scopeDefinitions[0]
+Assert-Equal 'scope:synthetic.device.os' $scopeDefinition.scopeId 'coverage is bound to a release-declared Evidence Scope'
+Assert-Equal $definition.fieldId $scopeDefinition.fieldIds[0] 'the scope resolves its admitted field'
+Assert-Equal $definition.source.sourceId.Replace('source:', 'collector:') $scopeDefinition.collectorIds[0] `
+    'the scope resolves its approved synthetic collector'
 $schemaKinds = @($contractSet.schemas.documentKind | Sort-Object -Unique)
 Assert-Equal 2 $schemaKinds.Count 'schema document kinds are unambiguous'
 foreach ($schemaResource in @($contractSet.schemas)) {
@@ -61,4 +67,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: the release Contract Set binds one safe synthetic field, vocabularies, and Draft 2020-12 schema.'
+Write-Output 'PASS: the release Contract Set binds one safe synthetic field and scope, vocabularies, and Draft 2020-12 schema.'

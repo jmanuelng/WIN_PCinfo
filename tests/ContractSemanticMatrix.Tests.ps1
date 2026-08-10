@@ -84,6 +84,68 @@ $cases = @(
         Expected = 'CONTRACT.FIELD_TYPE_INVALID'
         Mutate = { param($record) $record.observations[0].value = $true }
     }
+    @{
+        Name = 'undeclared-scope'
+        Expected = 'CONTRACT.COVERAGE_INCONSISTENT'
+        Mutate = {
+            param($record)
+            $record.coverage[0].scopeId = 'scope:synthetic.renamed'
+            $record.diagnostics[0].scopeId = 'scope:synthetic.renamed'
+            $record.collectorResults[0].intendedScopeIds = @('scope:synthetic.renamed')
+        }
+    }
+    @{
+        Name = 'not-started-with-collected-evidence'
+        Expected = 'CONTRACT.RUN_STATE_INCONSISTENT'
+        Mutate = { param($record) $record.run.outcome = 'NotStarted' }
+    }
+    @{
+        Name = 'cancelled-without-cancelled-coverage'
+        Expected = 'CONTRACT.RUN_STATE_INCONSISTENT'
+        Mutate = { param($record) $record.run.outcome = 'Cancelled' }
+    }
+    @{
+        Name = 'timed-out-without-timed-out-coverage'
+        Expected = 'CONTRACT.RUN_STATE_INCONSISTENT'
+        Mutate = { param($record) $record.run.outcome = 'TimedOut' }
+    }
+    @{
+        Name = 'integrity-failed-without-integrity-diagnostic'
+        Expected = 'CONTRACT.RUN_STATE_INCONSISTENT'
+        Mutate = { param($record) $record.run.outcome = 'IntegrityFailed' }
+    }
+    @{
+        Name = 'cleanup-incomplete-without-cleanup-diagnostic'
+        Expected = 'CONTRACT.RUN_STATE_INCONSISTENT'
+        Mutate = { param($record) $record.run.outcome = 'CleanupIncomplete' }
+    }
+    @{
+        Name = 'envelope-subject-conflict'
+        Expected = 'CONTRACT.ENVELOPE_INCONSISTENT'
+        Mutate = {
+            param($record)
+            $record.subjects += [pscustomobject][ordered]@{
+                subjectId = 'subject:synthetic-device:other'
+                kind = 'Device'
+            }
+            $record.collectorResults[0].subjectIds = @('subject:synthetic-device:other')
+        }
+    }
+    @{
+        Name = 'self-conflicting-recommendation'
+        Expected = 'CONTRACT.GRAPH_INVALID'
+        Mutate = {
+            param($record)
+            $record.recommendationRelationships = @(
+                [pscustomobject][ordered]@{
+                    relationshipId = 'relationship:synthetic:self-conflict'
+                    fromRecommendationId = 'recommendation:synthetic-follow-up:001'
+                    toRecommendationId = 'recommendation:synthetic-follow-up:001'
+                    kind = 'ConflictsWith'
+                }
+            )
+        }
+    }
 )
 
 foreach ($case in $cases) {

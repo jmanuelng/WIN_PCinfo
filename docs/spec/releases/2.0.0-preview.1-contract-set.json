@@ -51,6 +51,15 @@
       }
     }
   ],
+  "scopeDefinitions": [
+    {
+      "scopeId": "scope:synthetic.device.os",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Close coverage for the single approved synthetic operating-system observation carried by this tracer bullet.",
+      "fieldIds": ["field:device.os.display-name"],
+      "collectorIds": ["collector:synthetic.windows.os"]
+    }
+  ],
   "vocabularies": {
     "coverageStates": [
       "Complete",
@@ -70,6 +79,6 @@
     "observationValueStates": ["ObservedValue", "ObservedAbsent", "SourceReportedUnknown"],
     "findingOutcomes": ["ExpectedCondition", "NeedsAttention", "Informational", "Indeterminate", "NotApplicable"],
     "runOutcomes": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"],
-    "diagnosticPhases": ["Collection", "Interpretation", "Protection", "Packaging"]
+    "diagnosticPhases": ["Collection", "Interpretation", "Protection", "Packaging", "Cleanup"]
   }
 }
