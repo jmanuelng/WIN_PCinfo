@@ -24,7 +24,7 @@ function Get-Sha256Hex {
     ).ToLowerInvariant()
 }
 
-$sourceInputs = foreach ($relativePath in $sourcePaths) {
+$sourceFiles = foreach ($relativePath in $sourcePaths) {
     $literalPath = Join-Path $repositoryRoot $relativePath
     if (-not (Test-Path -LiteralPath $literalPath -PathType Leaf)) {
         throw "Build input is missing: $relativePath"
@@ -32,20 +32,23 @@ $sourceInputs = foreach ($relativePath in $sourcePaths) {
     $bytes = [System.IO.File]::ReadAllBytes($literalPath)
     [pscustomobject][ordered]@{
         path = $relativePath
-        sha256 = Get-Sha256Hex -Bytes $bytes
-        byteLength = $bytes.Length
+        literalPath = $literalPath
+        bytes = $bytes
+        text = [System.IO.File]::ReadAllText($literalPath)
     }
 }
 
-$sections = foreach ($relativePath in $sourcePaths) {
-    $literalPath = Join-Path $repositoryRoot $relativePath
-    if (-not (Test-Path -LiteralPath $literalPath -PathType Leaf)) {
-        throw "Build input is missing: $relativePath"
+$sourceInputs = foreach ($sourceFile in $sourceFiles) {
+    [pscustomobject][ordered]@{
+        path = $sourceFile.path
+        sha256 = Get-Sha256Hex -Bytes $sourceFile.bytes
+        byteLength = $sourceFile.bytes.Length
     }
+}
 
-    $source = [System.IO.File]::ReadAllText($literalPath)
-    $normalizedSource = $source -replace "`r`n", "`n" -replace "`r", "`n"
-    "#region Generated from $relativePath`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $relativePath"
+$sections = foreach ($sourceFile in $sourceFiles) {
+    $normalizedSource = $sourceFile.text -replace "`r`n", "`n" -replace "`r", "`n"
+    "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"
 }
 
 $generated = (@(

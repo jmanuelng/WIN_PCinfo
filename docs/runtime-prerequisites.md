@@ -22,11 +22,11 @@ Use an already installed PowerShell host with all of these properties:
 - `PSEdition` is `Core`.
 - The version is stable PowerShell 7.6.0 or later in the 7.x family. Preview, release-candidate, daily, and PowerShell 8-or-later hosts are not eligible.
 - The process architecture is x64, x86, or ARM64. Architecture eligibility is not the same as a Supported Scenario claim; support requires separate release evidence.
-- Required built-in commands are available.
-- the built-in `Microsoft.PowerShell.Utility\Test-Json` validator resolves from the active runtime's literal `$PSHOME` module tree;
-- strict UTF-8 behavior, SHA-256, AES-256-GCM, literal built-in module loading, and bounded child-process start/wait/exit/termination behavior work as expected.
+- Required Core commands and commands exported by the literal built-in Utility and Management modules are available with their expected identities.
+- The Utility, Management, and Security module manifests under the active runtime's literal `$PSHOME` tree have valid Microsoft Authenticode signatures, and `Microsoft.PowerShell.Utility\Test-Json` comes from that verified Utility module.
+- Strict UTF-8 decoding, JSON Unicode round trips, UTF-8 standard output, SHA-256, AES-256-GCM, literal module loading, and bounded child-process start/wait/exit/hard-termination behavior work as expected.
 
-These checks protect later evidence, validation, module, and process boundaries. A missing safety mechanism fails closed before assessment work instead of silently selecting a weaker fallback.
+These checks are the exact `win-pcinfo.runtime-compatibility/1.0.0` policy. That policy admits Core, stable versions from 7.6.0 up to but excluding 8.0.0, the three named architectures, and the named safety behavior. The range follows the governing decision that a newer stable 7.x host may attempt compatibility checks; passing does not create Release Evidence or a support claim for an unvalidated patch. A missing safety mechanism fails closed before assessment work instead of silently selecting a weaker fallback.
 
 ## Install PowerShell yourself when needed
 
@@ -64,8 +64,17 @@ The guided adapter constructs the current default request:
 {
   "contractVersion": "1.0.0",
   "profile": "ComprehensiveLocalAssessment",
-  "networkMode": "LocalOnly",
-  "acceptPreparation": false
+  "outputDestination": "./WIN-PCInfo-Results",
+  "networkBehavior": "LocalOnly",
+  "updateChoice": "NoUpdateCheck",
+  "diagnosticLevel": "Standard",
+  "automationChoices": {
+    "acceptPreparation": false,
+    "allowElevation": false,
+    "allowInstallation": false,
+    "allowPersistentChanges": false,
+    "allowStaleRecovery": false
+  }
 }
 ```
 
@@ -96,8 +105,8 @@ All current paths end as `NotStarted` / `20`. Common stable reasons are:
 | `RUNTIME.ARCHITECTURE_UNSUPPORTED` | The process architecture is outside x64, x86, and ARM64. | Install an eligible PowerShell architecture and retry. |
 | `RUNTIME.REQUIRED_COMMAND_MISSING` | A release-required built-in command is unavailable. | Repair or replace PowerShell outside WIN-PCInfo, then retry. |
 | `RUNTIME.VALIDATOR_PROVENANCE_INVALID` | `Test-Json` did not resolve from the trusted built-in module location. | Close modified sessions, use `-NoProfile`, verify the PowerShell installation, and retry. |
-| `RUNTIME.ENCODING_INCOMPATIBLE` | Strict UTF-8 behavior did not pass. | Use a supported stable PowerShell installation and retry. |
-| `RUNTIME.CRYPTOGRAPHY_INCOMPATIBLE` | Required SHA-256 or AES-GCM behavior did not pass. | Use a supported stable PowerShell installation and retry. |
+| `RUNTIME.ENCODING_INCOMPATIBLE` | Strict UTF-8 behavior did not pass. | Use an eligible stable PowerShell installation and retry. |
+| `RUNTIME.CRYPTOGRAPHY_INCOMPATIBLE` | Required SHA-256 or AES-GCM behavior did not pass. | Use an eligible stable PowerShell installation and retry. |
 | `RUNTIME.MODULE_LOADING_INCOMPATIBLE` | Literal built-in module loading did not pass. | Verify or repair PowerShell outside WIN-PCInfo, then retry. |
 | `RUNTIME.PROCESS_CONTROL_INCOMPATIBLE` | Bounded child-process control did not pass. | Close modified sessions, verify the PowerShell installation, and retry. |
 | `SLICE.COLLECTION_NOT_IMPLEMENTED` | Runtime checks passed; this tracer bullet intentionally stops before collection. | Wait for the dependent assessment slice; do not treat this as completed assessment evidence. |
@@ -110,4 +119,4 @@ Run all source-only and generated-artifact checks with no additional packages:
 pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1
 ```
 
-The suite exercises equivalent guided and automation launches, invalid automation requests, the runtime matrix, the no-mutation boundary, and deterministic build provenance. Fixtures contain synthetic compatibility flags only; they contain no assessment, tenant, account, device, network, or credential data.
+The suite exercises equivalent guided and automation launches, invalid automation requests, the runtime matrix, preservation of an isolated pre-existing working file, and deterministic build provenance. The live eligible-host path executes the real encoding, cryptographic, signed-module, and process-control probes; synthetic fixtures verify every stable terminal decision through the generated artifact. Fixtures contain synthetic compatibility flags only; they contain no assessment, tenant, account, device, network, or credential data.

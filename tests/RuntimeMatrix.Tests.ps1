@@ -4,59 +4,17 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Assert-Equal {
-    param($Expected, $Actual, [string] $Because)
-    if ($Expected -ne $Actual) {
-        throw "Expected '$Expected' but received '$Actual': $Because"
-    }
-}
-
-function Invoke-RuntimeFixture {
-    param(
-        [Parameter(Mandatory)] [string] $CandidatePath,
-        [Parameter(Mandatory)] [string] $RequestPath,
-        [Parameter(Mandatory)] [string] $FixturePath,
-        [Parameter(Mandatory)] [string] $WorkingDirectory
-    )
-
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = (Get-Command pwsh -CommandType Application).Source
-    $startInfo.WorkingDirectory = $WorkingDirectory
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    foreach ($argument in @(
-        '-NoLogo', '-NoProfile', '-File', $CandidatePath,
-        '-Mode', 'Automation', '-RequestPath', $RequestPath,
-        '-RuntimeFixturePath', $FixturePath
-    )) {
-        $null = $startInfo.ArgumentList.Add($argument)
-    }
-
-    $process = [System.Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    $null = $process.Start()
-    $standardOutput = $process.StandardOutput.ReadToEnd()
-    $standardError = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
-
-    [pscustomobject]@{
-        ExitCode = $process.ExitCode
-        Records = @($standardOutput -split "`r?`n" | Where-Object { $_ } | ForEach-Object {
-            $_ | ConvertFrom-Json -Depth 20
-        })
-        StandardError = $standardError
-    }
-}
-
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $testOutput = Join-Path $repositoryRoot '.test-output/runtime-matrix'
 $fixtureDirectory = Join-Path $testOutput 'fixtures'
 $workingDirectory = Join-Path $testOutput 'work'
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
 $null = New-Item -ItemType Directory -Path $fixtureDirectory -Force
 $null = New-Item -ItemType Directory -Path $workingDirectory -Force
+$sentinelPath = Join-Path $workingDirectory 'pre-existing-sentinel.txt'
+[System.IO.File]::WriteAllText($sentinelPath, 'pre-existing test-owned content', [System.Text.UTF8Encoding]::new($false))
 
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
@@ -76,10 +34,12 @@ $eligibleFacts = [ordered]@{
 
 $matrix = @(
     @{ Name = 'eligible'; Change = @{}; Expected = 'SLICE.COLLECTION_NOT_IMPLEMENTED' }
+    @{ Name = 'later-stable-7x'; Change = @{ version = '7.99.0' }; Expected = 'SLICE.COLLECTION_NOT_IMPLEMENTED' }
     @{ Name = 'missing'; Change = @{ hostPresent = $false }; Expected = 'RUNTIME.HOST_MISSING' }
     @{ Name = 'prerelease'; Change = @{ version = '7.7.0-preview.1'; prereleaseLabel = 'preview.1' }; Expected = 'RUNTIME.PRERELEASE_UNSUPPORTED' }
     @{ Name = 'wrong-edition'; Change = @{ psEdition = 'Desktop' }; Expected = 'RUNTIME.EDITION_UNSUPPORTED' }
     @{ Name = 'wrong-major'; Change = @{ version = '8.0.0' }; Expected = 'RUNTIME.MAJOR_UNSUPPORTED' }
+    @{ Name = 'too-old'; Change = @{ version = '7.5.9' }; Expected = 'RUNTIME.VERSION_TOO_OLD' }
     @{ Name = 'wrong-architecture'; Change = @{ architecture = 'S390x' }; Expected = 'RUNTIME.ARCHITECTURE_UNSUPPORTED' }
     @{ Name = 'commands'; Change = @{ requiredCommands = $false }; Expected = 'RUNTIME.REQUIRED_COMMAND_MISSING' }
     @{ Name = 'validator'; Change = @{ validatorProvenance = $false }; Expected = 'RUNTIME.VALIDATOR_PROVENANCE_INVALID' }
@@ -102,9 +62,14 @@ foreach ($case in $matrix) {
     )
 
     $before = @(Get-ChildItem -LiteralPath $workingDirectory -Force)
-    $result = Invoke-RuntimeFixture -CandidatePath $candidatePath -RequestPath $requestPath `
-        -FixturePath $fixturePath -WorkingDirectory $workingDirectory
+    $sentinelDigestBefore = (Get-FileHash -LiteralPath $sentinelPath -Algorithm SHA256).Hash
+    $result = Invoke-GeneratedApplication -CandidatePath $candidatePath -WorkingDirectory $workingDirectory `
+        -Arguments @(
+            '-Mode', 'Automation', '-RequestPath', $requestPath,
+            '-RuntimeFixturePath', $fixturePath
+        )
     $after = @(Get-ChildItem -LiteralPath $workingDirectory -Force)
+    $sentinelDigestAfter = (Get-FileHash -LiteralPath $sentinelPath -Algorithm SHA256).Hash
     $terminal = $result.Records[-1]
 
     Assert-Equal 20 $result.ExitCode "$($case.Name) must use the NotStarted exit code"
@@ -113,6 +78,7 @@ foreach ($case in $matrix) {
     Assert-Equal $false $terminal.collectionStarted "$($case.Name) must not collect"
     Assert-Equal $true $terminal.validationFixture "$($case.Name) cannot authorize a real run"
     Assert-Equal $before.Count $after.Count "$($case.Name) must not mutate its working directory"
+    Assert-Equal $sentinelDigestBefore $sentinelDigestAfter "$($case.Name) must preserve pre-existing working files"
 
     if ($case.Expected -like 'RUNTIME.*') {
         Assert-Equal 'https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows' `

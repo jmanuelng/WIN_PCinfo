@@ -1,4 +1,5 @@
-Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'RequestValidation' -State 'Started' -MessageId 'request.validation.started')
+Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'RequestValidation' -State 'Started' `
+    -MessageId 'request.validation.started' -CompletedUnits 0 -TotalUnits 2)
 try {
     $request = if ($Mode -eq 'Automation') {
         if ([string]::IsNullOrWhiteSpace($RequestPath)) {
@@ -19,11 +20,13 @@ catch {
     else {
         'REQUEST.UNREADABLE'
     }
-    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'RequestValidation' -State 'Failed' -MessageId 'request.validation.failed')
+    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'RequestValidation' -State 'Failed' `
+        -MessageId 'request.validation.failed' -CompletedUnits 0 -TotalUnits 2)
     Write-ContractRecord (New-TerminalRecord -ReasonCode $reasonCode -Phase 'RequestValidation')
     exit 20
 }
-Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'RequestValidation' -State 'Succeeded' -MessageId 'request.validation.succeeded')
+Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'RequestValidation' -State 'Succeeded' `
+    -MessageId 'request.validation.succeeded' -CompletedUnits 1 -TotalUnits 2)
 
 $usingRuntimeFixture = -not [string]::IsNullOrWhiteSpace($RuntimeFixturePath)
 $runtimeFacts = if ($usingRuntimeFixture) {

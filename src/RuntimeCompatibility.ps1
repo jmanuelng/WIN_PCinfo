@@ -8,12 +8,28 @@ function Test-Utf8RuntimeBehavior {
         $roundTrip = $strictUtf8.GetString($strictUtf8.GetBytes($sample))
         if ($roundTrip -ne $sample) { return $false }
 
+        # Validate the .NET JSON path used by the contract boundary rather than
+        # proving only a private encoder instance. JsonDocument preserves the
+        # Unicode scalar values without relying on localized display text.
+        $json = [System.Text.Json.JsonSerializer]::Serialize($sample, [string])
+        $document = [System.Text.Json.JsonDocument]::Parse($json)
+        try {
+            if ($document.RootElement.GetString() -ne $sample) { return $false }
+        }
+        finally {
+            $document.Dispose()
+        }
+        if ([System.Console]::OutputEncoding.CodePage -ne 65001) { return $false }
+
         try {
             $null = $strictUtf8.GetString([byte[]] @(0xC3, 0x28))
             return $false
         }
-        catch [System.Text.DecoderFallbackException] {
-            return $true
+        catch {
+            if ($_.Exception.InnerException -is [System.Text.DecoderFallbackException]) {
+                return $true
+            }
+            return $false
         }
     }
     catch {
@@ -59,38 +75,86 @@ function Test-CryptographyRuntimeBehavior {
     }
 }
 
-function Test-ValidatorProvenance {
+function Get-BuiltInModuleCompatibilityFacts {
     try {
-        # A profile or module-path shadow could replace Test-Json with attacker
-        # code. Resolve the module-qualified cmdlet and require its signed-in-box
-        # module location under the active runtime's literal PSHOME tree.
-        $validator = Get-Command 'Microsoft.PowerShell.Utility\Test-Json' -CommandType Cmdlet -ErrorAction Stop
+        # A profile or PSModulePath entry could shadow a required command with
+        # attacker-controlled code. Load only the literal manifests in PSHOME,
+        # verify their Authenticode signatures through the literal built-in
+        # Security module, and inspect the commands exported by those exact
+        # module objects. Trust is limited to Windows Authenticode validation and
+        # the installed PowerShell distribution; any ambiguity fails closed.
         $moduleRoot = [System.IO.Path]::GetFullPath((Join-Path $PSHOME 'Modules'))
-        $modulePath = [System.IO.Path]::GetFullPath($validator.Module.Path)
-        return $validator.Source -eq 'Microsoft.PowerShell.Utility' -and
-            $modulePath.StartsWith($moduleRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
-    }
-    catch {
-        return $false
-    }
-}
+        $manifests = [ordered]@{
+            'Microsoft.PowerShell.Security' = Join-Path $moduleRoot 'Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1'
+            'Microsoft.PowerShell.Utility' = Join-Path $moduleRoot 'Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1'
+            'Microsoft.PowerShell.Management' = Join-Path $moduleRoot 'Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1'
+        }
 
-function Test-LiteralModuleLoading {
-    try {
-        # Floating PSModulePath discovery is not a trust decision. Importing the
-        # exact built-in manifest proves that future modules can be loaded from a
-        # verified literal path and fail closed when that path is unavailable.
-        $manifestPath = Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1'
-        $module = Import-Module -Name $manifestPath -PassThru -ErrorAction Stop
-        return [System.IO.Path]::GetFullPath($module.Path) -eq [System.IO.Path]::GetFullPath($manifestPath)
+        $modules = [ordered]@{}
+        foreach ($moduleName in $manifests.Keys) {
+            $module = Import-Module -Name $manifests[$moduleName] -PassThru -Force -ErrorAction Stop
+            $resolvedManifest = [System.IO.Path]::GetFullPath($manifests[$moduleName])
+            if ($module.Name -ne $moduleName -or [System.IO.Path]::GetFullPath($module.Path) -ne $resolvedManifest) {
+                throw "Built-in module identity mismatch: $moduleName"
+            }
+            $modules[$moduleName] = $module
+        }
+
+        $signatureCommand = $modules['Microsoft.PowerShell.Security'].ExportedCommands['Get-AuthenticodeSignature']
+        if ($null -eq $signatureCommand -or $signatureCommand.CommandType -ne 'Cmdlet') {
+            throw 'The trusted Authenticode command is unavailable.'
+        }
+        foreach ($manifestPath in $manifests.Values) {
+            $signature = & $signatureCommand -LiteralPath $manifestPath -ErrorAction Stop
+            if ([string] $signature.Status -ne 'Valid' -or
+                $null -eq $signature.SignerCertificate -or
+                $signature.SignerCertificate.Subject -notmatch '^CN=Microsoft Corporation,') {
+                throw "Built-in module signature is not valid: $manifestPath"
+            }
+        }
+
+        $requiredExports = [ordered]@{
+            'Microsoft.PowerShell.Utility' = @('ConvertFrom-Json', 'ConvertTo-Json', 'Test-Json')
+            'Microsoft.PowerShell.Management' = @('Start-Process', 'Stop-Process', 'Wait-Process')
+        }
+        foreach ($moduleName in $requiredExports.Keys) {
+            foreach ($commandName in $requiredExports[$moduleName]) {
+                $command = $modules[$moduleName].ExportedCommands[$commandName]
+                if ($null -eq $command -or $command.CommandType -ne 'Cmdlet' -or $command.ModuleName -ne $moduleName) {
+                    throw "Required built-in command identity mismatch: $moduleName\$commandName"
+                }
+            }
+        }
+
+        $coreCommandsAvailable = $true
+        foreach ($commandName in @('Get-Command', 'Import-Module')) {
+            $command = $ExecutionContext.InvokeCommand.GetCommand(
+                $commandName,
+                [System.Management.Automation.CommandTypes]::Cmdlet
+            )
+            if ($null -eq $command -or $command.Source -ne 'Microsoft.PowerShell.Core') {
+                $coreCommandsAvailable = $false
+            }
+        }
+
+        return [pscustomobject]@{
+            requiredCommands = $coreCommandsAvailable
+            validatorProvenance = $true
+            moduleLoading = $true
+        }
     }
     catch {
-        return $false
+        return [pscustomobject]@{
+            requiredCommands = $false
+            validatorProvenance = $false
+            moduleLoading = $false
+        }
     }
 }
 
 function Test-ProcessControlBehavior {
     $process = $null
+    $terminationProcess = $null
     try {
         # Later collectors may launch approved Windows tools. The coordinator
         # must be able to pass literal arguments, observe a real exit code, bound
@@ -114,46 +178,88 @@ function Test-ProcessControlBehavior {
             $process.WaitForExit()
             return $false
         }
-        return $process.ExitCode -eq 17
+        if ($process.ExitCode -ne 17) { return $false }
+
+        $terminationStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $terminationStartInfo.FileName = $executable
+        $terminationStartInfo.UseShellExecute = $false
+        $terminationStartInfo.RedirectStandardOutput = $true
+        $terminationStartInfo.RedirectStandardError = $true
+        foreach ($argument in @(
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+            '[System.Threading.Thread]::Sleep(30000)'
+        )) {
+            $null = $terminationStartInfo.ArgumentList.Add($argument)
+        }
+        $terminationProcess = [System.Diagnostics.Process]::new()
+        $terminationProcess.StartInfo = $terminationStartInfo
+        if (-not $terminationProcess.Start()) { return $false }
+        if ($terminationProcess.WaitForExit(200)) { return $false }
+        $terminationProcess.Kill($true)
+        return $terminationProcess.WaitForExit(5000) -and $terminationProcess.HasExited
     }
     catch {
         if ($null -ne $process -and -not $process.HasExited) {
-            try { $process.Kill($true); $process.WaitForExit() } catch { }
+            try { $process.Kill(); $process.WaitForExit() } catch { }
+        }
+        if ($null -ne $terminationProcess -and -not $terminationProcess.HasExited) {
+            try { $terminationProcess.Kill(); $terminationProcess.WaitForExit() } catch { }
         }
         return $false
     }
     finally {
         if ($null -ne $process) { $process.Dispose() }
+        if ($null -ne $terminationProcess) { $terminationProcess.Dispose() }
+    }
+}
+
+function Get-RuntimeCompatibilityPolicy {
+    # This exact policy implements the governing decision that any stable 7.x
+    # host at or above 7.6 may attempt compatibility checks. Eligibility is not
+    # a support claim; release evidence separately records exact tested patches.
+    [pscustomobject][ordered]@{
+        policyId = 'win-pcinfo.runtime-compatibility/1.0.0'
+        edition = 'Core'
+        stableOnly = $true
+        minimumVersion = [version] '7.6.0'
+        maximumVersionExclusive = [version] '8.0.0'
+        architectures = @('X64', 'X86', 'Arm64')
     }
 }
 
 function Get-ActiveRuntimeFacts {
-    $requiredCommandNames = @(
-        'ConvertFrom-Json', 'ConvertTo-Json', 'Get-Command', 'Import-Module',
-        'Start-Process', 'Stop-Process', 'Wait-Process', 'Test-Json'
-    )
-    $commandsAvailable = $true
-    foreach ($commandName in $requiredCommandNames) {
-        if ($null -eq (Get-Command $commandName -CommandType Cmdlet -ErrorAction SilentlyContinue)) {
-            $commandsAvailable = $false
-            break
-        }
-    }
-
     $version = $PSVersionTable.PSVersion
-    [pscustomobject][ordered]@{
+    $facts = [ordered]@{
         hostPresent = $true
         psEdition = [string] $PSVersionTable.PSEdition
         version = [string] $version
         prereleaseLabel = if ($version.PSObject.Properties['PreReleaseLabel']) { [string] $version.PreReleaseLabel } else { $null }
         architecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
-        requiredCommands = $commandsAvailable
-        validatorProvenance = Test-ValidatorProvenance
-        encoding = Test-Utf8RuntimeBehavior
-        cryptography = Test-CryptographyRuntimeBehavior
-        moduleLoading = Test-LiteralModuleLoading
-        processControl = Test-ProcessControlBehavior
+        requiredCommands = $false
+        validatorProvenance = $false
+        encoding = $false
+        cryptography = $false
+        moduleLoading = $false
+        processControl = $false
     }
+
+    $policy = Get-RuntimeCompatibilityPolicy
+    $isStable = [string]::IsNullOrEmpty([string] $facts.prereleaseLabel) -and $facts.version -notmatch '-'
+    try { $parsedVersion = [version] $facts.version } catch { $parsedVersion = $null }
+    if ($facts.psEdition -ne $policy.edition -or -not $isStable -or $null -eq $parsedVersion -or
+        $parsedVersion -lt $policy.minimumVersion -or $parsedVersion -ge $policy.maximumVersionExclusive -or
+        $facts.architecture -notin $policy.architectures) {
+        return [pscustomobject] $facts
+    }
+
+    $moduleFacts = Get-BuiltInModuleCompatibilityFacts
+    $facts.requiredCommands = $moduleFacts.requiredCommands
+    $facts.validatorProvenance = $moduleFacts.validatorProvenance
+    $facts.moduleLoading = $moduleFacts.moduleLoading
+    $facts.encoding = Test-Utf8RuntimeBehavior
+    $facts.cryptography = Test-CryptographyRuntimeBehavior
+    $facts.processControl = Test-ProcessControlBehavior
+    [pscustomobject] $facts
 }
 
 function Read-RuntimeFixture {
@@ -169,10 +275,12 @@ function Read-RuntimeFixture {
 function Test-RuntimeCompatibility {
     param([Parameter(Mandatory)] $Facts)
 
+    $policy = Get-RuntimeCompatibilityPolicy
+
     $reasonCode = if (-not $Facts.hostPresent) {
         'RUNTIME.HOST_MISSING'
     }
-    elseif ($Facts.psEdition -ne 'Core') {
+    elseif ($Facts.psEdition -ne $policy.edition) {
         'RUNTIME.EDITION_UNSUPPORTED'
     }
     elseif (-not [string]::IsNullOrEmpty([string] $Facts.prereleaseLabel) -or [string] $Facts.version -match '-') {
@@ -183,9 +291,9 @@ function Test-RuntimeCompatibility {
         catch { $parsedVersion = $null }
 
         if ($null -eq $parsedVersion) { 'RUNTIME.VERSION_INVALID' }
-        elseif ($parsedVersion.Major -ne 7) { 'RUNTIME.MAJOR_UNSUPPORTED' }
-        elseif ($parsedVersion -lt [version] '7.6.0') { 'RUNTIME.VERSION_TOO_OLD' }
-        elseif ([string] $Facts.architecture -notin @('X64', 'X86', 'Arm64')) { 'RUNTIME.ARCHITECTURE_UNSUPPORTED' }
+        elseif ($parsedVersion -ge $policy.maximumVersionExclusive -or $parsedVersion.Major -ne 7) { 'RUNTIME.MAJOR_UNSUPPORTED' }
+        elseif ($parsedVersion -lt $policy.minimumVersion) { 'RUNTIME.VERSION_TOO_OLD' }
+        elseif ([string] $Facts.architecture -notin $policy.architectures) { 'RUNTIME.ARCHITECTURE_UNSUPPORTED' }
         elseif (-not $Facts.requiredCommands) { 'RUNTIME.REQUIRED_COMMAND_MISSING' }
         elseif (-not $Facts.validatorProvenance) { 'RUNTIME.VALIDATOR_PROVENANCE_INVALID' }
         elseif (-not $Facts.encoding) { 'RUNTIME.ENCODING_INCOMPATIBLE' }
@@ -198,5 +306,6 @@ function Test-RuntimeCompatibility {
     [pscustomobject][ordered]@{
         Eligible = $reasonCode -eq 'RUNTIME.ELIGIBLE'
         ReasonCode = $reasonCode
+        PolicyId = $policy.policyId
     }
 }

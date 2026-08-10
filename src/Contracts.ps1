@@ -2,15 +2,27 @@ function New-NormalizedRequest {
     param(
         [Parameter(Mandatory)] [string] $ContractVersion,
         [Parameter(Mandatory)] [string] $Profile,
-        [Parameter(Mandatory)] [string] $NetworkMode,
-        [Parameter(Mandatory)] [bool] $AcceptPreparation
+        [Parameter(Mandatory)] [string] $OutputDestination,
+        [Parameter(Mandatory)] [string] $NetworkBehavior,
+        [Parameter(Mandatory)] [string] $UpdateChoice,
+        [Parameter(Mandatory)] [string] $DiagnosticLevel,
+        [Parameter(Mandatory)] $AutomationChoices
     )
 
     [pscustomobject][ordered]@{
         contractVersion = $ContractVersion
         profile = $Profile
-        networkMode = $NetworkMode
-        acceptPreparation = $AcceptPreparation
+        outputDestination = $OutputDestination
+        networkBehavior = $NetworkBehavior
+        updateChoice = $UpdateChoice
+        diagnosticLevel = $DiagnosticLevel
+        automationChoices = [pscustomobject][ordered]@{
+            acceptPreparation = [bool] $AutomationChoices.acceptPreparation
+            allowElevation = [bool] $AutomationChoices.allowElevation
+            allowInstallation = [bool] $AutomationChoices.allowInstallation
+            allowPersistentChanges = [bool] $AutomationChoices.allowPersistentChanges
+            allowStaleRecovery = [bool] $AutomationChoices.allowStaleRecovery
+        }
     }
 }
 
@@ -34,7 +46,9 @@ function New-ProgressRecord {
         [Parameter(Mandatory)] [int] $Sequence,
         [Parameter()] [string] $Phase = 'RuntimeCompatibility',
         [Parameter(Mandatory)] [string] $State,
-        [Parameter(Mandatory)] [string] $MessageId
+        [Parameter(Mandatory)] [string] $MessageId,
+        [Parameter(Mandatory)] [int] $CompletedUnits,
+        [Parameter(Mandatory)] [int] $TotalUnits
     )
 
     [pscustomobject][ordered]@{
@@ -43,6 +57,12 @@ function New-ProgressRecord {
         sequence = $Sequence
         phase = $Phase
         state = $State
+        time = [System.DateTimeOffset]::UtcNow.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
+        completion = [pscustomobject][ordered]@{
+            completedUnits = $CompletedUnits
+            totalUnits = $TotalUnits
+            unit = 'LaunchGate'
+        }
         messageId = $MessageId
     }
 }
@@ -77,6 +97,7 @@ function New-TerminalRecord {
         $terminal.runtime = [pscustomobject][ordered]@{
             eligible = [bool] $RuntimeResult.Eligible
             reasonCode = [string] $RuntimeResult.ReasonCode
+            policyId = [string] $RuntimeResult.PolicyId
         }
     }
 

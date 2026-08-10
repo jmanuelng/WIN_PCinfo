@@ -4,57 +4,16 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Assert-Equal {
-    param(
-        [Parameter(Mandatory)] $Expected,
-        [Parameter(Mandatory)] $Actual,
-        [Parameter(Mandatory)] [string] $Because
-    )
-
-    if ($Expected -ne $Actual) {
-        throw "Expected '$Expected' but received '$Actual': $Because"
-    }
-}
-
-function Invoke-GeneratedApplication {
-    param([Parameter(Mandatory)] [string[]] $Arguments)
-
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = (Get-Command pwsh -CommandType Application).Source
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-
-    foreach ($argument in @('-NoLogo', '-NoProfile', '-File', $script:CandidatePath) + $Arguments) {
-        $null = $startInfo.ArgumentList.Add($argument)
-    }
-
-    $process = [System.Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    $null = $process.Start()
-    $standardOutput = $process.StandardOutput.ReadToEnd()
-    $standardError = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
-
-    $records = @($standardOutput -split "`r?`n" | Where-Object { $_ } | ForEach-Object {
-        $_ | ConvertFrom-Json -Depth 20
-    })
-
-    [pscustomobject]@{
-        ExitCode = $process.ExitCode
-        Records = $records
-        StandardError = $standardError
-    }
-}
-
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$script:CandidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
+$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $script:CandidatePath | Out-Null
+& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
-$guided = Invoke-GeneratedApplication -Arguments @('-Mode', 'Guided')
-$automation = Invoke-GeneratedApplication -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath)
+$guided = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @('-Mode', 'Guided')
+$automation = Invoke-GeneratedApplication -CandidatePath $candidatePath `
+    -Arguments @('-Mode', 'Automation', '-RequestPath', $requestPath)
 
 $guidedTerminal = $guided.Records[-1]
 $automationTerminal = $automation.Records[-1]
@@ -66,5 +25,18 @@ Assert-Equal $guidedTerminal.contractVersion $automationTerminal.contractVersion
 Assert-Equal $guidedTerminal.outcome $automationTerminal.outcome 'both entry adapters use one terminal outcome'
 Assert-Equal $guidedTerminal.reasonCode $automationTerminal.reasonCode 'both entry adapters reach the same engine boundary'
 Assert-Equal $guidedTerminal.requestDigest $automationTerminal.requestDigest 'equivalent guided and automation requests normalize identically'
+Assert-Equal 'SLICE.COLLECTION_NOT_IMPLEMENTED' $guidedTerminal.reasonCode 'the eligible live host reaches preparation without a capability claim'
+Assert-Equal $true $guidedTerminal.runtime.eligible 'the installed stable host passes every live compatibility probe'
+
+for ($index = 0; $index -lt ($guided.Records.Count - 1); $index++) {
+    $guidedProgress = $guided.Records[$index]
+    $automationProgress = $automation.Records[$index]
+    Assert-Equal $guidedProgress.recordType $automationProgress.recordType 'entry paths use the same progress record type'
+    Assert-Equal $guidedProgress.phase $automationProgress.phase 'entry paths use the same progress phases'
+    Assert-Equal $guidedProgress.state $automationProgress.state 'entry paths use the same progress states'
+    Assert-Equal $guidedProgress.messageId $automationProgress.messageId 'entry paths use the same stable progress identities'
+    Assert-Equal $guidedProgress.completion.completedUnits $automationProgress.completion.completedUnits 'entry paths use the same bounded completion'
+    Assert-Equal $guidedProgress.completion.totalUnits $automationProgress.completion.totalUnits 'entry paths use the same completion bound'
+}
 
 Write-Output 'PASS: generated guided and automation launches share request and terminal contracts.'
