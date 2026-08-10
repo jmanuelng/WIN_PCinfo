@@ -28,7 +28,13 @@ param(
     # presence marks the invocation validation-only and can never authorize a
     # collector, real Assessment Record, or Product Capability claim.
     [Parameter(DontShow)]
-    [string] $ContractFixturePath
+    [string] $ContractFixturePath,
+
+    # A release-owned synthetic lifecycle scenario may exercise the approved
+    # synthetic collector, but it cannot select commands, paths, device evidence,
+    # or a production package finalizer. The terminal remains visibly fixture-only.
+    [Parameter(DontShow)]
+    [string] $RunFixturePath
 )
 
 Set-StrictMode -Version Latest

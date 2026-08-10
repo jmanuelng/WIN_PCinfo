@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/run-lifecycle.schema.json",
+  "title": "WIN-PCInfo release run lifecycle policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "activeRunLock", "deadlines", "outcomes", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.run-lifecycle-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.run-lifecycle/1.0.0" },
+    "activeRunLock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "scope", "waitMilliseconds"],
+      "properties": {
+        "name": { "const": "Global\\WINPCInfo-AssessmentRun-v1" },
+        "scope": { "const": "DeviceWide" },
+        "waitMilliseconds": { "const": 0 }
+      }
+    },
+    "deadlines": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "phases", "operation", "process", "progress"],
+      "properties": {
+        "run": { "$ref": "#/$defs/deadline" },
+        "phases": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["phase", "maximumMilliseconds"],
+            "properties": {
+              "phase": { "enum": ["RunControl", "Collection", "Packaging", "Cleanup"] },
+              "maximumMilliseconds": { "type": "integer", "minimum": 1, "maximum": 60000 }
+            }
+          }
+        },
+        "operation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operationId", "maximumMilliseconds", "maximumAttempts"],
+          "properties": {
+            "operationId": { "const": "op:synthetic.windows.os.success" },
+            "maximumMilliseconds": { "type": "integer", "minimum": 1, "maximum": 60000 },
+            "maximumAttempts": { "const": 1 }
+          }
+        },
+        "process": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maximumMilliseconds", "cancellationGraceMilliseconds", "terminationVerificationMilliseconds"],
+          "properties": {
+            "maximumMilliseconds": { "type": "integer", "minimum": 1, "maximum": 60000 },
+            "cancellationGraceMilliseconds": { "type": "integer", "minimum": 1, "maximum": 5000 },
+            "terminationVerificationMilliseconds": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          }
+        },
+        "progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["firstEventMaximumMilliseconds", "heartbeatGapMaximumMilliseconds", "cancellationAcknowledgementMaximumMilliseconds"],
+          "properties": {
+            "firstEventMaximumMilliseconds": { "type": "integer", "minimum": 1, "maximum": 5000 },
+            "heartbeatGapMaximumMilliseconds": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "cancellationAcknowledgementMaximumMilliseconds": { "type": "integer", "minimum": 1, "maximum": 2000 }
+          }
+        }
+      }
+    },
+    "outcomes": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["outcome", "exitCode"],
+        "properties": {
+          "outcome": { "enum": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"] },
+          "exitCode": { "type": "integer", "minimum": 0, "maximum": 255 }
+        }
+      }
+    },
+    "validationScenarios": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": { "enum": ["Timeout", "Cancellation", "PackageUnavailable"] }
+    }
+  },
+  "$defs": {
+    "deadline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximumMilliseconds"],
+      "properties": {
+        "maximumMilliseconds": { "type": "integer", "minimum": 1, "maximum": 60000 }
+      }
+    }
+  }
+}

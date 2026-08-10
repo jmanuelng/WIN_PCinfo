@@ -7,6 +7,7 @@ function Invoke-WinPCInfoLaunch {
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
         [Parameter()] [AllowEmptyString()] [string] $PreparationFixturePath,
         [Parameter()] [AllowEmptyString()] [string] $ContractFixturePath,
+        [Parameter()] [AllowEmptyString()] [string] $RunFixturePath,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
         [Parameter(Mandatory)] $ConvertToJsonCommand,
@@ -31,7 +32,7 @@ function Invoke-WinPCInfoLaunch {
     Invoke-PreparationGate -Request $Request -RuntimeResult $runtime `
         -ArtifactTrustValid $ArtifactTrustValid `
         -Mode $Mode -AcceptPreparation $AcceptPreparation -PreparationFixturePath $PreparationFixturePath `
-        -ContractFixturePath $ContractFixturePath `
+        -ContractFixturePath $ContractFixturePath -RunFixturePath $RunFixturePath `
         -ValidationFixture $ValidationFixture -ConvertFromJsonCommand $ConvertFromJsonCommand `
         -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
 }

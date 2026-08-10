@@ -69,11 +69,13 @@ else {
 
 $usingPreparationFixture = -not [string]::IsNullOrWhiteSpace($PreparationFixturePath)
 $usingContractFixture = -not [string]::IsNullOrWhiteSpace($ContractFixturePath)
+$usingRunFixture = -not [string]::IsNullOrWhiteSpace($RunFixturePath)
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
     -Mode $Mode -AcceptPreparation:$AcceptPreparation -PreparationFixturePath $PreparationFixturePath `
-    -ContractFixturePath $ContractFixturePath `
+    -ContractFixturePath $ContractFixturePath -RunFixturePath $RunFixturePath `
     -ArtifactTrustValid $artifactTrustValid `
-    -ValidationFixture ($usingRuntimeFixture -or $usingPreparationFixture -or $usingContractFixture) `
+    -ValidationFixture ($usingRuntimeFixture -or $usingPreparationFixture -or
+        $usingContractFixture -or $usingRunFixture) `
     -ConvertFromJsonCommand $convertFromJsonCommand -ConvertToJsonCommand $convertToJsonCommand `
     -TestJsonCommand $moduleFacts.testJsonCommand
 exit $applicationExitCode

@@ -1,0 +1,45 @@
+{
+  "kind": "win-pcinfo.run-lifecycle-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.run-lifecycle/1.0.0",
+  "activeRunLock": {
+    "name": "Global\\WINPCInfo-AssessmentRun-v1",
+    "scope": "DeviceWide",
+    "waitMilliseconds": 0
+  },
+  "deadlines": {
+    "run": { "maximumMilliseconds": 60000 },
+    "phases": [
+      { "phase": "RunControl", "maximumMilliseconds": 5000 },
+      { "phase": "Collection", "maximumMilliseconds": 10000 },
+      { "phase": "Packaging", "maximumMilliseconds": 10000 },
+      { "phase": "Cleanup", "maximumMilliseconds": 10000 }
+    ],
+    "operation": {
+      "operationId": "op:synthetic.windows.os.success",
+      "maximumMilliseconds": 5000,
+      "maximumAttempts": 1
+    },
+    "process": {
+      "maximumMilliseconds": 5000,
+      "cancellationGraceMilliseconds": 750,
+      "terminationVerificationMilliseconds": 2000
+    },
+    "progress": {
+      "firstEventMaximumMilliseconds": 5000,
+      "heartbeatGapMaximumMilliseconds": 10000,
+      "cancellationAcknowledgementMaximumMilliseconds": 2000
+    }
+  },
+  "outcomes": [
+    { "outcome": "Completed", "exitCode": 0 },
+    { "outcome": "CompletedWithGaps", "exitCode": 10 },
+    { "outcome": "NotStarted", "exitCode": 20 },
+    { "outcome": "Cancelled", "exitCode": 30 },
+    { "outcome": "TimedOut", "exitCode": 40 },
+    { "outcome": "IntegrityFailed", "exitCode": 50 },
+    { "outcome": "CleanupIncomplete", "exitCode": 60 }
+  ],
+  "validationScenarios": ["Timeout", "Cancellation", "PackageUnavailable"]
+}
