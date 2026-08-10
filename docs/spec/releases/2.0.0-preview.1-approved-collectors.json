@@ -4,9 +4,9 @@
   "release": "2.0.0-preview.1",
   "limits": {
     "maximumArgumentCount": 8,
-    "maximumArgumentUtf8Bytes": 1024,
+    "maximumArgumentUtf8Bytes": 8192,
     "maximumEnvironmentVariables": 4,
-    "maximumEnvironmentValueUtf8Bytes": 1024
+    "maximumEnvironmentValueUtf8Bytes": 8192
   },
   "collectors": [
     {
@@ -19,22 +19,21 @@
         "signerCommonName": "Microsoft Corporation"
       },
       "payload": {
-        "kind": "EmbeddedReleaseSource",
-        "fileName": "SyntheticCollector.ps1",
-        "sha256": "452ca6c2d0d80f57988e0e9fa030307c18e12cbece7d753813bd5432df1da50a"
+        "kind": "EncodedReleaseSource",
+        "encoding": "PowerShellEncodedCommandUtf16Le",
+        "sha256": "1e0bd6ec3ea4dbe51eee1ac32500fde79b84a9899997181e1f8db4213e1e469c"
       },
       "workingBoundary": {
-        "kind": "RunOwnedTemporary",
-        "rootName": "WIN-PCInfo/ProcessSupervisor",
-        "removeBeforeReturn": true
+        "kind": "ActivePowerShellHome",
+        "writesAllowed": false
       },
       "environment": {
         "inheritParent": false,
         "variables": [
           { "name": "SystemRoot", "valueSource": "WindowsDirectory" },
-          { "name": "TEMP", "valueSource": "RunDirectory" },
-          { "name": "TMP", "valueSource": "RunDirectory" },
-          { "name": "WINPCINFO_CANCEL_PATH", "valueSource": "CancellationMarkerPath" }
+          { "name": "WINPCINFO_CANCEL_EVENT", "valueSource": "CancellationEventName" },
+          { "name": "WINPCINFO_OPERATION_MODE", "valueSource": "OperationMode" },
+          { "name": "WINPCINFO_ENCODED_PAYLOAD", "valueSource": "EncodedPayload" }
         ]
       },
       "treeControl": {
@@ -50,15 +49,14 @@
             "-NoLogo",
             "-NoProfile",
             "-NonInteractive",
-            "-File",
-            "{RunOwnedCollectorPath}",
-            "-Operation",
-            "Success"
+            "-EncodedCommand",
+            "{EncodedCollectorPayload}"
           ],
           "deadlineMilliseconds": 5000,
           "standardOutputMaximumBytes": 4096,
           "standardErrorMaximumBytes": 4096,
           "cancellationGraceMilliseconds": 750,
+          "terminationVerificationMilliseconds": 2000,
           "intendedScopeIds": ["scope:synthetic.device.os"],
           "subjectIds": ["subject:synthetic-device:primary"]
         }

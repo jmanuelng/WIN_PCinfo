@@ -22,10 +22,11 @@ The schema-validated [Approved Collector Catalog](spec/releases/2.0.0-preview.1-
 
 - the collector and operation identities;
 - resolution to the literal active `pwsh.exe` under `PSHOME` and a valid Microsoft Authenticode signer;
-- the exact embedded collector-payload digest and fixed argument vector;
+- the exact embedded collector-payload digest and fixed `-EncodedCommand` argument vector;
 - a replacement four-variable environment instead of parent-environment inheritance;
-- a fresh run-owned temporary working boundary and mandatory removal before return;
+- the validated active `PSHOME` as a non-writing working boundary;
 - a five-second operation deadline, separate 4 KiB stdout and stderr limits, and a 750 ms cooperative-cancellation grace interval;
+- a two-second hard-termination verification bound; and
 - suspended startup, mandatory Windows Job Object assignment, kill-on-close behavior, and `NotStarted` when Job assignment is incompatible.
 
 The deterministic build validates this catalog against [its Draft 2020-12 schema](../schemas/approved-collector-catalog.schema.json), embeds the exact canonical bytes in the generated application, and records both resources in the application manifest. The supervisor verifies the embedded digest before policy can influence a launch.
@@ -40,7 +41,7 @@ If Job assignment is incompatible, the safe fallback is no execution: the still-
 
 ## Cancellation and deadlines
 
-Cancellation first creates a fixed marker inside the run-owned boundary. The synthetic collector may observe only that predefined marker path. If it exits within 750 ms, the result records cooperative cancellation. If it ignores the marker, the supervisor terminates the complete Job Object and records hard cancellation. Both paths must acknowledge cancellation within the parent specification's two-second budget and return only after cleanup verification.
+Cancellation signals a run-unique named Windows event whose name is supplied through the fixed environment contract. The synthetic collector may only open that event. If it exits within 750 ms, the result records cooperative cancellation. If it ignores the event, the supervisor terminates the complete Job Object and records hard cancellation. Every wait after a termination request is bounded by two seconds; failure to prove absence becomes `PROCESS.TERMINATION_INCOMPLETE` rather than an infinite wait or a false cleanup claim. Both ordinary cancellation paths acknowledge within the parent specification's two-second budget and return only after cleanup verification.
 
 A deadline is independent of cancellation. Deadline expiry immediately terminates the Job and produces `TimedOut` coverage with `PROCESS.DEADLINE_EXCEEDED`.
 
@@ -52,6 +53,6 @@ Only the approved success payload is decoded as strict UTF-8 and checked against
 
 ## Files and other residue
 
-The supervisor creates only a GUID-named directory below its fixed temporary root, the digest-verified synthetic collector script, and an optional cancellation marker. It creates no scheduled task, service, persistent process, log, or lock. Cleanup resolves and checks the exact owned directory before recursive deletion. Every success, rejection, overflow, timeout, cancellation, child-process, and incompatibility fixture verifies the owned process tree and temporary boundary absent before return.
+The supervisor creates no script file or working directory. The digest-verified release source is encoded directly into the fixed PowerShell argument, closing the validate-then-execute file-replacement window. The active `PSHOME` is validated as the working directory and treated as non-writing. The run-unique cancellation event disappears when the last owned handle closes. No scheduled task, service, persistent process, marker, log, or lock is created. Every success, rejection, overflow, timeout, cancellation, child-process, and incompatibility fixture verifies the owned process tree and named event absent before return.
 
 For the public-safe validation matrix and commands, see [Issue #41 validation evidence](validation/issue-41-process-supervisor.md).

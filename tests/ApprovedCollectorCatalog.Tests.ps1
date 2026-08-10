@@ -27,8 +27,10 @@ Assert-CatalogEqual 'Microsoft Corporation' $catalog.collectors[0].executable.si
     'the approved publisher identity is explicit'
 Assert-CatalogEqual $false $catalog.collectors[0].environment.inheritParent `
     'the collector cannot inherit ambient secrets or unbounded environment values'
-Assert-CatalogEqual 'RunOwnedTemporary' $catalog.collectors[0].workingBoundary.kind `
-    'the working directory is created and owned by the supervisor'
+Assert-CatalogEqual 'ActivePowerShellHome' $catalog.collectors[0].workingBoundary.kind `
+    'the working directory resolves to the validated active PowerShell installation'
+Assert-CatalogEqual 'EncodedReleaseSource' $catalog.collectors[0].payload.kind `
+    'the collector payload crosses no writable script-path boundary'
 Assert-CatalogEqual 'WindowsJobObjectRequired' $catalog.collectors[0].treeControl.mode `
     'the release does not claim a root-only process fallback'
 Assert-CatalogEqual 'NotStarted' $catalog.collectors[0].treeControl.incompatibleDisposition `
@@ -46,6 +48,8 @@ Assert-CatalogEqual 4096 $operation.standardOutputMaximumBytes 'stdout has an in
 Assert-CatalogEqual 4096 $operation.standardErrorMaximumBytes 'stderr has an independent byte limit'
 Assert-CatalogEqual 750 $operation.cancellationGraceMilliseconds `
     'cooperative cancellation has a bounded grace interval before hard termination'
+Assert-CatalogEqual 2000 $operation.terminationVerificationMilliseconds `
+    'hard termination verification cannot wait indefinitely'
 if ($catalog.collectors[0].payload.sha256 -notmatch '^[0-9a-f]{64}$') {
     throw 'The staged synthetic collector payload needs an exact release identity.'
 }

@@ -40,11 +40,13 @@ Assert-SupervisorEqual 'Completed' $result.Supervision.outcome `
     'the process result reports a completed collector attempt'
 Assert-SupervisorEqual 'WindowsJobObject' $result.Supervision.treeControlMode `
     'compatible execution starts suspended and enters the run-owned Job Object before running'
+Assert-SupervisorEqual 'ActivePowerShellHome' $result.Supervision.workingBoundaryKind `
+    'the collector uses the validated release-defined non-writing working boundary'
 Assert-SupervisorEqual $expectedCatalogDigest $result.Supervision.policyDigest `
     'the result binds the exact canonical release collector catalog'
-Assert-SupervisorEqual '452ca6c2d0d80f57988e0e9fa030307c18e12cbece7d753813bd5432df1da50a' `
+Assert-SupervisorEqual '1e0bd6ec3ea4dbe51eee1ac32500fde79b84a9899997181e1f8db4213e1e469c' `
     $result.Supervision.payloadDigest `
-    'the staged collector script matches the release-owned payload identity'
+    'the encoded collector source matches the release-owned payload identity'
 Assert-SupervisorEqual $false $result.Supervision.standardOutput.exceeded `
     'standard output stays within its independent byte bound'
 Assert-SupervisorEqual $false $result.Supervision.standardError.exceeded `
@@ -52,7 +54,7 @@ Assert-SupervisorEqual $false $result.Supervision.standardError.exceeded `
 Assert-SupervisorEqual $true $result.Supervision.completeOwnedTreeAbsent `
     'the complete owned process tree is absent before the result is returned'
 Assert-SupervisorEqual $true $result.Supervision.temporaryArtifactsAbsent `
-    'the run-owned collector script, cancellation marker, and working boundary are removed'
+    'the run-owned cancellation event is absent and the collector created no file artifact'
 
 $wrongExecutable = Invoke-ApprovedCollectorProcess `
     -OperationId 'fixture:synthetic.wrong-executable'
@@ -65,7 +67,7 @@ Assert-SupervisorEqual $false $wrongExecutable.Supervision.processStarted `
 Assert-SupervisorEqual $true $wrongExecutable.Supervision.completeOwnedTreeAbsent `
     'a rejected executable leaves no owned process tree'
 Assert-SupervisorEqual $true $wrongExecutable.Supervision.temporaryArtifactsAbsent `
-    'wrong-executable rejection removes the run-owned staging boundary'
+    'wrong-executable rejection releases the run-owned cancellation event'
 
 $invalidArgument = Invoke-ApprovedCollectorProcess `
     -OperationId 'fixture:synthetic.invalid-argument'
@@ -130,7 +132,7 @@ finally {
 Assert-SupervisorEqual 'Cancelled' $cooperativelyCancelled.Supervision.outcome `
     'cooperative cancellation is distinct from timeout or failure'
 Assert-SupervisorEqual 'PROCESS.CANCELLED_COOPERATIVELY' $cooperativelyCancelled.Supervision.reasonCode `
-    'the fixed marker protocol reports a stable cooperative reason'
+    'the fixed named-event protocol reports a stable cooperative reason'
 Assert-SupervisorEqual 'Cooperative' $cooperativelyCancelled.Supervision.terminationMode `
     'the result does not claim hard termination when the collector cooperated'
 Assert-SupervisorEqual 'Cancelled' $cooperativelyCancelled.Coverage[0].state `
@@ -138,7 +140,7 @@ Assert-SupervisorEqual 'Cancelled' $cooperativelyCancelled.Coverage[0].state `
 Assert-SupervisorEqual $true $cooperativelyCancelled.Supervision.completeOwnedTreeAbsent `
     'cooperative cancellation still proves the complete Job Object tree absent'
 Assert-SupervisorEqual $true $cooperativelyCancelled.Supervision.temporaryArtifactsAbsent `
-    'the cooperative marker and working boundary are removed'
+    'the cooperative cancellation event is removed'
 if ($cooperativeWatch.ElapsedMilliseconds -gt 2000) {
     throw "Cooperative cancellation acknowledgement took $($cooperativeWatch.ElapsedMilliseconds) ms."
 }
@@ -164,7 +166,7 @@ Assert-SupervisorEqual 'Hard' $hardCancelled.Supervision.terminationMode `
 Assert-SupervisorEqual $true $hardCancelled.Supervision.completeOwnedTreeAbsent `
     'hard termination proves the complete Job Object tree absent'
 Assert-SupervisorEqual $true $hardCancelled.Supervision.temporaryArtifactsAbsent `
-    'the hard-cancel marker and working boundary are removed'
+    'the hard-cancel event is removed'
 if ($hardWatch.ElapsedMilliseconds -gt 2000) {
     throw "Hard cancellation acknowledgement took $($hardWatch.ElapsedMilliseconds) ms."
 }
@@ -179,7 +181,7 @@ if ($childProcess.Supervision.peakActiveProcesses -lt 2) {
 Assert-SupervisorEqual $true $childProcess.Supervision.completeOwnedTreeAbsent `
     'the supervisor removes a descendant that outlives the collector root'
 Assert-SupervisorEqual $true $childProcess.Supervision.temporaryArtifactsAbsent `
-    'child-process cleanup releases the staged script and working boundary'
+    'child-process cleanup releases the run-owned cancellation event'
 
 $incompatibleChild = Invoke-ApprovedCollectorProcess `
     -OperationId 'fixture:synthetic.incompatible-child'
@@ -194,6 +196,13 @@ Assert-SupervisorEqual 'IncompatibleNoLaunch' $incompatibleChild.Supervision.tre
 Assert-SupervisorEqual $true $incompatibleChild.Supervision.completeOwnedTreeAbsent `
     'the incompatible suspended process is absent before return'
 Assert-SupervisorEqual $true $incompatibleChild.Supervision.temporaryArtifactsAbsent `
-    'incompatibility cleanup removes the staged working boundary'
+    'incompatibility cleanup releases the run-owned cancellation event'
+
+$legacyTemporaryRoot = [System.IO.Path]::Combine(
+    [System.IO.Path]::GetTempPath(), 'WIN-PCInfo', 'ProcessSupervisor'
+)
+if ([System.IO.Directory]::Exists($legacyTemporaryRoot)) {
+    throw 'The Process Supervisor left a temporary product root after its fixture matrix.'
+}
 
 Write-Output 'PASS: the exported Process Supervisor passed all nine required process-contract fixtures.'

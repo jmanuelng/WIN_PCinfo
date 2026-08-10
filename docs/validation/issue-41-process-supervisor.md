@@ -12,17 +12,17 @@ The interface accepts one closed operation ID plus an optional cancellation toke
 
 | Fixture | Expected terminal process state | Safety evidence |
 | --- | --- | --- |
-| success | `Completed` | Microsoft-signed literal host, exact staged payload, normalized multilingual observation, separate bounded pipes, Job tree absent |
+| success | `Completed` | Microsoft-signed literal host, exact encoded payload, normalized multilingual observation, separate bounded pipes, Job tree absent |
 | wrong-executable | `NotStarted` / `PROCESS.EXECUTABLE_IDENTITY_INVALID` | no process launch and no path disclosure |
 | invalid-argument | `NotStarted` / `PROCESS.ARGUMENT_INVALID` | secret-shaped argument rejected before native launch |
 | excess-output | `Failed` / `PROCESS.OUTPUT_LIMIT_EXCEEDED` | stdout and stderr independently exceed 4 KiB, raw text absent, Job terminated |
 | timeout | `TimedOut` / `PROCESS.DEADLINE_EXCEEDED` | 200 ms synthetic deadline and complete tree termination |
-| cooperative-cancel | `Cancelled` / `PROCESS.CANCELLED_COOPERATIVELY` | fixed marker protocol, bounded grace, no hard-termination claim |
-| hard-cancel | `Cancelled` / `PROCESS.CANCELLED_HARD` | ignored marker escalates to Job termination within two seconds |
+| cooperative-cancel | `Cancelled` / `PROCESS.CANCELLED_COOPERATIVELY` | fixed named-event protocol, bounded grace, no hard-termination claim |
+| hard-cancel | `Cancelled` / `PROCESS.CANCELLED_HARD` | ignored event escalates to bounded Job termination |
 | child-process | `Completed` | kernel accounting observes at least two Job members and removes the surviving child |
 | incompatible-child | `NotStarted` / `PROCESS.JOB_INCOMPATIBLE` | suspended candidate never executes; explicit `IncompatibleNoLaunch` fallback |
 
-Every row also asserts the complete owned tree and run-owned temporary boundary absent before return. The fixed synthetic script creates no task, service, persistent lock, or other process artifact.
+Every row also asserts the complete owned tree and run-owned named event absent before return. The encoded synthetic collector creates no file, task, service, persistent lock, or other process artifact.
 
 ## Validation commands
 
@@ -45,8 +45,8 @@ These tests require Windows because they exercise real Windows Job Objects, susp
 ## Threat-boundary summary
 
 - Caller-controlled paths, commands, scripts, arguments, environment maps, working directories, output limits, and deadlines do not cross the interface.
-- The release catalog and payload have exact SHA-256 identities; the executable has literal active-host resolution plus valid Microsoft Authenticode identity.
+- The release catalog and encoded payload have exact SHA-256 identities; the executable has literal active-host resolution plus valid Microsoft Authenticode identity. No writable script path exists between identity validation and execution.
 - Parent environment inheritance is disabled, preventing ambient credentials, tokens, proxy settings, or module paths from crossing into the collector.
 - Raw untrusted output is bounded, privately normalized only for the approved success shape, never returned or hashed, and cleared after use.
-- Job incompatibility fails before execution. No root-only fallback can claim complete tree control.
-- Cleanup targets only a freshly generated GUID child of the fixed supervisor temporary root and is verified before the result returns.
+- Job incompatibility fails before execution. No root-only fallback can claim complete tree control, and every post-termination wait has a release-owned finite bound.
+- The working boundary is the validated active `PSHOME`, where collector writes are prohibited; the only run-owned coordination object is a named event verified absent before return.

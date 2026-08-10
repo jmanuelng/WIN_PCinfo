@@ -38,24 +38,17 @@ function Get-ApprovedCollectorCatalog {
 
         $collector = @($catalog.collectors)[0]
         $operation = @($collector.operations)[0]
-        $expectedFixtures = @(
-            'wrong-executable', 'invalid-argument', 'excess-output', 'timeout',
-            'cooperative-cancel', 'hard-cancel', 'child-process', 'incompatible-child'
-        )
-        $actualFixtures = @($catalog.validationFixtures.fixtureId)
         if ($catalog.kind -ne 'win-pcinfo.approved-collector-catalog' -or
             $catalog.contractVersion -ne '1.0.0' -or $catalog.release -ne '2.0.0-preview.1' -or
             @($catalog.collectors).Count -ne 1 -or
             $collector.collectorId -ne 'collector:synthetic.windows.os' -or
             $collector.executable.resolver -ne 'ActivePowerShellHost' -or
-            $collector.workingBoundary.kind -ne 'RunOwnedTemporary' -or
+            $collector.workingBoundary.kind -ne 'ActivePowerShellHome' -or
             $collector.environment.inheritParent -ne $false -or
             $collector.treeControl.mode -ne 'WindowsJobObjectRequired' -or
             $collector.treeControl.incompatibleDisposition -ne 'NotStarted' -or
             @($collector.operations).Count -ne 1 -or
-            $operation.operationId -ne 'op:synthetic.windows.os.success' -or
-            @($actualFixtures | Sort-Object -Unique).Count -ne $expectedFixtures.Count -or
-            @($expectedFixtures | Where-Object { $_ -notin $actualFixtures }).Count -gt 0) {
+            $operation.operationId -ne 'op:synthetic.windows.os.success') {
             throw 'Collector catalog semantic closure failed.'
         }
 
@@ -100,11 +93,31 @@ using Microsoft.Win32.SafeHandles;
 
 namespace WinPCInfo.ProcessSupervisor
 {
+    public enum NativeFailureStage
+    {
+        None,
+        CreateJobObject,
+        ConfigureJobObject,
+        CreateOutputPipes,
+        CreateProcess,
+        AssignJobObjectIncompatible,
+        AssignJobObject,
+        ResumeProcess,
+        WaitForProcess,
+        OutputLimit,
+        CooperativeCancellation,
+        HardCancellation,
+        Deadline,
+        TerminationIncomplete
+    }
+
+    public enum NativeCancellationMode { None, Cooperative, Hard }
+
     public sealed class NativeRunResult
     {
         public bool Started { get; set; }
         public int ExitCode { get; set; }
-        public string FailureStage { get; set; }
+        public NativeFailureStage FailureStage { get; set; }
         public int NativeError { get; set; }
         public byte[] StandardOutput { get; set; }
         public byte[] StandardError { get; set; }
@@ -114,7 +127,7 @@ namespace WinPCInfo.ProcessSupervisor
         public bool StandardErrorExceeded { get; set; }
         public bool CompleteOwnedTreeAbsent { get; set; }
         public int PeakActiveProcesses { get; set; }
-        public string CancellationMode { get; set; }
+        public NativeCancellationMode CancellationMode { get; set; }
     }
 
     internal sealed class CaptureResult
@@ -139,7 +152,6 @@ namespace WinPCInfo.ProcessSupervisor
         private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
         private const uint WAIT_OBJECT_0 = 0;
         private const uint WAIT_TIMEOUT = 258;
-        private const uint INFINITE = 0xffffffff;
         private const int JobObjectBasicAccountingInformation = 1;
         private const int JobObjectExtendedLimitInformation = 9;
 
@@ -341,17 +353,32 @@ namespace WinPCInfo.ProcessSupervisor
             finally { Marshal.FreeHGlobal(information); }
         }
 
+        private static bool TerminateProcessWithin(IntPtr process, int verificationMilliseconds)
+        {
+            bool submitted = TerminateProcess(process, 0xee);
+            return submitted && WaitForSingleObject(process, (uint)verificationMilliseconds) == WAIT_OBJECT_0;
+        }
+
+        private static bool TerminateJobWithin(
+            IntPtr job, IntPtr rootProcess, int verificationMilliseconds)
+        {
+            bool submitted = TerminateJobObject(job, 0xee);
+            return submitted &&
+                WaitForSingleObject(rootProcess, (uint)verificationMilliseconds) == WAIT_OBJECT_0;
+        }
+
         public static NativeRunResult Run(
             string executable, string[] arguments, string workingDirectory,
             IDictionary<string, string> environment, int deadlineMilliseconds,
             int standardOutputLimit, int standardErrorLimit,
             System.Threading.CancellationToken cancellationToken,
-            string cancellationMarkerPath, int cancellationGraceMilliseconds,
+            System.Threading.EventWaitHandle cancellationEvent,
+            int cancellationGraceMilliseconds, int terminationVerificationMilliseconds,
             bool simulateJobIncompatible)
         {
-            var result = new NativeRunResult { FailureStage = "None", ExitCode = -1,
+            var result = new NativeRunResult { FailureStage = NativeFailureStage.None, ExitCode = -1,
                 StandardOutput = Array.Empty<byte>(), StandardError = Array.Empty<byte>(),
-                CancellationMode = "None" };
+                CancellationMode = NativeCancellationMode.None };
             IntPtr job = IntPtr.Zero, stdoutRead = IntPtr.Zero, stdoutWrite = IntPtr.Zero;
             IntPtr stderrRead = IntPtr.Zero, stderrWrite = IntPtr.Zero, environmentBlock = IntPtr.Zero;
             PROCESS_INFORMATION process = new PROCESS_INFORMATION();
@@ -359,7 +386,7 @@ namespace WinPCInfo.ProcessSupervisor
             try
             {
                 job = CreateJobObject(IntPtr.Zero, null);
-                if (job == IntPtr.Zero) { result.FailureStage = "CreateJobObject"; result.NativeError = Marshal.GetLastWin32Error(); return result; }
+                if (job == IntPtr.Zero) { result.FailureStage = NativeFailureStage.CreateJobObject; result.NativeError = Marshal.GetLastWin32Error(); return result; }
 
                 var extended = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
                 extended.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -370,7 +397,7 @@ namespace WinPCInfo.ProcessSupervisor
                     Marshal.StructureToPtr(extended, extendedPointer, false);
                     if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation,
                         extendedPointer, (uint)extendedSize))
-                    { result.FailureStage = "ConfigureJobObject"; result.NativeError = Marshal.GetLastWin32Error(); return result; }
+                    { result.FailureStage = NativeFailureStage.ConfigureJobObject; result.NativeError = Marshal.GetLastWin32Error(); return result; }
                 }
                 finally { Marshal.FreeHGlobal(extendedPointer); }
 
@@ -379,7 +406,7 @@ namespace WinPCInfo.ProcessSupervisor
                     !SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0) ||
                     !CreatePipe(out stderrRead, out stderrWrite, ref attributes, 0) ||
                     !SetHandleInformation(stderrRead, HANDLE_FLAG_INHERIT, 0))
-                { result.FailureStage = "CreateOutputPipes"; result.NativeError = Marshal.GetLastWin32Error(); return result; }
+                { result.FailureStage = NativeFailureStage.CreateOutputPipes; result.NativeError = Marshal.GetLastWin32Error(); return result; }
 
                 var startup = new STARTUPINFO { cb = Marshal.SizeOf<STARTUPINFO>(),
                     dwFlags = STARTF_USESTDHANDLES, hStdInput = IntPtr.Zero,
@@ -390,7 +417,7 @@ namespace WinPCInfo.ProcessSupervisor
                 uint flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
                 if (!CreateProcess(executable, commandLine, IntPtr.Zero, IntPtr.Zero, true, flags,
                     environmentBlock, workingDirectory, ref startup, out process))
-                { result.FailureStage = "CreateProcess"; result.NativeError = Marshal.GetLastWin32Error(); return result; }
+                { result.FailureStage = NativeFailureStage.CreateProcess; result.NativeError = Marshal.GetLastWin32Error(); return result; }
 
                 if (simulateJobIncompatible)
                 {
@@ -398,19 +425,22 @@ namespace WinPCInfo.ProcessSupervisor
                     // assignment-incompatible branch while the process remains
                     // suspended. Terminating this never-resumed root is the safe
                     // fallback; root-only supervision would overstate control.
-                    result.FailureStage = "AssignJobObjectIncompatible";
-                    TerminateProcess(process.hProcess, 0xee);
-                    WaitForSingleObject(process.hProcess, INFINITE);
-                    result.CompleteOwnedTreeAbsent = true;
+                    result.FailureStage = NativeFailureStage.AssignJobObjectIncompatible;
+                    result.CompleteOwnedTreeAbsent = TerminateProcessWithin(
+                        process.hProcess, terminationVerificationMilliseconds);
+                    if (!result.CompleteOwnedTreeAbsent)
+                        result.FailureStage = NativeFailureStage.TerminationIncomplete;
                     return result;
                 }
 
                 if (!AssignProcessToJobObject(job, process.hProcess))
                 {
-                    result.FailureStage = "AssignJobObject";
+                    result.FailureStage = NativeFailureStage.AssignJobObject;
                     result.NativeError = Marshal.GetLastWin32Error();
-                    TerminateProcess(process.hProcess, 0xee);
-                    WaitForSingleObject(process.hProcess, INFINITE);
+                    result.CompleteOwnedTreeAbsent = TerminateProcessWithin(
+                        process.hProcess, terminationVerificationMilliseconds);
+                    if (!result.CompleteOwnedTreeAbsent)
+                        result.FailureStage = NativeFailureStage.TerminationIncomplete;
                     return result;
                 }
 
@@ -424,9 +454,10 @@ namespace WinPCInfo.ProcessSupervisor
 
                 if (ResumeThread(process.hThread) == UInt32.MaxValue)
                 {
-                    result.FailureStage = "ResumeProcess";
+                    result.FailureStage = NativeFailureStage.ResumeProcess;
                     result.NativeError = Marshal.GetLastWin32Error();
-                    TerminateJobObject(job, 0xee);
+                    if (!TerminateJobWithin(job, process.hProcess, terminationVerificationMilliseconds))
+                        result.FailureStage = NativeFailureStage.TerminationIncomplete;
                 }
                 else
                 {
@@ -443,25 +474,25 @@ namespace WinPCInfo.ProcessSupervisor
                         {
                             if (cancellationRequested)
                             {
-                                result.FailureStage = "CooperativeCancellation";
-                                result.CancellationMode = "Cooperative";
+                                result.FailureStage = NativeFailureStage.CooperativeCancellation;
+                                result.CancellationMode = NativeCancellationMode.Cooperative;
                             }
                             break;
                         }
                         if (wait != WAIT_TIMEOUT)
                         {
-                            result.FailureStage = "WaitForProcess";
+                            result.FailureStage = NativeFailureStage.WaitForProcess;
                             result.NativeError = Marshal.GetLastWin32Error();
-                            TerminateJobObject(job, 0xee);
-                            WaitForSingleObject(process.hProcess, INFINITE);
+                            if (!TerminateJobWithin(job, process.hProcess, terminationVerificationMilliseconds))
+                                result.FailureStage = NativeFailureStage.TerminationIncomplete;
                             break;
                         }
 
                         if (stdoutState.Exceeded || stderrState.Exceeded)
                         {
-                            result.FailureStage = "OutputLimit";
-                            TerminateJobObject(job, 0xee);
-                            WaitForSingleObject(process.hProcess, INFINITE);
+                            result.FailureStage = NativeFailureStage.OutputLimit;
+                            if (!TerminateJobWithin(job, process.hProcess, terminationVerificationMilliseconds))
+                                result.FailureStage = NativeFailureStage.TerminationIncomplete;
                             break;
                         }
 
@@ -470,29 +501,29 @@ namespace WinPCInfo.ProcessSupervisor
                         {
                             cancellationRequested = true;
                             cancellationDeadline = now.AddMilliseconds(cancellationGraceMilliseconds);
-                            try { File.WriteAllText(cancellationMarkerPath, "cancel"); }
+                            try { cancellationEvent.Set(); }
                             catch
                             {
-                                result.FailureStage = "HardCancellation";
-                                result.CancellationMode = "Hard";
-                                TerminateJobObject(job, 0xee);
-                                WaitForSingleObject(process.hProcess, INFINITE);
+                                result.FailureStage = NativeFailureStage.HardCancellation;
+                                result.CancellationMode = NativeCancellationMode.Hard;
+                                if (!TerminateJobWithin(job, process.hProcess, terminationVerificationMilliseconds))
+                                    result.FailureStage = NativeFailureStage.TerminationIncomplete;
                                 break;
                             }
                         }
                         if (cancellationRequested && now >= cancellationDeadline)
                         {
-                            result.FailureStage = "HardCancellation";
-                            result.CancellationMode = "Hard";
-                            TerminateJobObject(job, 0xee);
-                            WaitForSingleObject(process.hProcess, INFINITE);
+                            result.FailureStage = NativeFailureStage.HardCancellation;
+                            result.CancellationMode = NativeCancellationMode.Hard;
+                            if (!TerminateJobWithin(job, process.hProcess, terminationVerificationMilliseconds))
+                                result.FailureStage = NativeFailureStage.TerminationIncomplete;
                             break;
                         }
                         if (!cancellationRequested && now >= deadline)
                         {
-                            result.FailureStage = "Deadline";
-                            TerminateJobObject(job, 0xee);
-                            WaitForSingleObject(process.hProcess, INFINITE);
+                            result.FailureStage = NativeFailureStage.Deadline;
+                            if (!TerminateJobWithin(job, process.hProcess, terminationVerificationMilliseconds))
+                                result.FailureStage = NativeFailureStage.TerminationIncomplete;
                             break;
                         }
                     }
@@ -506,7 +537,8 @@ namespace WinPCInfo.ProcessSupervisor
                 // not background services. The accounting query is the kernel's
                 // proof that every process assigned to this owned tree is gone.
                 TerminateJobObject(job, 0xee);
-                for (int attempt = 0; attempt < 200; attempt++)
+                int accountingAttempts = Math.Max(1, terminationVerificationMilliseconds / 10);
+                for (int attempt = 0; attempt < accountingAttempts; attempt++)
                 {
                     uint active = ActiveProcessCount(job);
                     if (active != UInt32.MaxValue) peakActive = Math.Max(peakActive, (int)active);
@@ -543,12 +575,11 @@ namespace WinPCInfo.ProcessSupervisor
 }
 
 function Get-SyntheticCollectorScriptBytes {
-    $script = @'
-[CmdletBinding()]
-param([Parameter(Mandatory)][string] $Operation)
+$script = @'
 $ErrorActionPreference = 'Stop'
 [System.Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 [System.Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$Operation = [System.Environment]::GetEnvironmentVariable('WINPCINFO_OPERATION_MODE')
 if ($Operation -eq 'Success') {
     [System.Console]::Out.Write('{"displayName":"WIN-PCInfo synthétique 日本語 العربية"}')
     [System.Console]::Error.Write('synthetic collector diagnostic')
@@ -564,10 +595,14 @@ if ($Operation -eq 'Timeout') {
     exit 0
 }
 if ($Operation -eq 'CooperativeCancel') {
-    $marker = [System.Environment]::GetEnvironmentVariable('WINPCINFO_CANCEL_PATH')
-    if ([string]::IsNullOrWhiteSpace($marker)) { exit 65 }
-    while (-not [System.IO.File]::Exists($marker)) {
-        [System.Threading.Thread]::Sleep(25)
+    $eventName = [System.Environment]::GetEnvironmentVariable('WINPCINFO_CANCEL_EVENT')
+    if ([string]::IsNullOrWhiteSpace($eventName)) { exit 65 }
+    $cancelEvent = [System.Threading.EventWaitHandle]::OpenExisting($eventName)
+    try {
+        while (-not $cancelEvent.WaitOne(25)) { }
+    }
+    finally {
+        $cancelEvent.Dispose()
     }
     exit 75
 }
@@ -579,12 +614,13 @@ if ($Operation -eq 'ChildProcess') {
     $childInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $childInfo.FileName = [System.IO.Path]::Combine($PSHOME, 'pwsh.exe')
     $childInfo.UseShellExecute = $false
+    $encodedPayload = [System.Environment]::GetEnvironmentVariable('WINPCINFO_ENCODED_PAYLOAD')
     foreach ($argument in @(
-        '-NoLogo', '-NoProfile', '-NonInteractive', '-File', $PSCommandPath,
-        '-Operation', 'ChildLeaf'
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $encodedPayload
     )) {
         $null = $childInfo.ArgumentList.Add($argument)
     }
+    $childInfo.Environment['WINPCINFO_OPERATION_MODE'] = 'ChildLeaf'
     $child = [System.Diagnostics.Process]::Start($childInfo)
     try {
         [System.Threading.Thread]::Sleep(300)
@@ -612,74 +648,35 @@ function Get-Sha256ForSupervisorBytes {
     ).ToLowerInvariant()
 }
 
-function New-SupervisorNotStartedResult {
-    param(
-        [Parameter(Mandatory)] [string] $OperationId,
-        [Parameter(Mandatory)] [string] $RunId,
-        [Parameter(Mandatory)] [System.DateTimeOffset] $StartedAt,
-        [Parameter(Mandatory)] [string] $ReasonCode,
-        [Parameter()] [AllowEmptyString()] [string] $PolicyDigest = '',
-        [Parameter()] [AllowEmptyString()] [string] $PayloadDigest = ''
-    )
+function Get-NativeSupervisorReasonCode {
+    param([Parameter(Mandatory)] $NativeResult)
 
-    $coverageId = "coverage:synthetic-device-os:$RunId"
-    $diagnosticId = "diagnostic:process-supervisor:$RunId"
-    [pscustomobject][ordered]@{
-        Envelope = [pscustomobject][ordered]@{
-            envelopeId = "envelope:synthetic-windows-os:$RunId"
-            collectorId = 'collector:synthetic.windows.os'
-            collectorVersion = '1.0.0'
-            operationId = $OperationId
-            intendedScopeIds = @('scope:synthetic.device.os')
-            subjectIds = @('subject:synthetic-device:primary')
-            startedAt = $StartedAt.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
-            completedAt = [System.DateTimeOffset]::UtcNow.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
-            executionContext = 'Synthetic'
-            attempts = 1
-            observationIds = @()
-            coverageIds = @($coverageId)
-            diagnosticIds = @($diagnosticId)
-        }
-        Observations = @()
-        Coverage = @([pscustomobject][ordered]@{
-            coverageId = $coverageId
-            scopeId = 'scope:synthetic.device.os'
-            state = 'NotAttempted'
-            reasonCode = $ReasonCode
-            observationIds = @()
-            diagnosticIds = @($diagnosticId)
-        })
-        Diagnostics = @([pscustomobject][ordered]@{
-            diagnosticId = $diagnosticId
-            phase = 'Collection'
-            reasonCode = $ReasonCode
-            messageId = 'process.supervisor.not-started'
-        })
-        Supervision = [pscustomobject][ordered]@{
-            outcome = 'NotStarted'
-            reasonCode = $ReasonCode
-            policyDigest = $PolicyDigest
-            payloadDigest = $PayloadDigest
-            processStarted = $false
-            treeControlMode = 'NoLaunch'
-            standardOutput = [pscustomobject][ordered]@{
-                byteCount = 0
-                maximumBytes = 4096
-                exceeded = $false
-            }
-            standardError = [pscustomobject][ordered]@{
-                byteCount = 0
-                maximumBytes = 4096
-                exceeded = $false
-            }
-            peakActiveProcesses = 0
-            completeOwnedTreeAbsent = $true
-            temporaryArtifactsAbsent = $false
-        }
+    if ($NativeResult.StandardOutputExceeded -or $NativeResult.StandardErrorExceeded) {
+        return 'PROCESS.OUTPUT_LIMIT_EXCEEDED'
     }
+    if ($NativeResult.FailureStage -eq
+        [WinPCInfo.ProcessSupervisor.NativeFailureStage]::AssignJobObjectIncompatible) {
+        return 'PROCESS.JOB_INCOMPATIBLE'
+    }
+    if ($NativeResult.FailureStage -eq
+        [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete) {
+        return 'PROCESS.TERMINATION_INCOMPLETE'
+    }
+    if ($NativeResult.FailureStage -eq [WinPCInfo.ProcessSupervisor.NativeFailureStage]::Deadline) {
+        return 'PROCESS.DEADLINE_EXCEEDED'
+    }
+    if ($NativeResult.FailureStage -eq
+        [WinPCInfo.ProcessSupervisor.NativeFailureStage]::CooperativeCancellation) {
+        return 'PROCESS.CANCELLED_COOPERATIVELY'
+    }
+    if ($NativeResult.FailureStage -eq
+        [WinPCInfo.ProcessSupervisor.NativeFailureStage]::HardCancellation) {
+        return 'PROCESS.CANCELLED_HARD'
+    }
+    ''
 }
 
-function New-SupervisorAttemptFailureResult {
+function New-ProcessSupervisorResult {
     param(
         [Parameter(Mandatory)] [string] $OperationId,
         [Parameter(Mandatory)] [string] $RunId,
@@ -687,15 +684,62 @@ function New-SupervisorAttemptFailureResult {
         [Parameter(Mandatory)] [string] $Outcome,
         [Parameter(Mandatory)] [string] $CoverageState,
         [Parameter(Mandatory)] [string] $ReasonCode,
-        [Parameter(Mandatory)] $NativeResult,
-        [Parameter(Mandatory)] [string] $PolicyDigest,
-        [Parameter(Mandatory)] [string] $PayloadDigest,
+        [Parameter()] [AllowEmptyString()] [string] $CoverageReasonCode = '',
+        [Parameter()] [AllowEmptyString()] [string] $PolicyDigest = '',
+        [Parameter()] [AllowEmptyString()] [string] $PayloadDigest = '',
         [Parameter(Mandatory)] [int] $StandardOutputMaximumBytes,
-        [Parameter(Mandatory)] [int] $StandardErrorMaximumBytes
+        [Parameter(Mandatory)] [int] $StandardErrorMaximumBytes,
+        [Parameter()] $NativeResult,
+        [Parameter()] [AllowEmptyString()] [string] $ObservationValue
     )
 
     $coverageId = "coverage:synthetic-device-os:$RunId"
     $diagnosticId = "diagnostic:process-supervisor:$RunId"
+    $hasObservation = $PSBoundParameters.ContainsKey('ObservationValue')
+    $observationId = if ($hasObservation) { "observation:synthetic-os-name:$RunId" } else { '' }
+    $hasDiagnostic = -not $hasObservation
+    if (-not $CoverageReasonCode) {
+        $CoverageReasonCode = $ReasonCode
+    }
+    $observationIds = if ($hasObservation) { @($observationId) } else { @() }
+    $diagnosticIds = if ($hasDiagnostic) { @($diagnosticId) } else { @() }
+    $observations = if ($hasObservation) {
+        @([pscustomobject][ordered]@{
+            observationId = $observationId
+            fieldId = 'field:device.os.display-name'
+            subjectId = 'subject:synthetic-device:primary'
+            valueState = 'ObservedValue'
+            value = $ObservationValue
+        })
+    }
+    else {
+        @()
+    }
+    $diagnostics = if ($hasDiagnostic) {
+        @([pscustomobject][ordered]@{
+            diagnosticId = $diagnosticId
+            phase = 'Collection'
+            reasonCode = $ReasonCode
+            messageId = if ($Outcome -eq 'NotStarted') {
+                'process.supervisor.not-started'
+            }
+            else {
+                'process.supervisor.attempt-failed'
+            }
+        })
+    }
+    else {
+        @()
+    }
+    $processStarted = $null -ne $NativeResult -and [bool] $NativeResult.Started
+    $treeControlMode = if ($processStarted) { 'WindowsJobObject' } else { 'NoLaunch' }
+    $outputBytes = if ($null -ne $NativeResult) { $NativeResult.StandardOutputBytes } else { 0 }
+    $errorBytes = if ($null -ne $NativeResult) { $NativeResult.StandardErrorBytes } else { 0 }
+    $outputExceeded = $null -ne $NativeResult -and [bool] $NativeResult.StandardOutputExceeded
+    $errorExceeded = $null -ne $NativeResult -and [bool] $NativeResult.StandardErrorExceeded
+    $completeTreeAbsent = $null -eq $NativeResult -or [bool] $NativeResult.CompleteOwnedTreeAbsent
+    $terminationMode = if ($null -ne $NativeResult) { [string] $NativeResult.CancellationMode } else { 'None' }
+
     [pscustomobject][ordered]@{
         Envelope = [pscustomobject][ordered]@{
             envelopeId = "envelope:synthetic-windows-os:$RunId"
@@ -708,45 +752,41 @@ function New-SupervisorAttemptFailureResult {
             completedAt = [System.DateTimeOffset]::UtcNow.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
             executionContext = 'Synthetic'
             attempts = 1
-            observationIds = @()
+            observationIds = $observationIds
             coverageIds = @($coverageId)
-            diagnosticIds = @($diagnosticId)
+            diagnosticIds = $diagnosticIds
         }
-        Observations = @()
+        Observations = $observations
         Coverage = @([pscustomobject][ordered]@{
             coverageId = $coverageId
             scopeId = 'scope:synthetic.device.os'
             state = $CoverageState
-            reasonCode = $ReasonCode
-            observationIds = @()
-            diagnosticIds = @($diagnosticId)
+            reasonCode = $CoverageReasonCode
+            observationIds = $observationIds
+            diagnosticIds = $diagnosticIds
         })
-        Diagnostics = @([pscustomobject][ordered]@{
-            diagnosticId = $diagnosticId
-            phase = 'Collection'
-            reasonCode = $ReasonCode
-            messageId = 'process.supervisor.attempt-failed'
-        })
+        Diagnostics = $diagnostics
         Supervision = [pscustomobject][ordered]@{
             outcome = $Outcome
             reasonCode = $ReasonCode
             policyDigest = $PolicyDigest
             payloadDigest = $PayloadDigest
-            processStarted = $true
-            treeControlMode = 'WindowsJobObject'
+            processStarted = $processStarted
+            treeControlMode = $treeControlMode
+            workingBoundaryKind = 'ActivePowerShellHome'
             standardOutput = [pscustomobject][ordered]@{
-                byteCount = $NativeResult.StandardOutputBytes
+                byteCount = $outputBytes
                 maximumBytes = $StandardOutputMaximumBytes
-                exceeded = [bool] $NativeResult.StandardOutputExceeded
+                exceeded = $outputExceeded
             }
             standardError = [pscustomobject][ordered]@{
-                byteCount = $NativeResult.StandardErrorBytes
+                byteCount = $errorBytes
                 maximumBytes = $StandardErrorMaximumBytes
-                exceeded = [bool] $NativeResult.StandardErrorExceeded
+                exceeded = $errorExceeded
             }
-            peakActiveProcesses = $NativeResult.PeakActiveProcesses
-            terminationMode = [string] $NativeResult.CancellationMode
-            completeOwnedTreeAbsent = [bool] $NativeResult.CompleteOwnedTreeAbsent
+            peakActiveProcesses = if ($null -ne $NativeResult) { $NativeResult.PeakActiveProcesses } else { 0 }
+            terminationMode = $terminationMode
+            completeOwnedTreeAbsent = $completeTreeAbsent
             temporaryArtifactsAbsent = $false
         }
     }
@@ -756,17 +796,6 @@ function Invoke-ApprovedCollectorProcess {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet(
-            'op:synthetic.windows.os.success',
-            'fixture:synthetic.wrong-executable',
-            'fixture:synthetic.invalid-argument',
-            'fixture:synthetic.excess-output',
-            'fixture:synthetic.timeout',
-            'fixture:synthetic.cooperative-cancel',
-            'fixture:synthetic.hard-cancel',
-            'fixture:synthetic.child-process',
-            'fixture:synthetic.incompatible-child'
-        )]
         [string] $OperationId,
 
         [Parameter()]
@@ -776,10 +805,9 @@ function Invoke-ApprovedCollectorProcess {
     Initialize-ProcessSupervisorNativeType
     $startedAt = [System.DateTimeOffset]::UtcNow
     $runId = [System.Guid]::NewGuid().ToString('N')
-    $temporaryRoot = ''
-    $runDirectory = ''
-    $collectorScriptPath = ''
-    $cancellationMarkerPath = ''
+    $workingDirectory = ''
+    $cancellationEventName = ''
+    $cancellationEvent = $null
     $temporaryArtifactsAbsent = $false
     $collectorResult = $null
     $native = $null
@@ -814,6 +842,11 @@ function Invoke-ApprovedCollectorProcess {
         else {
             ''
         }
+        if (-not $fixtureId -and $OperationId -ne [string] $operationPolicy.operationId) {
+            $exception = [System.InvalidOperationException]::new('The operation is not release-defined.')
+            $exception.Data['ReasonCode'] = 'PROCESS.OPERATION_INVALID'
+            throw $exception
+        }
         $fixturePolicy = if ($fixtureId) {
             @($policy.Catalog.validationFixtures | Where-Object fixtureId -eq $fixtureId)[0]
         }
@@ -832,23 +865,28 @@ function Invoke-ApprovedCollectorProcess {
         $moduleFacts = Get-BuiltInModuleCompatibilityFacts
         $AuthenticodeCommand = $moduleFacts.authenticodeCommand
 
-        $temporaryRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
-        foreach ($segment in ([string] $collectorPolicy.workingBoundary.rootName -split '/')) {
-            $temporaryRoot = [System.IO.Path]::GetFullPath(
-                [System.IO.Path]::Combine($temporaryRoot, $segment)
-            )
-        }
-        $runDirectory = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($temporaryRoot, $runId))
-        $collectorScriptPath = [System.IO.Path]::Combine(
-            $runDirectory, [string] $collectorPolicy.payload.fileName
-        )
-        $cancellationMarkerPath = [System.IO.Path]::Combine($runDirectory, 'cancel.requested')
-        $null = [System.IO.Directory]::CreateDirectory($runDirectory)
         $scriptBytes = Get-SyntheticCollectorScriptBytes
-        [System.IO.File]::WriteAllBytes($collectorScriptPath, $scriptBytes)
-        if ((Get-Sha256ForSupervisorBytes -Bytes ([System.IO.File]::ReadAllBytes($collectorScriptPath))) -ne $payloadDigest -or
-            (Get-Sha256ForSupervisorBytes -Bytes $scriptBytes) -ne $payloadDigest) {
-            throw 'The run-owned synthetic collector identity changed while staging.'
+        if ((Get-Sha256ForSupervisorBytes -Bytes $scriptBytes) -ne $payloadDigest) {
+            throw 'The embedded synthetic collector identity does not match the release catalog.'
+        }
+        $scriptText = [System.Text.UTF8Encoding]::new($false, $true).GetString($scriptBytes)
+        $encodedPayload = [System.Convert]::ToBase64String(
+            [System.Text.Encoding]::Unicode.GetBytes($scriptText)
+        )
+
+        # Cancellation uses a run-unique named kernel event rather than a file.
+        # The event gives the approved child one cooperative signal without a
+        # writable script or marker path. Windows keeps it alive only while an
+        # owned process holds a handle; disposing the last handle removes the
+        # object. Name collision fails closed before the collector is resumed.
+        $cancellationEventName = "Local\WINPCInfo-ProcessSupervisor-$runId"
+        [bool] $createdNewCancellationEvent = $false
+        $cancellationEvent = [System.Threading.EventWaitHandle]::new(
+            $false, [System.Threading.EventResetMode]::ManualReset,
+            $cancellationEventName, [ref] $createdNewCancellationEvent
+        )
+        if (-not $createdNewCancellationEvent) {
+            throw 'The run-owned cancellation event already exists.'
         }
 
         # The operation catalog resolves the current signed PowerShell host; no
@@ -875,6 +913,12 @@ function Invoke-ApprovedCollectorProcess {
             $exception.Data['ReasonCode'] = 'PROCESS.EXECUTABLE_IDENTITY_INVALID'
             throw $exception
         }
+        $workingDirectory = [System.IO.Path]::GetFullPath($PSHOME)
+        if (-not [System.IO.Path]::GetDirectoryName($activeExecutable).Equals(
+            $workingDirectory, [System.StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw 'The release-defined working boundary does not match the active PowerShell home.'
+        }
         if ($null -eq $AuthenticodeCommand -or $AuthenticodeCommand.CommandType -ne 'Cmdlet' -or
             $AuthenticodeCommand.ModuleName -ne 'Microsoft.PowerShell.Security') {
             throw 'The Authenticode verifier does not have the required built-in command provenance.'
@@ -887,12 +931,15 @@ function Invoke-ApprovedCollectorProcess {
             throw 'The release-defined PowerShell host does not have the approved Microsoft signature.'
         }
 
-        $arguments = @($operationPolicy.arguments | ForEach-Object {
-            if ($_ -eq '{RunOwnedCollectorPath}') { $collectorScriptPath } else { [string] $_ }
-        })
-        if ($null -ne $fixturePolicy) {
-            $arguments[$arguments.Count - 1] = [string] $fixturePolicy.operationMode
+        $operationMode = if ($null -ne $fixturePolicy) {
+            [string] $fixturePolicy.operationMode
         }
+        else {
+            'Success'
+        }
+        $arguments = @($operationPolicy.arguments | ForEach-Object {
+            if ($_ -eq '{EncodedCollectorPayload}') { $encodedPayload } else { [string] $_ }
+        })
         if ($null -ne $fixturePolicy -and $fixturePolicy.fault -eq 'SecretShapedArgument') {
             $arguments += '--password=synthetic-prohibited-marker'
         }
@@ -920,8 +967,9 @@ function Invoke-ApprovedCollectorProcess {
         foreach ($variablePolicy in @($collectorPolicy.environment.variables)) {
             $value = switch ([string] $variablePolicy.valueSource) {
                 'WindowsDirectory' { [System.Environment]::GetFolderPath('Windows') }
-                'RunDirectory' { $runDirectory }
-                'CancellationMarkerPath' { $cancellationMarkerPath }
+                'CancellationEventName' { $cancellationEventName }
+                'OperationMode' { $operationMode }
+                'EncodedPayload' { $encodedPayload }
                 default { '' }
             }
             $environment[[string] $variablePolicy.name] = $value
@@ -945,48 +993,27 @@ function Invoke-ApprovedCollectorProcess {
             [int] $operationPolicy.deadlineMilliseconds
         }
         $native = [WinPCInfo.ProcessSupervisor.NativeRunner]::Run(
-            $approvedExecutable, $arguments, $runDirectory, $environment,
+            $approvedExecutable, $arguments, $workingDirectory, $environment,
             $deadlineMilliseconds, $standardOutputMaximumBytes, $standardErrorMaximumBytes,
-            $CancellationToken, $cancellationMarkerPath,
+            $CancellationToken, $cancellationEvent,
             [int] $operationPolicy.cancellationGraceMilliseconds,
+            [int] $operationPolicy.terminationVerificationMilliseconds,
             ($null -ne $fixturePolicy -and $fixturePolicy.fault -eq 'JobAssignmentIncompatible')
         )
-        if ($native.FailureStage -eq 'AssignJobObjectIncompatible') {
+        $nativeReasonCode = Get-NativeSupervisorReasonCode -NativeResult $native
+        if ($native.Started -and -not $native.CompleteOwnedTreeAbsent -and -not $nativeReasonCode) {
+            $nativeReasonCode = 'PROCESS.TERMINATION_INCOMPLETE'
+        }
+        if ($nativeReasonCode) {
             $exception = [System.InvalidOperationException]::new(
-                'The collector cannot be placed in the required Windows Job Object.'
+                'The native process attempt ended with a sanitized supervisor reason.'
             )
-            $exception.Data['ReasonCode'] = 'PROCESS.JOB_INCOMPATIBLE'
+            $exception.Data['ReasonCode'] = $nativeReasonCode
             throw $exception
         }
-        if ($native.StandardOutputExceeded -or $native.StandardErrorExceeded) {
-            $exception = [System.InvalidOperationException]::new(
-                'The approved synthetic collector exceeded a release-owned output bound.'
-            )
-            $exception.Data['ReasonCode'] = 'PROCESS.OUTPUT_LIMIT_EXCEEDED'
-            throw $exception
-        }
-        if ($native.FailureStage -eq 'Deadline') {
-            $exception = [System.TimeoutException]::new(
-                'The approved synthetic collector exceeded its release-owned deadline.'
-            )
-            $exception.Data['ReasonCode'] = 'PROCESS.DEADLINE_EXCEEDED'
-            throw $exception
-        }
-        if ($native.FailureStage -eq 'CooperativeCancellation') {
-            $exception = [System.OperationCanceledException]::new(
-                'The approved synthetic collector acknowledged cooperative cancellation.'
-            )
-            $exception.Data['ReasonCode'] = 'PROCESS.CANCELLED_COOPERATIVELY'
-            throw $exception
-        }
-        if ($native.FailureStage -eq 'HardCancellation') {
-            $exception = [System.OperationCanceledException]::new(
-                'The approved synthetic collector required bounded hard cancellation.'
-            )
-            $exception.Data['ReasonCode'] = 'PROCESS.CANCELLED_HARD'
-            throw $exception
-        }
-        if (-not $native.Started -or $native.FailureStage -ne 'None' -or $native.ExitCode -ne 0 -or
+        if (-not $native.Started -or
+            $native.FailureStage -ne [WinPCInfo.ProcessSupervisor.NativeFailureStage]::None -or
+            $native.ExitCode -ne 0 -or
             -not $native.CompleteOwnedTreeAbsent) {
             throw 'The approved synthetic collector did not complete its bounded process contract.'
         }
@@ -1005,62 +1032,13 @@ function Invoke-ApprovedCollectorProcess {
             throw 'The approved synthetic collector returned an invalid observation payload.'
         }
 
-        $observationId = "observation:synthetic-os-name:$runId"
-        $coverageId = "coverage:synthetic-device-os:$runId"
-        $collectorResult = [pscustomobject][ordered]@{
-            Envelope = [pscustomobject][ordered]@{
-                envelopeId = "envelope:synthetic-windows-os:$runId"
-                collectorId = 'collector:synthetic.windows.os'
-                collectorVersion = '1.0.0'
-                operationId = $OperationId
-                intendedScopeIds = @($operationPolicy.intendedScopeIds)
-                subjectIds = @($operationPolicy.subjectIds)
-                startedAt = $startedAt.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
-                completedAt = [System.DateTimeOffset]::UtcNow.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
-                executionContext = 'Synthetic'
-                attempts = 1
-                observationIds = @($observationId)
-                coverageIds = @($coverageId)
-                diagnosticIds = @()
-            }
-            Observations = @([pscustomobject][ordered]@{
-                observationId = $observationId
-                fieldId = 'field:device.os.display-name'
-                subjectId = 'subject:synthetic-device:primary'
-                valueState = 'ObservedValue'
-                value = [string] $output.displayName
-            })
-            Coverage = @([pscustomobject][ordered]@{
-                coverageId = $coverageId
-                scopeId = 'scope:synthetic.device.os'
-                state = 'Complete'
-                reasonCode = 'COLLECTION.COMPLETE'
-                observationIds = @($observationId)
-                diagnosticIds = @()
-            })
-            Diagnostics = @()
-            Supervision = [pscustomobject][ordered]@{
-                outcome = 'Completed'
-                reasonCode = 'PROCESS.COMPLETED'
-                policyDigest = $policyDigest
-                payloadDigest = $payloadDigest
-                treeControlMode = 'WindowsJobObject'
-                processStarted = $true
-                standardOutput = [pscustomobject][ordered]@{
-                    byteCount = $native.StandardOutputBytes
-                    maximumBytes = $standardOutputMaximumBytes
-                    exceeded = [bool] $native.StandardOutputExceeded
-                }
-                standardError = [pscustomobject][ordered]@{
-                    byteCount = $native.StandardErrorBytes
-                    maximumBytes = $standardErrorMaximumBytes
-                    exceeded = [bool] $native.StandardErrorExceeded
-                }
-                peakActiveProcesses = $native.PeakActiveProcesses
-                completeOwnedTreeAbsent = [bool] $native.CompleteOwnedTreeAbsent
-                temporaryArtifactsAbsent = $false
-            }
-        }
+        $collectorResult = New-ProcessSupervisorResult -OperationId $OperationId `
+            -RunId $runId -StartedAt $startedAt -Outcome 'Completed' -CoverageState 'Complete' `
+            -ReasonCode 'PROCESS.COMPLETED' -CoverageReasonCode 'COLLECTION.COMPLETE' `
+            -PolicyDigest $policyDigest -PayloadDigest $payloadDigest `
+            -StandardOutputMaximumBytes $standardOutputMaximumBytes `
+            -StandardErrorMaximumBytes $standardErrorMaximumBytes `
+            -NativeResult $native -ObservationValue ([string] $output.displayName)
     }
     catch {
         $reasonCode = if ($_.Exception.Data.Contains('ReasonCode')) {
@@ -1069,18 +1047,22 @@ function Invoke-ApprovedCollectorProcess {
         else {
             'PROCESS.SUPERVISOR_FAILED'
         }
-        if ($null -ne $native -and $native.Started) {
+        if ($null -ne $native -and ($native.Started -or $native.FailureStage -eq
+            [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete)) {
             $attemptOutcome = if ($reasonCode -eq 'PROCESS.DEADLINE_EXCEEDED') {
                 'TimedOut'
             }
             elseif ($reasonCode -like 'PROCESS.CANCELLED_*') {
                 'Cancelled'
             }
+            elseif ($reasonCode -eq 'PROCESS.TERMINATION_INCOMPLETE') {
+                'CleanupIncomplete'
+            }
             else {
                 'Failed'
             }
-            $coverageState = $attemptOutcome
-            $collectorResult = New-SupervisorAttemptFailureResult -OperationId $OperationId `
+            $coverageState = if ($attemptOutcome -eq 'CleanupIncomplete') { 'Failed' } else { $attemptOutcome }
+            $collectorResult = New-ProcessSupervisorResult -OperationId $OperationId `
                 -RunId $runId -StartedAt $startedAt -Outcome $attemptOutcome -CoverageState $coverageState `
                 -ReasonCode $reasonCode -NativeResult $native `
                 -PolicyDigest $policyDigest -PayloadDigest $payloadDigest `
@@ -1088,9 +1070,12 @@ function Invoke-ApprovedCollectorProcess {
                 -StandardErrorMaximumBytes $standardErrorMaximumBytes
         }
         else {
-            $collectorResult = New-SupervisorNotStartedResult -OperationId $OperationId `
-                -RunId $runId -StartedAt $startedAt -ReasonCode $reasonCode `
-                -PolicyDigest $policyDigest -PayloadDigest $payloadDigest
+            $collectorResult = New-ProcessSupervisorResult -OperationId $OperationId `
+                -RunId $runId -StartedAt $startedAt -Outcome 'NotStarted' `
+                -CoverageState 'NotAttempted' -ReasonCode $reasonCode `
+                -PolicyDigest $policyDigest -PayloadDigest $payloadDigest `
+                -StandardOutputMaximumBytes $standardOutputMaximumBytes `
+                -StandardErrorMaximumBytes $standardErrorMaximumBytes
             if ($reasonCode -eq 'PROCESS.JOB_INCOMPATIBLE') {
                 $collectorResult.Supervision.treeControlMode = 'IncompatibleNoLaunch'
             }
@@ -1109,23 +1094,23 @@ function Invoke-ApprovedCollectorProcess {
                 [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($native.StandardError)
             }
         }
-        # Only the freshly generated GUID directory beneath the fixed supervisor
-        # root is eligible for deletion. Resolving and checking that ownership
-        # boundary prevents a malformed path from turning cleanup into a broad
-        # recursive delete. Failure remains visible in the returned contract.
-        $ownedPrefix = if ($temporaryRoot) {
-            $temporaryRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) +
-                [System.IO.Path]::DirectorySeparatorChar
+        if ($null -ne $cancellationEvent) {
+            $cancellationEvent.Dispose()
         }
-        else {
-            ''
+        $temporaryArtifactsAbsent = $true
+        if ($cancellationEventName) {
+            try {
+                $eventProbe = [System.Threading.EventWaitHandle]::OpenExisting($cancellationEventName)
+                $temporaryArtifactsAbsent = $false
+                $eventProbe.Dispose()
+            }
+            catch [System.Threading.WaitHandleCannotBeOpenedException] {
+                $temporaryArtifactsAbsent = $true
+            }
+            catch {
+                $temporaryArtifactsAbsent = $false
+            }
         }
-        if ($ownedPrefix -and $runDirectory -and
-            $runDirectory.StartsWith($ownedPrefix, [System.StringComparison]::OrdinalIgnoreCase) -and
-            [System.IO.Directory]::Exists($runDirectory)) {
-            [System.IO.Directory]::Delete($runDirectory, $true)
-        }
-        $temporaryArtifactsAbsent = -not $runDirectory -or -not [System.IO.Directory]::Exists($runDirectory)
         if ($null -ne $collectorResult) {
             $collectorResult.Supervision.temporaryArtifactsAbsent = $temporaryArtifactsAbsent
         }
