@@ -11,7 +11,7 @@ The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contra
 - how prohibited material is omitted; and
 - whether the definition or a value may appear in a public projection.
 
-Only `field:device.os.display-name` is admitted in this Assessment Record tracer bullet. Its source is explicitly `SyntheticContractFixture`; it is not a Windows collector or a claim about the machine running the test. The separate SYSTEM Collection Sub-plan has its own release policy and emits the normal envelope shape through the generated application, but it does not widen this earlier lifecycle fixture or fabricate a globally closed SYSTEM scope before the real lifecycle schedules it.
+Only `field:device.os.display-name` is admitted in the original lifecycle Assessment Record profile. Its source is explicitly `SyntheticContractFixture`; it is not a Windows collector or a claim about the machine running the test. The separate SYSTEM Collection Sub-plan keeps its own one-field, one-scope release definition rather than forcing earlier lifecycle fixtures to fabricate SYSTEM evidence. Its successful generated path emits a normal Assessment Record and applies the shared schema plus semantic graph checks against that narrow definition. The schema admits honest `Synthetic` and verified `LocalSystem` execution provenance; a live pre-identity failure remains `NotStarted` in the phase result and produces no fabricated observation record.
 
 ## What validation does
 

@@ -39,6 +39,57 @@ function Get-SystemCollectionPlanPolicy {
     ) -Depth 30 -ErrorAction Stop
 }
 
+function Get-SystemCollectionValidationScenario {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Name)
+
+    # A fixture name controls several cooperating seams: whether Task
+    # Scheduler is used, how long the coordinator waits, what the worker does,
+    # and whether cleanup injects its one allowed retry. Keeping that behavior
+    # in one tuple prevents a future test case from meaning different things to
+    # the coordinator and worker. The empty name is the live controlled-client
+    # path; it is data here too, rather than a special string scattered through
+    # the security-sensitive control flow.
+    $defaults = [ordered]@{
+        isFixture = $true
+        activationFailure = $false
+        activationDenied = $false
+        operationDeadlineMilliseconds = $null
+        workerDeadlineMilliseconds = $null
+        workerFault = ''
+        workerLossExpected = $false
+        injectCleanupFailure = $false
+        planMutation = 'None'
+        cancellationDelayMilliseconds = $null
+    }
+    $scenarios = @{
+        '' = @{ isFixture = $false }
+        SyntheticSuccess = @{}
+        UnknownOperation = @{ planMutation = 'UnknownOperation' }
+        InvalidParameters = @{ planMutation = 'InvalidParameters' }
+        ActivationFailure = @{ activationFailure = $true }
+        WorkerLost = @{ workerFault = 'Lost'; workerLossExpected = $true }
+        Cancellation = @{ workerFault = 'Wait'; cancellationDelayMilliseconds = 200 }
+        Timeout = @{
+            operationDeadlineMilliseconds = 200
+            workerDeadlineMilliseconds = 30000
+            workerFault = 'Wait'
+        }
+        Denied = @{ activationDenied = $true }
+        AbnormalCleanup = @{ injectCleanupFailure = $true }
+    }
+    if (-not $scenarios.ContainsKey($Name)) {
+        throw 'The SYSTEM collection validation scenario is not release-defined.'
+    }
+    $scenario = [ordered]@{ name = $Name }
+    foreach ($property in $defaults.Keys) {
+        $scenario[$property] = if ($scenarios[$Name].ContainsKey($property)) {
+            $scenarios[$Name][$property]
+        }
+        else { $defaults[$property] }
+    }
+    [pscustomobject] $scenario
+}
+
 function Get-SystemCollectionWorkerSource {
     # This worker is release source, not a caller script. The only substituted
     # value is a coordinator-created, closed protocol configuration containing
@@ -326,41 +377,6 @@ function Get-SystemCollectionPlanValidationReason {
     ''
 }
 
-function Read-SystemCollectionFrame {
-    param(
-        [Parameter(Mandatory)] $Stream,
-        [Parameter(Mandatory)] [int] $MaximumBytes,
-        [Parameter(Mandatory)] [System.Threading.CancellationToken] $CancellationToken
-    )
-    $lengthBytes = Read-PrivilegedCollectionPlanExactBytes -Stream $Stream -Count 4 `
-        -CancellationToken $CancellationToken
-    $length = [System.BitConverter]::ToInt32($lengthBytes, 0)
-    if ($length -le 0 -or $length -gt $MaximumBytes) { throw 'Invalid SYSTEM frame length.' }
-    [System.Text.UTF8Encoding]::new($false, $true).GetString(
-        (Read-PrivilegedCollectionPlanExactBytes -Stream $Stream -Count $length `
-            -CancellationToken $CancellationToken)
-    )
-}
-
-function Write-SystemCollectionFrame {
-    param(
-        [Parameter(Mandatory)] $Stream,
-        [Parameter(Mandatory)] [string] $Json,
-        [Parameter(Mandatory)] [int] $MaximumBytes,
-        [Parameter(Mandatory)] [System.Threading.CancellationToken] $CancellationToken
-    )
-    $payload = [System.Text.UTF8Encoding]::new($false).GetBytes($Json)
-    if ($payload.Length -le 0 -or $payload.Length -gt $MaximumBytes) {
-        throw 'Invalid SYSTEM frame payload.'
-    }
-    $length = [System.BitConverter]::GetBytes([int] $payload.Length)
-    $null = $Stream.WriteAsync($length, 0, 4, $CancellationToken).GetAwaiter().GetResult()
-    $null = $Stream.WriteAsync(
-        $payload, 0, $payload.Length, $CancellationToken
-    ).GetAwaiter().GetResult()
-    $null = $Stream.FlushAsync($CancellationToken).GetAwaiter().GetResult()
-}
-
 function New-SystemCollectorResult {
     param(
         [Parameter(Mandatory)] $Policy,
@@ -377,14 +393,29 @@ function New-SystemCollectorResult {
         [Parameter(Mandatory)] [bool] $WorkerTreeAbsent,
         [Parameter()] [AllowNull()] [Nullable[bool]] $ProviderAvailable,
         [Parameter()] [int] $CleanupRetries = 0,
-        [Parameter()] [bool] $RunIntegrityCompromised = $false
+        [Parameter()] [bool] $RunIntegrityCompromised = $false,
+        [Parameter()] [Nullable[System.DateTimeOffset]] $StartedAt,
+        [Parameter()] [Nullable[System.DateTimeOffset]] $CompletedAt,
+        [Parameter()] [Nullable[System.DateTimeOffset]] $CollectedAt
     )
 
     $runId = [System.Guid]::NewGuid().ToString('N')
-    $startedAt = [System.DateTimeOffset]::UtcNow
+    $effectiveStartedAt = if ($null -ne $StartedAt) {
+        [System.DateTimeOffset] $StartedAt
+    }
+    else { [System.DateTimeOffset]::UtcNow }
+    $effectiveCompletedAt = if ($null -ne $CompletedAt) {
+        [System.DateTimeOffset] $CompletedAt
+    }
+    else { [System.DateTimeOffset]::UtcNow }
+    $effectiveCollectedAt = if ($null -ne $CollectedAt) {
+        [System.DateTimeOffset] $CollectedAt
+    }
+    else { $effectiveCompletedAt }
     $operation = $Policy.operations[0]
     $coverageId = "coverage:mdm-system:$runId"
     $observationId = "observation:mdm-provider:$runId"
+    $provenanceId = "provenance:mdm-system:$runId"
     $diagnosticId = "diagnostic:system-collection:$runId"
     $hasObservation = $null -ne $ProviderAvailable
     $observationIds = if ($hasObservation) { @($observationId) } else { @() }
@@ -394,8 +425,25 @@ function New-SystemCollectorResult {
             observationId = $observationId
             fieldId = [string] $operation.result.fieldId
             subjectId = [string] $operation.subjectIds[0]
+            provenanceId = $provenanceId
             valueState = 'ObservedValue'
             value = [bool] $ProviderAvailable
+        })
+    }
+    else { @() }
+    $provenance = if ($hasObservation) {
+        @([pscustomobject][ordered]@{
+            provenanceId = $provenanceId
+            fieldId = [string] $operation.result.fieldId
+            subjectId = [string] $operation.subjectIds[0]
+            sourceId = [string] $operation.source.sourceId
+            collectorId = [string] $operation.collectorId
+            collectorVersion = [string] $operation.collectorVersion
+            executionContext = $ObservedExecutionContext
+            collectedAt = $effectiveCollectedAt.ToString(
+                'o', [System.Globalization.CultureInfo]::InvariantCulture
+            )
+            sourceLocale = 'und'
         })
     }
     else { @() }
@@ -423,22 +471,23 @@ function New-SystemCollectorResult {
                 operationId = [string] $operation.operationId
                 intendedScopeIds = @($operation.intendedScopeIds)
                 subjectIds = @($operation.subjectIds)
-                startedAt = $startedAt.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
-                completedAt = [System.DateTimeOffset]::UtcNow.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
+                startedAt = $effectiveStartedAt.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
+                completedAt = $effectiveCompletedAt.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
                 executionContext = $ObservedExecutionContext
                 attempts = 1
-                observationIds = $observationIds
+                observationIds = @($observationIds)
                 coverageIds = @($coverageId)
-                diagnosticIds = $diagnosticIds
+                diagnosticIds = @($diagnosticIds)
             }
+            Provenance = $provenance
             Observations = $observations
             Coverage = @([pscustomobject][ordered]@{
                 coverageId = $coverageId
                 scopeId = [string] $operation.intendedScopeIds[0]
                 state = $CoverageState
                 reasonCode = if ($CoverageState -eq 'Complete') { 'COLLECTION.COMPLETE' } else { $ReasonCode }
-                observationIds = $observationIds
-                diagnosticIds = $diagnosticIds
+                observationIds = @($observationIds)
+                diagnosticIds = @($diagnosticIds)
             })
             Diagnostics = $diagnostics
         }
@@ -479,6 +528,144 @@ function New-SystemCollectorResult {
     }
 }
 
+function New-SystemCollectionStoppedResult {
+    param(
+        [Parameter(Mandatory)] [string] $State,
+        [Parameter(Mandatory)] [string] $ReasonCode,
+        [Parameter(Mandatory)] [string] $CoverageState,
+        [Parameter(Mandatory)] [hashtable] $Context,
+        [Parameter()] [bool] $RunIntegrityCompromised = $false
+    )
+
+    # Pre-activation failures all share the same important absence proof: no
+    # task, worker, pipe, or temporary object was created. Centralizing that
+    # tuple makes it difficult for one rejection branch to accidentally claim a
+    # different cleanup or execution-context fact.
+    $startedAt = if ($Context.ContainsKey('StartedAt')) {
+        [System.DateTimeOffset] $Context.StartedAt
+    }
+    else { [System.DateTimeOffset]::UtcNow }
+    New-SystemCollectorResult -Policy $Context.Policy -Plan $Context.Plan `
+        -PlanDigest $Context.PlanDigest -State $State -ReasonCode $ReasonCode `
+        -CoverageState $CoverageState `
+        -ObservedExecutionContext $Context.ObservedExecutionContext `
+        -LocalSystemIdentityVerified $false -CleanupVerified $true `
+        -TaskAbsent $true -PipeAbsent $true -WorkerTreeAbsent $true `
+        -RunIntegrityCompromised $RunIntegrityCompromised -StartedAt $startedAt
+}
+
+function Get-SystemAssessmentContractDefinition {
+    param(
+        [Parameter(Mandatory)] $Policy,
+        [Parameter(Mandatory)] $ConvertFromJsonCommand
+    )
+
+    $base = (Get-EmbeddedAssessmentContractSet `
+        -ConvertFromJsonCommand $ConvertFromJsonCommand).Definition
+    $operation = $Policy.operations[0]
+    [pscustomobject][ordered]@{
+        contractVersion = [string] $base.contractVersion
+        schemaDraft = [string] $base.schemaDraft
+        requiredFeatures = @($base.requiredFeatures)
+        limits = $base.limits
+        fieldDefinitions = @([pscustomobject][ordered]@{
+            fieldId = [string] $operation.result.fieldId
+            source = [pscustomobject][ordered]@{
+                sourceId = [string] $operation.source.sourceId
+            }
+            valueType = [string] $operation.result.valueType
+            bounds = [pscustomobject][ordered]@{
+                maximumUtf8Bytes = 5 # UTF-8 bytes in "False", the longest Boolean spelling.
+                maximumOccurrencesPerSubject = [int] $operation.result.maximumObservations
+            }
+        })
+        scopeDefinitions = @([pscustomobject][ordered]@{
+            scopeId = [string] $operation.intendedScopeIds[0]
+            fieldIds = @([string] $operation.result.fieldId)
+            collectorIds = @([string] $operation.collectorId)
+        })
+    }
+}
+
+function New-SystemAssessmentRecord {
+    param([Parameter(Mandatory)] $SystemResult)
+
+    if ($SystemResult.state -ne 'Completed' -or
+        @($SystemResult.collectorResult.Observations).Count -ne 1 -or
+        @($SystemResult.collectorResult.Provenance).Count -ne 1) {
+        throw 'Only a completed SYSTEM collector result can form an Assessment Record.'
+    }
+    $envelope = $SystemResult.collectorResult.Envelope
+    $observation = $SystemResult.collectorResult.Observations[0]
+    $provenance = $SystemResult.collectorResult.Provenance[0]
+    $coverageSource = $SystemResult.collectorResult.Coverage[0]
+    $runId = "run:system:$([System.Guid]::NewGuid().ToString('N'))"
+    $coverage = [pscustomobject][ordered]@{
+        coverageId = [string] $coverageSource.coverageId
+        scopeId = [string] $coverageSource.scopeId
+        state = 'Complete'
+        observationIds = @($coverageSource.observationIds)
+        diagnosticIds = @()
+    }
+    [pscustomobject][ordered]@{
+        recordType = 'win-pcinfo.assessment-record'
+        contractVersion = '1.0.0'
+        requiredFeatures = @(
+            'closed-scope-coverage'
+            'evidence-references'
+            'prohibited-material-omission'
+        )
+        run = [pscustomobject][ordered]@{
+            runId = $runId
+            outcome = 'Completed'
+            validationFixture = [string] $envelope.executionContext -eq 'Synthetic'
+        }
+        subjects = @([pscustomobject][ordered]@{
+            subjectId = [string] $envelope.subjectIds[0]
+            kind = 'Device'
+        })
+        provenance = @($provenance)
+        observations = @($observation)
+        coverage = @($coverage)
+        diagnostics = @()
+        collectorResults = @($envelope)
+        findings = @([pscustomobject][ordered]@{
+            findingId = "finding:mdm-provider:$($runId.Substring(11))"
+            ruleId = 'rule:mdm-provider-observed/1.0.0'
+            targetSubjectId = [string] $observation.subjectId
+            outcome = 'Informational'
+            evidenceReferences = @([pscustomobject][ordered]@{
+                observationId = [string] $observation.observationId
+                fieldId = [string] $observation.fieldId
+                subjectId = [string] $observation.subjectId
+            })
+        })
+        recommendations = @()
+        recommendationRelationships = @()
+    }
+}
+
+function Get-SystemAssessmentRecordValidationReason {
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] $Policy,
+        [Parameter(Mandatory)] $ConvertFromJsonCommand,
+        [Parameter(Mandatory)] $ConvertToJsonCommand,
+        [Parameter(Mandatory)] $TestJsonCommand
+    )
+
+    $embedded = Get-EmbeddedAssessmentContractSet `
+        -ConvertFromJsonCommand $ConvertFromJsonCommand
+    $json = & $ConvertToJsonCommand -InputObject $Record -Compress -Depth 30
+    if (-not (& $TestJsonCommand -Json $json `
+        -Schema $embedded.AssessmentRecordSchema -ErrorAction SilentlyContinue)) {
+        return 'CONTRACT.SCHEMA_INVALID'
+    }
+    $definition = Get-SystemAssessmentContractDefinition -Policy $Policy `
+        -ConvertFromJsonCommand $ConvertFromJsonCommand
+    Get-AssessmentRecordSemanticReason -Record $Record -ContractDefinition $definition
+}
+
 function Test-SystemCollectionAdministrator {
     try {
         $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -486,6 +673,45 @@ function Test-SystemCollectionAdministrator {
         $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch { $false }
+}
+
+function Get-SystemCollectionFailureDisposition {
+    param(
+        [Parameter(Mandatory)] [string] $FailureStage,
+        [Parameter(Mandatory)] [System.Exception] $Exception,
+        [Parameter()] [bool] $WorkerExited = $false,
+        [Parameter()] [bool] $WorkerLossExpected = $false
+    )
+
+    if ($FailureStage -eq 'ACTIVATION') {
+        $denied = $Exception -is [System.UnauthorizedAccessException] -or
+            ($Exception -is [System.Runtime.InteropServices.COMException] -and
+                $Exception.HResult -eq -2147024891)
+        return [pscustomobject][ordered]@{
+            state = 'Unavailable'
+            reasonCode = if ($denied) { 'SYSTEM.ACTIVATION_DENIED' } else { 'SYSTEM.ACTIVATION_FAILED' }
+            coverageState = if ($denied) { 'Denied' } else { 'Unavailable' }
+            runIntegrityCompromised = $false
+        }
+    }
+    if ($FailureStage -eq 'RESULT_READ' -and ($WorkerLossExpected -or $WorkerExited)) {
+        return [pscustomobject][ordered]@{
+            state = 'Failed'
+            reasonCode = 'SYSTEM.WORKER_LOST'
+            coverageState = 'Failed'
+            runIntegrityCompromised = $false
+        }
+    }
+    # Once a complete frame exists, any JSON or closed-schema rejection means
+    # the authenticated endpoint violated the protocol. Before authentication,
+    # an unknown client/channel failure is equally unconfined. Both fail the
+    # run's integrity instead of being laundered into an ordinary source gap.
+    [pscustomobject][ordered]@{
+        state = 'IntegrityFailed'
+        reasonCode = 'SYSTEM.CHANNEL_INTEGRITY_FAILED'
+        coverageState = 'Failed'
+        runIntegrityCompromised = $true
+    }
 }
 
 function Start-SystemCollectionTransientTask {
@@ -528,6 +754,7 @@ function Start-SystemCollectionTransientTask {
     $action.Arguments = "-NoLogo -NoProfile -NonInteractive -EncodedCommand $EncodedWorker"
     $action.WorkingDirectory = $WorkingDirectory
     $task = $null
+    $runningTask = $null
     try {
         $task = $folder.RegisterTaskDefinition(
             $TaskName, $definition, 2, $null, $null, 5,
@@ -564,6 +791,7 @@ function Start-SystemCollectionTransientTask {
             Folder = $folder
             RegisteredTask = $task
             RunningTask = $runningTask
+            InstanceGuid = [string] $runningTask.InstanceGuid
         }
     }
     catch {
@@ -573,15 +801,19 @@ function Start-SystemCollectionTransientTask {
         # raised to the caller, which reports cleanup uncertainty rather than a
         # harmless activation gap.
         if ($null -ne $task) {
-            $taskAbsent = $false
-            $cleanupWatch = [System.Diagnostics.Stopwatch]::StartNew()
-            while ($cleanupWatch.ElapsedMilliseconds -lt 3000) {
-                try { $folder.DeleteTask($TaskName, 0) } catch {}
-                try { $null = $folder.GetTask($TaskName) }
-                catch { $taskAbsent = $true; break }
-                [System.Threading.Thread]::Sleep(25)
+            $partialActivation = [pscustomobject][ordered]@{
+                Service = $service
+                Folder = $folder
+                RegisteredTask = $task
+                RunningTask = $runningTask
+                InstanceGuid = if ($null -ne $runningTask) {
+                    [string] $runningTask.InstanceGuid
+                }
+                else { '' }
             }
-            if (-not $taskAbsent) {
+            $cleanup = Remove-SystemCollectionTransientTask -Activation $partialActivation `
+                -TaskName $TaskName -MaximumMilliseconds 3000
+            if (-not $cleanup.Absent) {
                 $_.Exception.Data['SystemTaskCleanupUnverified'] = $true
             }
         }
@@ -589,43 +821,155 @@ function Start-SystemCollectionTransientTask {
     }
 }
 
+function Get-SystemCollectionOwnedTaskInstances {
+    param([Parameter(Mandatory)] $Activation)
+
+    if ([string]::IsNullOrWhiteSpace([string] $Activation.InstanceGuid)) { return @() }
+    try {
+        $running = $Activation.Service.GetRunningTasks(0)
+        @(
+            for ($index = 1; $index -le [int] $running.Count; $index++) {
+                $candidate = $running.Item($index)
+                if ([string] $candidate.InstanceGuid -eq [string] $Activation.InstanceGuid) {
+                    $candidate
+                }
+            }
+        )
+    }
+    catch {
+        # Failure to enumerate the scheduler-owned instance is uncertainty, not
+        # absence. Return the originally owned instance so cleanup fails closed.
+        @($Activation.RunningTask | Where-Object { $null -ne $_ })
+    }
+}
+
+function Test-SystemCollectionProcessIdsAbsent {
+    param([Parameter(Mandatory)] [System.Collections.Generic.HashSet[int]] $ProcessIds)
+
+    foreach ($processId in $ProcessIds) {
+        $process = $null
+        try {
+            $process = [System.Diagnostics.Process]::GetProcessById($processId)
+            if (-not $process.HasExited) { return $false }
+        }
+        catch [System.ArgumentException] {}
+        catch { return $false }
+        finally { if ($null -ne $process) { $process.Dispose() } }
+    }
+    $true
+}
+
 function Remove-SystemCollectionTransientTask {
     param(
         [Parameter()] [AllowNull()] $Activation,
         [Parameter(Mandatory)] [string] $TaskName,
-        [Parameter(Mandatory)] [int] $MaximumMilliseconds,
-        [Parameter()] [bool] $InjectFirstDeleteFailure = $false
+        [Parameter(Mandatory)] [int] $MaximumMilliseconds
     )
 
     if ($null -eq $Activation) {
-        return [pscustomobject][ordered]@{ Absent = $true; Retries = 0 }
+        return [pscustomobject][ordered]@{
+            Absent = $true; Retries = 0; InstanceAbsent = $true; EngineProcessAbsent = $true
+        }
     }
     if ($TaskName -notmatch '^WINPCInfo-SystemCollection-v1-[0-9a-f]{32}$') {
+        return [pscustomobject][ordered]@{
+            Absent = $false; Retries = 0; InstanceAbsent = $false; EngineProcessAbsent = $false
+        }
+    }
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $retries = 0
+    $deleteAttempts = 0
+    $ownedProcessIds = [System.Collections.Generic.HashSet[int]]::new()
+    while ($watch.ElapsedMilliseconds -lt $MaximumMilliseconds) {
+        $instances = @(Get-SystemCollectionOwnedTaskInstances -Activation $Activation)
+        foreach ($instance in $instances) {
+            try {
+                $engineProcessId = [int] $instance.EnginePID
+                if ($engineProcessId -gt 0) { $null = $ownedProcessIds.Add($engineProcessId) }
+            }
+            catch {}
+            try { $instance.Stop() } catch {}
+        }
+        if ($null -ne $Activation.RunningTask) {
+            try {
+                $engineProcessId = [int] $Activation.RunningTask.EnginePID
+                if ($engineProcessId -gt 0) { $null = $ownedProcessIds.Add($engineProcessId) }
+            }
+            catch {}
+            try { $Activation.RunningTask.Stop(0) } catch {}
+        }
+        if ($deleteAttempts -lt 2) {
+            try { $Activation.Folder.DeleteTask($TaskName, 0) } catch {}
+            $deleteAttempts++
+            $retries = [Math]::Max(0, $deleteAttempts - 1)
+        }
+        $registrationAbsent = $false
+        try {
+            $null = $Activation.Folder.GetTask($TaskName)
+        }
+        catch { $registrationAbsent = $true }
+        $instanceAbsent = @(Get-SystemCollectionOwnedTaskInstances -Activation $Activation).Count -eq 0
+        $engineProcessAbsent = Test-SystemCollectionProcessIdsAbsent -ProcessIds $ownedProcessIds
+        if ($registrationAbsent -and $instanceAbsent -and $engineProcessAbsent) {
+            return [pscustomobject][ordered]@{
+                Absent = $true
+                Retries = $retries
+                InstanceAbsent = $true
+                EngineProcessAbsent = $true
+            }
+        }
+        [System.Threading.Thread]::Sleep(25)
+    }
+    [pscustomobject][ordered]@{
+        Absent = $false
+        Retries = $retries
+        InstanceAbsent = $instanceAbsent
+        EngineProcessAbsent = $engineProcessAbsent
+    }
+}
+
+function Invoke-SystemCollectionSyntheticCleanupProbe {
+    param(
+        [Parameter(Mandatory)] [string] $Name,
+        [Parameter(Mandatory)] [int] $MaximumMilliseconds
+    )
+
+    # Synthetic validation cannot register a real SYSTEM task. It can still
+    # exercise an actual owned Windows artifact and the same bounded retry
+    # rule. This named event is an IPC kernel object. The first cleanup attempt
+    # deliberately leaves its handle open, proves the object remains, then the
+    # sole retry disposes it and proves the exact name can no longer be opened.
+    $createdNew = $false
+    $ownedEvent = [System.Threading.EventWaitHandle]::new(
+        $false, [System.Threading.EventResetMode]::ManualReset, $Name, [ref] $createdNew
+    )
+    if (-not $createdNew) {
+        $ownedEvent.Dispose()
         return [pscustomobject][ordered]@{ Absent = $false; Retries = 0 }
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $retries = 0
-    $attempt = 0
-    try { $Activation.RunningTask.Stop(0) } catch {}
-    while ($watch.ElapsedMilliseconds -lt $MaximumMilliseconds) {
-        if (-not ($InjectFirstDeleteFailure -and $attempt -eq 0)) {
-            try {
-                $Activation.Folder.DeleteTask($TaskName, 0)
+    try {
+        for ($attempt = 0; $attempt -le 1 -and
+            $watch.ElapsedMilliseconds -lt $MaximumMilliseconds; $attempt++) {
+            if ($attempt -eq 1) {
+                $ownedEvent.Dispose()
+                $ownedEvent = $null
             }
-            catch {}
+            $opened = $null
+            $exists = [System.Threading.EventWaitHandle]::TryOpenExisting($Name, [ref] $opened)
+            if ($null -ne $opened) { $opened.Dispose() }
+            if (-not $exists) {
+                return [pscustomobject][ordered]@{ Absent = $true; Retries = $retries }
+            }
+            if ($attempt -eq 0) {
+                $retries++
+                [System.Threading.Thread]::Sleep(25)
+            }
         }
-        try {
-            $null = $Activation.Folder.GetTask($TaskName)
-        }
-        catch {
-            return [pscustomobject][ordered]@{ Absent = $true; Retries = $retries }
-        }
-        if ($attempt -ge 1) { break }
-        $attempt++
-        $retries++
-        [System.Threading.Thread]::Sleep(25)
+        [pscustomobject][ordered]@{ Absent = $false; Retries = $retries }
     }
-    [pscustomobject][ordered]@{ Absent = $false; Retries = $retries }
+    finally { if ($null -ne $ownedEvent) { $ownedEvent.Dispose() } }
 }
 
 function Invoke-SystemCollectionPlan {
@@ -642,48 +986,47 @@ function Invoke-SystemCollectionPlan {
             [System.Threading.CancellationToken]::None
     )
 
+    $attemptStartedAt = [System.DateTimeOffset]::UtcNow
     $policy = Get-SystemCollectionPlanPolicy
+    $scenario = Get-SystemCollectionValidationScenario -Name $ValidationScenario
+    $resultContext = @{
+        Policy = $policy
+        Plan = $Plan
+        PlanDigest = $PlanDigest
+        StartedAt = $attemptStartedAt
+        ObservedExecutionContext = if ($scenario.isFixture) { 'Synthetic' } else { 'NotStarted' }
+    }
     $convertToJsonCommand = $ExecutionContext.InvokeCommand.GetCommand(
         'ConvertTo-Json', [System.Management.Automation.CommandTypes]::Cmdlet
     )
     if ($null -eq $convertToJsonCommand -or
         (Get-ObjectDigest -Value $Plan -ConvertToJsonCommand $convertToJsonCommand) -ne $PlanDigest) {
-        return New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
-            -State 'IntegrityFailed' -ReasonCode 'SYSTEM.PLAN_INTEGRITY_INVALID' `
-            -CoverageState 'NotAttempted' -ObservedExecutionContext 'Synthetic' `
-            -LocalSystemIdentityVerified $false -CleanupVerified $true -TaskAbsent $true `
-            -PipeAbsent $true -WorkerTreeAbsent $true -RunIntegrityCompromised $true
+        return New-SystemCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'SYSTEM.PLAN_INTEGRITY_INVALID' -CoverageState 'NotAttempted' `
+            -Context $resultContext -RunIntegrityCompromised $true
     }
     $validationReason = Get-SystemCollectionPlanValidationReason -Plan $Plan -Policy $policy
     if ($validationReason) {
-        return New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
-            -State 'IntegrityFailed' -ReasonCode $validationReason `
-            -CoverageState 'NotAttempted' -ObservedExecutionContext 'Synthetic' `
-            -LocalSystemIdentityVerified $false -CleanupVerified $true -TaskAbsent $true `
-            -PipeAbsent $true -WorkerTreeAbsent $true -RunIntegrityCompromised $true
+        return New-SystemCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode $validationReason -CoverageState 'NotAttempted' `
+            -Context $resultContext -RunIntegrityCompromised $true
     }
 
-    $validationFixture = -not [string]::IsNullOrWhiteSpace($ValidationScenario)
-    if ($ValidationScenario -eq 'ActivationFailure') {
-        return New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
-            -State 'Unavailable' -ReasonCode 'SYSTEM.ACTIVATION_FAILED' `
-            -CoverageState 'Unavailable' -ObservedExecutionContext 'Synthetic' `
-            -LocalSystemIdentityVerified $false -CleanupVerified $true -TaskAbsent $true `
-            -PipeAbsent $true -WorkerTreeAbsent $true
+    $validationFixture = [bool] $scenario.isFixture
+    if ($scenario.activationFailure) {
+        return New-SystemCollectionStoppedResult -State 'Unavailable' `
+            -ReasonCode 'SYSTEM.ACTIVATION_FAILED' -CoverageState 'Unavailable' `
+            -Context $resultContext
     }
-    if ($ValidationScenario -eq 'Denied') {
-        return New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
-            -State 'Unavailable' -ReasonCode 'SYSTEM.ACTIVATION_DENIED' `
-            -CoverageState 'Denied' -ObservedExecutionContext 'Synthetic' `
-            -LocalSystemIdentityVerified $false -CleanupVerified $true -TaskAbsent $true `
-            -PipeAbsent $true -WorkerTreeAbsent $true
+    if ($scenario.activationDenied) {
+        return New-SystemCollectionStoppedResult -State 'Unavailable' `
+            -ReasonCode 'SYSTEM.ACTIVATION_DENIED' -CoverageState 'Denied' `
+            -Context $resultContext
     }
     if (-not $validationFixture -and -not (Test-SystemCollectionAdministrator)) {
-        return New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
-            -State 'Unavailable' -ReasonCode 'SYSTEM.ACTIVATION_DENIED' `
-            -CoverageState 'Denied' -ObservedExecutionContext 'Synthetic' `
-            -LocalSystemIdentityVerified $false -CleanupVerified $true -TaskAbsent $true `
-            -PipeAbsent $true -WorkerTreeAbsent $true
+        return New-SystemCollectionStoppedResult -State 'Unavailable' `
+            -ReasonCode 'SYSTEM.ACTIVATION_DENIED' -CoverageState 'Denied' `
+            -Context $resultContext
     }
 
     Initialize-PrivilegedCollectionPlanNativeType
@@ -692,11 +1035,9 @@ function Invoke-SystemCollectionPlan {
         [System.Text.UTF8Encoding]::new($false).GetBytes($workerSource)
     )
     if ($workerDigest -ne [string] $policy.activation.payloadSha256) {
-        return New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
-            -State 'IntegrityFailed' -ReasonCode 'SYSTEM.WORKER_INTEGRITY_INVALID' `
-            -CoverageState 'NotAttempted' -ObservedExecutionContext 'Synthetic' `
-            -LocalSystemIdentityVerified $false -CleanupVerified $true -TaskAbsent $true `
-            -PipeAbsent $true -WorkerTreeAbsent $true -RunIntegrityCompromised $true
+        return New-SystemCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'SYSTEM.WORKER_INTEGRITY_INVALID' -CoverageState 'NotAttempted' `
+            -Context $resultContext -RunIntegrityCompromised $true
     }
 
     $approvedExecutable = [System.IO.Path]::GetFullPath(
@@ -706,11 +1047,9 @@ function Invoke-SystemCollectionPlan {
         [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     )
     if (-not $approvedExecutable.Equals($activeExecutable, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
-            -State 'IntegrityFailed' -ReasonCode 'SYSTEM.EXECUTABLE_IDENTITY_INVALID' `
-            -CoverageState 'NotAttempted' -ObservedExecutionContext 'Synthetic' `
-            -LocalSystemIdentityVerified $false -CleanupVerified $true -TaskAbsent $true `
-            -PipeAbsent $true -WorkerTreeAbsent $true -RunIntegrityCompromised $true
+        return New-SystemCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'SYSTEM.EXECUTABLE_IDENTITY_INVALID' -CoverageState 'NotAttempted' `
+            -Context $resultContext -RunIntegrityCompromised $true
     }
     $authenticodeCommand = $ExecutionContext.InvokeCommand.GetCommand(
         'Get-AuthenticodeSignature', [System.Management.Automation.CommandTypes]::Cmdlet
@@ -720,11 +1059,9 @@ function Invoke-SystemCollectionPlan {
         $signature.SignerCertificate.GetNameInfo(
             [System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false
         ) -ne [string] $policy.activation.signerCommonName) {
-        return New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
-            -State 'IntegrityFailed' -ReasonCode 'SYSTEM.EXECUTABLE_IDENTITY_INVALID' `
-            -CoverageState 'NotAttempted' -ObservedExecutionContext 'Synthetic' `
-            -LocalSystemIdentityVerified $false -CleanupVerified $true -TaskAbsent $true `
-            -PipeAbsent $true -WorkerTreeAbsent $true -RunIntegrityCompromised $true
+        return New-SystemCollectionStoppedResult -State 'IntegrityFailed' `
+            -ReasonCode 'SYSTEM.EXECUTABLE_IDENTITY_INVALID' -CoverageState 'NotAttempted' `
+            -Context $resultContext -RunIntegrityCompromised $true
     }
 
     $executableDigest = Get-SystemCollectionSha256 -Bytes ([System.IO.File]::ReadAllBytes($approvedExecutable))
@@ -743,8 +1080,8 @@ function Invoke-SystemCollectionPlan {
     $worker = $null
     $taskActivation = $null
     $deadline = [System.Threading.CancellationTokenSource]::CreateLinkedTokenSource($CancellationToken)
-    $deadline.CancelAfter($(if ($ValidationScenario -eq 'Timeout') {
-        200
+    $deadline.CancelAfter($(if ($null -ne $scenario.operationDeadlineMilliseconds) {
+        [int] $scenario.operationDeadlineMilliseconds
     }
     else { [int] $policy.deadlines.operationMaximumMilliseconds }))
     $cleanupVerified = $false
@@ -752,7 +1089,10 @@ function Invoke-SystemCollectionPlan {
     $workerTreeAbsent = $false
     $taskAbsent = $validationFixture
     $cleanupRetries = 0
+    $syntheticCleanupAbsent = $true
     $providerAvailable = $null
+    $attemptCompletedAt = $null
+    $observationCollectedAt = $null
     $state = 'IntegrityFailed'
     $reasonCode = 'SYSTEM.CHANNEL_FAILED'
     $coverageState = 'Failed'
@@ -779,8 +1119,8 @@ function Invoke-SystemCollectionPlan {
             nonce = $nonce
             jobName = $jobName
             maximumBytes = [int] $policy.channel.maximumMessageUtf8Bytes
-            deadlineMilliseconds = $(if ($ValidationScenario -eq 'Timeout') {
-                30000
+            deadlineMilliseconds = $(if ($null -ne $scenario.workerDeadlineMilliseconds) {
+                [int] $scenario.workerDeadlineMilliseconds
             }
             else { [int] $policy.deadlines.operationMaximumMilliseconds })
             coordinatorProcessId = $PID
@@ -788,13 +1128,7 @@ function Invoke-SystemCollectionPlan {
             workerPayloadSha256 = $workerDigest
             planDigest = $PlanDigest
             validationFixture = $validationFixture
-            workerFault = if ($ValidationScenario -eq 'WorkerLost') {
-                'Lost'
-            }
-            elseif ($ValidationScenario -in @('Cancellation', 'Timeout')) {
-                'Wait'
-            }
-            else { '' }
+            workerFault = [string] $scenario.workerFault
         }
         $configurationBase64 = [System.Convert]::ToBase64String(
             [System.Text.UTF8Encoding]::new($false).GetBytes(
@@ -837,7 +1171,7 @@ function Invoke-SystemCollectionPlan {
                 throw 'The connected SYSTEM worker is not the run-owned scheduled task process.'
             }
         }
-        $hello = (Read-SystemCollectionFrame -Stream $server `
+        $hello = (Read-BoundedCollectionChannelFrame -Stream $server `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token) | ConvertFrom-Json -Depth 10
         $helloNames = @($hello.PSObject.Properties.Name)
@@ -853,6 +1187,13 @@ function Invoke-SystemCollectionPlan {
             throw 'The SYSTEM worker hello failed identity validation.'
         }
         $peerVerified = $true
+        if (-not $validationFixture) {
+            # LocalSystem provenance becomes true only after the authenticated
+            # worker has proved SID S-1-5-18, its process identity, payload
+            # digest, executable digest, nonce, and Job membership. Merely
+            # asking Task Scheduler to start SYSTEM is not evidence that it did.
+            $resultContext.ObservedExecutionContext = 'LocalSystem'
+        }
 
         $failureStage = 'EXECUTION'
         $request = [pscustomobject][ordered]@{
@@ -863,13 +1204,20 @@ function Invoke-SystemCollectionPlan {
             phaseId = [string] $Plan.phaseId
             operations = @($Plan.operations)
         }
-        Write-SystemCollectionFrame -Stream $server `
+        Write-BoundedCollectionChannelFrame -Stream $server `
             -Json ($request | ConvertTo-Json -Compress -Depth 10) `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token
-        $result = (Read-SystemCollectionFrame -Stream $server `
+        $failureStage = 'RESULT_READ'
+        $resultJson = Read-BoundedCollectionChannelFrame -Stream $server `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
-            -CancellationToken $deadline.Token) | ConvertFrom-Json -Depth 10
+            -CancellationToken $deadline.Token
+        # A complete frame from the authenticated worker is now untrusted input
+        # to the closed result parser. Malformed JSON or an unexpected field is
+        # protocol corruption, not ordinary worker loss, and therefore closes
+        # the run's integrity boundary.
+        $failureStage = 'RESULT_PROTOCOL'
+        $result = $resultJson | ConvertFrom-Json -Depth 10
         $resultNames = @($result.PSObject.Properties.Name)
         $resultOperation = @($result.operations)[0]
         if ($resultNames.Count -ne 7 -or @($resultNames | Sort-Object -Unique).Count -ne 7 -or
@@ -884,11 +1232,14 @@ function Invoke-SystemCollectionPlan {
             throw 'The SYSTEM result failed its closed schema.'
         }
         $providerAvailable = [bool] $resultOperation.providerAvailable
+        $observationCollectedAt = [System.DateTimeOffset]::UtcNow
+        $attemptCompletedAt = $observationCollectedAt
         $state = 'Completed'
         $reasonCode = 'SYSTEM.COMPLETED'
         $coverageState = 'Complete'
     }
     catch [System.OperationCanceledException] {
+        $attemptCompletedAt = [System.DateTimeOffset]::UtcNow
         if ($CancellationToken.IsCancellationRequested) {
             $state = 'Cancelled'
             $reasonCode = 'SYSTEM.CANCELLED'
@@ -901,35 +1252,21 @@ function Invoke-SystemCollectionPlan {
         }
     }
     catch {
+        $attemptCompletedAt = [System.DateTimeOffset]::UtcNow
+        $workerExited = $false
+        if ($failureStage -eq 'RESULT_READ' -and $null -ne $worker) {
+            try { $workerExited = $worker.HasExited -or $worker.WaitForExit(100) } catch {}
+        }
+        $disposition = Get-SystemCollectionFailureDisposition `
+            -FailureStage $failureStage -Exception $_.Exception -WorkerExited $workerExited `
+            -WorkerLossExpected ([bool] $scenario.workerLossExpected)
+        $state = [string] $disposition.state
+        $reasonCode = [string] $disposition.reasonCode
+        $coverageState = [string] $disposition.coverageState
+        $runIntegrityCompromised = [bool] $disposition.runIntegrityCompromised
         if ($failureStage -eq 'ACTIVATION') {
-            $state = 'Unavailable'
-            $reasonCode = if ($_.Exception -is [System.UnauthorizedAccessException] -or
-                ($_.Exception -is [System.Runtime.InteropServices.COMException] -and
-                    $_.Exception.HResult -eq -2147024891)) {
-                'SYSTEM.ACTIVATION_DENIED'
-            }
-            else { 'SYSTEM.ACTIVATION_FAILED' }
-            $coverageState = if ($reasonCode -eq 'SYSTEM.ACTIVATION_DENIED') {
-                'Denied'
-            }
-            else { 'Unavailable' }
             $activationCleanupUnverified =
                 $_.Exception.Data.Contains('SystemTaskCleanupUnverified')
-        }
-        elseif ($ValidationScenario -eq 'WorkerLost' -or $peerVerified) {
-            $state = 'Failed'
-            $reasonCode = 'SYSTEM.WORKER_LOST'
-            $coverageState = 'Failed'
-        }
-        else {
-            # Protocol, peer, executable, or result-schema failures can no
-            # longer be confined to a source result: they compromise whether
-            # the run executed the approved SYSTEM plan at all. Restricted
-            # exception text is discarded and never reaches public output.
-            $state = 'IntegrityFailed'
-            $reasonCode = 'SYSTEM.CHANNEL_INTEGRITY_FAILED'
-            $coverageState = 'Failed'
-            $runIntegrityCompromised = $true
         }
     }
     finally {
@@ -937,21 +1274,39 @@ function Invoke-SystemCollectionPlan {
         $workerTreeAbsent = Wait-PrivilegedCollectionOwnedTreeAbsent -OwnedJob $ownedJob `
             -WorkerRoot $worker -MaximumMilliseconds ([int] $policy.deadlines.cancellationGraceMilliseconds)
         if (-not $workerTreeAbsent -and $null -ne $ownedJob) {
-            $null = $ownedJob.Terminate()
-            $workerTreeAbsent = Wait-PrivilegedCollectionOwnedTreeAbsent -OwnedJob $ownedJob `
-                -WorkerRoot $worker `
-                -MaximumMilliseconds ([int] $policy.deadlines.terminationVerificationMilliseconds)
+            $terminationIssued = $ownedJob.Terminate()
+            # TerminateJobObject and KILL_ON_JOB_CLOSE initiate whole-tree
+            # termination, but process signaling is asynchronous under load.
+            # Close the Job now, retain the root handle, and spend the one
+            # release-owned verification bound proving that exact process has
+            # signaled. A pre-Job Task Scheduler engine is independently proved
+            # absent below from its captured EnginePID.
+            $ownedJob.Dispose()
+            $ownedJob = $null
+            $workerTreeAbsent = $terminationIssued -and (
+                Wait-PrivilegedCollectionOwnedTreeAbsent -OwnedJob $null `
+                    -WorkerRoot $worker `
+                    -MaximumMilliseconds ([int] $policy.deadlines.terminationVerificationMilliseconds)
+            )
         }
         if ($null -ne $worker) { $worker.Dispose() }
         if ($null -ne $ownedJob) { $ownedJob.Dispose() }
         $taskCleanup = Remove-SystemCollectionTransientTask -Activation $taskActivation `
             -TaskName $taskName `
-            -MaximumMilliseconds ([int] $policy.deadlines.cleanupMaximumMilliseconds) `
-            -InjectFirstDeleteFailure ($ValidationScenario -eq 'AbnormalCleanup')
+            -MaximumMilliseconds ([int] $policy.deadlines.cleanupMaximumMilliseconds)
         $taskAbsent = [bool] $taskCleanup.Absent -and -not $activationCleanupUnverified
         $cleanupRetries = [int] $taskCleanup.Retries
+        if ($scenario.injectCleanupFailure -and $validationFixture) {
+            $cleanupProbe = Invoke-SystemCollectionSyntheticCleanupProbe `
+                -Name "Local\WINPCInfo-SystemCollection-Cleanup-v1-$($nonce.Substring(0, 32))" `
+                -MaximumMilliseconds ([int] $policy.deadlines.cleanupMaximumMilliseconds
+                )
+            $syntheticCleanupAbsent = [bool] $cleanupProbe.Absent
+            $cleanupRetries += [int] $cleanupProbe.Retries
+        }
         $deadline.Dispose()
-        $cleanupVerified = $workerTreeAbsent -and $pipeAbsent -and $taskAbsent
+        $cleanupVerified = $workerTreeAbsent -and $pipeAbsent -and $taskAbsent -and
+            $syntheticCleanupAbsent
     }
 
     if (-not $cleanupVerified) {
@@ -961,20 +1316,15 @@ function Invoke-SystemCollectionPlan {
         $runIntegrityCompromised = $true
         $providerAvailable = $null
     }
-    if ($ValidationScenario -eq 'AbnormalCleanup' -and $validationFixture) {
-        # Synthetic validation never creates a real scheduled task. This one
-        # injected retry exercises the same bounded cleanup decision without
-        # pretending that a live Task Scheduler deletion occurred.
-        $cleanupRetries = 1
-    }
-
     New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
         -State $state -ReasonCode $reasonCode -CoverageState $coverageState `
-        -ObservedExecutionContext $(if ($validationFixture) { 'Synthetic' } else { 'LocalSystem' }) `
-        -LocalSystemIdentityVerified (-not $validationFixture) `
+        -ObservedExecutionContext $resultContext.ObservedExecutionContext `
+        -LocalSystemIdentityVerified ($resultContext.ObservedExecutionContext -eq 'LocalSystem') `
         -CleanupVerified $cleanupVerified -TaskAbsent $taskAbsent -PipeAbsent $pipeAbsent `
         -WorkerTreeAbsent $workerTreeAbsent -ProviderAvailable $providerAvailable `
-        -CleanupRetries $cleanupRetries -RunIntegrityCompromised $runIntegrityCompromised
+        -CleanupRetries $cleanupRetries -RunIntegrityCompromised $runIntegrityCompromised `
+        -StartedAt $attemptStartedAt -CompletedAt $attemptCompletedAt `
+        -CollectedAt $observationCollectedAt
 }
 
 function Read-SystemCollectionPlanFixture {
@@ -1053,15 +1403,16 @@ function Invoke-SystemCollectionPlanFixture {
     }
 
     $scenario = [string] $fixture.scenario
+    $scenarioPolicy = Get-SystemCollectionValidationScenario -Name $scenario
     $systemPlan = $planResult.Plan
     $systemPlanDigest = $planResult.Digest
-    if ($scenario -eq 'UnknownOperation') {
+    if ($scenarioPolicy.planMutation -eq 'UnknownOperation') {
         $systemPlan = $systemPlan | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
         $systemPlan.operations[0].operationId = 'op:validation.unknown-system-operation'
         $systemPlanDigest = Get-ObjectDigest -Value $systemPlan `
             -ConvertToJsonCommand $ConvertToJsonCommand
     }
-    elseif ($scenario -eq 'InvalidParameters') {
+    elseif ($scenarioPolicy.planMutation -eq 'InvalidParameters') {
         $systemPlan = $systemPlan | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
         $systemPlan.operations[0].parameters | Add-Member -NotePropertyName command `
             -NotePropertyValue 'synthetic-prohibited-marker'
@@ -1069,12 +1420,14 @@ function Invoke-SystemCollectionPlanFixture {
             -ConvertToJsonCommand $ConvertToJsonCommand
     }
 
-    $fixtureCancellation = if ($scenario -eq 'Cancellation') {
+    $fixtureCancellation = if ($null -ne $scenarioPolicy.cancellationDelayMilliseconds) {
         [System.Threading.CancellationTokenSource]::new()
     }
     else { $null }
     try {
-        if ($null -ne $fixtureCancellation) { $fixtureCancellation.CancelAfter(200) }
+        if ($null -ne $fixtureCancellation) {
+            $fixtureCancellation.CancelAfter([int] $scenarioPolicy.cancellationDelayMilliseconds)
+        }
         $systemResult = Invoke-SystemCollectionPlan -Plan $systemPlan `
             -PlanDigest $systemPlanDigest -ValidationScenario $scenario `
             -CancellationToken $(if ($null -ne $fixtureCancellation) {
@@ -1085,7 +1438,28 @@ function Invoke-SystemCollectionPlanFixture {
     finally {
         if ($null -ne $fixtureCancellation) { $fixtureCancellation.Dispose() }
     }
+    $assessmentRecord = $null
+    if ($systemResult.state -eq 'Completed') {
+        $testJsonCommand = $ExecutionContext.InvokeCommand.GetCommand(
+            'Test-Json', [System.Management.Automation.CommandTypes]::Cmdlet
+        )
+        if ($null -eq $testJsonCommand -or
+            $testJsonCommand.ModuleName -ne 'Microsoft.PowerShell.Utility') {
+            throw 'The Assessment Record schema command does not have built-in provenance.'
+        }
+        $assessmentRecord = New-SystemAssessmentRecord -SystemResult $systemResult
+        $assessmentReason = Get-SystemAssessmentRecordValidationReason `
+            -Record $assessmentRecord -Policy (Get-SystemCollectionPlanPolicy) `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $testJsonCommand
+        if ($assessmentReason) {
+            throw "The SYSTEM Assessment Record failed validation: $assessmentReason"
+        }
+    }
     Write-ContractRecord $systemResult -ConvertToJsonCommand $ConvertToJsonCommand
+    if ($null -ne $assessmentRecord) {
+        Write-ContractRecord $assessmentRecord -ConvertToJsonCommand $ConvertToJsonCommand
+    }
 
     # A source-scoped SYSTEM failure does not gain authority over the rest of
     # the Assessment Run. Safe standard-user work continues after activation

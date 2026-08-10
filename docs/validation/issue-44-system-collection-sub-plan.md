@@ -20,9 +20,11 @@ This public-safe evidence describes synthetic validation only. It contains no re
 | Cancellation | `Cancelled` | `Cancelled`; scheduling closes; bounded tree termination |
 | Timeout | `TimedOut` | `TimedOut`; bounded tree termination; safe work continues |
 | Denied | `Unavailable` | `Denied`; no activation residue; safe work continues |
-| AbnormalCleanup | `Completed` | one bounded cleanup retry; task, pipe, and tree verified absent |
+| AbnormalCleanup | `Completed` | a real named kernel IPC object survives the first attempt, is removed by one bounded retry, and cannot be reopened |
 
-The generated application repeats the complete matrix after request validation and Preparation approval. It emits one SYSTEM phase record, one matching terminal result, the normal envelope, exact synthetic provenance, scoped coverage, and verified cleanup. Useful synthetic work still ends `IntegrityFailed` at the later package gate because issue #44 does not implement a Protected Evidence Package.
+The generated application repeats the complete matrix after request validation and Preparation approval. It emits one SYSTEM phase record, one matching terminal result, the normal envelope, exact synthetic provenance, scoped coverage, and verified cleanup. The successful case additionally emits a normal Assessment Record that passes the shared Draft 2020-12 schema and semantic reference, coverage, graph, type, and bound checks. The same schema admits real `LocalSystem` provenance, but the coordinator uses it only after SID `S-1-5-18` and peer identity are proven. Useful synthetic work still ends `IntegrityFailed` at the later package gate because issue #44 does not implement a Protected Evidence Package.
+
+Focused security checks also prove that malformed authenticated result content closes run integrity instead of becoming worker loss, a pre-identity live failure reports `NotStarted`, and deleting a simulated pre-Job task registration cannot hide its still-running captured engine process.
 
 ## Commands
 

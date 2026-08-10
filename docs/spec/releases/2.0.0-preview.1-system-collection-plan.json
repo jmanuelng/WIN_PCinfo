@@ -53,7 +53,7 @@
   },
   "channel": {
     "pipeNamePrefix": "WINPCInfo-SystemCollection-v1-",
-    "jobNamePrefix": "Local\\WINPCInfo-SystemCollection-v1-",
+    "jobNamePrefix": "Global\\WINPCInfo-SystemCollection-v1-",
     "maximumServerInstances": 1,
     "maximumMessageUtf8Bytes": 8192,
     "nonceBytes": 32,

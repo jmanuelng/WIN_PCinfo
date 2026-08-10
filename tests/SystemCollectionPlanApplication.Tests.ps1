@@ -66,6 +66,12 @@ foreach ($case in $cases) {
 
 $success = Invoke-SystemFixtureApplication -Name 'system-synthetic-success'
 $successSystem = @($success.Records | Where-Object recordType -eq 'win-pcinfo.system-collection-phase')[0]
+$successAssessments = @($success.Records | Where-Object recordType -eq 'win-pcinfo.assessment-record')
+Assert-Equal 1 $successAssessments.Count `
+    'the successful generated path emits one normal Assessment Record'
+Assert-Equal $true (Test-Json -Json ($successAssessments[0] | ConvertTo-Json -Compress -Depth 30) `
+    -SchemaFile (Join-Path $repositoryRoot 'schemas/assessment-record.schema.json')) `
+    'the generated SYSTEM Assessment Record validates against the normal release schema'
 Assert-Equal 'collector:windows.mdm-bridge.device-manageability' `
     $successSystem.collectorResult.Envelope.collectorId `
     'the generated artifact returns SYSTEM evidence through the normal envelope shape'

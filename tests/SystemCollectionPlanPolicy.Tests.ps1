@@ -54,6 +54,8 @@ Assert-Equal 'TransientTaskSchedulerCom' $policy.activation.kind `
     'the live activation mechanism is fixed and separately cleaned up'
 Assert-Equal 'WindowsJobObjectRequired' $policy.treeControl.mode `
     'the SYSTEM worker and descendants must join the coordinator-owned Job Object'
+Assert-Equal 'Global\WINPCInfo-SystemCollection-v1-' $policy.channel.jobNamePrefix `
+    'the Job Object crosses the interactive-to-Task-Scheduler session boundary'
 $canonicalWorkerSource = (Get-SystemCollectionWorkerSource).Replace("`r`n", "`n").Replace("`r", "`n")
 $workerDigest = Get-SystemCollectionSha256 -Bytes (
     [System.Text.UTF8Encoding]::new($false).GetBytes($canonicalWorkerSource)

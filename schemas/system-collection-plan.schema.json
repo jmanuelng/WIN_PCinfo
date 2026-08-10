@@ -133,7 +133,7 @@
       "required": ["pipeNamePrefix", "jobNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireLocalSystemSid", "requireArtifactDigest", "assessmentEvidenceAllowed"],
       "properties": {
         "pipeNamePrefix": { "const": "WINPCInfo-SystemCollection-v1-" },
-        "jobNamePrefix": { "const": "Local\\WINPCInfo-SystemCollection-v1-" },
+        "jobNamePrefix": { "const": "Global\\WINPCInfo-SystemCollection-v1-" },
         "maximumServerInstances": { "const": 1 },
         "maximumMessageUtf8Bytes": { "type": "integer", "minimum": 256, "maximum": 16384 },
         "nonceBytes": { "type": "integer", "minimum": 32, "maximum": 64 },

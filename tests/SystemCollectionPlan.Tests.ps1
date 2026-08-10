@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot 'src/Contracts.ps1')
+. (Join-Path $repositoryRoot 'src/ContractValidator.ps1')
 . (Join-Path $repositoryRoot 'src/PrivilegedCollectionPlan.ps1')
 . (Join-Path $repositoryRoot 'src/SystemCollectionPlan.ps1')
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
@@ -76,6 +77,44 @@ Assert-Equal 'SYSTEM.LIVE_ACTIVATION_VALIDATION_UNAVAILABLE' `
     'missing live SYSTEM validation has one public-safe typed reason'
 Assert-Equal $true $accepted.standardUserWorkMayContinue `
     'successful SYSTEM collection leaves unrelated safe work schedulable'
+Assert-Equal 1 @($accepted.collectorResult.Provenance).Count `
+    'the collector result includes the normal observation provenance object'
+Assert-Equal $accepted.collectorResult.Envelope.executionContext `
+    $accepted.collectorResult.Provenance[0].executionContext `
+    'envelope and observation provenance agree on the exact execution context'
+$attemptStarted = [System.DateTimeOffset]::Parse($accepted.collectorResult.Envelope.startedAt)
+$attemptCompleted = [System.DateTimeOffset]::Parse($accepted.collectorResult.Envelope.completedAt)
+$observationCollected = [System.DateTimeOffset]::Parse(
+    $accepted.collectorResult.Provenance[0].collectedAt
+)
+if ($attemptStarted -gt $observationCollected -or
+    $observationCollected -gt $attemptCompleted) {
+    throw 'SYSTEM timing does not enclose the actual accepted observation.'
+}
+
+$systemAssessment = New-SystemAssessmentRecord -SystemResult $accepted
+$testJsonCommand = $ExecutionContext.InvokeCommand.GetCommand(
+    'Test-Json', [System.Management.Automation.CommandTypes]::Cmdlet
+)
+$assessmentReason = Get-SystemAssessmentRecordValidationReason `
+    -Record $systemAssessment -Policy (Get-SystemCollectionPlanPolicy) `
+    -ConvertFromJsonCommand (Get-Command ConvertFrom-Json) `
+    -ConvertToJsonCommand $convertToJsonCommand -TestJsonCommand $testJsonCommand
+if ($assessmentReason) {
+    throw "The SYSTEM envelope was rejected inside its Assessment Record: $assessmentReason"
+}
+
+$liveAssessment = $systemAssessment | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+$liveAssessment.run.validationFixture = $false
+$liveAssessment.provenance[0].executionContext = 'LocalSystem'
+$liveAssessment.collectorResults[0].executionContext = 'LocalSystem'
+$liveReason = Get-SystemAssessmentRecordValidationReason -Record $liveAssessment `
+    -Policy (Get-SystemCollectionPlanPolicy) `
+    -ConvertFromJsonCommand (Get-Command ConvertFrom-Json) `
+    -ConvertToJsonCommand $convertToJsonCommand -TestJsonCommand $testJsonCommand
+if ($liveReason) {
+    throw "The normal Assessment Record rejected LocalSystem provenance: $liveReason"
+}
 
 $serialized = $accepted | ConvertTo-Json -Compress -Depth 30
 if ($serialized -match '(?i)recipientProfile|localPackageProtector|assessmentUserContext|packageKey|credential|password|secret|scriptText|commandText|executablePath|taskName|pipeName') {
@@ -97,6 +136,32 @@ Assert-Equal $true $unknown.runIntegrityCompromised `
     'a recomputed but unauthorized plan digest cannot preserve run integrity'
 Assert-Equal $true $unknown.cleanup.verified `
     'unknown input creates no task, process, channel, or artifact'
+
+$liveStopped = New-SystemCollectionStoppedResult -State 'Unavailable' `
+    -ReasonCode 'SYSTEM.ACTIVATION_FAILED' -CoverageState 'Unavailable' -Context @{
+        Policy = Get-SystemCollectionPlanPolicy
+        Plan = $planResult.Plan
+        PlanDigest = $planResult.Digest
+        ObservedExecutionContext = 'NotStarted'
+    }
+Assert-Equal 'NotStarted' $liveStopped.collectorResult.Envelope.executionContext `
+    'a live pre-hello failure does not fabricate LocalSystem provenance'
+Assert-Equal $false $liveStopped.activation.localSystemIdentityVerified `
+    'a live pre-hello failure explicitly reports that SYSTEM identity was not verified'
+
+$protocolFailure = Get-SystemCollectionFailureDisposition -FailureStage 'RESULT_PROTOCOL' `
+    -Exception ([System.FormatException]::new('synthetic malformed result'))
+Assert-Equal 'IntegrityFailed' $protocolFailure.state `
+    'malformed authenticated result content compromises run integrity'
+Assert-Equal 'SYSTEM.CHANNEL_INTEGRITY_FAILED' $protocolFailure.reasonCode `
+    'protocol corruption cannot be mislabeled as ordinary worker loss'
+Assert-Equal $true $protocolFailure.runIntegrityCompromised `
+    'protocol corruption closes unrelated scheduling'
+
+$lostDisposition = Get-SystemCollectionFailureDisposition -FailureStage 'RESULT_READ' `
+    -Exception ([System.IO.EndOfStreamException]::new()) -WorkerExited $true
+Assert-Equal 'SYSTEM.WORKER_LOST' $lostDisposition.reasonCode `
+    'EOF plus verified worker exit remains the narrow worker-loss outcome'
 
 $invalidParameterPlan = $planResult.Plan | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
 $invalidParameterPlan.operations[0].parameters | Add-Member -NotePropertyName command `
@@ -205,5 +270,81 @@ Assert-Equal $true $abnormalCleanup.cleanup.taskAbsent `
     'no transient task survives abnormal cleanup recovery'
 Assert-Equal $true $abnormalCleanup.cleanup.workerTreeAbsent `
     'no worker descendant survives abnormal cleanup recovery'
+
+$cleanupProbeName = "Local\WINPCInfo-SystemCollection-Test-$([guid]::NewGuid().ToString('N'))"
+$cleanupProbe = Invoke-SystemCollectionSyntheticCleanupProbe -Name $cleanupProbeName `
+    -MaximumMilliseconds 1000
+Assert-Equal 1 $cleanupProbe.Retries `
+    'the abnormal-cleanup probe really consumes its single retry'
+Assert-Equal $true $cleanupProbe.Absent `
+    'the abnormal-cleanup probe proves its owned IPC object absent'
+$openedProbe = $null
+$probeSurvived = [System.Threading.EventWaitHandle]::TryOpenExisting(
+    $cleanupProbeName, [ref] $openedProbe
+)
+if ($null -ne $openedProbe) { $openedProbe.Dispose() }
+Assert-Equal $false $probeSurvived `
+    'the exact injected-cleanup IPC name cannot be reopened after return'
+
+# Simulate a live task engine that never joined the Job and ignores the task
+# stop request. Deleting its registration and losing the scheduler instance is
+# insufficient: cleanup must retain the captured EnginePID and fail closed
+# while that exact process is alive.
+$engineStart = [System.Diagnostics.ProcessStartInfo]::new()
+$engineStart.FileName = Join-Path $PSHOME 'pwsh.exe'
+$engineStart.UseShellExecute = $false
+$null = $engineStart.ArgumentList.Add('-NoLogo')
+$null = $engineStart.ArgumentList.Add('-NoProfile')
+$null = $engineStart.ArgumentList.Add('-Command')
+$null = $engineStart.ArgumentList.Add('[System.Threading.Thread]::Sleep(30000)')
+$script:systemCleanupEngine = [System.Diagnostics.Process]::Start($engineStart)
+$script:systemCleanupInstanceActive = $true
+$script:systemCleanupRegistered = $true
+$script:systemCleanupInstance = [pscustomobject]@{
+    InstanceGuid = [guid]::NewGuid().ToString('B')
+    EnginePID = $script:systemCleanupEngine.Id
+}
+$script:systemCleanupInstance | Add-Member -MemberType ScriptMethod -Name Stop -Value {}
+$service = [pscustomobject]@{}
+$service | Add-Member -MemberType ScriptMethod -Name GetRunningTasks -Value {
+    param($Flags)
+    $collection = [pscustomobject]@{ Count = if ($script:systemCleanupInstanceActive) { 1 } else { 0 } }
+    $collection | Add-Member -MemberType ScriptMethod -Name Item -Value {
+        param($Index)
+        $script:systemCleanupInstance
+    }
+    $collection
+}
+$folder = [pscustomobject]@{}
+$folder | Add-Member -MemberType ScriptMethod -Name DeleteTask -Value {
+    param($Name, $Flags)
+    $script:systemCleanupRegistered = $false
+    $script:systemCleanupInstanceActive = $false
+}
+$folder | Add-Member -MemberType ScriptMethod -Name GetTask -Value {
+    param($Name)
+    if (-not $script:systemCleanupRegistered) { throw 'Task not found.' }
+    [pscustomobject]@{}
+}
+try {
+    $preJobCleanup = Remove-SystemCollectionTransientTask -Activation ([pscustomobject]@{
+        Service = $service
+        Folder = $folder
+        RunningTask = $script:systemCleanupInstance
+        InstanceGuid = $script:systemCleanupInstance.InstanceGuid
+    }) -TaskName "WINPCInfo-SystemCollection-v1-$([guid]::NewGuid().ToString('N'))" `
+        -MaximumMilliseconds 150
+    Assert-Equal $false $preJobCleanup.Absent `
+        'a surviving pre-Job task engine cannot be reported absent'
+    Assert-Equal $false $preJobCleanup.EngineProcessAbsent `
+        'cleanup records the exact captured task EnginePID as surviving'
+}
+finally {
+    if (-not $script:systemCleanupEngine.HasExited) {
+        $script:systemCleanupEngine.Kill($true)
+        $script:systemCleanupEngine.WaitForExit()
+    }
+    $script:systemCleanupEngine.Dispose()
+}
 
 Write-Output 'PASS: all nine SYSTEM sub-plan cases enforce catalog, parameters, provenance, confinement, lifecycle, and cleanup contracts.'
