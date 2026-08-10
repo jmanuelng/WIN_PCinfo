@@ -21,6 +21,13 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot 'src/RuntimeCompatibility.ps1')
 . (Join-Path $repositoryRoot 'src/ProcessSupervisor.ps1')
 
+$supervisorSource = Get-Content -LiteralPath (
+    Join-Path $repositoryRoot 'src/ProcessSupervisor.ps1'
+) -Raw
+if ($supervisorSource -match 'GetAwaiter\(\)\.GetResult\(\)|System\.Threading\.Tasks') {
+    throw 'Process supervision must not depend on an unbounded asynchronous pipe-drain task.'
+}
+
 $catalogBytes = Get-Utf8LfBytes -LiteralPath (
     Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
 )
@@ -55,6 +62,15 @@ Assert-SupervisorEqual $true $result.Supervision.completeOwnedTreeAbsent `
     'the complete owned process tree is absent before the result is returned'
 Assert-SupervisorEqual $true $result.Supervision.temporaryArtifactsAbsent `
     'the run-owned cancellation event is absent and the collector created no file artifact'
+
+$terminationIncompleteWithOverflow = [pscustomobject]@{
+    StandardOutputExceeded = $true
+    StandardErrorExceeded = $false
+    FailureStage = [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete
+}
+Assert-SupervisorEqual 'PROCESS.TERMINATION_INCOMPLETE' (
+    Get-NativeSupervisorReasonCode -NativeResult $terminationIncompleteWithOverflow
+) 'unproved tree cleanup takes precedence over the triggering output failure'
 
 $wrongExecutable = Invoke-ApprovedCollectorProcess `
     -OperationId 'fixture:synthetic.wrong-executable'

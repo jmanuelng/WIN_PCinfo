@@ -88,8 +88,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Win32.SafeHandles;
 
 namespace WinPCInfo.ProcessSupervisor
 {
@@ -104,6 +102,7 @@ namespace WinPCInfo.ProcessSupervisor
         AssignJobObject,
         ResumeProcess,
         WaitForProcess,
+        CaptureOutput,
         OutputLimit,
         CooperativeCancellation,
         HardCancellation,
@@ -137,9 +136,32 @@ namespace WinPCInfo.ProcessSupervisor
         internal bool Exceeded;
     }
 
-    internal sealed class CaptureState
+    internal sealed class CaptureBuffer
     {
-        internal volatile bool Exceeded;
+        private readonly int limit;
+        private readonly MemoryStream prefix;
+        internal long TotalBytes { get; private set; }
+        internal bool Exceeded { get { return TotalBytes > limit; } }
+
+        internal CaptureBuffer(int maximumBytes)
+        {
+            limit = maximumBytes;
+            prefix = new MemoryStream(Math.Min(maximumBytes, 4096));
+        }
+
+        internal void Append(byte[] bytes, int count)
+        {
+            int remaining = Math.Max(0, limit - (int)prefix.Length);
+            if (remaining > 0) prefix.Write(bytes, 0, Math.Min(remaining, count));
+            TotalBytes += count;
+        }
+
+        internal CaptureResult Snapshot()
+        {
+            return new CaptureResult {
+                Prefix = prefix.ToArray(), TotalBytes = TotalBytes, Exceeded = Exceeded
+            };
+        }
     }
 
     public static class NativeRunner
@@ -268,6 +290,15 @@ namespace WinPCInfo.ProcessSupervisor
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool PeekNamedPipe(
+            IntPtr pipe, IntPtr buffer, uint bufferSize, IntPtr bytesRead,
+            out uint totalBytesAvailable, IntPtr bytesLeftThisMessage);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool ReadFile(
+            IntPtr file, byte[] buffer, uint bytesToRead, out uint bytesRead, IntPtr overlapped);
+
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern bool CreateProcess(
             string applicationName, StringBuilder commandLine, IntPtr processAttributes,
@@ -320,24 +351,40 @@ namespace WinPCInfo.ProcessSupervisor
             return Marshal.StringToHGlobalUni(block.ToString());
         }
 
-        private static async Task<CaptureResult> CaptureAsync(IntPtr readHandle, int limit, CaptureState state)
+        private static bool DrainAvailablePipe(
+            IntPtr readHandle, CaptureBuffer capture, int maximumBytesPerPass, out int nativeError)
         {
-            var retained = new MemoryStream(Math.Min(limit, 4096));
-            long total = 0;
-            using (var safeHandle = new SafeFileHandle(readHandle, true))
-            using (var stream = new FileStream(safeHandle, FileAccess.Read, 4096, false))
+            nativeError = 0;
+            var buffer = new byte[4096];
+            int remainingBudget = maximumBytesPerPass;
+            while (remainingBudget > 0)
             {
-                var buffer = new byte[4096];
-                int read;
-                while ((read = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
+                uint available;
+                if (!PeekNamedPipe(readHandle, IntPtr.Zero, 0, IntPtr.Zero, out available, IntPtr.Zero))
                 {
-                    int remaining = Math.Max(0, limit - (int)retained.Length);
-                    if (remaining > 0) retained.Write(buffer, 0, Math.Min(remaining, read));
-                    total += read;
-                    if (total > limit) state.Exceeded = true;
+                    int error = Marshal.GetLastWin32Error();
+                    // ERROR_BROKEN_PIPE means every writer closed. That is the
+                    // normal EOF signal for an anonymous Windows pipe.
+                    if (error == 109) return true;
+                    nativeError = error;
+                    return false;
                 }
+                if (available == 0) return true;
+                uint requested = Math.Min(
+                    available, (uint)Math.Min(buffer.Length, remainingBudget));
+                uint read;
+                if (!ReadFile(readHandle, buffer, requested, out read, IntPtr.Zero))
+                {
+                    int error = Marshal.GetLastWin32Error();
+                    if (error == 109) return true;
+                    nativeError = error;
+                    return false;
+                }
+                if (read == 0) return true;
+                capture.Append(buffer, (int)read);
+                remainingBudget -= (int)read;
             }
-            return new CaptureResult { Prefix = retained.ToArray(), TotalBytes = total, Exceeded = total > limit };
+            return true;
         }
 
         private static uint ActiveProcessCount(IntPtr job)
@@ -445,10 +492,8 @@ namespace WinPCInfo.ProcessSupervisor
                 }
 
                 result.Started = true;
-                var stdoutState = new CaptureState();
-                var stderrState = new CaptureState();
-                var stdoutTask = CaptureAsync(stdoutRead, standardOutputLimit, stdoutState); stdoutRead = IntPtr.Zero;
-                var stderrTask = CaptureAsync(stderrRead, standardErrorLimit, stderrState); stderrRead = IntPtr.Zero;
+                var stdoutCapture = new CaptureBuffer(standardOutputLimit);
+                var stderrCapture = new CaptureBuffer(standardErrorLimit);
                 CloseHandle(stdoutWrite); stdoutWrite = IntPtr.Zero;
                 CloseHandle(stderrWrite); stderrWrite = IntPtr.Zero;
 
@@ -464,8 +509,21 @@ namespace WinPCInfo.ProcessSupervisor
                     DateTime deadline = DateTime.UtcNow.AddMilliseconds(deadlineMilliseconds);
                     DateTime cancellationDeadline = DateTime.MaxValue;
                     bool cancellationRequested = false;
+                    bool outputLimitObserved = false;
                     while (true)
                     {
+                        int outputError;
+                        int outputPassLimit = Math.Max(
+                            4096, Math.Max(standardOutputLimit, standardErrorLimit) + 4096);
+                        if (!DrainAvailablePipe(stdoutRead, stdoutCapture, outputPassLimit, out outputError) ||
+                            !DrainAvailablePipe(stderrRead, stderrCapture, outputPassLimit, out outputError))
+                        {
+                            result.FailureStage = NativeFailureStage.CaptureOutput;
+                            result.NativeError = outputError;
+                            if (!TerminateJobWithin(job, process.hProcess, terminationVerificationMilliseconds))
+                                result.FailureStage = NativeFailureStage.TerminationIncomplete;
+                            break;
+                        }
                         uint activeDuringRun = ActiveProcessCount(job);
                         if (activeDuringRun != UInt32.MaxValue)
                             peakActive = Math.Max(peakActive, (int)activeDuringRun);
@@ -488,8 +546,18 @@ namespace WinPCInfo.ProcessSupervisor
                             break;
                         }
 
-                        if (stdoutState.Exceeded || stderrState.Exceeded)
+                        if (stdoutCapture.Exceeded || stderrCapture.Exceeded)
                         {
+                            // One additional bounded poll lets the sibling pipe
+                            // drain independently when the child filled stdout
+                            // before it could write stderr. A continuously
+                            // writing process is still terminated on the next
+                            // 25 ms iteration.
+                            if (!outputLimitObserved)
+                            {
+                                outputLimitObserved = true;
+                                continue;
+                            }
                             result.FailureStage = NativeFailureStage.OutputLimit;
                             if (!TerminateJobWithin(job, process.hProcess, terminationVerificationMilliseconds))
                                 result.FailureStage = NativeFailureStage.TerminationIncomplete;
@@ -547,8 +615,23 @@ namespace WinPCInfo.ProcessSupervisor
                 }
                 result.PeakActiveProcesses = peakActive;
 
-                CaptureResult stdout = stdoutTask.GetAwaiter().GetResult();
-                CaptureResult stderr = stderrTask.GetAwaiter().GetResult();
+                // Pipe reads never wait for EOF. PeekNamedPipe reports only
+                // bytes already buffered by the kernel, and ReadFile consumes
+                // no more than that reported amount. Consequently a failed
+                // TerminateJobObject cannot strand the supervisor in a pipe
+                // task after the finite termination/accounting interval.
+                int finalOutputError;
+                int finalPassLimit = Math.Max(
+                    4096, Math.Max(standardOutputLimit, standardErrorLimit) + 4096);
+                if ((!DrainAvailablePipe(stdoutRead, stdoutCapture, finalPassLimit, out finalOutputError) ||
+                    !DrainAvailablePipe(stderrRead, stderrCapture, finalPassLimit, out finalOutputError)) &&
+                    result.FailureStage == NativeFailureStage.None)
+                {
+                    result.FailureStage = NativeFailureStage.CaptureOutput;
+                    result.NativeError = finalOutputError;
+                }
+                CaptureResult stdout = stdoutCapture.Snapshot();
+                CaptureResult stderr = stderrCapture.Snapshot();
                 result.StandardOutput = stdout.Prefix;
                 result.StandardError = stderr.Prefix;
                 result.StandardOutputBytes = stdout.TotalBytes;
@@ -651,9 +734,6 @@ function Get-Sha256ForSupervisorBytes {
 function Get-NativeSupervisorReasonCode {
     param([Parameter(Mandatory)] $NativeResult)
 
-    if ($NativeResult.StandardOutputExceeded -or $NativeResult.StandardErrorExceeded) {
-        return 'PROCESS.OUTPUT_LIMIT_EXCEEDED'
-    }
     if ($NativeResult.FailureStage -eq
         [WinPCInfo.ProcessSupervisor.NativeFailureStage]::AssignJobObjectIncompatible) {
         return 'PROCESS.JOB_INCOMPATIBLE'
@@ -661,6 +741,9 @@ function Get-NativeSupervisorReasonCode {
     if ($NativeResult.FailureStage -eq
         [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete) {
         return 'PROCESS.TERMINATION_INCOMPLETE'
+    }
+    if ($NativeResult.StandardOutputExceeded -or $NativeResult.StandardErrorExceeded) {
+        return 'PROCESS.OUTPUT_LIMIT_EXCEEDED'
     }
     if ($NativeResult.FailureStage -eq [WinPCInfo.ProcessSupervisor.NativeFailureStage]::Deadline) {
         return 'PROCESS.DEADLINE_EXCEEDED'
@@ -1001,7 +1084,7 @@ function Invoke-ApprovedCollectorProcess {
             ($null -ne $fixturePolicy -and $fixturePolicy.fault -eq 'JobAssignmentIncompatible')
         )
         $nativeReasonCode = Get-NativeSupervisorReasonCode -NativeResult $native
-        if ($native.Started -and -not $native.CompleteOwnedTreeAbsent -and -not $nativeReasonCode) {
+        if ($native.Started -and -not $native.CompleteOwnedTreeAbsent) {
             $nativeReasonCode = 'PROCESS.TERMINATION_INCOMPLETE'
         }
         if ($nativeReasonCode) {
