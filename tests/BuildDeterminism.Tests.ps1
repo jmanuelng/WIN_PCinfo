@@ -10,6 +10,7 @@ function Assert-True {
 }
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $repositoryRoot 'build/TextCanonicalization.ps1')
 $buildScript = Join-Path $repositoryRoot 'build/Build.ps1'
 $outputDirectory = Join-Path $repositoryRoot '.test-output/build-determinism'
 $firstPath = Join-Path $outputDirectory 'first/WIN-PCInfo.ps1'
@@ -32,10 +33,48 @@ Assert-True (@($first.sourceInputs | Where-Object { $_.sha256 -notmatch '^[0-9a-
 Assert-True ($first.definitionInputs.Count -eq 3) 'all governing preparation resources are recorded'
 Assert-True (@($first.definitionInputs | Where-Object { $_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count -eq 0) `
     'every governing preparation resource has an exact digest'
-Assert-True ($first.applicationManifest.resources.Count -eq 10) `
+Assert-True ($first.applicationManifest.resources.Count -eq 11) `
     'source, build tool, and public schemas are bound into the application manifest'
 Assert-True ($first.applicationManifest.sha256 -match '^[0-9a-f]{64}$') `
     'the application manifest has one exact digest'
+foreach ($resource in @($first.applicationManifest.resources) + @($first.definitionInputs)) {
+    $resourcePath = Join-Path $repositoryRoot $resource.path
+    $utf8LfBytes = Get-Utf8LfBytes -LiteralPath $resourcePath
+    $utf8LfDigest = [System.Convert]::ToHexString(
+        [System.Security.Cryptography.SHA256]::HashData($utf8LfBytes)
+    ).ToLowerInvariant()
+    Assert-True ($resource.sha256 -eq $utf8LfDigest) `
+        "$($resource.path) uses a checkout-independent UTF-8/LF identity"
+}
+
+$vectorPath = Join-Path $outputDirectory 'canonicalization-vector.txt'
+[System.IO.File]::WriteAllText($vectorPath, "alpha`r`nbeta`rgamma`n", [System.Text.UTF8Encoding]::new($false))
+[byte[]] $expectedVector = [System.Text.UTF8Encoding]::new($false).GetBytes("alpha`nbeta`ngamma`n")
+[byte[]] $actualVector = @(Get-Utf8LfBytes $vectorPath)
+Assert-True ([System.Linq.Enumerable]::SequenceEqual[byte]($actualVector, $expectedVector)) `
+    'UTF-8/LF identity normalizes CRLF and bare CR without adding a BOM'
+
+$mirrorSessionRoot = Join-Path $outputDirectory ([System.Guid]::NewGuid().ToString('N'))
+$mirrorResources = @(
+    @($first.applicationManifest.resources.path) + @($first.definitionInputs.path) |
+        Sort-Object -Unique
+)
+foreach ($representation in @('lf', 'crlf')) {
+    $mirrorRoot = Join-Path $mirrorSessionRoot $representation
+    foreach ($relativePath in $mirrorResources) {
+        $sourcePath = Join-Path $repositoryRoot $relativePath
+        $mirrorPath = Join-Path $mirrorRoot $relativePath
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $mirrorPath) -Force
+        $lfText = [System.Text.UTF8Encoding]::new($false, $true).GetString((Get-Utf8LfBytes $sourcePath))
+        $representedText = if ($representation -eq 'crlf') { $lfText -replace "`n", "`r`n" } else { $lfText }
+        [System.IO.File]::WriteAllText($mirrorPath, $representedText, [System.Text.UTF8Encoding]::new($false))
+    }
+    $mirrorBuild = & (Join-Path $mirrorRoot 'build/Build.ps1') `
+        -OutputPath (Join-Path $mirrorRoot 'artifacts/WIN-PCInfo.ps1')
+    $mirrorBytes = [System.IO.File]::ReadAllBytes($mirrorBuild.outputPath)
+    Assert-True ([System.Linq.Enumerable]::SequenceEqual[byte]($firstBytes, $mirrorBytes)) `
+        "$representation input trees of the same reviewed text must generate identical application bytes"
+}
 Assert-True ($firstBytes[0] -eq 0xEF -and $firstBytes[1] -eq 0xBB -and $firstBytes[2] -eq 0xBF) `
     'the signing representation starts with a UTF-8 BOM'
 

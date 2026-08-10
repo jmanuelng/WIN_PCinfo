@@ -13,7 +13,7 @@ This is the public-safe validation projection for the Preparation Summary tracer
 - Active preparation rejects UNC syntax before path access and tests local fixed-volume type before readiness or free-space access. It resolves and freezes the absolute destination, required free disk, actual Local Package Protector availability, the recipient choice, and the no-Windows-Feature-change boundary through metadata-only checks. Missing critical prerequisites emitted the trusted summary and stopped as `PREPARATION.PREREQUISITE_UNRESOLVED`. Unsigned artifact trust, synthetic integrity failure, and byte-level corruption of the real embedded definition all stopped as `PREPARATION.INTEGRITY_FAILED`; none had an override path.
 - Runtime and preparation fixtures remained validation-only, created no working-directory entry, preserved a pre-existing sentinel byte-for-byte, and could not cross into collection.
 - The generated application ran under Windows PowerShell 5.1 and stopped at the established runtime boundary. Its normal PowerShell 7 path performed no assessment network request, elevation, install, agreement, Windows Feature change, workspace creation, or collection before approval.
-- Two builds to different output directories produced identical application bytes with UTF-8 BOM and CRLF. Build evidence recorded all seven modular sources, the build tool, both public schemas, and SHA-256 identities for all three governing preparation resources.
+- Two builds to different output directories produced identical application bytes with UTF-8 BOM and CRLF. Unique isolated input trees explicitly materialized every resource as UTF-8/LF and UTF-8/CRLF; both produced those same bytes. Build evidence recorded all seven modular sources, the build tool and its text-canonicalization helper, both public schemas, and UTF-8/LF SHA-256 identities for all three governing preparation resources.
 
 ## Sanitized contract projection
 
@@ -21,22 +21,22 @@ The tracked synthetic requests and public-safe preparation fixture produced thes
 
 | Fixture | Network behavior | Planned request classes | Request SHA-256 | Plan SHA-256 | Accepted terminal reason |
 | --- | --- | ---: | --- | --- | --- |
-| `automation-request.json` | `LocalOnly` | 0 | `090ef945d67afbd3400a7d242e6931f9dc1fbbee8ae25ddf1315aa6010afa1c2` | `2b04ec113806d1ed04d55b51635d91fa8c0073f6da64714f3093b58d38f9cf98` | `PREPARATION.VALIDATION_ONLY` |
-| `automation-request-connectivity.json` | `MicrosoftConnectivityEnabled` | 2 | `5a5ac1ca9a6f1c8840c88492274c8684e1f1e4eb5b466bac19bc98f740adbe2e` | `76a86395a85ea7e64a08a2d0dd0d3dc4c499d0087cad2da5a7b08ee53b26f45e` | `PREPARATION.VALIDATION_ONLY` |
+| `automation-request.json` | `LocalOnly` | 0 | `090ef945d67afbd3400a7d242e6931f9dc1fbbee8ae25ddf1315aa6010afa1c2` | `c567b40daff6c8b1cc5b7bf614e78d5f751e4e509007255d4239ff4d553ae262` | `PREPARATION.VALIDATION_ONLY` |
+| `automation-request-connectivity.json` | `MicrosoftConnectivityEnabled` | 2 | `5a5ac1ca9a6f1c8840c88492274c8684e1f1e4eb5b466bac19bc98f740adbe2e` | `50b2cb8ad0254ab1efb41700c0aa92920cb20d9a1be4bc9419df93b938b1edd2` | `PREPARATION.VALIDATION_ONLY` |
 
 Every successful preparation sequence emitted request-validation progress, runtime-validation progress, one Preparation Summary containing one immutable plan, and one `NotStarted` terminal. The summary disclosed scope, privilege, dependencies, estimates, network behavior, protected output, fixed recipient choice, Windows Feature behavior, limitations, later side effects, cleanup, and the exact approval instruction exactly once.
 
 ## Deterministic definition and build evidence
 
 - Build contract: `win-pcinfo.build-evidence/1.0.0`
-- Generated application SHA-256: `f71aa3548ac7dd4844be31d89a65f7b4928898ef76779cf50f0c249d39de7402`
+- Generated application SHA-256: `86cd6401fed3baa027c63659e6bc08d99bc52d3dc8ebd8f9ac582d3cc66dbe6c`
 - Representation: UTF-8 with BOM and CRLF
 - Governing release-definition SHA-256: `0d00048b445d803504813a34fbd3af4693c4d003d1a0e981651e11d4d8281913`
-- Governing capability-ledger SHA-256: `295997eb8ed1bd4915b6799e532b51a6f75d392bd11b3ec2bde7f82c41a93039`
+- Governing capability-ledger SHA-256: `41626cc5fe8f14366b26989acec9d24132d42a3c7a3bda0f85799a408ca8e52a`
 - Governing preparation-operation SHA-256: `c8541442269fd947c7f19513ad4ffcc9ed0e6bb2808e797f5720ef357e534fd4`
 - Reproduction: `pwsh -NoLogo -NoProfile -File ./build/Build.ps1`
 
-The build resolves the profile and capability dependencies from the release definition, capability ledger, and release-bound operation manifest. It binds all modular source, the build tool, and both public schemas into one application manifest, then embeds the normalized definition and a separate definition digest. Runtime checks the embedded bytes and manifest digest before using them. Changing a request changes its request and plan digests; changing governed definition or application-resource data changes the generated artifact and plan digest.
+The build resolves the profile and capability dependencies from the release definition, capability ledger, and release-bound operation manifest. It canonicalizes tracked text to UTF-8/LF for resource identity, binds all modular source, the build tool, and both public schemas into one application manifest, then emits the separately fixed UTF-8-BOM/CRLF signing representation. Runtime checks the embedded bytes and manifest digest before using them. Changing a request changes its request and plan digests; changing governed definition or application-resource text changes the generated artifact and plan digest, while checkout-only line endings do not.
 
 ## Security-sensitive change trace
 
