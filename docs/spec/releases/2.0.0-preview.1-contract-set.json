@@ -9,7 +9,7 @@
     "prohibited-material-omission"
   ],
   "limits": {
-    "maximumDocumentUtf8Bytes": 32768,
+    "maximumDocumentUtf8Bytes": 65536,
     "maximumJsonDepth": 16,
     "maximumSafeInteger": 9007199254740991,
     "maximumStringUtf8Bytes": 1024,
@@ -254,7 +254,7 @@
       "fieldId": "field:device.secure-boot.enabled",
       "capabilityIds": ["CAP-0003"],
       "purpose": "Record the Boolean Secure Boot state returned by Confirm-SecureBootUEFI when the UEFI source is applicable and accessible.",
-      "source": { "sourceId": "source:windows.secure-boot.confirm", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Microsoft.SecureBoot Confirm-SecureBootUEFI Boolean result" },
+      "source": { "sourceId": "source:windows.secure-boot.confirm", "kind": "StructuredWindowsSource", "authoritativeIdentity": "SecureBoot module Confirm-SecureBootUEFI Boolean result" },
       "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
       "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
       "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },

@@ -56,8 +56,13 @@ function Test-FirmwareReadinessCollectorPayload {
     }
     if ($Payload.firmwareState -eq 'Complete') {
         if ([string]$Payload.firmwareType -notin @('Uefi','LegacyBios','Unknown') -or
-            [Text.Encoding]::UTF8.GetByteCount([string]$Payload.biosVersion) -gt 128 -or
-            [Text.Encoding]::UTF8.GetByteCount([string]$Payload.smbiosVersion) -gt 16) {
+            ($null -ne $Payload.biosVersion -and (
+                [string]::IsNullOrWhiteSpace([string]$Payload.biosVersion) -or
+                [Text.Encoding]::UTF8.GetByteCount([string]$Payload.biosVersion) -gt 128
+            )) -or ($null -ne $Payload.smbiosVersion -and (
+                [string]::IsNullOrWhiteSpace([string]$Payload.smbiosVersion) -or
+                [Text.Encoding]::UTF8.GetByteCount([string]$Payload.smbiosVersion) -gt 16
+            ))) {
             return $false
         }
     }
@@ -74,7 +79,11 @@ function Test-FirmwareReadinessCollectorPayload {
         }
         if ([bool]$Payload.tpmPresent) {
             if ($Payload.tpmEnabled -isnot [bool] -or
-                $Payload.tpmActivated -isnot [bool]) { return $false }
+                $Payload.tpmActivated -isnot [bool] -or
+                ($null -ne $Payload.tpmSpecification -and (
+                    [string]::IsNullOrWhiteSpace([string]$Payload.tpmSpecification) -or
+                    [Text.Encoding]::UTF8.GetByteCount([string]$Payload.tpmSpecification) -gt 32
+                ))) { return $false }
         }
         elseif ($null -ne $Payload.tpmEnabled -or $null -ne $Payload.tpmActivated -or
             $null -ne $Payload.tpmSpecification) { return $false }
@@ -381,6 +390,20 @@ function Complete-ValidatedFirmwareReadinessAssessmentRecord {
                 [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.TPM_EVIDENCE_INCOMPLETE'}
             } elseif (-not [bool]$tpmPresent.value) {
                 [pscustomobject]@{outcome='NeedsAttention'}
+            } elseif (($null -ne $tpmEnabled -and
+                    $tpmEnabled.valueState -eq 'ObservedValue' -and
+                    -not [bool]$tpmEnabled.value) -or
+                ($null -ne $tpmActivated -and
+                    $tpmActivated.valueState -eq 'ObservedValue' -and
+                    -not [bool]$tpmActivated.value)) {
+                [pscustomobject]@{outcome='NeedsAttention'}
+            } elseif ($null -eq $tpmEnabled -or $tpmEnabled.valueState -ne 'ObservedValue' -or
+                $null -eq $tpmActivated -or $tpmActivated.valueState -ne 'ObservedValue' -or
+                $null -eq $tpmSpecification -or
+                $tpmSpecification.valueState -ne 'ObservedValue') {
+                [pscustomobject]@{
+                    outcome='Indeterminate';reasonCode='FINDING.TPM_DETAILS_INCOMPLETE'
+                }
             } elseif ($null -ne $tpmEnabled -and $tpmEnabled.valueState -eq 'ObservedValue' -and
                 [bool]$tpmEnabled.value -and $null -ne $tpmActivated -and
                 $tpmActivated.valueState -eq 'ObservedValue' -and [bool]$tpmActivated.value -and
@@ -392,15 +415,28 @@ function Complete-ValidatedFirmwareReadinessAssessmentRecord {
     )
     $Record.findings = @($Record.findings) + @($firmware,$secureBoot,$tpm)
     $recommendations = [Collections.Generic.List[object]]::new()
-    if ($tpm.outcome -eq 'Indeterminate') {
+    $firmwareReason = if ($firmware.PSObject.Properties['reasonCode']) {
+        [string]$firmware.reasonCode
+    } else { '' }
+    $secureBootReason = if ($secureBoot.PSObject.Properties['reasonCode']) {
+        [string]$secureBoot.reasonCode
+    } else { '' }
+    $tpmReason = if ($tpm.PSObject.Properties['reasonCode']) {
+        [string]$tpm.reasonCode
+    } else { '' }
+    if ($tpmReason -eq 'FINDING.VIRTUAL_TPM_PHYSICAL_ATTESTATION_UNPROVEN') {
         $recommendations.Add([pscustomobject][ordered]@{
             recommendationId="recommendation:physical-tpm:$($Record.run.runId)"
             definitionId='task:confirm-physical-tpm-attestation/1.0.0'
             kind='TenantSideDiscoveryTask';findingIds=@([string]$tpm.findingId)
         })
     }
-    if ($firmware.outcome -eq 'Indeterminate' -or
-        $secureBoot.outcome -in @('Indeterminate','NotApplicable')) {
+    $secureBootCoverage = @($Record.coverage | Where-Object {
+        $_.scopeId -eq 'scope:device.secure-boot'
+    })[0]
+    if ($firmwareReason -eq 'FINDING.FIRMWARE_TYPE_UNKNOWN' -or
+        $secureBootReason -eq 'FINDING.SECURE_BOOT_NOT_APPLICABLE_NON_UEFI' -or
+        [string]$secureBootCoverage.state -eq 'Unsupported') {
         $recommendations.Add([pscustomobject][ordered]@{
             recommendationId="recommendation:oem-firmware:$($Record.run.runId)"
             definitionId='task:confirm-oem-firmware-support/1.0.0'

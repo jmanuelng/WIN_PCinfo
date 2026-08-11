@@ -17,11 +17,11 @@ $cases = @(
     @{name='firmware-absent';exit=0;outcome='Completed';firmware='Complete';secure='Complete';tpm='Complete';firmwareFinding='ExpectedCondition';secureFinding='ExpectedCondition';tpmFinding='NeedsAttention';uac=0;tasks=0},
     @{name='firmware-virtual';exit=0;outcome='Completed';firmware='Complete';secure='Complete';tpm='Complete';firmwareFinding='ExpectedCondition';secureFinding='ExpectedCondition';tpmFinding='Indeterminate';uac=1;tasks=1},
     @{name='firmware-nonuefi';exit=10;outcome='CompletedWithGaps';firmware='Complete';secure='Unsupported';tpm='Complete';firmwareFinding='NeedsAttention';secureFinding='NotApplicable';tpmFinding='ExpectedCondition';uac=0;tasks=1},
-    @{name='firmware-accessdenied';exit=10;outcome='CompletedWithGaps';firmware='Denied';secure='Denied';tpm='Denied';firmwareFinding='Indeterminate';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=1;tasks=2},
-    @{name='firmware-unsupported';exit=10;outcome='CompletedWithGaps';firmware='Complete';secure='Unsupported';tpm='Unsupported';firmwareFinding='ExpectedCondition';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=0;tasks=2},
-    @{name='firmware-malformed';exit=10;outcome='CompletedWithGaps';firmware='Malformed';secure='Malformed';tpm='Malformed';firmwareFinding='Indeterminate';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=0;tasks=2},
-    @{name='firmware-timeout';exit=10;outcome='CompletedWithGaps';firmware='TimedOut';secure='TimedOut';tpm='TimedOut';firmwareFinding='Indeterminate';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=1;tasks=2},
-    @{name='firmware-collectorfailure';exit=10;outcome='CompletedWithGaps';firmware='Failed';secure='Failed';tpm='Failed';firmwareFinding='Indeterminate';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=0;tasks=2}
+    @{name='firmware-accessdenied';exit=10;outcome='CompletedWithGaps';firmware='Denied';secure='Denied';tpm='Denied';firmwareFinding='Indeterminate';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=1;tasks=0},
+    @{name='firmware-unsupported';exit=10;outcome='CompletedWithGaps';firmware='Complete';secure='Unsupported';tpm='Unsupported';firmwareFinding='ExpectedCondition';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=0;tasks=1},
+    @{name='firmware-malformed';exit=10;outcome='CompletedWithGaps';firmware='Malformed';secure='Malformed';tpm='Malformed';firmwareFinding='Indeterminate';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=0;tasks=0},
+    @{name='firmware-timeout';exit=10;outcome='CompletedWithGaps';firmware='TimedOut';secure='TimedOut';tpm='TimedOut';firmwareFinding='Indeterminate';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=1;tasks=0},
+    @{name='firmware-collectorfailure';exit=10;outcome='CompletedWithGaps';firmware='Failed';secure='Failed';tpm='Failed';firmwareFinding='Indeterminate';secureFinding='Indeterminate';tpmFinding='Indeterminate';uac=0;tasks=0}
 )
 
 foreach ($case in $cases) {

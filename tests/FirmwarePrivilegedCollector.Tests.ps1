@@ -54,6 +54,22 @@ Assert-Equal '2.0' $private.payload.tpmSpecification `
     'the supported fixture carries only the bounded TPM specification'
 Assert-Equal $true (Test-FirmwareReadinessCollectorPayload -Payload $private.payload) `
     'the coordinator reprojects one exact release-shaped payload'
+$unknownProviderValues = $private.payload.PSObject.Copy()
+$unknownProviderValues.biosVersion = $null
+$unknownProviderValues.smbiosVersion = $null
+$unknownProviderValues.tpmSpecification = $null
+Assert-Equal $true (Test-FirmwareReadinessCollectorPayload -Payload $unknownProviderValues) `
+    'a successfully examined provider may retain explicit unknown field values'
+$missingTpmBoolean = $private.payload.PSObject.Copy()
+$missingTpmBoolean.tpmEnabled = $null
+Assert-Equal $false (Test-FirmwareReadinessCollectorPayload -Payload $missingTpmBoolean) `
+    'a present TPM cannot turn a missing readiness boolean into false evidence'
+$blankProviderValues = $private.payload.PSObject.Copy()
+$blankProviderValues.biosVersion = ''
+$blankProviderValues.smbiosVersion = ' '
+$blankProviderValues.tpmSpecification = ''
+Assert-Equal $false (Test-FirmwareReadinessCollectorPayload -Payload $blankProviderValues) `
+    'blank provider values cannot become affirmative observations'
 if (($private | ConvertTo-Json -Compress -Depth 10) -match
     '(?i)ownerAuthorization|endorsementSecret|privateKey|recoveryData|serialNumber') {
     throw 'The private collector result contains prohibited TPM material.'

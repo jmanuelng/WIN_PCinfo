@@ -16,7 +16,7 @@
     "dependencies": [
       "Windows GetFirmwareType API",
       "Windows CIM provider",
-      "Microsoft.SecureBoot PowerShell module"
+      "SecureBoot PowerShell module"
     ],
     "mayPrompt": false,
     "mayInstall": false,

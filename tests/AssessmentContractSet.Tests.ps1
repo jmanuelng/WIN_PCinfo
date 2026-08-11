@@ -20,6 +20,8 @@ $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
 Assert-Equal '1.1.0' $contractSet.contractVersion `
     'the additive firmware contract has an explicit version'
+Assert-Equal 65536 $contractSet.limits.maximumDocumentUtf8Bytes `
+    'the combined profile has a finite release-owned 64 KiB document ceiling'
 Assert-Equal 26 @($contractSet.fieldDefinitions).Count `
     'the historical fields remain while eight bounded firmware fields are admitted'
 Assert-Equal 6 @($contractSet.scopeDefinitions).Count `

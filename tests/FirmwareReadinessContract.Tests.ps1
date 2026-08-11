@@ -75,6 +75,8 @@ Assert-Equal $true $firmwareSourceValidation.accepted `
     'privileged source observations cross the contract before firmware rules evaluate'
 Assert-Equal 4 @($record.findings).Count `
     'the firmware source pass cannot fabricate a firmware-security finding'
+Assert-Equal 'CONTRACT.ACCEPTED' $firmwareSourceValidation.reasonCode `
+    'the firmware source pass retains the stable accepted reason'
 $record = Complete-ValidatedFirmwareReadinessAssessmentRecord -Record $record `
     -Policy $firmwarePolicy -ContractValidation $firmwareSourceValidation
 $validation = Test-CanonicalRecord $record
@@ -100,6 +102,58 @@ Assert-Equal 'ExpectedCondition|ExpectedCondition|ExpectedCondition' (
         ForEach-Object outcome) -join '|'
 ) 'supported structured evidence produces three bounded advisory outcomes'
 
+$virtualRecord = $record | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+$virtualObservation = @($virtualRecord.observations | Where-Object {
+    $_.fieldId -eq 'field:device.virtualization.detected'
+})[0]
+$virtualObservation.value = $true
+$virtualRecord.findings = @($virtualRecord.findings | Where-Object {
+    $_.findingId -notlike 'finding:firmware-context:*' -and
+    $_.findingId -notlike 'finding:secure-boot-readiness:*' -and
+    $_.findingId -notlike 'finding:tpm-readiness:*'
+})
+$virtualRecord.recommendations = @()
+Assert-Equal 4 @($virtualRecord.findings).Count `
+    'the virtual rule probe starts from the four device-context findings'
+$virtualRecord = Complete-ValidatedFirmwareReadinessAssessmentRecord -Record $virtualRecord `
+    -Policy $firmwarePolicy -ContractValidation $firmwareSourceValidation
+$virtualValidation = Test-CanonicalRecord $virtualRecord
+Assert-Equal 'CONTRACT.ACCEPTED' $virtualValidation.reasonCode `
+    'the bounded physical-attestation task remains part of a valid canonical record'
+$virtualReport = [Text.UTF8Encoding]::new($false,$true).GetString(
+    (New-DeviceReadinessReportBytes -Record $virtualRecord -FirmwarePolicy $firmwarePolicy)
+)
+if (-not $virtualReport.Contains('EndpointSecurityOrHardwareOwner') -or
+    -not $virtualReport.Contains('AuthorizedTenantOrOEMManagementBoundary') -or
+    -not $virtualReport.Contains('without exporting TPM secrets')) {
+    throw 'The beginner report omitted actionable, bounded physical-attestation follow-up.'
+}
+$unknownTpmRecord = $record | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+$unknownTpmRecord.findings = @($unknownTpmRecord.findings | Where-Object {
+    $_.findingId -notlike 'finding:firmware-context:*' -and
+    $_.findingId -notlike 'finding:secure-boot-readiness:*' -and
+    $_.findingId -notlike 'finding:tpm-readiness:*'
+})
+$unknownTpmRecord.recommendations = @()
+$specObservation = @($unknownTpmRecord.observations | Where-Object {
+    $_.fieldId -eq 'field:device.tpm.specification'
+})[0]
+$specObservation.valueState = 'SourceReportedUnknown'
+$specObservation.PSObject.Properties.Remove('value')
+$unknownTpmValidation = Test-CanonicalRecord $unknownTpmRecord
+Assert-Equal $true $unknownTpmValidation.accepted `
+    'a successfully examined but unknown TPM specification remains valid evidence'
+Assert-Equal 4 @($unknownTpmRecord.findings).Count `
+    'the unknown TPM probe starts from the four device-context findings'
+$unknownTpmRecord = Complete-ValidatedFirmwareReadinessAssessmentRecord `
+    -Record $unknownTpmRecord -Policy $firmwarePolicy `
+    -ContractValidation $unknownTpmValidation
+$unknownTpmFinding = @($unknownTpmRecord.findings | Where-Object {
+    $_.findingId -like 'finding:tpm-readiness:*'
+})[0]
+Assert-Equal 'Indeterminate' $unknownTpmFinding.outcome `
+    'unknown TPM detail cannot become a negative readiness finding'
+
 $firmwareEnvelope = @($record.collectorResults | Where-Object {
     $_.collectorId -eq 'collector:windows.firmware-security'
 })
@@ -118,6 +172,19 @@ foreach ($item in @($record.provenance | Where-Object {
 if (($record | ConvertTo-Json -Compress -Depth 30) -match
     '(?i)ownerAuthorization|endorsementSecret|privateKey|recoveryData|serialNumber') {
     throw 'The canonical record contains prohibited TPM secret or unbounded identity material.'
+}
+
+foreach ($case in @(
+    @{reason='FIRMWARE.PRIVILEGE_TIMED_OUT';outcome='TimedOut';exit=40},
+    @{reason='FIRMWARE.PRIVILEGE_CANCELLED';outcome='Cancelled';exit=30},
+    @{reason='FIRMWARE.PRIVILEGE_CLEANUP_INCOMPLETE';outcome='CleanupIncomplete';exit=60}
+)) {
+    $disposition = Get-DeviceReadinessFailureDisposition `
+        -ReasonCode $case.reason -CollectionStarted $true
+    Assert-Equal $case.outcome $disposition.outcome `
+        'privilege lifecycle failures retain their distinct terminal outcome'
+    Assert-Equal $case.exit $disposition.exitCode `
+        'privilege lifecycle failures retain their stable exit code'
 }
 
 Write-Output 'PASS: Firmware Readiness composes closed observations, coverage, provenance, and findings.'

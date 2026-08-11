@@ -29,7 +29,7 @@
           "prefixItems": [
             { "const": "Windows GetFirmwareType API" },
             { "const": "Windows CIM provider" },
-            { "const": "Microsoft.SecureBoot PowerShell module" }
+            { "const": "SecureBoot PowerShell module" }
           ],
           "items": false
         },

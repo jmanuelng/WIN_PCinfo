@@ -3,7 +3,7 @@
 WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect narrow Device, Windows, activation, form, virtualization, chassis, battery, power, firmware, Secure Boot, and TPM-readiness context after approval, validate typed evidence, supervise approved work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, protect an assessment package for the local user and optionally one preapproved recipient, reopen one requested artifact safely, exercise warned restricted HTML export, and drive each validation path to one honest terminal outcome.
 
 > [!IMPORTANT]
-> The v2 application implements only the narrow device-context slice described below. It is not the complete assessment and does not by itself create a Preview/Supported capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance; repository validation uses closed synthetic fixtures.
+> The v2 application implements only the narrow device-context and firmware-security slices described below. It is not the complete assessment and does not by itself create a Preview/Supported capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance; repository validation uses closed synthetic fixtures.
 
 ## Try the v2 launch safely
 

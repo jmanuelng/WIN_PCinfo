@@ -197,7 +197,7 @@
           "privilege": "RequiresAdministrator",
           "networkBehavior": "OfflineOnly",
           "executable": "ActiveMicrosoftSignedPowerShellHost",
-          "dependencies": ["Windows GetFirmwareType API", "Windows CIM provider", "Microsoft.SecureBoot PowerShell module"],
+          "dependencies": ["Windows GetFirmwareType API", "Windows CIM provider", "SecureBoot PowerShell module"],
           "mayPrompt": false, "mayInstall": false, "mayDownload": false,
           "maySelfElevate": false, "writesAllowed": false,
           "maximumAttempts": 1, "deadlineMilliseconds": 5000,

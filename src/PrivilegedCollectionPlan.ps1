@@ -293,9 +293,24 @@ function Get-WorkerAccessState {
     param($Failure)
     $exception = $Failure.Exception
     $nativeCode = [int]($exception.HResult -band 0xffff)
-    if ($exception -is [System.UnauthorizedAccessException] -or $nativeCode -eq 5) {
+    $providerCode = ''
+    $cursor = $exception
+    while ($null -ne $cursor -and [string]::IsNullOrWhiteSpace($providerCode)) {
+        if ($cursor.PSObject.Properties['NativeErrorCode']) {
+            $providerCode = [string]$cursor.NativeErrorCode
+        }
+        $cursor = $cursor.InnerException
+    }
+    if ($exception -is [System.UnauthorizedAccessException] -or $nativeCode -eq 5 -or
+        $providerCode -eq 'AccessDenied') {
         'Denied'
-    } else { 'Failed' }
+    }
+    elseif ($exception -is [System.PlatformNotSupportedException] -or
+        [string]$Failure.FullyQualifiedErrorId -match '^CmdletNotSupported' -or
+        $providerCode -in @('InvalidNamespace','InvalidClass','NotSupported','MethodNotAvailable')) {
+        'Unsupported'
+    }
+    else { 'Failed' }
 }
 
 function Get-LiveFirmwareResult {
@@ -312,18 +327,36 @@ function Get-LiveFirmwareResult {
         $bios = @(Get-CimInstance -ClassName Win32_BIOS -Property @(
             'SMBIOSBIOSVersion','SMBIOSMajorVersion','SMBIOSMinorVersion'
         ) -ErrorAction Stop)
-        if ($bios.Count -ne 1) { throw 'The bounded BIOS projection is ambiguous.' }
-        $firmwareType = switch ([uint32]$nativeFirmware) {
-            1 { 'LegacyBios' } 2 { 'Uefi' } default { 'Unknown' }
+        if ($bios.Count -ne 1) {
+            $result.firmwareState = 'Malformed'
         }
-        $biosVersion = ([string]$bios[0].SMBIOSBIOSVersion).Trim()
-        $smbiosVersion = "$([int]$bios[0].SMBIOSMajorVersion).$([int]$bios[0].SMBIOSMinorVersion)"
-        if ([Text.Encoding]::UTF8.GetByteCount($biosVersion) -gt 128 -or
-            [Text.Encoding]::UTF8.GetByteCount($smbiosVersion) -gt 16) {
-            throw 'The bounded BIOS projection is oversized.'
+        else {
+            $firmwareType = switch ([uint32]$nativeFirmware) {
+                1 { 'LegacyBios' } 2 { 'Uefi' } default { 'Unknown' }
+            }
+            $biosVersion = if ($null -eq $bios[0].SMBIOSBIOSVersion) {
+                $null
+            } else { ([string]$bios[0].SMBIOSBIOSVersion).Trim() }
+            $smbiosVersion = if ($null -eq $bios[0].SMBIOSMajorVersion -or
+                $null -eq $bios[0].SMBIOSMinorVersion) {
+                $null
+            } else {
+                "$([int]$bios[0].SMBIOSMajorVersion).$([int]$bios[0].SMBIOSMinorVersion)"
+            }
+            if (($null -ne $biosVersion -and (
+                    [string]::IsNullOrWhiteSpace($biosVersion) -or
+                    [Text.Encoding]::UTF8.GetByteCount($biosVersion) -gt 128
+                )) -or ($null -ne $smbiosVersion -and (
+                    [string]::IsNullOrWhiteSpace($smbiosVersion) -or
+                    [Text.Encoding]::UTF8.GetByteCount($smbiosVersion) -gt 16
+                ))) {
+                $result.firmwareState = 'Malformed'
+            }
+            else {
+                $result.firmwareState='Complete';$result.firmwareType=$firmwareType
+                $result.biosVersion=$biosVersion;$result.smbiosVersion=$smbiosVersion
+            }
         }
-        $result.firmwareState='Complete';$result.firmwareType=$firmwareType
-        $result.biosVersion=$biosVersion;$result.smbiosVersion=$smbiosVersion
     }
     catch {
         $result.firmwareState = Get-WorkerAccessState -Failure $_
@@ -339,8 +372,14 @@ function Get-LiveFirmwareResult {
         }
         else {
             try {
-                $result.secureBootEnabled = [bool](& $secureBootCommand -ErrorAction Stop)
-                $result.secureBootState = 'Complete'
+                $secureBootValue = & $secureBootCommand -ErrorAction Stop
+                if ($secureBootValue -isnot [bool]) {
+                    $result.secureBootState = 'Malformed'
+                }
+                else {
+                    $result.secureBootEnabled = [bool]$secureBootValue
+                    $result.secureBootState = 'Complete'
+                }
             }
             catch { $result.secureBootState = Get-WorkerAccessState -Failure $_ }
         }
@@ -351,17 +390,30 @@ function Get-LiveFirmwareResult {
             -ClassName Win32_Tpm -Property @(
                 'SpecVersion','IsEnabled_InitialValue','IsActivated_InitialValue'
             ) -ErrorAction Stop)
-        if ($tpm.Count -gt 1) { throw 'The bounded TPM projection is ambiguous.' }
-        $result.tpmState = 'Complete'
-        $result.tpmPresent = $tpm.Count -eq 1
-        if ($tpm.Count -eq 1) {
-            $result.tpmEnabled = [bool]$tpm[0].IsEnabled_InitialValue
-            $result.tpmActivated = [bool]$tpm[0].IsActivated_InitialValue
-            $specification = ([string]$tpm[0].SpecVersion).Trim()
-            if ([Text.Encoding]::UTF8.GetByteCount($specification) -gt 32) {
-                throw 'The bounded TPM specification is oversized.'
+        if ($tpm.Count -gt 1) {
+            $result.tpmState = 'Malformed'
+        }
+        elseif ($tpm.Count -eq 0) {
+            $result.tpmState = 'Complete';$result.tpmPresent = $false
+        }
+        else {
+            $enabled = $tpm[0].IsEnabled_InitialValue
+            $activated = $tpm[0].IsActivated_InitialValue
+            $specification = if ($null -eq $tpm[0].SpecVersion) {
+                $null
+            } else { ([string]$tpm[0].SpecVersion).Trim() }
+            if ($enabled -isnot [bool] -or $activated -isnot [bool] -or
+                ($null -ne $specification -and (
+                    [string]::IsNullOrWhiteSpace($specification) -or
+                    [Text.Encoding]::UTF8.GetByteCount($specification) -gt 32
+                ))) {
+                $result.tpmState = 'Malformed'
             }
-            $result.tpmSpecification = $specification
+            else {
+                $result.tpmState='Complete';$result.tpmPresent=$true
+                $result.tpmEnabled=$enabled;$result.tpmActivated=$activated
+                $result.tpmSpecification=$specification
+            }
         }
     }
     catch {
