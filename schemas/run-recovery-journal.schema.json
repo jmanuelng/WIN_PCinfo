@@ -10,7 +10,7 @@
     "contractVersion": { "const": "1.0.0" },
     "runId": { "type": "string", "format": "uuid" },
     "planDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "phase": { "enum": ["Preparation", "Collection", "Packaging", "Cleanup", "Terminal"] },
+    "phase": { "enum": ["Preparation", "Collection", "Packaging", "Viewing", "Cleanup", "Terminal"] },
     "owner": {
       "type": "object",
       "additionalProperties": false,
@@ -30,7 +30,7 @@
         "required": ["artifactId", "kind", "path", "fileSystemIdentity", "cleanupAction", "finalized"],
         "properties": {
           "artifactId": { "type": "string", "format": "uuid" },
-          "kind": { "enum": ["Workspace", "TemporaryEvidence", "ProtectedEvidencePackage"] },
+          "kind": { "enum": ["Workspace", "TemporaryEvidence", "ProtectedEvidencePackage", "EvidenceViewingArtifact"] },
           "path": { "type": "string", "minLength": 3, "maxLength": 1024 },
           "fileSystemIdentity": { "type": "string", "pattern": "^[0-9a-f]{8}:[0-9a-f]{8}:[0-9a-f]{8}$" },
           "cleanupAction": { "enum": ["Remove", "RemoveWhenEmpty", "Preserve"] },

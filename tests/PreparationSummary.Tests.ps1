@@ -80,7 +80,19 @@ Assert-Equal $false $automationSummary.plan.cleanup.staleRunRecovery.requested `
     'cleanup-only stale recovery is never inferred without the request choice'
 Assert-Equal $false $automationSummary.plan.cleanup.staleRunRecovery.collectionResumeAllowed `
     'the Preparation Summary cannot promise collection resume after recovery'
-Assert-Equal 31 $automationSummary.plan.integrity.applicationResources.Count `
-    'the plan is bound to modular source, build, public schemas, and the release Contract Set'
+$protectionResources = @(
+    'src/ProtectedPackage.ps1', 'schemas/protected-package.schema.json',
+    'schemas/protected-package-envelope.schema.json',
+    'schemas/assessment-package-manifest.schema.json',
+    'docs/spec/releases/2.0.0-preview.1-protected-package.json'
+)
+foreach ($path in $protectionResources) {
+    Assert-Equal 1 @($automationSummary.plan.integrity.applicationResources |
+        Where-Object path -eq $path).Count `
+        "$path is bound into the approved application manifest"
+}
+Assert-Equal 0 @($automationSummary.plan.integrity.applicationResources |
+    Where-Object sha256 -notmatch '^[0-9a-f]{64}$').Count `
+    'every modular source, build, schema, and release resource has an exact digest'
 
 Write-Output 'PASS: one immutable Preparation Summary gates accepted and declined generated-app paths.'

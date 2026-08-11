@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/assessment-package-manifest.schema.json",
+  "title": "WIN-PCInfo Assessment Package Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "productRelease", "assessmentContractSet", "packagePolicy", "manifestContract", "completeness", "protection", "contents"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.assessment-package-manifest" },
+    "contractVersion": { "const": "1.0.0" },
+    "productRelease": { "const": "2.0.0-preview.1" },
+    "assessmentContractSet": { "const": "1.0.0" },
+    "packagePolicy": { "const": "win-pcinfo.protected-package/1.0.0" },
+    "manifestContract": { "const": "win-pcinfo.assessment-package-manifest/1.0.0" },
+    "completeness": { "enum": ["Complete", "RecoverablePartial"] },
+    "protection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "authorshipClaim", "durableTamperEvidenceClaim"],
+      "properties": {
+        "state": { "const": "EncryptedAuthenticated" },
+        "authorshipClaim": { "const": false },
+        "durableTamperEvidenceClaim": { "const": false }
+      }
+    },
+    "contents": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [
+        { "$ref": "#/$defs/recordContent" },
+        { "$ref": "#/$defs/reportContent" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "recordContent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["relativePath", "mediaType", "byteLength", "sha256"],
+      "properties": {
+        "relativePath": { "const": "assessment-record.json" },
+        "mediaType": { "const": "application/json" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 32768 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "reportContent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["relativePath", "mediaType", "byteLength", "sha256"],
+      "properties": {
+        "relativePath": { "const": "assessment-report.html" },
+        "mediaType": { "const": "text/html" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 262144 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

@@ -59,6 +59,7 @@ function Initialize-EvidenceWorkspaceNative {
     $source = @'
 using System;
 using System.ComponentModel;
+using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
 
 namespace WinPCInfo
@@ -130,11 +131,36 @@ namespace WinPCInfo
             uint flagsAndAttributes,
             IntPtr templateFile);
 
+        [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode,
+            SetLastError = true)]
+        private static extern SafeFileHandle CreateOwnedFileW(
+            string fileName,
+            uint desiredAccess,
+            uint shareMode,
+            IntPtr securityAttributes,
+            uint creationDisposition,
+            uint flagsAndAttributes,
+            IntPtr templateFile);
+
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetFileInformationByHandle(
             IntPtr file,
             out BY_HANDLE_FILE_INFORMATION information);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FILE_DISPOSITION_INFO
+        {
+            [MarshalAs(UnmanagedType.Bool)] public bool deleteFile;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetFileInformationByHandle(
+            SafeFileHandle file,
+            int fileInformationClass,
+            ref FILE_DISPOSITION_INFO fileInformation,
+            uint bufferSize);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -204,6 +230,46 @@ namespace WinPCInfo
             {
                 CloseHandle(handle);
             }
+        }
+
+        public static SafeFileHandle CreateOwnedWriteThroughFile(string path)
+        {
+            const uint GENERIC_WRITE = 0x40000000;
+            const uint DELETE = 0x00010000;
+            const uint FILE_SHARE_READ = 1;
+            const uint CREATE_NEW = 1;
+            const uint FILE_FLAG_WRITE_THROUGH = 0x80000000;
+            SafeFileHandle handle = CreateOwnedFileW(
+                ToExtendedPath(path), GENERIC_WRITE | DELETE, FILE_SHARE_READ,
+                IntPtr.Zero, CREATE_NEW, FILE_FLAG_WRITE_THROUGH, IntPtr.Zero);
+            if (handle.IsInvalid)
+            {
+                int error = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                throw new Win32Exception(error);
+            }
+            return handle;
+        }
+
+        public static string GetFileSystemIdentity(SafeFileHandle handle)
+        {
+            if (handle == null || handle.IsInvalid || handle.IsClosed)
+                throw new ArgumentException("The owned file handle is unavailable.", "handle");
+            BY_HANDLE_FILE_INFORMATION information;
+            if (!GetFileInformationByHandle(handle.DangerousGetHandle(), out information))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            return information.volumeSerialNumber.ToString("x8") + ":"
+                + information.fileIndexHigh.ToString("x8") + ":"
+                + information.fileIndexLow.ToString("x8");
+        }
+
+        public static void MarkOwnedFileForDeletion(SafeFileHandle handle)
+        {
+            FILE_DISPOSITION_INFO information = new FILE_DISPOSITION_INFO { deleteFile = true };
+            if (!SetFileInformationByHandle(
+                handle, 4, ref information,
+                (uint)Marshal.SizeOf<FILE_DISPOSITION_INFO>()))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
         }
     }
 }
@@ -335,7 +401,7 @@ function New-RunRecoveryJournal {
         [Parameter(Mandatory)] [string] $RecoveryBasePath,
         [Parameter(Mandatory)] [ValidatePattern('^[0-9a-f]{64}$')] [string] $PlanDigest,
         [Parameter(Mandatory)]
-        [ValidateSet('Preparation', 'Collection', 'Packaging', 'Cleanup', 'Terminal')]
+        [ValidateSet('Preparation', 'Collection', 'Packaging', 'Viewing', 'Cleanup', 'Terminal')]
         [string] $Phase,
         [Parameter()] [AllowNull()] [System.Diagnostics.Process] $OwnerProcess
     )
@@ -817,18 +883,88 @@ function Test-RunRecoveryJournalCurrentOwner {
         (Get-RunRecoveryOwnerState -Owner $Journal.owner) -eq 'Live'
 }
 
-function New-TemporaryEvidenceRegistration {
+function Get-OwnedEvidenceArtifactDefinition {
     param(
-        [Parameter(Mandatory)] [string] $JournalPath,
-        [Parameter(Mandatory)] [int] $ExpectedContentLength
+        [Parameter(Mandatory)]
+        [ValidateSet('TemporaryEvidence', 'EvidenceViewingArtifact')]
+        [string] $Kind
     )
 
     $policy = Get-EvidenceWorkspacePolicy
+    if ($Kind -eq 'TemporaryEvidence') {
+        return [pscustomobject][ordered]@{
+            kind = $Kind
+            directoryName = [string] $policy.temporaryEvidence.directoryName
+            extension = '.bin'
+            maximumBytes = [int] $policy.temporaryEvidence.maximumArtifactBytes
+            maximumCount = [int] $policy.temporaryEvidence.maximumArtifactCount
+            sizeReasonCode = 'TEMPORARY_EVIDENCE.SIZE_EXCEEDED'
+            ownerReasonCode = 'TEMPORARY_EVIDENCE.RUN_OWNER_MISMATCH'
+            countReasonCode = 'TEMPORARY_EVIDENCE.COUNT_EXCEEDED'
+            ownershipReasonCode = 'TEMPORARY_EVIDENCE.OWNERSHIP_UNVERIFIED'
+            registeredReasonCode = 'TEMPORARY_EVIDENCE.REGISTERED'
+        }
+    }
+    [pscustomobject][ordered]@{
+        kind = $Kind
+        directoryName = 'evidence-viewing'
+        extension = '.view'
+        maximumBytes = [int] $policy.temporaryEvidence.maximumArtifactBytes
+        maximumCount = 1
+        sizeReasonCode = 'VIEWING.ARTIFACT_SIZE_EXCEEDED'
+        ownerReasonCode = 'VIEWING.RUN_OWNER_MISMATCH'
+        countReasonCode = 'VIEWING.ARTIFACT_COUNT_EXCEEDED'
+        ownershipReasonCode = 'VIEWING.ARTIFACT_OWNERSHIP_UNVERIFIED'
+        registeredReasonCode = 'VIEWING.ARTIFACT_REGISTERED'
+    }
+}
+
+function New-EvidenceWorkspaceOwnedWriteStream {
+    param([Parameter(Mandatory)] [string] $LiteralPath)
+
+    Initialize-EvidenceWorkspaceNative
+    $handle = [WinPCInfo.EvidenceWorkspaceNative]::CreateOwnedWriteThroughFile(
+        [System.IO.Path]::GetFullPath($LiteralPath)
+    )
+    try {
+        [System.IO.FileStream]::new($handle, [System.IO.FileAccess]::Write, 4096, $false)
+    }
+    catch {
+        try { [WinPCInfo.EvidenceWorkspaceNative]::MarkOwnedFileForDeletion($handle) }
+        finally { $handle.Dispose() }
+        throw
+    }
+}
+
+function Get-EvidenceWorkspaceOwnedStreamIdentity {
+    param([Parameter(Mandatory)] [System.IO.FileStream] $Stream)
+
+    Initialize-EvidenceWorkspaceNative
+    [WinPCInfo.EvidenceWorkspaceNative]::GetFileSystemIdentity($Stream.SafeFileHandle)
+}
+
+function Remove-EvidenceWorkspaceOwnedStreamOnClose {
+    param([Parameter(Mandatory)] [System.IO.FileStream] $Stream)
+
+    Initialize-EvidenceWorkspaceNative
+    [WinPCInfo.EvidenceWorkspaceNative]::MarkOwnedFileForDeletion($Stream.SafeFileHandle)
+}
+
+function New-RegisteredEvidenceArtifact {
+    param(
+        [Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(Mandatory)] [int] $ExpectedContentLength,
+        [Parameter(Mandatory)]
+        [ValidateSet('TemporaryEvidence', 'EvidenceViewingArtifact')]
+        [string] $Kind
+    )
+
+    $definition = Get-OwnedEvidenceArtifactDefinition -Kind $Kind
     if ($ExpectedContentLength -lt 0 -or
-        $ExpectedContentLength -gt [int] $policy.temporaryEvidence.maximumArtifactBytes) {
+        $ExpectedContentLength -gt $definition.maximumBytes) {
         return [pscustomobject][ordered]@{
             state = 'Rejected'
-            reasonCode = 'TEMPORARY_EVIDENCE.SIZE_EXCEEDED'
+            reasonCode = $definition.sizeReasonCode
             artifactId = ''
             literalPath = ''
         }
@@ -837,33 +973,33 @@ function New-TemporaryEvidenceRegistration {
     if (-not (Test-RunRecoveryJournalCurrentOwner -Journal $journal)) {
         return [pscustomobject][ordered]@{
             state = 'Rejected'
-            reasonCode = 'TEMPORARY_EVIDENCE.RUN_OWNER_MISMATCH'
+            reasonCode = $definition.ownerReasonCode
             artifactId = ''
             literalPath = ''
         }
     }
-    if (@($journal.artifacts | Where-Object kind -eq 'TemporaryEvidence').Count -ge
-        [int] $policy.temporaryEvidence.maximumArtifactCount) {
+    if (@($journal.artifacts | Where-Object kind -eq $Kind).Count -ge
+        $definition.maximumCount) {
         return [pscustomobject][ordered]@{
             state = 'Rejected'
-            reasonCode = 'TEMPORARY_EVIDENCE.COUNT_EXCEEDED'
+            reasonCode = $definition.countReasonCode
             artifactId = ''
             literalPath = ''
         }
     }
     $workspace = @($journal.artifacts | Where-Object kind -eq 'Workspace')
     if ($workspace.Count -ne 1) { throw 'The journal does not bind exactly one workspace.' }
-    $temporaryDirectory = Join-Path $workspace[0].path ([string] $policy.temporaryEvidence.directoryName)
-    if (-not [System.IO.Directory]::Exists($temporaryDirectory)) {
-        $null = [System.IO.Directory]::CreateDirectory($temporaryDirectory)
+    $artifactDirectory = Join-Path $workspace[0].path $definition.directoryName
+    if (-not [System.IO.Directory]::Exists($artifactDirectory)) {
+        $null = [System.IO.Directory]::CreateDirectory($artifactDirectory)
     }
-    if (([System.IO.File]::GetAttributes($temporaryDirectory) -band
+    if (([System.IO.File]::GetAttributes($artifactDirectory) -band
         [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw 'The Temporary Evidence directory is a reparse point.'
+        throw "The $Kind directory is a reparse point."
     }
 
     $artifactId = [guid]::NewGuid().ToString('D')
-    $literalPath = Join-Path $temporaryDirectory ($artifactId + '.bin')
+    $literalPath = Join-Path $artifactDirectory ($artifactId + $definition.extension)
     $file = [System.IO.FileStream]::new(
         $literalPath, [System.IO.FileMode]::CreateNew,
         [System.IO.FileAccess]::Write, [System.IO.FileShare]::None
@@ -871,7 +1007,7 @@ function New-TemporaryEvidenceRegistration {
     $file.Dispose()
     $artifact = [pscustomobject][ordered]@{
         artifactId = $artifactId
-        kind = 'TemporaryEvidence'
+        kind = $Kind
         path = $literalPath
         fileSystemIdentity = Get-EvidenceWorkspaceFileSystemIdentity -LiteralPath $literalPath
         cleanupAction = 'Remove'
@@ -882,24 +1018,27 @@ function New-TemporaryEvidenceRegistration {
 
     [pscustomobject][ordered]@{
         state = 'Registered'
-        reasonCode = 'TEMPORARY_EVIDENCE.REGISTERED'
+        reasonCode = $definition.registeredReasonCode
         artifactId = $artifactId
         literalPath = $literalPath
     }
 }
 
-function Write-RegisteredTemporaryEvidence {
+function Write-RegisteredEvidenceArtifact {
     param(
         [Parameter(Mandatory)] [string] $JournalPath,
         [Parameter(Mandatory)] [guid] $ArtifactId,
-        [Parameter(Mandatory)] [byte[]] $Content
+        [Parameter(Mandatory)] [byte[]] $Content,
+        [Parameter(Mandatory)]
+        [ValidateSet('TemporaryEvidence', 'EvidenceViewingArtifact')]
+        [string] $Kind
     )
 
-    $policy = Get-EvidenceWorkspacePolicy
-    if ($Content.Length -gt [int] $policy.temporaryEvidence.maximumArtifactBytes) {
+    $definition = Get-OwnedEvidenceArtifactDefinition -Kind $Kind
+    if ($Content.Length -gt $definition.maximumBytes) {
         return [pscustomobject][ordered]@{
             state = 'Rejected'
-            reasonCode = 'TEMPORARY_EVIDENCE.SIZE_EXCEEDED'
+            reasonCode = $definition.sizeReasonCode
             artifactId = $ArtifactId.ToString('D')
             literalPath = ''
         }
@@ -908,13 +1047,13 @@ function Write-RegisteredTemporaryEvidence {
     if (-not (Test-RunRecoveryJournalCurrentOwner -Journal $journal)) {
         return [pscustomobject][ordered]@{
             state = 'Rejected'
-            reasonCode = 'TEMPORARY_EVIDENCE.RUN_OWNER_MISMATCH'
+            reasonCode = $definition.ownerReasonCode
             artifactId = $ArtifactId.ToString('D')
             literalPath = ''
         }
     }
     $artifact = @($journal.artifacts | Where-Object {
-        $_.kind -eq 'TemporaryEvidence' -and $_.artifactId -eq $ArtifactId.ToString('D')
+        $_.kind -eq $Kind -and $_.artifactId -eq $ArtifactId.ToString('D')
     })
     if ($artifact.Count -ne 1 -or
         -not [System.IO.File]::Exists([string] $artifact[0].path) -or
@@ -922,7 +1061,7 @@ function Write-RegisteredTemporaryEvidence {
             [string] $artifact[0].fileSystemIdentity) {
         return [pscustomobject][ordered]@{
             state = 'Rejected'
-            reasonCode = 'TEMPORARY_EVIDENCE.OWNERSHIP_UNVERIFIED'
+            reasonCode = $definition.ownershipReasonCode
             artifactId = $ArtifactId.ToString('D')
             literalPath = ''
         }
@@ -948,10 +1087,31 @@ function Write-RegisteredTemporaryEvidence {
 
     [pscustomobject][ordered]@{
         state = 'Registered'
-        reasonCode = 'TEMPORARY_EVIDENCE.REGISTERED'
+        reasonCode = $definition.registeredReasonCode
         artifactId = $ArtifactId.ToString('D')
         literalPath = [string] $artifact[0].path
     }
+}
+
+function New-TemporaryEvidenceRegistration {
+    param(
+        [Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(Mandatory)] [int] $ExpectedContentLength
+    )
+
+    New-RegisteredEvidenceArtifact -JournalPath $JournalPath `
+        -ExpectedContentLength $ExpectedContentLength -Kind TemporaryEvidence
+}
+
+function Write-RegisteredTemporaryEvidence {
+    param(
+        [Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(Mandatory)] [guid] $ArtifactId,
+        [Parameter(Mandatory)] [byte[]] $Content
+    )
+
+    Write-RegisteredEvidenceArtifact -JournalPath $JournalPath `
+        -ArtifactId $ArtifactId -Content $Content -Kind TemporaryEvidence
 }
 
 function Add-TemporaryEvidence {
@@ -965,6 +1125,81 @@ function Add-TemporaryEvidence {
     if ($registration.state -ne 'Registered') { return $registration }
     Write-RegisteredTemporaryEvidence -JournalPath $JournalPath `
         -ArtifactId $registration.artifactId -Content $Content
+}
+
+function New-EvidenceViewingArtifact {
+    param(
+        [Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(Mandatory)] [byte[]] $Content
+    )
+
+    $registration = New-RegisteredEvidenceArtifact -JournalPath $JournalPath `
+        -ExpectedContentLength $Content.Length -Kind EvidenceViewingArtifact
+    if ($registration.state -ne 'Registered') { return $registration }
+    Write-RegisteredEvidenceArtifact -JournalPath $JournalPath `
+        -ArtifactId $registration.artifactId -Content $Content `
+        -Kind EvidenceViewingArtifact
+}
+
+function Remove-EvidenceViewingArtifactAndBoundary {
+    param(
+        [Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(Mandatory)] [guid] $ArtifactId
+    )
+
+    $incomplete = [pscustomobject][ordered]@{
+        state = 'CleanupIncomplete'; verified = $false
+        reasonCode = 'VIEWING.CLEANUP_INCOMPLETE'; recoveryRetained = $true
+    }
+    try {
+        $journal = Read-RunRecoveryJournal -LiteralPath $JournalPath
+        if (-not (Test-RunRecoveryJournalCurrentOwner -Journal $journal)) { return $incomplete }
+        $workspace = @($journal.artifacts | Where-Object kind -eq 'Workspace')
+        $artifact = @($journal.artifacts | Where-Object {
+            $_.kind -eq 'EvidenceViewingArtifact' -and
+            $_.artifactId -eq $ArtifactId.ToString('D')
+        })
+        if ($workspace.Count -ne 1 -or $artifact.Count -ne 1 -or
+            -not (Test-EvidenceArtifactWithinWorkspace -ArtifactPath $artifact[0].path `
+                -WorkspacePath $workspace[0].path) -or
+            (Get-EvidenceWorkspaceFileSystemIdentity -LiteralPath $workspace[0].path) -ne
+                [string] $workspace[0].fileSystemIdentity -or
+            (Get-EvidenceWorkspaceFileSystemIdentity -LiteralPath $artifact[0].path) -ne
+                [string] $artifact[0].fileSystemIdentity) { return $incomplete }
+
+        [System.IO.File]::Delete([string] $artifact[0].path)
+        if ([System.IO.File]::Exists([string] $artifact[0].path)) { return $incomplete }
+        $journal.artifacts = @($journal.artifacts | Where-Object {
+            $_.artifactId -ne $ArtifactId.ToString('D')
+        })
+        Write-RunRecoveryJournal -Journal $journal -LiteralPath $JournalPath
+        $viewingDirectory = Split-Path -Parent ([string] $artifact[0].path)
+        if ([System.IO.Directory]::Exists($viewingDirectory)) {
+            if ([System.IO.Directory]::EnumerateFileSystemEntries($viewingDirectory) |
+                Select-Object -First 1) { return $incomplete }
+            [System.IO.Directory]::Delete($viewingDirectory, $false)
+        }
+        if ([System.IO.Directory]::EnumerateFileSystemEntries($workspace[0].path) |
+            Select-Object -First 1) { return $incomplete }
+        [System.IO.Directory]::Delete([string] $workspace[0].path, $false)
+        if ([System.IO.Directory]::Exists([string] $workspace[0].path)) { return $incomplete }
+
+        # Remove recovery ownership last, after its registered plaintext and
+        # restricted boundary are both verified absent.
+        $journalDirectory = Split-Path -Parent ([System.IO.Path]::GetFullPath($JournalPath))
+        [System.IO.File]::Delete([System.IO.Path]::GetFullPath($JournalPath))
+        if ([System.IO.File]::Exists([System.IO.Path]::GetFullPath($JournalPath))) { return $incomplete }
+        if ([System.IO.Directory]::Exists($journalDirectory) -and
+            -not ([System.IO.Directory]::EnumerateFileSystemEntries($journalDirectory) |
+                Select-Object -First 1)) {
+            [System.IO.Directory]::Delete($journalDirectory, $false)
+        }
+        [pscustomobject][ordered]@{
+            state = 'Closed'; verified = $true
+            reasonCode = 'VIEWING.PLAINTEXT_REMOVED'; recoveryRetained = $false
+        }
+    }
+    catch { $incomplete }
 }
 
 function Complete-TemporaryEvidenceIngestion {
@@ -1011,6 +1246,12 @@ function Complete-TemporaryEvidenceIngestion {
             state = 'IngestionFailed'
             reasonCode = 'TEMPORARY_EVIDENCE.INGESTION_FAILED'
         }
+    }
+    finally {
+        # Temporary evidence is already unprotected on disk, but the additional
+        # managed copy used during ingestion is controllable. Clear that buffer
+        # on every path so viewing cleanup does not extend plaintext lifetime.
+        [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($bytes)
     }
 
     # File.Delete is ordinary filesystem deletion. It removes the product-owned

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/protected-package-envelope.schema.json",
+  "title": "WIN-PCInfo Protected Package envelope header",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "algorithm", "keyProtection", "chunkPlaintextBytes", "plaintextLength", "chunkCount", "noncePrefix", "protectedContentKey"],
+  "properties": {
+    "formatVersion": { "const": 1 },
+    "algorithm": { "const": "AES-256-GCM" },
+    "keyProtection": { "const": "DPAPI-CurrentUser" },
+    "chunkPlaintextBytes": { "const": 16384 },
+    "plaintextLength": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+    "chunkCount": { "type": "integer", "minimum": 1, "maximum": 64 },
+    "noncePrefix": { "type": "string", "pattern": "^[A-Za-z0-9+/]{11}=$" },
+    "protectedContentKey": { "type": "string", "minLength": 44, "maxLength": 5464, "pattern": "^[A-Za-z0-9+/]+={0,2}$" }
+  }
+}
