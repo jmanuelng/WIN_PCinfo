@@ -877,10 +877,59 @@ function Get-DeviceReadinessNoPayloadDisposition {
     }
 }
 
+function Get-DeviceReadinessPackageDisposition {
+    param(
+        [Parameter()] $Package,
+        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] [bool] $ValidationCleanupVerified,
+        [Parameter(Mandatory)] [bool] $FinalVerificationSucceeded
+    )
+
+    $packageState = if ($null -ne $Package -and $Package.PSObject.Properties['state']) {
+        [string]$Package.state
+    }
+    else { 'NotCreated' }
+    $packageCreatedVerified = $null -ne $Package -and
+        $Package.PSObject.Properties['verified'] -and [bool]$Package.verified
+    $packagePath = if ($null -ne $Package -and $Package.PSObject.Properties['packagePath']) {
+        [string]$Package.packagePath
+    }
+    else { '' }
+
+    $cleanupUncertain = $packageState -eq 'CleanupIncomplete' -or
+        ($ValidationFixture -and -not $ValidationCleanupVerified) -or
+        ($FinalVerificationSucceeded -and -not $ValidationFixture -and
+            ([string]::IsNullOrWhiteSpace($packagePath) -or
+                -not [System.IO.File]::Exists($packagePath)))
+    if ($cleanupUncertain) {
+        return [pscustomobject][ordered]@{
+            packageAvailability = 'Uncertain'; outcome = 'CleanupIncomplete'
+            exitCode = 60; reasonCode = 'DEVICE_READINESS.PACKAGE_CLEANUP_INCOMPLETE'
+        }
+    }
+    if ($FinalVerificationSucceeded) {
+        return [pscustomobject][ordered]@{
+            packageAvailability = if ($ValidationFixture) { 'VerifiedAbsent' } else { 'Available' }
+            outcome = ''; exitCode = -1; reasonCode = ''
+        }
+    }
+    if ($packageCreatedVerified) {
+        return [pscustomobject][ordered]@{
+            packageAvailability = 'Uncertain'; outcome = 'IntegrityFailed'
+            exitCode = 50; reasonCode = 'DEVICE_READINESS.PACKAGE_INVALID'
+        }
+    }
+    [pscustomobject][ordered]@{
+        packageAvailability = 'VerifiedAbsent'; outcome = 'IntegrityFailed'
+        exitCode = 50; reasonCode = 'DEVICE_READINESS.PACKAGE_INVALID'
+    }
+}
+
 function Invoke-DeviceReadinessSlice {
     param(
         [Parameter()] [string] $LiteralPath,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
+        [Parameter()] $ApprovedRecipient,
         [Parameter(Mandatory)] [string] $RequestDigest,
         [Parameter(Mandatory)] [string] $PlanDigest,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
@@ -890,13 +939,14 @@ function Invoke-DeviceReadinessSlice {
 
     $isFixture = -not [string]::IsNullOrWhiteSpace($LiteralPath)
     $scenario = if ($isFixture) { '' } else { 'Actual' }
-    $policy = $null; $boundary = $null; $opened = $null
+    $policy = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
     $packageVerified = $false; $coverageState = 'Unavailable'; $findingOutcome = 'Indeterminate'
     $activationFindingOutcome = 'Indeterminate'; $platformFindingOutcome = 'Indeterminate'
     $powerFindingOutcome = 'Indeterminate'; $sourceAccessDiagnostics = ''
     $activationContext = 'Unknown'; $virtualizationContext = 'Unknown'
     $formFactor = 'Unknown'; $batteryPresence = 'Unknown'
+    $recipientKeyProtection = 'None'
     $collectionStarted = $false
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
     try {
@@ -1051,15 +1101,24 @@ function Invoke-DeviceReadinessSlice {
                     else { 'RecoverablePartial' }
                     $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
                         -Artifacts $artifacts -AssessmentContractSetVersion '1.0.0' `
-                        -Completeness $packageCompleteness
+                        -Completeness $packageCompleteness -ApprovedRecipient $ApprovedRecipient
                     if ($package.verified) {
+                        $recipientKeyProtection = [string](
+                            Get-ProtectedPackageEnvelopeHeader $package.packagePath
+                        ).recipientKeyProtection
                         $opened = Read-ProtectedEvidencePackage -LiteralPath $package.packagePath
                         $packageVerified = [bool]$opened.verified -and
                             $opened.artifacts.Contains('assessment-record.json') -and
                             $opened.artifacts.Contains('assessment-report.html')
                     }
                     if (-not $packageVerified) {
-                        $outcome='IntegrityFailed';$exitCode=50;$reasonCode='DEVICE_READINESS.PACKAGE_INVALID'
+                        $packageDisposition = Get-DeviceReadinessPackageDisposition `
+                            -Package $package -ValidationFixture $isFixture `
+                            -ValidationCleanupVerified $true `
+                            -FinalVerificationSucceeded $packageVerified
+                        $outcome=[string]$packageDisposition.outcome
+                        $exitCode=[int]$packageDisposition.exitCode
+                        $reasonCode=[string]$packageDisposition.reasonCode
                     }
                     elseif ($coverageState -eq 'Complete') {
                         $outcome='Completed';$exitCode=0;$reasonCode='DEVICE_READINESS.COMPLETED'
@@ -1103,8 +1162,32 @@ function Invoke-DeviceReadinessSlice {
             sourceAccessDiagnostics=$sourceAccessDiagnostics
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
+            recipientKeyProtection=$recipientKeyProtection
         }) -ConvertToJsonCommand $ConvertToJsonCommand
     }
+    $recipientSelected = $null -ne $ApprovedRecipient
+    $recipientProtectionLevel = if ($recipientSelected) {
+        [string]$ApprovedRecipient.protectionLevel
+    }
+    else { 'None' }
+    $recipientAccessAvailable = $packageVerified -and
+        $recipientKeyProtection -eq 'RSA-OAEP-SHA-256'
+    $packageDisposition = Get-DeviceReadinessPackageDisposition `
+        -Package $package -ValidationFixture $isFixture `
+        -ValidationCleanupVerified $cleanupVerified `
+        -FinalVerificationSucceeded $packageVerified
+    $packageAvailability = [string]$packageDisposition.packageAvailability
+    if ($packageDisposition.outcome -eq 'CleanupIncomplete') {
+        $outcome=[string]$packageDisposition.outcome
+        $exitCode=[int]$packageDisposition.exitCode
+        $reasonCode=[string]$packageDisposition.reasonCode
+    }
+    Write-ContractRecord (New-CompletionSummary -PackageVerified $packageVerified `
+        -PackageAvailability $packageAvailability `
+        -RecipientSelected $recipientSelected `
+        -RecipientProtectionLevel $recipientProtectionLevel `
+        -RecipientAccessAvailable $recipientAccessAvailable `
+        -RestrictedReportExported $false) -ConvertToJsonCommand $ConvertToJsonCommand
     Write-DeviceReadinessTerminal -Outcome $outcome -ExitCode $exitCode -ReasonCode $reasonCode `
         -CollectionStarted $collectionStarted `
         -ValidationFixture $isFixture -CleanupVerified $cleanupVerified `

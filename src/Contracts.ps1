@@ -6,8 +6,15 @@ function New-NormalizedRequest {
         [Parameter(Mandatory)] [string] $NetworkBehavior,
         [Parameter(Mandatory)] [string] $UpdateChoice,
         [Parameter(Mandatory)] [string] $DiagnosticLevel,
-        [Parameter(Mandatory)] $AutomationChoices
+        [Parameter(Mandatory)] $AutomationChoices,
+        [Parameter()] $RecipientSelection
     )
+
+    if ($null -eq $RecipientSelection) {
+        $RecipientSelection = [pscustomobject][ordered]@{
+            mode = 'None'; profilePath = $null; fingerprintConfirmation = $null
+        }
+    }
 
     [pscustomobject][ordered]@{
         contractVersion = $ContractVersion
@@ -16,6 +23,17 @@ function New-NormalizedRequest {
         networkBehavior = $NetworkBehavior
         updateChoice = $UpdateChoice
         diagnosticLevel = $DiagnosticLevel
+        recipientSelection = [pscustomobject][ordered]@{
+            mode = [string] $RecipientSelection.mode
+            profilePath = if ($null -eq $RecipientSelection.profilePath) {
+                $null
+            }
+            else { [string] $RecipientSelection.profilePath }
+            fingerprintConfirmation = if ($null -eq $RecipientSelection.fingerprintConfirmation) {
+                $null
+            }
+            else { [string] $RecipientSelection.fingerprintConfirmation }
+        }
         automationChoices = [pscustomobject][ordered]@{
             allowAssessmentNetwork = [bool] $AutomationChoices.allowAssessmentNetwork
             allowElevation = [bool] $AutomationChoices.allowElevation

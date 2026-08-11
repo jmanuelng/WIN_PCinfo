@@ -46,7 +46,7 @@
           "type": "object", "additionalProperties": false,
           "required": ["allowedFields", "prohibitedIdentityClasses"],
           "properties": {
-            "allowedFields": { "type": "array", "prefixItems": [{"const":"formatVersion"},{"const":"algorithm"},{"const":"keyProtection"},{"const":"chunkPlaintextBytes"},{"const":"plaintextLength"},{"const":"chunkCount"},{"const":"noncePrefix"},{"const":"protectedContentKey"}], "items": false, "minItems": 8, "maxItems": 8 },
+            "allowedFields": { "type": "array", "prefixItems": [{"const":"formatVersion"},{"const":"algorithm"},{"const":"keyProtection"},{"const":"recipientKeyProtection"},{"const":"chunkPlaintextBytes"},{"const":"plaintextLength"},{"const":"chunkCount"},{"const":"noncePrefix"},{"const":"protectedContentKey"},{"const":"recipientWrappedContentKey"}], "items": false, "minItems": 10, "maxItems": 10 },
             "prohibitedIdentityClasses": { "type": "array", "prefixItems": [{"const":"Assessment"},{"const":"User"},{"const":"Device"},{"const":"Organization"},{"const":"Certificate"}], "items": false, "minItems": 5, "maxItems": 5 }
           }
         }

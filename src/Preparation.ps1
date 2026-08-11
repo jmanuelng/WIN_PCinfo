@@ -169,6 +169,67 @@ function Get-ActivePreparationFacts {
     }
 }
 
+function Resolve-PreparationRecipientSelection {
+    param([Parameter(Mandatory)] $Request)
+
+    if ($Request.recipientSelection.mode -eq 'None') {
+        return [pscustomobject][ordered]@{
+            resolved = $true; mode = 'None'; label = $null; fingerprint = $null
+            protectionLevel = $null; profileValidated = $true
+            fingerprintConfirmed = $false; reasonCode = 'RECIPIENT.NONE_SELECTED'
+            approvedRecipient = $null
+        }
+    }
+    if (-not (Get-Command Import-RecipientProfile -CommandType Function `
+            -ErrorAction SilentlyContinue)) {
+        return [pscustomobject][ordered]@{
+            resolved = $false; mode = 'Profile'; label = $null; fingerprint = $null
+            protectionLevel = $null; profileValidated = $false
+            fingerprintConfirmed = $false; reasonCode = 'RECIPIENT.PROFILE_VALIDATOR_UNAVAILABLE'
+            approvedRecipient = $null
+        }
+    }
+    $admission = Import-RecipientProfile -LiteralPath $Request.recipientSelection.profilePath `
+        -ExpectedFingerprint $Request.recipientSelection.fingerprintConfirmation `
+        -ForNewPackage
+    try {
+        [pscustomobject][ordered]@{
+            resolved = $admission.state -eq 'Approved'
+            mode = 'Profile'
+            label = if ($admission.state -eq 'Approved') { [string] $admission.label } else { $null }
+            fingerprint = if ($admission.state -eq 'Approved') {
+                [string] $admission.fingerprint
+            }
+            else { $null }
+            protectionLevel = if ($admission.state -eq 'Approved') {
+                [string] $admission.protectionLevel
+            }
+            else { $null }
+            profileValidated = $admission.state -eq 'Approved'
+            fingerprintConfirmed = $admission.state -eq 'Approved'
+            reasonCode = [string] $admission.reasonCode
+            # The execution fact freezes the exact admitted public certificate,
+            # not merely its display label. New-ProtectedEvidencePackage accepts
+            # this closed admission object and rechecks the fingerprint/validity
+            # before OAEP wrapping. New-PreparationPlan intentionally projects
+            # only the human-review fields into the public summary.
+            approvedRecipient = if ($admission.state -eq 'Approved') {
+                [pscustomobject][ordered]@{
+                    state = 'Approved'; admissionKind = 'ApprovedRecipientForPackage'
+                    fingerprint = [string] $admission.fingerprint
+                    label = [string] $admission.label
+                    protectionLevel = [string] $admission.protectionLevel
+                    certificateDerBase64 = [System.Convert]::ToBase64String(
+                        $admission.certificate.RawData
+                    )
+                }
+            }
+            else { $null }
+        }
+    }
+    finally { if ($null -ne $admission.certificate) { $admission.certificate.Dispose() } }
+}
+
 function New-PreparationPlan {
     param(
         [Parameter(Mandatory)] $Request,
@@ -241,9 +302,9 @@ function New-PreparationPlan {
             plannedRequests = @($networkRequests)
         }
         # Evidence protection is fixed before collection so plaintext or a new
-        # recipient cannot become a late escape hatch. The Local Package
-        # Protector owns local cryptographic access; a future verified Recipient
-        # Profile may add zero or one recipient through a new reviewed plan.
+        # recipient cannot become a late escape hatch. The plan carries only the
+        # verified public profile facts needed for human review; the private
+        # profile path and all private-key/provider material remain outside it.
         output = [pscustomobject][ordered]@{
             requestedDestination = [string] $Request.outputDestination
             destination = [string] $PreparationFacts.resolvedOutputDestination
@@ -252,9 +313,14 @@ function New-PreparationPlan {
                 plaintextSharingArtifactAllowed = $false
             }
             recipientProfile = [pscustomobject][ordered]@{
-                mode = 'None'
+                mode = [string] $PreparationFacts.recipientSelection.mode
                 selectedBeforeCollection = $true
                 maximumRecipients = 1
+                label = $PreparationFacts.recipientSelection.label
+                fingerprint = $PreparationFacts.recipientSelection.fingerprint
+                protectionLevel = $PreparationFacts.recipientSelection.protectionLevel
+                profileValidated = [bool] $PreparationFacts.recipientSelection.profileValidated
+                fingerprintConfirmed = [bool] $PreparationFacts.recipientSelection.fingerprintConfirmed
             }
         }
         windowsFeatures = [pscustomobject][ordered]@{
@@ -349,6 +415,7 @@ function Invoke-PreparationGate {
     $systemCollectionFixturePath = [string] $ValidationContext.SystemCollectionFixturePath
     $evidenceWorkspaceFixturePath = [string] $ValidationContext.EvidenceWorkspaceFixturePath
     $protectedPackageFixturePath = [string] $ValidationContext.ProtectedPackageFixturePath
+    $recipientSharingFixturePath = [string] $ValidationContext.RecipientSharingFixturePath
     $deviceReadinessFixturePath = [string] $ValidationContext.DeviceReadinessFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
@@ -381,6 +448,13 @@ function Invoke-PreparationGate {
             -ConvertToJsonCommand $ConvertToJsonCommand
         return 20
     }
+
+    $recipientSelection = Resolve-PreparationRecipientSelection -Request $Request
+    $recipientCheck = @($facts.prerequisiteChecks | Where-Object id -eq 'recipient-profile-resolved')[0]
+    $recipientCheck.resolved = [bool] $recipientCheck.resolved -and
+        [bool] $recipientSelection.resolved
+    $facts | Add-Member -MemberType NoteProperty -Name recipientSelection `
+        -Value $recipientSelection -Force
 
     # Fixtures can only reduce trust. They cannot make corrupt embedded bytes,
     # an application manifest, or a governing resource valid and cannot create
@@ -416,7 +490,8 @@ function Invoke-PreparationGate {
     $selectedExecutionFixtures = @(
         @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath,
             $systemCollectionFixturePath, $evidenceWorkspaceFixturePath,
-            $protectedPackageFixturePath, $deviceReadinessFixturePath) |
+            $protectedPackageFixturePath, $recipientSharingFixturePath,
+            $deviceReadinessFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -462,9 +537,17 @@ function Invoke-PreparationGate {
             -PlanDigest $planResult.Digest -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand
     }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($recipientSharingFixturePath)) {
+        return Invoke-RecipientSharingFixture -LiteralPath $recipientSharingFixturePath `
+            -RuntimeResult $RuntimeResult -RequestDigest $requestDigest `
+            -PlanDigest $planResult.Digest -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand `
+            -ApprovedRecipient $recipientSelection.approvedRecipient
+    }
     if ($accepted -and -not [string]::IsNullOrWhiteSpace($deviceReadinessFixturePath)) {
         return Invoke-DeviceReadinessSlice -LiteralPath $deviceReadinessFixturePath `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
             -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
@@ -472,6 +555,7 @@ function Invoke-PreparationGate {
     if ($accepted -and -not $ValidationFixture) {
         return Invoke-DeviceReadinessSlice `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
             -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand

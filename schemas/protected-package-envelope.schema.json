@@ -4,15 +4,29 @@
   "title": "WIN-PCInfo Protected Package envelope header",
   "type": "object",
   "additionalProperties": false,
-  "required": ["formatVersion", "algorithm", "keyProtection", "chunkPlaintextBytes", "plaintextLength", "chunkCount", "noncePrefix", "protectedContentKey"],
+  "required": ["formatVersion", "algorithm", "keyProtection", "recipientKeyProtection", "chunkPlaintextBytes", "plaintextLength", "chunkCount", "noncePrefix", "protectedContentKey", "recipientWrappedContentKey"],
   "properties": {
     "formatVersion": { "const": 1 },
     "algorithm": { "const": "AES-256-GCM" },
     "keyProtection": { "const": "DPAPI-CurrentUser" },
+    "recipientKeyProtection": { "enum": ["None", "RSA-OAEP-SHA-256"] },
     "chunkPlaintextBytes": { "const": 16384 },
     "plaintextLength": { "type": "integer", "minimum": 1, "maximum": 1048576 },
     "chunkCount": { "type": "integer", "minimum": 1, "maximum": 64 },
     "noncePrefix": { "type": "string", "pattern": "^[A-Za-z0-9+/]{11}=$" },
-    "protectedContentKey": { "type": "string", "minLength": 44, "maxLength": 5464, "pattern": "^[A-Za-z0-9+/]+={0,2}$" }
-  }
+    "protectedContentKey": { "type": "string", "minLength": 44, "maxLength": 5464, "pattern": "^[A-Za-z0-9+/]+={0,2}$" },
+    "recipientWrappedContentKey": {
+      "type": ["string", "null"],
+      "minLength": 344,
+      "maxLength": 2732,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "recipientKeyProtection": { "const": "None" } } },
+      "then": { "properties": { "recipientWrappedContentKey": { "type": "null" } } },
+      "else": { "properties": { "recipientWrappedContentKey": { "type": "string" } } }
+    }
+  ]
 }

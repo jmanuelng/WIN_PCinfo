@@ -19,6 +19,7 @@ $sourcePaths = @(
     'src/PrivilegedCollectionPlan.ps1'
     'src/SystemCollectionPlan.ps1'
     'src/EvidenceWorkspace.ps1'
+    'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
     'src/DeviceReadiness.ps1'
     'src/RunLifecycle.ps1'
@@ -56,6 +57,9 @@ $deviceReadinessPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0
 $deviceReadinessSchemaPath = Join-Path $repositoryRoot 'schemas/device-readiness.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
 $assessmentPackageManifestSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-package-manifest.schema.json'
+$recipientSharingPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
+$recipientProfileSchemaPath = Join-Path $repositoryRoot 'schemas/recipient-profile.schema.json'
+$recipientSharingSchemaPath = Join-Path $repositoryRoot 'schemas/recipient-sharing.schema.json'
 foreach ($requiredDefinitionPath in @(
     $releaseDefinitionPath, $capabilityLedgerPath, $preparationPlanPath,
     $assessmentContractSetPath, $assessmentRecordSchemaPath,
@@ -66,6 +70,7 @@ foreach ($requiredDefinitionPath in @(
     $evidenceWorkspacePolicyPath, $evidenceWorkspaceSchemaPath,
     $runRecoveryJournalSchemaPath, $protectedPackagePolicyPath, $protectedPackageSchemaPath,
     $protectedPackageEnvelopeSchemaPath, $assessmentPackageManifestSchemaPath,
+    $recipientSharingPolicyPath, $recipientProfileSchemaPath, $recipientSharingSchemaPath,
     $deviceReadinessPolicyPath, $deviceReadinessSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
@@ -124,6 +129,15 @@ $protectedPackageEnvelopeSchemaDigest = Get-Sha256Hex -Bytes $protectedPackageEn
 $assessmentPackageManifestSchemaBytes = Get-Utf8LfBytes -LiteralPath $assessmentPackageManifestSchemaPath
 $assessmentPackageManifestSchemaBase64 = [System.Convert]::ToBase64String($assessmentPackageManifestSchemaBytes)
 $assessmentPackageManifestSchemaDigest = Get-Sha256Hex -Bytes $assessmentPackageManifestSchemaBytes
+$recipientSharingPolicyBytes = Get-Utf8LfBytes -LiteralPath $recipientSharingPolicyPath
+$recipientSharingPolicyBase64 = [System.Convert]::ToBase64String($recipientSharingPolicyBytes)
+$recipientSharingPolicyDigest = Get-Sha256Hex -Bytes $recipientSharingPolicyBytes
+$recipientSharingPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+    $recipientSharingPolicyBytes
+)
+$recipientProfileSchemaBytes = Get-Utf8LfBytes -LiteralPath $recipientProfileSchemaPath
+$recipientProfileSchemaBase64 = [System.Convert]::ToBase64String($recipientProfileSchemaBytes)
+$recipientProfileSchemaDigest = Get-Sha256Hex -Bytes $recipientProfileSchemaBytes
 $deviceReadinessPolicyBytes = Get-Utf8LfBytes -LiteralPath $deviceReadinessPolicyPath
 $deviceReadinessPolicyBase64 = [System.Convert]::ToBase64String($deviceReadinessPolicyBytes)
 $deviceReadinessPolicyDigest = Get-Sha256Hex -Bytes $deviceReadinessPolicyBytes
@@ -145,6 +159,9 @@ if (-not (Test-Json -Json $evidenceWorkspacePolicyJson -SchemaFile $evidenceWork
 }
 if (-not (Test-Json -Json $protectedPackagePolicyJson -SchemaFile $protectedPackageSchemaPath)) {
     throw 'The Protected Package policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $recipientSharingPolicyJson -SchemaFile $recipientSharingSchemaPath)) {
+    throw 'The Recipient Sharing policy does not satisfy its release schema.'
 }
 if (-not (Test-Json -Json $deviceReadinessPolicyJson -SchemaFile $deviceReadinessSchemaPath)) {
     throw 'The Device Readiness policy does not satisfy its release schema.'
@@ -191,6 +208,8 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/protected-package.schema.json'
     'schemas/protected-package-envelope.schema.json'
     'schemas/assessment-package-manifest.schema.json'
+    'schemas/recipient-profile.schema.json'
+    'schemas/recipient-sharing.schema.json'
     'schemas/device-readiness.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -199,6 +218,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
     'docs/spec/releases/2.0.0-preview.1-evidence-workspace.json'
     'docs/spec/releases/2.0.0-preview.1-protected-package.json'
+    'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
     'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
 )
 $applicationResources = @(
@@ -345,6 +365,20 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__ASSESSMENT_PACKAGE_MANIFEST_SCHEMA_SHA256__', $assessmentPackageManifestSchemaDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/RecipientSharing.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__RECIPIENT_SHARING_POLICY_BASE64__', $recipientSharingPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__RECIPIENT_SHARING_POLICY_SHA256__', $recipientSharingPolicyDigest
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__RECIPIENT_PROFILE_SCHEMA_BASE64__', $recipientProfileSchemaBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__RECIPIENT_PROFILE_SCHEMA_SHA256__', $recipientProfileSchemaDigest
         )
     }
     if ($sourceFile.path -eq 'src/DeviceReadiness.ps1') {

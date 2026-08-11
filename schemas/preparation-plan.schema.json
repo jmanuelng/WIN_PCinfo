@@ -264,12 +264,40 @@
         "recipientProfile": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["mode", "selectedBeforeCollection", "maximumRecipients"],
+          "required": ["mode", "selectedBeforeCollection", "maximumRecipients", "label", "fingerprint", "protectionLevel", "profileValidated", "fingerprintConfirmed"],
           "properties": {
-            "mode": { "const": "None" },
+            "mode": { "enum": ["None", "Profile"] },
             "selectedBeforeCollection": { "const": true },
-            "maximumRecipients": { "const": 1 }
-          }
+            "maximumRecipients": { "const": 1 },
+            "label": { "type": ["string", "null"], "minLength": 1, "maxLength": 80 },
+            "fingerprint": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+            "protectionLevel": { "type": ["string", "null"], "enum": [null, "UserAndDeviceBound", "WindowsUserBound"] },
+            "profileValidated": { "type": "boolean" },
+            "fingerprintConfirmed": { "type": "boolean" }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "mode": { "const": "None" } } },
+              "then": {
+                "properties": {
+                  "label": { "type": "null" },
+                  "fingerprint": { "type": "null" },
+                  "protectionLevel": { "type": "null" },
+                  "profileValidated": { "const": true },
+                  "fingerprintConfirmed": { "const": false }
+                }
+              },
+              "else": {
+                "properties": {
+                  "label": { "type": "string" },
+                  "fingerprint": { "type": "string" },
+                  "protectionLevel": { "type": "string" },
+                  "profileValidated": { "const": true },
+                  "fingerprintConfirmed": { "const": true }
+                }
+              }
+            }
+          ]
         }
       }
     },

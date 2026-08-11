@@ -81,10 +81,13 @@ Assert-Equal $false $automationSummary.plan.cleanup.staleRunRecovery.requested `
 Assert-Equal $false $automationSummary.plan.cleanup.staleRunRecovery.collectionResumeAllowed `
     'the Preparation Summary cannot promise collection resume after recovery'
 $protectionResources = @(
-    'src/ProtectedPackage.ps1', 'schemas/protected-package.schema.json',
+    'src/RecipientSharing.ps1', 'src/ProtectedPackage.ps1',
+    'schemas/recipient-sharing.schema.json', 'schemas/recipient-profile.schema.json',
+    'schemas/protected-package.schema.json',
     'schemas/protected-package-envelope.schema.json',
     'schemas/assessment-package-manifest.schema.json',
-    'docs/spec/releases/2.0.0-preview.1-protected-package.json'
+    'docs/spec/releases/2.0.0-preview.1-protected-package.json',
+    'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
 )
 foreach ($path in $protectionResources) {
     Assert-Equal 1 @($automationSummary.plan.integrity.applicationResources |

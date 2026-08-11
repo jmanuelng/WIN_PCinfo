@@ -25,11 +25,120 @@ $convertFromJsonCommand = $moduleFacts.convertFromJsonCommand
 $artifactTrustValid = Test-ApplicationArtifactTrust -LiteralPath $PSCommandPath `
     -AuthenticodeCommand $moduleFacts.authenticodeCommand
 
+if ($Workflow -ne 'Assessment') {
+    $workflowRuntime = Test-RuntimeCompatibility -Facts (
+        Get-ActiveRuntimeFacts -ModuleFacts $moduleFacts
+    )
+    if (-not $workflowRuntime.Eligible -or -not $artifactTrustValid) {
+        $reason = if (-not $workflowRuntime.Eligible) {
+            [string] $workflowRuntime.ReasonCode
+        }
+        else { 'PREPARATION.INTEGRITY_FAILED' }
+        Write-ContractRecord (New-TerminalRecord -ReasonCode $reason `
+            -RuntimeResult $workflowRuntime -Phase $Workflow) `
+            -ConvertToJsonCommand $convertToJsonCommand
+        exit 20
+    }
+    if ($Workflow -eq 'RecipientProfileSetup') {
+        $workflowResult = if ([string]::IsNullOrWhiteSpace($RecipientLabel) -or
+            [string]::IsNullOrWhiteSpace($RecipientProfileOutputPath)) {
+            [pscustomobject][ordered]@{
+                state = 'NotStarted'; reasonCode = 'RECIPIENT.SETUP_INPUT_INVALID'
+                profilePath = $null; fingerprint = $null; protectionLevel = $null
+                syntheticRoundTripVerified = $false
+            }
+        }
+        else {
+            New-RecipientProfileSetup -Label $RecipientLabel `
+                -OutputPath $RecipientProfileOutputPath `
+                -ConfirmSetup:$ConfirmRecipientSetup
+        }
+        Write-ContractRecord ([pscustomobject][ordered]@{
+            recordType = 'win-pcinfo.recipient-profile-setup'
+            contractVersion = '1.0.0'
+            state = $workflowResult.state
+            reasonCode = $workflowResult.reasonCode
+            profilePath = $workflowResult.profilePath
+            fingerprint = $workflowResult.fingerprint
+            protectionLevel = $workflowResult.protectionLevel
+            syntheticRoundTripVerified = $workflowResult.syntheticRoundTripVerified
+            privateKeyExported = $false
+        }) -ConvertToJsonCommand $convertToJsonCommand
+        $terminal = New-TerminalRecord -ReasonCode $workflowResult.reasonCode `
+            -RuntimeResult $workflowRuntime -Phase RecipientProfileSetup
+        $exitCode = 20
+        if ($workflowResult.state -eq 'Created') {
+            $terminal.outcome = 'Completed'; $terminal.exitCode = 0; $exitCode = 0
+        }
+        elseif ($workflowResult.state -eq 'CleanupIncomplete') {
+            $terminal.outcome = 'CleanupIncomplete'; $terminal.exitCode = 60
+            $terminal.cleanup.required = $true; $terminal.cleanup.verified = $false
+            $exitCode = 60
+        }
+        Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+        exit $exitCode
+    }
+    # The warning is an observable workflow step, not text hidden in help or in
+    # the resulting HTML. It is emitted before checking the deliberate phrase,
+    # so declining or mistyping still proves that no plaintext write preceded
+    # the prominent Restricted consequences and deletion instructions.
+    Write-ContractRecord (Get-RestrictedReportExportWarning) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    $workflowResult = if ([string]::IsNullOrWhiteSpace($ProtectedPackagePath) -or
+        [string]::IsNullOrWhiteSpace($RestrictedReportOutputPath) -or
+        $null -eq $RestrictedReportWarningAcknowledgment) {
+        [pscustomobject][ordered]@{
+            state = 'NotStarted'; reasonCode = 'EXPORT.INPUT_INVALID'
+            reportPath = $null; restrictedDiagnosticEvidence = $true
+            publiclyShareable = $false; cleanupVerified = $true
+        }
+    }
+    else {
+        Export-RestrictedAssessmentReport `
+            -PackagePath $ProtectedPackagePath -OutputPath $RestrictedReportOutputPath `
+            -WarningAcknowledgment $RestrictedReportWarningAcknowledgment
+    }
+    Write-ContractRecord ([pscustomobject][ordered]@{
+        recordType = 'win-pcinfo.restricted-report-export'
+        contractVersion = '1.0.0'
+        state = $workflowResult.state
+        reasonCode = $workflowResult.reasonCode
+        reportPath = $workflowResult.reportPath
+        restrictedDiagnosticEvidence = $true
+        publiclyShareable = $false
+        cleanupVerified = $workflowResult.cleanupVerified
+    }) -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode $workflowResult.reasonCode `
+        -RuntimeResult $workflowRuntime -Phase RestrictedReportExport
+    $exitCode = 20
+    if ($workflowResult.state -eq 'Exported') {
+        $terminal.outcome = 'Completed'; $terminal.exitCode = 0; $exitCode = 0
+    }
+    elseif ($workflowResult.state -eq 'IntegrityFailed') {
+        $terminal.outcome = 'IntegrityFailed'; $terminal.exitCode = 50; $exitCode = 50
+    }
+    elseif ($workflowResult.state -eq 'CleanupIncomplete') {
+        $terminal.outcome = 'CleanupIncomplete'; $terminal.exitCode = 60
+        $terminal.cleanup.required = $true; $terminal.cleanup.verified = $false
+        $exitCode = 60
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $exitCode
+}
+
 Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'RequestValidation' -State 'Started' `
     -MessageId 'request.validation.started' -CompletedUnits 0 -TotalUnits 2) `
     -ConvertToJsonCommand $convertToJsonCommand
 try {
     $request = if ($Mode -eq 'Automation') {
+        if (-not [string]::IsNullOrWhiteSpace($AssessmentRecipientProfilePath) -or
+            -not [string]::IsNullOrWhiteSpace($AssessmentRecipientFingerprintConfirmation)) {
+            $exception = [System.ArgumentException]::new(
+                'Guided recipient parameters cannot modify an automation request.'
+            )
+            $exception.Data['ReasonCode'] = 'REQUEST.RECIPIENT_SELECTION_INVALID'
+            throw $exception
+        }
         if ([string]::IsNullOrWhiteSpace($RequestPath)) {
             $exception = [System.ArgumentException]::new('Automation mode requires -RequestPath.')
             $exception.Data['ReasonCode'] = 'REQUEST.PATH_REQUIRED'
@@ -38,7 +147,8 @@ try {
         Get-AutomationRequest -LiteralPath $RequestPath -ConvertFromJsonCommand $convertFromJsonCommand
     }
     else {
-        Get-GuidedRequest
+        Get-GuidedRequest -RecipientProfilePath $AssessmentRecipientProfilePath `
+            -RecipientFingerprintConfirmation $AssessmentRecipientFingerprintConfirmation
     }
 }
 catch {
@@ -74,6 +184,7 @@ $usingPrivilegedCollectionFixture = -not [string]::IsNullOrWhiteSpace($Privilege
 $usingSystemCollectionFixture = -not [string]::IsNullOrWhiteSpace($SystemCollectionFixturePath)
 $usingEvidenceWorkspaceFixture = -not [string]::IsNullOrWhiteSpace($EvidenceWorkspaceFixturePath)
 $usingProtectedPackageFixture = -not [string]::IsNullOrWhiteSpace($ProtectedPackageFixturePath)
+$usingRecipientSharingFixture = -not [string]::IsNullOrWhiteSpace($RecipientSharingFixturePath)
 $usingDeviceReadinessFixture = -not [string]::IsNullOrWhiteSpace($DeviceReadinessFixturePath)
 $validationContext = [pscustomobject][ordered]@{
     PreparationFixturePath = $PreparationFixturePath
@@ -83,11 +194,13 @@ $validationContext = [pscustomobject][ordered]@{
     SystemCollectionFixturePath = $SystemCollectionFixturePath
     EvidenceWorkspaceFixturePath = $EvidenceWorkspaceFixturePath
     ProtectedPackageFixturePath = $ProtectedPackageFixturePath
+    RecipientSharingFixturePath = $RecipientSharingFixturePath
     DeviceReadinessFixturePath = $DeviceReadinessFixturePath
     IsFixture = ($usingRuntimeFixture -or $usingPreparationFixture -or
         $usingContractFixture -or $usingRunFixture -or $usingPrivilegedCollectionFixture -or
         $usingSystemCollectionFixture -or $usingEvidenceWorkspaceFixture -or
-        $usingProtectedPackageFixture -or $usingDeviceReadinessFixture)
+        $usingProtectedPackageFixture -or $usingRecipientSharingFixture -or
+        $usingDeviceReadinessFixture)
 }
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
     -Mode $Mode -AcceptPreparation:$AcceptPreparation -ValidationContext $validationContext `

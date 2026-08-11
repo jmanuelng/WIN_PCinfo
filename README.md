@@ -1,6 +1,6 @@
 # WIN-PCInfo
 
-WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect narrow Device, Windows, activation, form, virtualization, chassis, battery, and power context after approval, validate typed evidence, protect and reopen its package, and drive each validation path to one honest terminal outcome.
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect narrow Device, Windows, activation, form, virtualization, chassis, battery, and power context after approval, validate typed evidence, supervise approved work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, protect an assessment package for the local user and optionally one preapproved recipient, reopen one requested artifact safely, exercise warned restricted HTML export, and drive each validation path to one honest terminal outcome.
 
 > [!IMPORTANT]
 > The v2 application implements only the narrow device-context slice described below. It is not the complete assessment and does not by itself create a Preview/Supported capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance; repository validation uses closed synthetic fixtures.
@@ -31,6 +31,8 @@ To understand the finite Assessment Run state machine, stable exit codes, struct
 To understand where restricted evidence may exist, what the non-secret Run Recovery Journal records, and why stale recovery refuses ambiguous deletion, read [Evidence Workspace and Stale-run Recovery](docs/evidence-workspace-recovery.md). It includes beginner steps, privacy limits, ordinary-deletion guidance, and recovery troubleshooting.
 
 To understand how the synthetic Assessment Record and report become one locally protected package, and how a restricted viewing session reveals and removes only one requested artifact, read [Protected Evidence Packages and viewing](docs/protected-evidence-package.md). It explains AES-GCM chunks, DPAPI CurrentUser protection, validation, failure handling, privacy limits, and recovery in beginner-friendly terms.
+
+To understand separate consultant Recipient Profile setup, TPM-backed versus Windows-user-bound protection, out-of-band fingerprint confirmation, one-recipient OAEP wrapping, private transfer, historical recipient opening, warned HTML-only export, and Result-sharing Guidance, read [Recipient Profiles and restricted report export](docs/recipient-sharing.md).
 
 To understand why one device-level Windows MDM WMI Bridge source requires LocalSystem, and how WIN-PCInfo prevents that narrow need from becoming a SYSTEM command channel, read [SYSTEM Collection Sub-plan](docs/system-collection-sub-plan.md). It explains the frozen catalog, typed plan, transient activation, exact provenance, evidence confinement, privacy boundary, cleanup proof, and current controlled-client validation limitation.
 

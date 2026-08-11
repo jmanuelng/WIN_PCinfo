@@ -1,0 +1,87 @@
+{
+  "kind": "win-pcinfo.recipient-sharing-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.recipient-sharing/1.0.0",
+  "recipient": {
+    "maximumRecipients": 1,
+    "selectedBeforeCollection": true,
+    "profileContract": "win-pcinfo.recipient-profile/1.0.0",
+    "maximumProfileUtf8Bytes": 32768,
+    "maximumLabelCharacters": 80,
+    "fingerprintAlgorithm": "SHA-256",
+    "keyWrapAlgorithm": "RSA-OAEP-SHA-256",
+    "rsa": {
+      "defaultKeyBits": 3072,
+      "minimumKeyBits": 2048,
+      "publicExponent": 65537
+    },
+    "privateKey": {
+      "storeLocation": "CurrentUser",
+      "nonExportable": true,
+      "preferredProvider": "Microsoft Platform Crypto Provider",
+      "fallbackProvider": "Microsoft Software Key Storage Provider"
+    },
+    "protectionLevels": ["UserAndDeviceBound", "WindowsUserBound"],
+    "admission": {
+      "requireCurrentValidity": true,
+      "requireOutOfBandFingerprintConfirmation": true,
+      "requireSyntheticRoundTrip": true
+    },
+    "historicalOpening": {
+      "requireCurrentValidity": false,
+      "requireMatchingUsablePrivateKey": true,
+      "backgroundExpirationMonitor": false
+    },
+    "publicProfileFields": [
+      "kind",
+      "contractVersion",
+      "label",
+      "certificateDerBase64",
+      "fingerprintAlgorithm",
+      "fingerprint",
+      "protectionLevel",
+      "notBefore",
+      "notAfter",
+      "rsaKeyBits",
+      "keyWrapAlgorithm",
+      "syntheticRoundTrip"
+    ]
+  },
+  "restrictedReportExport": {
+    "artifact": "assessment-report.html",
+    "maximumBytes": 262144,
+    "warningAcknowledgmentRequired": true,
+    "acknowledgment": "I UNDERSTAND THIS IS RESTRICTED DIAGNOSTIC EVIDENCE",
+    "permanentRestrictedBanner": true,
+    "bannerText": "RESTRICTED DIAGNOSTIC EVIDENCE — PRIVATE AUTHORIZED HANDLING ONLY — NOT PUBLICLY SHAREABLE",
+    "publiclyShareable": false,
+    "provisionalSuffix": ".partial",
+    "backgroundServices": []
+  },
+  "completionSummary": {
+    "guidanceKind": "ResultSharingGuidance",
+    "requiredTopics": [
+      "localAccess",
+      "recipientAccess",
+      "privateTransfer",
+      "restrictedExport",
+      "deletionResponsibility",
+      "prohibitedPublicSharing"
+    ]
+  },
+  "validationScenarios": [
+    "TpmBackedSetup",
+    "SoftwareFallbackSetup",
+    "ProfileValidation",
+    "WrongFingerprint",
+    "ExpiredAdmission",
+    "HistoricalOpening",
+    "MissingKey",
+    "ZeroRecipient",
+    "OneRecipient",
+    "InterruptedExport",
+    "WarningDeclined",
+    "RestrictedExport"
+  ]
+}

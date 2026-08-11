@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/recipient-sharing.schema.json",
+  "title": "WIN-PCInfo Recipient Sharing policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "recipient", "restrictedReportExport", "completionSummary", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.recipient-sharing-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.recipient-sharing/1.0.0" },
+    "recipient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximumRecipients", "selectedBeforeCollection", "profileContract", "maximumProfileUtf8Bytes", "maximumLabelCharacters", "fingerprintAlgorithm", "keyWrapAlgorithm", "rsa", "privateKey", "protectionLevels", "admission", "historicalOpening", "publicProfileFields"],
+      "properties": {
+        "maximumRecipients": { "const": 1 },
+        "selectedBeforeCollection": { "const": true },
+        "profileContract": { "const": "win-pcinfo.recipient-profile/1.0.0" },
+        "maximumProfileUtf8Bytes": { "const": 32768 },
+        "maximumLabelCharacters": { "const": 80 },
+        "fingerprintAlgorithm": { "const": "SHA-256" },
+        "keyWrapAlgorithm": { "const": "RSA-OAEP-SHA-256" },
+        "rsa": {
+          "type": "object", "additionalProperties": false,
+          "required": ["defaultKeyBits", "minimumKeyBits", "publicExponent"],
+          "properties": { "defaultKeyBits": { "const": 3072 }, "minimumKeyBits": { "const": 2048 }, "publicExponent": { "const": 65537 } }
+        },
+        "privateKey": {
+          "type": "object", "additionalProperties": false,
+          "required": ["storeLocation", "nonExportable", "preferredProvider", "fallbackProvider"],
+          "properties": {
+            "storeLocation": { "const": "CurrentUser" }, "nonExportable": { "const": true },
+            "preferredProvider": { "const": "Microsoft Platform Crypto Provider" },
+            "fallbackProvider": { "const": "Microsoft Software Key Storage Provider" }
+          }
+        },
+        "protectionLevels": { "type": "array", "prefixItems": [{ "const": "UserAndDeviceBound" }, { "const": "WindowsUserBound" }], "items": false, "minItems": 2, "maxItems": 2 },
+        "admission": {
+          "type": "object", "additionalProperties": false,
+          "required": ["requireCurrentValidity", "requireOutOfBandFingerprintConfirmation", "requireSyntheticRoundTrip"],
+          "properties": { "requireCurrentValidity": { "const": true }, "requireOutOfBandFingerprintConfirmation": { "const": true }, "requireSyntheticRoundTrip": { "const": true } }
+        },
+        "historicalOpening": {
+          "type": "object", "additionalProperties": false,
+          "required": ["requireCurrentValidity", "requireMatchingUsablePrivateKey", "backgroundExpirationMonitor"],
+          "properties": { "requireCurrentValidity": { "const": false }, "requireMatchingUsablePrivateKey": { "const": true }, "backgroundExpirationMonitor": { "const": false } }
+        },
+        "publicProfileFields": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "kind" }, { "const": "contractVersion" }, { "const": "label" },
+            { "const": "certificateDerBase64" }, { "const": "fingerprintAlgorithm" },
+            { "const": "fingerprint" }, { "const": "protectionLevel" }, { "const": "notBefore" },
+            { "const": "notAfter" }, { "const": "rsaKeyBits" }, { "const": "keyWrapAlgorithm" },
+            { "const": "syntheticRoundTrip" }
+          ],
+          "items": false, "minItems": 12, "maxItems": 12
+        }
+      }
+    },
+    "restrictedReportExport": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifact", "maximumBytes", "warningAcknowledgmentRequired", "acknowledgment", "permanentRestrictedBanner", "bannerText", "publiclyShareable", "provisionalSuffix", "backgroundServices"],
+      "properties": {
+        "artifact": { "const": "assessment-report.html" }, "maximumBytes": { "const": 262144 },
+        "warningAcknowledgmentRequired": { "const": true },
+        "acknowledgment": { "const": "I UNDERSTAND THIS IS RESTRICTED DIAGNOSTIC EVIDENCE" },
+        "permanentRestrictedBanner": { "const": true },
+        "bannerText": { "const": "RESTRICTED DIAGNOSTIC EVIDENCE — PRIVATE AUTHORIZED HANDLING ONLY — NOT PUBLICLY SHAREABLE" },
+        "publiclyShareable": { "const": false }, "provisionalSuffix": { "const": ".partial" },
+        "backgroundServices": { "type": "array", "maxItems": 0 }
+      }
+    },
+    "completionSummary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["guidanceKind", "requiredTopics"],
+      "properties": {
+        "guidanceKind": { "const": "ResultSharingGuidance" },
+        "requiredTopics": {
+          "type": "array",
+          "prefixItems": [{ "const": "localAccess" }, { "const": "recipientAccess" }, { "const": "privateTransfer" }, { "const": "restrictedExport" }, { "const": "deletionResponsibility" }, { "const": "prohibitedPublicSharing" }],
+          "items": false, "minItems": 6, "maxItems": 6
+        }
+      }
+    },
+    "validationScenarios": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "TpmBackedSetup" }, { "const": "SoftwareFallbackSetup" },
+        { "const": "ProfileValidation" }, { "const": "WrongFingerprint" },
+        { "const": "ExpiredAdmission" }, { "const": "HistoricalOpening" },
+        { "const": "MissingKey" }, { "const": "ZeroRecipient" },
+        { "const": "OneRecipient" }, { "const": "InterruptedExport" },
+        { "const": "WarningDeclined" },
+        { "const": "RestrictedExport" }
+      ],
+      "items": false, "minItems": 12, "maxItems": 12
+    }
+  }
+}
