@@ -13,7 +13,7 @@ Review the whole summary once. It discloses:
 - stable PowerShell 7.6-or-later 7.x and built-in-module dependencies, with no planned install or agreement;
 - estimated duration and disk use;
 - the exact network behavior and planned request classes;
-- the protected output destination, Local Package Protector, and fixed zero-recipient choice;
+- the protected output destination, Local Package Protector, and a fixed zero-or-one Recipient Profile choice;
 - Windows Feature observations, with no feature changes;
 - limitations, later side effects, and cleanup work.
 
@@ -50,6 +50,8 @@ pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 `
   -RequestPath ./tests/fixtures/automation-request.json `
   -AcceptPreparation
 ```
+
+To select one Package Recipient in Automation, add the `recipientSelection` object described in [Recipient Profiles and restricted report export](recipient-sharing.md). Guided mode accepts the paired `-AssessmentRecipientProfilePath` and `-AssessmentRecipientFingerprintConfirmation` parameters; omit both for zero recipients. Preparation validates the public profile and requires the separately confirmed SHA-256 fingerprint before the summary can become ready. The summary shows the recipient label, fingerprint, and actual protection level but never the local profile path.
 
 Omit `-AcceptPreparation` to decline. The switch cannot repair an invalid request, missing prerequisite, or integrity failure. It cannot approve later input, new authority, a new agreement, another elevation, or a recipient change; those require a new request and plan.
 

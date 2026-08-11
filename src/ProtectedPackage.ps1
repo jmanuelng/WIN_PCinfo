@@ -507,6 +507,7 @@ function Test-ProtectedPackageHeader {
     $policy = Get-ProtectedPackagePolicy
     if ($Header.formatVersion -ne 1 -or $Header.algorithm -ne 'AES-256-GCM' -or
         $Header.keyProtection -ne 'DPAPI-CurrentUser' -or
+        $Header.recipientKeyProtection -notin @('None', 'RSA-OAEP-SHA-256') -or
         $Header.chunkPlaintextBytes -ne [int] $policy.envelope.contentEncryption.chunkPlaintextBytes -or
         $Header.plaintextLength -lt 1 -or
         $Header.plaintextLength -gt [int] $policy.envelope.maximumPlaintextBytes -or
@@ -516,7 +517,17 @@ function Test-ProtectedPackageHeader {
     try {
         [byte[]] $prefix = [System.Convert]::FromBase64String([string] $Header.noncePrefix)
         [byte[]] $protectedKey = [System.Convert]::FromBase64String([string] $Header.protectedContentKey)
-        $prefix.Length -eq 8 -and $protectedKey.Length -gt 32 -and $protectedKey.Length -le 4096
+        $recipientWrapValid = if ($Header.recipientKeyProtection -eq 'None') {
+            $null -eq $Header.recipientWrappedContentKey
+        }
+        else {
+            [byte[]] $recipientWrap = [System.Convert]::FromBase64String(
+                [string] $Header.recipientWrappedContentKey
+            )
+            $recipientWrap.Length -ge 256 -and $recipientWrap.Length -le 2048
+        }
+        $prefix.Length -eq 8 -and $protectedKey.Length -gt 32 -and
+            $protectedKey.Length -le 4096 -and $recipientWrapValid
     }
     catch { $false }
 }
@@ -525,6 +536,10 @@ function Write-ProtectedPackageEnvelope {
     param(
         [Parameter(Mandatory)] [byte[]] $Plaintext,
         [Parameter(Mandatory)] [string] $LiteralPath,
+        [Parameter()]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2] $RecipientCertificate,
+        [Parameter(DontShow)]
+        [System.DateTimeOffset] $SyntheticAdmissionTime = [System.DateTimeOffset]::UtcNow,
         [Parameter(DontShow)]
         [ValidateSet('None', 'SetupFailure', 'InterruptedWrite', 'DiskExhaustion')]
         [string] $SyntheticWriteFailure = 'None'
@@ -542,17 +557,34 @@ function Write-ProtectedPackageEnvelope {
     [System.Security.Cryptography.RandomNumberGenerator]::Fill($noncePrefix)
     try {
         [byte[]] $protectedKey = Protect-ProtectedPackageContentKey -ContentKey $contentKey
+        [byte[]] $recipientWrappedKey = if ($null -ne $RecipientCertificate) {
+            if (-not (Get-Command Protect-RecipientContentKey -CommandType Function `
+                    -ErrorAction SilentlyContinue)) {
+                throw 'Recipient key protection is unavailable.'
+            }
+            Protect-RecipientContentKey -ContentKey $contentKey `
+                -Certificate $RecipientCertificate -AdmissionTime $SyntheticAdmissionTime
+        }
+        else { $null }
         $chunkSize = [int] $policy.envelope.contentEncryption.chunkPlaintextBytes
         $chunkCount = [int] [Math]::Ceiling($Plaintext.Length / [double] $chunkSize)
         $header = [pscustomobject][ordered]@{
             formatVersion = 1
             algorithm = 'AES-256-GCM'
             keyProtection = 'DPAPI-CurrentUser'
+            recipientKeyProtection = if ($null -eq $recipientWrappedKey) {
+                'None'
+            }
+            else { 'RSA-OAEP-SHA-256' }
             chunkPlaintextBytes = $chunkSize
             plaintextLength = $Plaintext.Length
             chunkCount = $chunkCount
             noncePrefix = [System.Convert]::ToBase64String($noncePrefix)
             protectedContentKey = [System.Convert]::ToBase64String($protectedKey)
+            recipientWrappedContentKey = if ($null -eq $recipientWrappedKey) {
+                $null
+            }
+            else { [System.Convert]::ToBase64String($recipientWrappedKey) }
         }
         [byte[]] $headerBytes = ConvertTo-ProtectedPackageJsonBytes -Value $header
         if ($headerBytes.Length -gt [int] $policy.envelope.maximumHeaderUtf8Bytes) {
@@ -646,6 +678,8 @@ function Read-ProtectedEvidencePackage {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $LiteralPath,
+        [Parameter()]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2] $RecipientCertificate,
         [Parameter(DontShow)]
         [ValidateSet('None', 'WrongUser', 'WrongDevice')]
         [string] $SyntheticProtectionContext = 'None'
@@ -653,6 +687,10 @@ function Read-ProtectedEvidencePackage {
 
     $integrityFailure = [pscustomobject][ordered]@{
         state = 'IntegrityFailed'; verified = $false; manifest = $null
+        artifacts = $null; innerPackageSha256 = $null
+    }
+    $protectionUnavailable = [pscustomobject][ordered]@{
+        state = 'ProtectionUnavailable'; verified = $false; manifest = $null
         artifacts = $null; innerPackageSha256 = $null
     }
     [byte[]] $contentKey = $null
@@ -679,7 +717,25 @@ function Read-ProtectedEvidencePackage {
                     'The synthetic DPAPI protection context does not match.'
                 )
             }
-            $contentKey = Unprotect-ProtectedPackageContentKey -ProtectedContentKey $wrappedKey
+            if ($null -ne $RecipientCertificate) {
+                if ($header.recipientKeyProtection -ne 'RSA-OAEP-SHA-256' -or
+                    $null -eq $header.recipientWrappedContentKey -or
+                    -not (Get-Command Unprotect-RecipientContentKey -CommandType Function `
+                        -ErrorAction SilentlyContinue)) {
+                    return $protectionUnavailable
+                }
+                try {
+                    [byte[]] $recipientWrappedKey = [System.Convert]::FromBase64String(
+                        [string] $header.recipientWrappedContentKey
+                    )
+                    $contentKey = Unprotect-RecipientContentKey `
+                        -WrappedContentKey $recipientWrappedKey -Certificate $RecipientCertificate
+                }
+                catch { return $protectionUnavailable }
+            }
+            else {
+                $contentKey = Unprotect-ProtectedPackageContentKey -ProtectedContentKey $wrappedKey
+            }
             if ($contentKey.Length -ne 32) { return $integrityFailure }
             $innerBytes = [byte[]]::new([int] $header.plaintextLength)
             $aes = [System.Security.Cryptography.AesGcm]::new($contentKey, 16)
@@ -754,6 +810,10 @@ function New-ProtectedEvidencePackage {
         [Parameter(Mandatory)] [ValidateSet('1.0.0')] [string] $AssessmentContractSetVersion,
         [Parameter(Mandatory)] [ValidateSet('Complete', 'RecoverablePartial')] [string] $Completeness,
         [Parameter()] [string] $JournalPath,
+        [Parameter()]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2] $RecipientCertificate,
+        [Parameter(DontShow)]
+        [System.DateTimeOffset] $SyntheticAdmissionTime = [System.DateTimeOffset]::UtcNow,
         [Parameter(DontShow)]
         [ValidateSet('None', 'SetupFailure', 'InterruptedWrite', 'DiskExhaustion')]
         [string] $SyntheticWriteFailure = 'None'
@@ -779,6 +839,7 @@ function New-ProtectedEvidencePackage {
         $inner = New-DeterministicAssessmentPackage -Artifacts $Artifacts `
             -AssessmentContractSetVersion $AssessmentContractSetVersion -Completeness $Completeness
         $writeResult = Write-ProtectedPackageEnvelope -Plaintext $inner.bytes -LiteralPath $provisionalPath `
+            -RecipientCertificate $RecipientCertificate -SyntheticAdmissionTime $SyntheticAdmissionTime `
             -SyntheticWriteFailure $SyntheticWriteFailure
         $provisionalIdentity = [string] $writeResult.fileSystemIdentity
 

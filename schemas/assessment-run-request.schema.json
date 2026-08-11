@@ -22,6 +22,36 @@
     },
     "updateChoice": { "const": "NoUpdateCheck" },
     "diagnosticLevel": { "const": "Standard" },
+    "recipientSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "profilePath", "fingerprintConfirmation"],
+      "properties": {
+        "mode": { "enum": ["None", "Profile"] },
+        "profilePath": { "type": ["string", "null"], "minLength": 1 },
+        "fingerprintConfirmation": {
+          "type": ["string", "null"],
+          "pattern": "^(?:[0-9A-Fa-f]{64}|(?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2})$"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "None" } } },
+          "then": {
+            "properties": {
+              "profilePath": { "type": "null" },
+              "fingerprintConfirmation": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "profilePath": { "type": "string" },
+              "fingerprintConfirmation": { "type": "string" }
+            }
+          }
+        }
+      ]
+    },
     "automationChoices": {
       "type": "object",
       "additionalProperties": false,

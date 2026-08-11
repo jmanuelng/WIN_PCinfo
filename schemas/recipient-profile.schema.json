@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/recipient-profile.schema.json",
+  "title": "WIN-PCInfo Recipient Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "label",
+    "certificateDerBase64",
+    "fingerprintAlgorithm",
+    "fingerprint",
+    "protectionLevel",
+    "notBefore",
+    "notAfter",
+    "rsaKeyBits",
+    "keyWrapAlgorithm",
+    "syntheticRoundTrip"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.recipient-profile" },
+    "contractVersion": { "const": "1.0.0" },
+    "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "certificateDerBase64": {
+      "type": "string",
+      "minLength": 256,
+      "maxLength": 8192,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+    },
+    "fingerprintAlgorithm": { "const": "SHA-256" },
+    "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "protectionLevel": { "enum": ["UserAndDeviceBound", "WindowsUserBound"] },
+    "notBefore": { "type": "string", "format": "date-time" },
+    "notAfter": { "type": "string", "format": "date-time" },
+    "rsaKeyBits": { "type": "integer", "minimum": 2048, "maximum": 16384 },
+    "keyWrapAlgorithm": { "const": "RSA-OAEP-SHA-256" },
+    "syntheticRoundTrip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "verified"],
+      "properties": {
+        "algorithm": { "const": "RSA-OAEP-SHA-256" },
+        "verified": { "const": true }
+      }
+    }
+  }
+}

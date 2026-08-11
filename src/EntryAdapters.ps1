@@ -1,4 +1,33 @@
 function Get-GuidedRequest {
+    param(
+        [Parameter()] [string] $RecipientProfilePath,
+        [Parameter()] [string] $RecipientFingerprintConfirmation
+    )
+
+    $hasProfile = -not [string]::IsNullOrWhiteSpace($RecipientProfilePath)
+    $hasConfirmation = -not [string]::IsNullOrWhiteSpace($RecipientFingerprintConfirmation)
+    if ($hasProfile -ne $hasConfirmation -or
+        ($hasProfile -and (Test-NetworkPathSyntax -Path $RecipientProfilePath)) -or
+        ($hasConfirmation -and
+            $RecipientFingerprintConfirmation.Replace(':', '').Replace(' ', '') `
+                -notmatch '^[0-9A-Fa-f]{64}$')) {
+        $exception = [System.ArgumentException]::new(
+            'Guided recipient selection requires one local profile and its confirmed fingerprint.'
+        )
+        $exception.Data['ReasonCode'] = 'REQUEST.RECIPIENT_SELECTION_INVALID'
+        throw $exception
+    }
+    $recipientSelection = if ($hasProfile) {
+        [pscustomobject][ordered]@{
+            mode = 'Profile'; profilePath = $RecipientProfilePath
+            fingerprintConfirmation = $RecipientFingerprintConfirmation
+        }
+    }
+    else {
+        [pscustomobject][ordered]@{
+            mode = 'None'; profilePath = $null; fingerprintConfirmation = $null
+        }
+    }
     $automationChoices = [pscustomobject]@{
         allowAssessmentNetwork = $false
         allowElevation = $true
@@ -13,7 +42,8 @@ function Get-GuidedRequest {
         -NetworkBehavior 'LocalOnly' `
         -UpdateChoice 'NoUpdateCheck' `
         -DiagnosticLevel 'Standard' `
-        -AutomationChoices $automationChoices
+        -AutomationChoices $automationChoices `
+        -RecipientSelection $recipientSelection
 }
 
 function Get-AutomationRequest {
@@ -39,8 +69,9 @@ function Get-AutomationRequest {
         'contractVersion', 'profile', 'outputDestination', 'networkBehavior',
         'updateChoice', 'diagnosticLevel', 'automationChoices'
     )
+    $allowedFields = @($requiredFields) + @('recipientSelection')
     $actualFields = @($inputRequest.PSObject.Properties.Name)
-    $unknownFields = @($actualFields | Where-Object { $_ -notin $requiredFields })
+    $unknownFields = @($actualFields | Where-Object { $_ -notin $allowedFields })
     if ($unknownFields.Count -gt 0) {
         # Unknown input could represent a safety control introduced by a newer
         # caller. Ignoring it would let automation believe a constraint applied
@@ -62,7 +93,9 @@ function Get-AutomationRequest {
         'updateChoice', 'diagnosticLevel'
     )
     if (@($stringFields | Where-Object { $inputRequest.$_ -isnot [string] }).Count -gt 0 -or
-        $inputRequest.automationChoices -isnot [pscustomobject]) {
+        $inputRequest.automationChoices -isnot [pscustomobject] -or
+        ('recipientSelection' -in $actualFields -and
+            $inputRequest.recipientSelection -isnot [pscustomobject])) {
         $exception = [System.ArgumentException]::new('The automation request contains a field with an invalid type.')
         $exception.Data['ReasonCode'] = 'REQUEST.FIELD_TYPE_INVALID'
         throw $exception
@@ -155,11 +188,46 @@ function Get-AutomationRequest {
         $exception.Data['ReasonCode'] = 'REQUEST.AUTHORITY_CONFLICT'
         throw $exception
     }
+    $recipientSelection = if ('recipientSelection' -notin $actualFields) {
+        [pscustomobject][ordered]@{
+            mode = 'None'; profilePath = $null; fingerprintConfirmation = $null
+        }
+    }
+    else { $inputRequest.recipientSelection }
+    $recipientFields = @('mode', 'profilePath', 'fingerprintConfirmation')
+    $actualRecipientFields = @($recipientSelection.PSObject.Properties.Name)
+    if (@($actualRecipientFields | Where-Object { $_ -notin $recipientFields }).Count -gt 0 -or
+        @($recipientFields | Where-Object { $_ -notin $actualRecipientFields }).Count -gt 0 -or
+        $recipientSelection.mode -isnot [string] -or
+        [string] $recipientSelection.mode -notin @('None', 'Profile')) {
+        $exception = [System.ArgumentException]::new('The recipient selection is invalid.')
+        $exception.Data['ReasonCode'] = 'REQUEST.RECIPIENT_SELECTION_INVALID'
+        throw $exception
+    }
+    if ($recipientSelection.mode -eq 'None') {
+        if ($null -ne $recipientSelection.profilePath -or
+            $null -ne $recipientSelection.fingerprintConfirmation) {
+            $exception = [System.ArgumentException]::new('A zero-recipient request cannot carry recipient data.')
+            $exception.Data['ReasonCode'] = 'REQUEST.RECIPIENT_SELECTION_INVALID'
+            throw $exception
+        }
+    }
+    elseif ($recipientSelection.profilePath -isnot [string] -or
+        [string]::IsNullOrWhiteSpace([string] $recipientSelection.profilePath) -or
+        (Test-NetworkPathSyntax -Path ([string] $recipientSelection.profilePath)) -or
+        $recipientSelection.fingerprintConfirmation -isnot [string] -or
+        ([string] $recipientSelection.fingerprintConfirmation).Replace(':', '').Replace(' ', '') `
+            -notmatch '^[0-9A-Fa-f]{64}$') {
+        $exception = [System.ArgumentException]::new('The selected Recipient Profile input is invalid.')
+        $exception.Data['ReasonCode'] = 'REQUEST.RECIPIENT_SELECTION_INVALID'
+        throw $exception
+    }
     New-NormalizedRequest -ContractVersion $inputRequest.contractVersion `
         -Profile $inputRequest.profile `
         -OutputDestination $inputRequest.outputDestination `
         -NetworkBehavior $inputRequest.networkBehavior `
         -UpdateChoice $inputRequest.updateChoice `
         -DiagnosticLevel $inputRequest.diagnosticLevel `
-        -AutomationChoices $inputRequest.automationChoices
+        -AutomationChoices $inputRequest.automationChoices `
+        -RecipientSelection $recipientSelection
 }

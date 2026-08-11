@@ -6,7 +6,7 @@ This tracer bullet proves that WIN-PCInfo can turn a validated synthetic Assessm
 
 A Protected Evidence Package contains Restricted Diagnostic Evidence. Treat the `.winpcinfo` file as sensitive even though its contents are encrypted. Keep it on an eligible local Evidence Workspace and do not attach it to a public issue, discussion, or CI log.
 
-The Local Package Protector is the Windows user who initiated the run. WIN-PCInfo generates a fresh random 256-bit content key for each package and asks Windows Data Protection API (DPAPI) to protect that key with `CurrentUser` scope. An alternate administrator does not become the protector. Copying the package to another Windows user or device normally makes the wrapped key unusable. This is local access protection, not proof of who authored the package and not durable public tamper evidence.
+The Local Package Protector is the Windows user who initiated the run. WIN-PCInfo generates a fresh random 256-bit content key for each package and asks Windows Data Protection API (DPAPI) to protect that key with `CurrentUser` scope. An alternate administrator does not become the protector. Copying a zero-recipient package to another Windows user or device normally makes the local wrap unusable. When one Recipient Profile was confirmed before collection, the same content key also receives one identity-free RSA-OAEP-SHA-256 wrap for that recipient; local DPAPI access remains. This is access protection, not proof of who authored the package and not durable public tamper evidence.
 
 ## What finalization does
 
@@ -28,8 +28,8 @@ Close the session as soon as the requested artifact is no longer needed. Close r
 ## Troubleshooting
 
 - `IntegrityFailed`: do not retry by weakening validation or extracting the archive with another tool. Preserve the original protected package if investigation is authorized, and create a new package from validated source evidence.
-- Wrong user or device: return to the initiating Windows user's original device and profile. This slice has no recovery certificate or password bypass.
+- Wrong user or device: return to the initiating Windows user's original device and profile, or use the one Package Recipient fixed before collection. There is no password, PFX, recovery-phrase, or late-recipient bypass.
 - Interrupted finalization: only a fully reopened final `.winpcinfo` file is a package. A `.partial` file is incomplete ciphertext and is removed by the owning operation.
 - Viewing cleanup incomplete: do not delete an ambiguous path manually. Use the exact Run Recovery Journal through deliberate cleanup-only recovery.
 
-The closed release policy is `docs/spec/releases/2.0.0-preview.1-protected-package.json`. The envelope and manifest schemas are `schemas/protected-package-envelope.schema.json` and `schemas/assessment-package-manifest.schema.json`.
+The closed release policy is `docs/spec/releases/2.0.0-preview.1-protected-package.json`. The envelope and manifest schemas are `schemas/protected-package-envelope.schema.json` and `schemas/assessment-package-manifest.schema.json`. Recipient setup, confirmation, opening, transfer, export, and Result-sharing Guidance are explained in [Recipient Profiles and restricted report export](recipient-sharing.md).

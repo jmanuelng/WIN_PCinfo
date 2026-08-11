@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param(
     [Parameter()]
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport')]
+    [string] $Workflow = 'Assessment',
+
+    [Parameter()]
     [ValidateSet('Guided', 'Automation')]
     [string] $Mode = 'Guided',
 
@@ -12,6 +16,40 @@ param(
     # that were supplied before the Preparation Summary was produced.
     [Parameter()]
     [switch] $AcceptPreparation,
+
+    # Guided assessment selection requires both the local public profile path
+    # and the fingerprint confirmed through the operator's trusted relationship.
+    # Supplying neither chooses zero recipients; supplying only one fails closed.
+    [Parameter()]
+    [string] $AssessmentRecipientProfilePath,
+
+    [Parameter()]
+    [string] $AssessmentRecipientFingerprintConfirmation,
+
+    # Recipient setup is a separate, deliberate consultant workflow. The
+    # confirmation switch is never inferred from assessment approval. A trusted
+    # release creates one persistent non-exportable Current User identity only
+    # when all three setup inputs are supplied together.
+    [Parameter()]
+    [string] $RecipientProfileOutputPath,
+
+    [Parameter()]
+    [string] $RecipientLabel,
+
+    [Parameter()]
+    [switch] $ConfirmRecipientSetup,
+
+    # Restricted Report Export is also separate from an Assessment Run. It can
+    # open one completed package and write one warned HTML artifact; no argument
+    # can request another inner artifact, upload, retention, or background work.
+    [Parameter()]
+    [string] $ProtectedPackagePath,
+
+    [Parameter()]
+    [string] $RestrictedReportOutputPath,
+
+    [Parameter()]
+    [string] $RestrictedReportWarningAcknowledgment,
 
     # This validation-only input exercises the generated artifact against
     # synthetic host descriptions. It never authorizes collection, even when
@@ -58,7 +96,13 @@ param(
     # A package fixture selects one release-owned cryptographic or viewing
     # scenario. It cannot supply plaintext, keys, identities, paths, or metadata.
     [Parameter(DontShow)]
-    [string] $ProtectedPackageFixturePath
+    [string] $ProtectedPackageFixturePath,
+
+    # A sharing fixture selects one release-owned recipient/profile/export
+    # scenario. It cannot supply a certificate, key, fingerprint, profile,
+    # package, report, path, warning text, or persistent Windows identity.
+    [Parameter(DontShow)]
+    [string] $RecipientSharingFixturePath
 )
 
 Set-StrictMode -Version Latest

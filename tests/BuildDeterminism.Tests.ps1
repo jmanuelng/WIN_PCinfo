@@ -37,6 +37,7 @@ $expectedSourcePaths = @(
     'src/PrivilegedCollectionPlan.ps1'
     'src/SystemCollectionPlan.ps1'
     'src/EvidenceWorkspace.ps1'
+    'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
     'src/RunLifecycle.ps1'
     'src/LaunchEngine.ps1'
@@ -67,6 +68,8 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/protected-package.schema.json'
     'schemas/protected-package-envelope.schema.json'
     'schemas/assessment-package-manifest.schema.json'
+    'schemas/recipient-profile.schema.json'
+    'schemas/recipient-sharing.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -74,6 +77,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
     'docs/spec/releases/2.0.0-preview.1-evidence-workspace.json'
     'docs/spec/releases/2.0.0-preview.1-protected-package.json'
+    'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq
     (@($expectedApplicationResourcePaths | Sort-Object) -join '|')) `

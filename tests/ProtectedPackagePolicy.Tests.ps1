@@ -35,7 +35,7 @@ Assert-Equal $true $policy.envelope.associatedData.bindHeader `
 Assert-Equal 'chunkIndex|plaintextLength|ciphertextLength|nonce' `
     (@($policy.envelope.associatedData.chunkFields) -join '|') `
     'per-chunk framing metadata is authenticated'
-Assert-Equal 'formatVersion|algorithm|keyProtection|chunkPlaintextBytes|plaintextLength|chunkCount|noncePrefix|protectedContentKey' `
+Assert-Equal 'formatVersion|algorithm|keyProtection|recipientKeyProtection|chunkPlaintextBytes|plaintextLength|chunkCount|noncePrefix|protectedContentKey|recipientWrappedContentKey' `
     (@($policy.envelope.outerMetadata.allowedFields) -join '|') `
     'outer metadata is a closed non-identifying set'
 Assert-Equal 'assessment-record.json|assessment-report.html' `

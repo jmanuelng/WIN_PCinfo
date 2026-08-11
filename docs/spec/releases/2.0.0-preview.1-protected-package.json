@@ -28,7 +28,7 @@
       "chunkFields": ["chunkIndex", "plaintextLength", "ciphertextLength", "nonce"]
     },
     "outerMetadata": {
-      "allowedFields": ["formatVersion", "algorithm", "keyProtection", "chunkPlaintextBytes", "plaintextLength", "chunkCount", "noncePrefix", "protectedContentKey"],
+      "allowedFields": ["formatVersion", "algorithm", "keyProtection", "recipientKeyProtection", "chunkPlaintextBytes", "plaintextLength", "chunkCount", "noncePrefix", "protectedContentKey", "recipientWrappedContentKey"],
       "prohibitedIdentityClasses": ["Assessment", "User", "Device", "Organization", "Certificate"]
     }
   },
