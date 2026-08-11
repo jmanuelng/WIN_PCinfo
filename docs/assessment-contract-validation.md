@@ -1,6 +1,6 @@
 # Assessment Contract validation
 
-The Assessment Contract began with one safe synthetic observation. It now has two explicit profiles: the original one-field synthetic tracer and the eight-field Device and Windows readiness slice. The latter can collect after approval and produce a Protected Evidence Package, but it does not by itself mark a Product Capability delivered.
+The Assessment Contract began with one safe synthetic observation. It now has three explicit profiles: the original one-field synthetic tracer, the historical eight-field Device and Windows readiness slice, and the versioned 17-field device-context slice. The current slice can collect after approval and produce a Protected Evidence Package, but it does not by itself mark a Product Capability delivered.
 
 The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contract-set.json) is the dictionary and rulebook for this slice. Its [schema](../schemas/assessment-contract-set.schema.json) requires every admitted Evidence Field Definition to state:
 
@@ -11,7 +11,7 @@ The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contra
 - how prohibited material is omitted; and
 - whether the definition or a value may appear in a public projection.
 
-Only `field:device.os.display-name` is admitted in the original lifecycle profile, `profile:synthetic-contract-tracer`. Its source remains `SyntheticContractFixture`. The separate `profile:device-windows-readiness` owns `scope:device.windows-readiness` and exactly eight fields from the real standard-user collector. `Complete` coverage must contain the exact field set for the selected profile. A source-reported unknown field remains an explicit observation under `Partial`; a source-wide or payload failure produces no field observation and is carried by coverage, diagnostics, and the collector envelope. The schema admits honest `Synthetic`, `StandardUser`, and verified `LocalSystem` provenance.
+Only `field:device.os.display-name` is admitted in the original lifecycle profile, `profile:synthetic-contract-tracer`. Its source remains `SyntheticContractFixture`. `profile:device-windows-readiness` retains the original `scope:device.windows-readiness` and eight fields. The current `profile:device-windows-context` owns a distinct 17-field scope, Windows collector, and in-process classifier identity so an additive release change cannot silently redefine historical complete coverage. `Complete` coverage must contain the exact field set for the selected profile. A successful source may explicitly report an unknown or absent field; inaccessible or partial collection retains a reason and diagnostic. Activation, chassis, and battery denial each retain their own stable access-denied diagnostic. A source-wide, malformed, or prohibited-material failure fabricates no field observation and is carried by coverage, diagnostics, and the collector envelope. The schema admits honest `Synthetic`, `StandardUser`, and verified `LocalSystem` provenance.
 
 ## What validation does
 
@@ -39,6 +39,10 @@ The synthetic record demonstrates five different kinds of state:
 
 One state never substitutes for another. For example, a diagnostic is not an observation, `ObservedAbsent` is not a collection failure, and `Completed` is invalid while any Evidence Scope has a gap. `NotStarted` cannot contain post-start evidence; `Cancelled` and `TimedOut` require their matching coverage state; `IntegrityFailed` requires an integrity diagnostic; and `CleanupIncomplete` requires a cleanup diagnostic.
 
+Absence is how the contract represents a rule that has not been attempted. The device-context source pass therefore contains no findings and omits the not-yet-run virtualization and form classifiers. After that pass is accepted, the classifiers append their derived observations; only then do the four bounded Rule Evaluations append their findings. `Indeterminate` is reserved for a rule that actually ran but lacked enough admitted evidence.
+
+Evidence Coverage is aggregate scope state, so the Windows collector and both classifier envelopes may bind the same final coverage identity while each owns a disjoint observation set. This does not merge their provenance: every derived observation names the classifier identity and actual classifier completion time, and the Windows envelope remains bound only to the observations returned by its completed attempt.
+
 ## Secret exclusion
 
 Prohibited Secret Material never becomes an Evidence Field Definition. If a source encounters it, the value is omitted rather than retained, copied, redacted, encrypted, or hashed. The record may contain only the approved `prohibitedMaterial` marker (`encountered: true`, `retained: false`, `hashed: false`) and a linked diagnostic. A synthetic test also proves that a secret-bearing field identity is rejected and that its test-only value never appears in application output.
@@ -53,4 +57,4 @@ pwsh -NoLogo -NoProfile -File ./tests/ContractSemanticMatrix.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/AssessmentContractSet.Tests.ps1
 ```
 
-The original `-ContractFixturePath` conformance seam still ends `NotStarted` and cannot enable collection. Device Readiness uses its separate closed scenario seam through the generated application; it produces typed synthetic samples and removes their protected packages before returning. Neither fixture can add elevation, network access, device mutation, authentication, or Azure activity.
+The original `-ContractFixturePath` conformance seam still ends `NotStarted` and cannot enable collection. Device context uses its separate 18-name closed scenario seam through the generated application; it produces typed synthetic samples and removes their protected packages before returning. Neither fixture can add elevation, network access, device mutation, authentication, or Azure activity.

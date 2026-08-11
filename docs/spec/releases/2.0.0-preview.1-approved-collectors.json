@@ -4,9 +4,9 @@
   "release": "2.0.0-preview.1",
   "limits": {
     "maximumArgumentCount": 8,
-    "maximumArgumentUtf8Bytes": 16384,
+    "maximumArgumentUtf8Bytes": 30000,
     "maximumEnvironmentVariables": 4,
-    "maximumEnvironmentValueUtf8Bytes": 16384
+    "maximumEnvironmentValueUtf8Bytes": 30000
   },
   "collectors": [
     {
@@ -21,7 +21,7 @@
       "payload": {
         "kind": "EncodedReleaseSource",
         "encoding": "PowerShellEncodedCommandUtf16Le",
-        "sha256": "57489123f9d28e795a8190d5b15e906454c288910859af8d24660309ff2506ce"
+        "sha256": "9796611297a4807d6aa90c40b97d78542f79d2f938f6ee81fa4386073808e828"
       },
       "workingBoundary": {
         "kind": "ActivePowerShellHome",
@@ -74,7 +74,7 @@
       "payload": {
         "kind": "EncodedReleaseSource",
         "encoding": "PowerShellEncodedCommandUtf16Le",
-        "sha256": "57489123f9d28e795a8190d5b15e906454c288910859af8d24660309ff2506ce"
+        "sha256": "9796611297a4807d6aa90c40b97d78542f79d2f938f6ee81fa4386073808e828"
       },
       "workingBoundary": { "kind": "ActivePowerShellHome", "writesAllowed": false },
       "environment": {
@@ -108,6 +108,56 @@
           "cancellationGraceMilliseconds": 750,
           "terminationVerificationMilliseconds": 2000,
           "intendedScopeIds": ["scope:device.windows-readiness"],
+          "subjectIds": ["subject:device:primary"]
+        }
+      ]
+    },
+    {
+      "collectorId": "collector:windows.device-context",
+      "collectorVersion": "1.0.0",
+      "purpose": "Collect bounded Windows activation, device form, virtualization, chassis, battery, and power context without configuration changes or key material.",
+      "executable": {
+        "resolver": "ActivePowerShellHost",
+        "fileName": "pwsh.exe",
+        "signerCommonName": "Microsoft Corporation"
+      },
+      "payload": {
+        "kind": "EncodedReleaseSource",
+        "encoding": "PowerShellEncodedCommandUtf16Le",
+        "sha256": "9796611297a4807d6aa90c40b97d78542f79d2f938f6ee81fa4386073808e828"
+      },
+      "workingBoundary": { "kind": "ActivePowerShellHome", "writesAllowed": false },
+      "environment": {
+        "inheritParent": false,
+        "variables": [
+          { "name": "SystemRoot", "valueSource": "WindowsDirectory" },
+          { "name": "WINPCINFO_CANCEL_EVENT", "valueSource": "CancellationEventName" },
+          { "name": "WINPCINFO_OPERATION_MODE", "valueSource": "OperationMode" },
+          { "name": "WINPCINFO_ENCODED_PAYLOAD", "valueSource": "EncodedPayload" }
+        ]
+      },
+      "treeControl": {
+        "mode": "WindowsJobObjectRequired",
+        "startSuspendedBeforeAssignment": true,
+        "killOnClose": true,
+        "incompatibleDisposition": "NotStarted"
+      },
+      "operations": [
+        {
+          "operationId": "op:device.windows-context.collect",
+          "arguments": [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-EncodedCommand",
+            "{EncodedCollectorPayload}"
+          ],
+          "deadlineMilliseconds": 5000,
+          "standardOutputMaximumBytes": 16384,
+          "standardErrorMaximumBytes": 4096,
+          "cancellationGraceMilliseconds": 750,
+          "terminationVerificationMilliseconds": 2000,
+          "intendedScopeIds": ["scope:device.windows-context"],
           "subjectIds": ["subject:device:primary"]
         }
       ]

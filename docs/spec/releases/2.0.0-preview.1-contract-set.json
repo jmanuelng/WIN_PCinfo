@@ -129,6 +129,96 @@
       "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
       "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
       "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.windows.activation-state",
+      "capabilityIds": ["CAP-0002"],
+      "purpose": "Carry only the normalized point-in-time Windows activation state without any product key or entitlement claim.",
+      "source": { "sourceId": "source:windows.cim.software-licensing-product", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Bounded SoftwareLicensingProduct.LicenseStatus projection for the Windows application identity" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.system-type-code",
+      "capabilityIds": ["CAP-0004"],
+      "purpose": "Carry the language-neutral PCSystemType code used by the bounded form-factor rule.",
+      "source": { "sourceId": "source:windows.cim.computer-system", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_ComputerSystem.PCSystemType explicit property projection" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 3, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.hypervisor-present",
+      "capabilityIds": ["CAP-0004"],
+      "purpose": "Carry the Windows hypervisor-present signal as context without treating it alone as proof of a virtual device.",
+      "source": { "sourceId": "source:windows.cim.computer-system", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_ComputerSystem.HypervisorPresent explicit property projection" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.chassis.type-codes",
+      "capabilityIds": ["CAP-0004"],
+      "purpose": "Carry a bounded sorted list of language-neutral SMBIOS chassis type codes.",
+      "source": { "sourceId": "source:windows.cim.system-enclosure", "kind": "StructuredWindowsSource", "authoritativeIdentity": "First Win32_SystemEnclosure.ChassisTypes explicit property projection, normalized to at most eight codes" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 31, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.form-factor",
+      "capabilityIds": ["CAP-0004"],
+      "purpose": "Record the release-owned advisory form classification derived from validated chassis and system-type evidence.",
+      "source": { "sourceId": "source:win-pcinfo.form-factor-rule", "kind": "DerivedValidatedObservation", "authoritativeIdentity": "win-pcinfo.form-factor-classifier/1.0.0" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.battery.presence",
+      "capabilityIds": ["CAP-0004"],
+      "purpose": "Record whether Windows exposed a battery in the assessed operating-system context.",
+      "source": { "sourceId": "source:windows.cim.battery", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Bounded Win32_Battery instance presence from explicit property projection" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.battery.status",
+      "capabilityIds": ["CAP-0004"],
+      "purpose": "Normalize the first guest-visible battery status code for advisory power context.",
+      "source": { "sourceId": "source:windows.cim.battery", "kind": "StructuredWindowsSource", "authoritativeIdentity": "First Win32_Battery.BatteryStatus explicit property projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 24, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.battery.charge-percent",
+      "capabilityIds": ["CAP-0004"],
+      "purpose": "Carry the bounded charge percentage reported for the first guest-visible battery.",
+      "source": { "sourceId": "source:windows.cim.battery", "kind": "StructuredWindowsSource", "authoritativeIdentity": "First Win32_Battery.EstimatedChargeRemaining explicit property projection" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 3, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.battery.estimated-runtime-minutes",
+      "capabilityIds": ["CAP-0004"],
+      "purpose": "Carry the bounded runtime estimate reported for the first guest-visible battery without making a performance claim.",
+      "source": { "sourceId": "source:windows.cim.battery", "kind": "StructuredWindowsSource", "authoritativeIdentity": "First Win32_Battery.EstimatedRunTime explicit property projection with provider sentinel values omitted" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
     }
   ],
   "scopeDefinitions": [
@@ -156,6 +246,35 @@
         "field:device.virtualization.detected"
       ],
       "collectorIds": ["collector:windows.device-readiness"]
+    },
+    {
+      "scopeId": "scope:device.windows-context",
+      "profileIds": ["profile:device-windows-context"],
+      "capabilityIds": ["CAP-0001", "CAP-0002", "CAP-0004"],
+      "purpose": "Close coverage for the bounded Device, Windows, activation, form, virtualization, chassis, battery, and power field set.",
+      "fieldIds": [
+        "field:device.manufacturer",
+        "field:device.model",
+        "field:device.processor.name",
+        "field:device.memory.physical-bytes",
+        "field:device.windows.edition",
+        "field:device.windows.build",
+        "field:device.architecture",
+        "field:device.windows.activation-state",
+        "field:device.system-type-code",
+        "field:device.hypervisor-present",
+        "field:device.chassis.type-codes",
+        "field:device.virtualization.detected",
+        "field:device.form-factor",
+        "field:device.battery.presence",
+        "field:device.battery.status",
+        "field:device.battery.charge-percent",
+        "field:device.battery.estimated-runtime-minutes"
+      ],
+      "collectorIds": [
+        "collector:windows.device-context",
+        "collector:win-pcinfo.device-context-classifier"
+      ]
     }
   ],
   "vocabularies": {

@@ -15,15 +15,15 @@
       "required": ["maximumArgumentCount", "maximumArgumentUtf8Bytes", "maximumEnvironmentVariables", "maximumEnvironmentValueUtf8Bytes"],
       "properties": {
         "maximumArgumentCount": { "type": "integer", "minimum": 1, "maximum": 32 },
-        "maximumArgumentUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "maximumArgumentUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 30000 },
         "maximumEnvironmentVariables": { "type": "integer", "minimum": 1, "maximum": 16 },
-        "maximumEnvironmentValueUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 16384 }
+        "maximumEnvironmentValueUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 30000 }
       }
     },
     "collectors": {
       "type": "array",
       "minItems": 2,
-      "maxItems": 2,
+      "maxItems": 3,
       "prefixItems": [
         { "allOf": [
           { "$ref": "#/$defs/collector" },
@@ -32,6 +32,10 @@
         { "allOf": [
           { "$ref": "#/$defs/collector" },
           { "properties": { "collectorId": { "const": "collector:windows.device-readiness" }, "operations": { "prefixItems": [{ "$ref": "#/$defs/deviceReadinessOperation" }] } } }
+        ] },
+        { "allOf": [
+          { "$ref": "#/$defs/collector" },
+          { "properties": { "collectorId": { "const": "collector:windows.device-context" }, "operations": { "prefixItems": [{ "$ref": "#/$defs/deviceContextOperation" }] } } }
         ] }
       ],
       "items": false
@@ -50,7 +54,7 @@
       "additionalProperties": false,
       "required": ["collectorId", "collectorVersion", "purpose", "executable", "payload", "workingBoundary", "environment", "treeControl", "operations"],
       "properties": {
-        "collectorId": { "enum": ["collector:synthetic.windows.os", "collector:windows.device-readiness"] },
+        "collectorId": { "enum": ["collector:synthetic.windows.os", "collector:windows.device-readiness", "collector:windows.device-context"] },
         "collectorVersion": { "const": "1.0.0" },
         "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
         "executable": {
@@ -119,7 +123,8 @@
           "maxItems": 1,
           "items": { "oneOf": [
             { "$ref": "#/$defs/legacyOperation" },
-            { "$ref": "#/$defs/deviceReadinessOperation" }
+            { "$ref": "#/$defs/deviceReadinessOperation" },
+            { "$ref": "#/$defs/deviceContextOperation" }
           ] }
         }
       }
@@ -175,6 +180,32 @@
         "cancellationGraceMilliseconds": { "type": "integer", "minimum": 100, "maximum": 2000 },
         "terminationVerificationMilliseconds": { "type": "integer", "minimum": 100, "maximum": 5000 },
         "intendedScopeIds": { "const": ["scope:device.windows-readiness"] },
+        "subjectIds": { "const": ["subject:device:primary"] }
+      }
+    },
+    "deviceContextOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "arguments", "deadlineMilliseconds", "standardOutputMaximumBytes", "standardErrorMaximumBytes", "cancellationGraceMilliseconds", "terminationVerificationMilliseconds", "intendedScopeIds", "subjectIds"],
+      "properties": {
+        "operationId": { "const": "op:device.windows-context.collect" },
+        "arguments": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "const": "-NoLogo" }, { "const": "-NoProfile" },
+            { "const": "-NonInteractive" }, { "const": "-EncodedCommand" },
+            { "const": "{EncodedCollectorPayload}" }
+          ],
+          "items": false
+        },
+        "deadlineMilliseconds": { "const": 5000 },
+        "standardOutputMaximumBytes": { "const": 16384 },
+        "standardErrorMaximumBytes": { "const": 4096 },
+        "cancellationGraceMilliseconds": { "const": 750 },
+        "terminationVerificationMilliseconds": { "const": 2000 },
+        "intendedScopeIds": { "const": ["scope:device.windows-context"] },
         "subjectIds": { "const": ["subject:device:primary"] }
       }
     },

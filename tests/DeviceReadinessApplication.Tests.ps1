@@ -43,6 +43,16 @@ Assert-Equal 'Complete' $records[0].scenario 'the release-owned fixture identity
 Assert-Equal 'Complete' $records[0].coverageState 'all expected device evidence is explicit'
 Assert-Equal 'ExpectedCondition' $records[0].findingOutcome `
     'validated complete observations can support the advisory readiness finding'
+Assert-Equal 'Activated' $records[0].activationContext `
+    'Windows activation context is represented without a product key or entitlement claim'
+Assert-Equal 'NotDetected' $records[0].virtualizationContext `
+    'absence of a virtual signal is explicit without claiming the device is physically verified'
+Assert-Equal 'Desktop' $records[0].formFactor `
+    'structured chassis and system-type evidence supports the desktop form classification'
+Assert-Equal 'Absent' $records[0].batteryPresence `
+    'a completed physical fixture represents the observed absence of a battery explicitly'
+Assert-Equal $false $records[0].physicalClaimsAllowed `
+    'the preview never promotes context evidence into physical firmware, TPM, OEM, or performance claims'
 Assert-Equal $true $records[0].assessmentRecordValidated `
     'the canonical typed Assessment Record passes exact contract validation'
 Assert-Equal $true $records[0].beginnerReportVerified `
@@ -53,7 +63,7 @@ Assert-Equal $true $records[0].validationCleanupVerified `
     'the generated application removes every test-owned workspace and package'
 Assert-Equal $false ([System.IO.Directory]::Exists($validationRoot)) `
     'the generated application leaves no Device Readiness validation root'
-if ($result.StandardOutput -match '(?i)Fabrikam|Model-48|Synthetic Processor') {
+if ($result.StandardOutput -match '(?i)Fabrikam|Model-4[89]|Synthetic Processor|product.?key|entitlement|purchase') {
     throw 'Restricted synthetic device-identifying values entered public progress or validation output.'
 }
 if ($result.StandardError) { throw "Complete wrote stderr: $($result.StandardError)" }

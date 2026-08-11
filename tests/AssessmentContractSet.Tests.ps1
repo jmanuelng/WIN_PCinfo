@@ -18,10 +18,10 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal 9 @($contractSet.fieldDefinitions).Count `
-    'the tracer contract retains its legacy probe and admits eight Device Readiness fields'
-Assert-Equal 2 @($contractSet.scopeDefinitions).Count `
-    'the legacy tracer and real Device Readiness slice have distinct closed Evidence Scopes'
+Assert-Equal 18 @($contractSet.fieldDefinitions).Count `
+    'the tracer and readiness fields remain while nine bounded context fields are admitted'
+Assert-Equal 3 @($contractSet.scopeDefinitions).Count `
+    'legacy tracer, Device Readiness, and expanded device-context scopes remain distinct'
 
 $definition = @($contractSet.fieldDefinitions | Where-Object fieldId -eq 'field:device.os.display-name')[0]
 Assert-Equal 'field:device.os.display-name' $definition.fieldId 'the admitted field identity is release-bound'
@@ -57,6 +57,20 @@ $deviceScope = @($contractSet.scopeDefinitions | Where-Object scopeId -eq 'scope
 Assert-Equal 8 @($deviceScope.fieldIds).Count 'the Device Readiness scope resolves exactly eight fields'
 Assert-Equal 'collector:windows.device-readiness' $deviceScope.collectorIds[0] `
     'real evidence resolves only to the real approved collector'
+$contextScope = @($contractSet.scopeDefinitions | Where-Object {
+    $_.scopeId -eq 'scope:device.windows-context'
+})[0]
+Assert-Equal 17 @($contextScope.fieldIds).Count `
+    'the versioned expanded scope resolves exactly seventeen context fields'
+Assert-Equal 'collector:windows.device-context' $contextScope.collectorIds[0] `
+    'the expanded scope resolves its release-approved Windows collector'
+Assert-Equal 'collector:win-pcinfo.device-context-classifier' $contextScope.collectorIds[1] `
+    'the expanded scope resolves its release-approved post-validation classifier'
+if (@($contextScope.fieldIds | Where-Object {
+    [string]$_ -match '(?i)(product.?key|license.?key|private.?key|secret|token)'
+}).Count -gt 0) {
+    throw 'The release Contract Set admitted a prohibited key-like field identity.'
+}
 $schemaKinds = @($contractSet.schemas.documentKind | Sort-Object -Unique)
 Assert-Equal 2 $schemaKinds.Count 'schema document kinds are unambiguous'
 foreach ($schemaResource in @($contractSet.schemas)) {
@@ -82,4 +96,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: the release Contract Set binds one safe synthetic field and scope, vocabularies, and Draft 2020-12 schema.'
+Write-Output 'PASS: the release Contract Set binds synthetic, readiness, and expanded device-context scopes to Draft 2020-12 contracts.'

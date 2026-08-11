@@ -35,8 +35,8 @@ Assert-CatalogEqual 'WindowsJobObjectRequired' $catalog.collectors[0].treeContro
     'the release does not claim a root-only process fallback'
 Assert-CatalogEqual 'NotStarted' $catalog.collectors[0].treeControl.incompatibleDisposition `
     'Job incompatibility fails before collector code runs'
-Assert-CatalogEqual 2 @($catalog.collectors).Count `
-    'the legacy synthetic and real Device Readiness collectors have distinct identities'
+Assert-CatalogEqual 3 @($catalog.collectors).Count `
+    'legacy synthetic, Device Readiness, and expanded device-context collectors have distinct identities'
 Assert-CatalogEqual 1 @($catalog.collectors[0].operations).Count `
     'the synthetic collector exposes only its legacy probe'
 Assert-CatalogEqual 8 @($catalog.validationFixtures).Count `
@@ -59,6 +59,15 @@ Assert-CatalogEqual 'op:device.windows-readiness.collect' $deviceOperation.opera
     'Device Readiness has a separate stable approved operation identity'
 Assert-CatalogEqual 8192 $deviceOperation.standardOutputMaximumBytes `
     'the larger structured device payload remains independently bounded'
+$contextOperation = $catalog.collectors[2].operations[0]
+Assert-CatalogEqual 'collector:windows.device-context' $catalog.collectors[2].collectorId `
+    'activation, form, virtualization, and power evidence has an honest collector identity'
+Assert-CatalogEqual 'op:device.windows-context.collect' $contextOperation.operationId `
+    'the expanded context operation is stable and distinct from the prior readiness scope'
+Assert-CatalogEqual 16384 $contextOperation.standardOutputMaximumBytes `
+    'the expanded structured payload retains an explicit finite stdout bound'
+Assert-CatalogEqual 30000 $catalog.limits.maximumArgumentUtf8Bytes `
+    'the compact encoded payload remains below the Windows process-launch boundary'
 if ($catalog.collectors[0].payload.sha256 -notmatch '^[0-9a-f]{64}$') {
     throw 'The staged synthetic collector payload needs an exact release identity.'
 }
