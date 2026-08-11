@@ -78,6 +78,12 @@ if ($Workflow -ne 'Assessment') {
         Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
         exit $exitCode
     }
+    # The warning is an observable workflow step, not text hidden in help or in
+    # the resulting HTML. It is emitted before checking the deliberate phrase,
+    # so declining or mistyping still proves that no plaintext write preceded
+    # the prominent Restricted consequences and deletion instructions.
+    Write-ContractRecord (Get-RestrictedReportExportWarning) `
+        -ConvertToJsonCommand $convertToJsonCommand
     $workflowResult = if ([string]::IsNullOrWhiteSpace($ProtectedPackagePath) -or
         [string]::IsNullOrWhiteSpace($RestrictedReportOutputPath) -or
         $null -eq $RestrictedReportWarningAcknowledgment) {

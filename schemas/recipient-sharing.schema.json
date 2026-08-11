@@ -93,9 +93,10 @@
         { "const": "ExpiredAdmission" }, { "const": "HistoricalOpening" },
         { "const": "MissingKey" }, { "const": "ZeroRecipient" },
         { "const": "OneRecipient" }, { "const": "InterruptedExport" },
-        { "const": "WarningDeclined" }
+        { "const": "WarningDeclined" },
+        { "const": "RestrictedExport" }
       ],
-      "items": false, "minItems": 11, "maxItems": 11
+      "items": false, "minItems": 12, "maxItems": 12
     }
   }
 }

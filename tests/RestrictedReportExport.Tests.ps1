@@ -16,6 +16,29 @@ $null = [System.IO.Directory]::CreateDirectory($testRoot)
 $recordBytes = $null
 $reportBytes = $null
 try {
+    $warning = Get-RestrictedReportExportWarning
+    Assert-Equal 'win-pcinfo.restricted-report-warning' $warning.recordType `
+        'the export workflow presents a dedicated warning before acknowledgment'
+    Assert-Equal 'Restricted' $warning.severity 'the pre-export warning is prominent'
+    Assert-Equal $true $warning.unencryptedOutput 'the warning explains the plaintext consequence'
+    Assert-Equal $true $warning.deletionRequiredAfterUse `
+        'the warning explains deletion responsibility'
+    if ([string]::IsNullOrWhiteSpace([string] $warning.acknowledgmentRequired)) {
+        throw 'The presented warning did not provide the deliberate acknowledgment phrase.'
+    }
+    $applicationMain = [System.IO.File]::ReadAllText(
+        (Join-Path $repositoryRoot 'src/ApplicationMain.ps1')
+    )
+    $warningIndex = $applicationMain.IndexOf(
+        'Write-ContractRecord (Get-RestrictedReportExportWarning)',
+        [System.StringComparison]::Ordinal
+    )
+    $exportIndex = $applicationMain.IndexOf(
+        'Export-RestrictedAssessmentReport', [System.StringComparison]::Ordinal
+    )
+    Assert-Equal $true ($warningIndex -ge 0 -and $warningIndex -lt $exportIndex) `
+        'the public application presents the prominent warning before export can write'
+
     [byte[]] $recordBytes = [System.IO.File]::ReadAllBytes(
         (Join-Path $PSScriptRoot 'fixtures/contract-positive.json')
     )
@@ -69,7 +92,8 @@ try {
     }
 
     $summary = New-CompletionSummary -PackageVerified $true -RecipientSelected $true `
-        -RecipientProtectionLevel WindowsUserBound -RestrictedReportExported $true
+        -RecipientProtectionLevel WindowsUserBound -RecipientAccessAvailable $true `
+        -RestrictedReportExported $true
     Assert-Equal 'win-pcinfo.completion-summary' $summary.recordType `
         'completion emits the stable summary contract'
     Assert-Equal 'InitiatingWindowsUserAndDevice' $summary.resultSharingGuidance.localAccess `
@@ -83,6 +107,13 @@ try {
     Assert-Equal 'OperatorAndAuthorizedRecipient' `
         $summary.resultSharingGuidance.deletionResponsibility `
         'the summary assigns deletion responsibility'
+    $localSummary = New-CompletionSummary -PackageVerified $true -RecipientSelected $false `
+        -RecipientProtectionLevel None -RecipientAccessAvailable $false `
+        -RestrictedReportExported $false
+    Assert-Equal 'Operator' $localSummary.resultSharingGuidance.deletionResponsibility `
+        'zero-recipient guidance does not invent an authorized recipient'
+    Assert-Equal $false $localSummary.resultSharingGuidance.privateTransfer.allowed `
+        'a DPAPI-only package is not described as transferable recipient access'
     Assert-Equal $true $summary.resultSharingGuidance.prohibitedPublicSharing `
         'the summary prohibits public issue, Discussion, and repository sharing'
 }

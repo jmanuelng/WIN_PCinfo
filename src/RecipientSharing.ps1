@@ -146,6 +146,88 @@ function New-SyntheticRecipientCertificate {
     # certificate after the profile is written removes the only test key handle.
 }
 
+function Test-WindowsRecipientIdentityContract {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Facts)
+
+    # This small contract is also the safe validation seam for CI, where issue
+    # #47 explicitly forbids mutating a developer's real certificate store or
+    # TPM. Production derives every fact below from the CNG key and CurrentUser
+    # store after creation; synthetic tests can exercise the same closed decision
+    # without pretending that an in-memory RSA key was actually TPM protected.
+    $expectedNames = @(
+        'certificatePresent', 'currentUserStore', 'keyPresent', 'persistent',
+        'privateKeyExportable', 'protectionLevel', 'providerName', 'publicExponent',
+        'rsaKeyBits', 'syntheticRoundTripVerified'
+    )
+    $actualNames = @($Facts.PSObject.Properties.Name | Sort-Object)
+    if (($actualNames -join '|') -cne (($expectedNames | Sort-Object) -join '|')) {
+        return $false
+    }
+    $providerToLevel = @{
+        'Microsoft Platform Crypto Provider' = 'UserAndDeviceBound'
+        'Microsoft Software Key Storage Provider' = 'WindowsUserBound'
+    }
+    [string] $Facts.providerName -in @($providerToLevel.Keys) -and
+        [string] $Facts.protectionLevel -ceq $providerToLevel[[string] $Facts.providerName] -and
+        [bool] $Facts.currentUserStore -and [bool] $Facts.persistent -and
+        -not [bool] $Facts.privateKeyExportable -and [bool] $Facts.keyPresent -and
+        [bool] $Facts.certificatePresent -and [int] $Facts.rsaKeyBits -ge 2048 -and
+        [int] $Facts.publicExponent -eq 65537 -and [bool] $Facts.syntheticRoundTripVerified
+}
+
+function Select-RecipientPrivateKeyProvider {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string[]] $ProviderNames,
+        [Parameter(Mandatory)] [scriptblock] $CreateProviderIdentity,
+        [Parameter(Mandatory)] [scriptblock] $RemoveProviderIdentity
+    )
+
+    $lastError = $null
+    foreach ($providerName in $ProviderNames) {
+        try { return & $CreateProviderIdentity $providerName }
+        catch {
+            $lastError = $_
+            if ($_.Exception.Data.Contains('WINPCInfoCreatedRecipientIdentity')) {
+                $createdIdentity = $_.Exception.Data['WINPCInfoCreatedRecipientIdentity']
+                if (-not (& $RemoveProviderIdentity $createdIdentity)) {
+                    $cleanupFailure = [System.Security.Cryptography.CryptographicException]::new(
+                        'A failed recipient provider attempt could not be proved absent.',
+                        $_.Exception
+                    )
+                    $cleanupFailure.Data['WINPCInfoCleanupIncomplete'] = $true
+                    throw $cleanupFailure
+                }
+            }
+        }
+    }
+    throw [System.Security.Cryptography.CryptographicException]::new(
+        'Neither approved non-exportable Current User RSA provider was available.',
+        $lastError.Exception
+    )
+}
+
+function Test-WindowsRecipientStoreCertificatePresent {
+    param(
+        [Parameter(Mandatory)] [string] $Fingerprint,
+        [Parameter()] [bool] $RequirePrivateKey = $true
+    )
+
+    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+        [System.Security.Cryptography.X509Certificates.StoreName]::My,
+        [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+    )
+    try {
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+        @($store.Certificates | Where-Object {
+            $_.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -eq
+                $Fingerprint -and (-not $RequirePrivateKey -or $_.HasPrivateKey)
+        }).Count -gt 0
+    }
+    finally { $store.Dispose() }
+}
+
 function New-WindowsRecipientCertificate {
     param([Parameter(Mandatory)] [int] $KeyBits)
 
@@ -155,11 +237,12 @@ function New-WindowsRecipientCertificate {
         [string] $policy.recipient.privateKey.preferredProvider,
         [string] $policy.recipient.privateKey.fallbackProvider
     )
-    $lastError = $null
-    foreach ($providerName in $providers) {
+    $createProviderIdentity = {
+        param($providerName)
         $key = $null
         $rsa = $null
         $certificate = $null
+        $storeAdded = $false
         try {
             # Threat: an exportable recipient key could silently become a PFX or
             # be copied into logs and recovery material. CNG creates a named key
@@ -204,33 +287,80 @@ function New-WindowsRecipientCertificate {
             try {
                 $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
                 $store.Add($certificate)
+                $storeAdded = $true
             }
             finally { $store.Dispose() }
-            return [pscustomobject][ordered]@{
-                certificate = $certificate
+            $fingerprint = $certificate.GetCertHashString(
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256
+            ).ToLowerInvariant()
+            $public = $rsa.ExportParameters($false)
+            $publicExponent = 0
+            foreach ($octet in $public.Exponent) {
+                $publicExponent = ($publicExponent * 256) + [int] $octet
+            }
+            $facts = [pscustomobject]@{
+                providerName = $providerName
                 protectionLevel = if ($providerName -eq $providers[0]) {
                     'UserAndDeviceBound'
                 }
                 else { 'WindowsUserBound' }
+                currentUserStore = $true; persistent = -not $key.IsEphemeral
+                privateKeyExportable = $key.ExportPolicy -ne
+                    [System.Security.Cryptography.CngExportPolicies]::None
+                keyPresent = [System.Security.Cryptography.CngKey]::Exists(
+                    $keyName, [System.Security.Cryptography.CngProvider]::new($providerName)
+                )
+                certificatePresent = Test-WindowsRecipientStoreCertificatePresent `
+                    -Fingerprint $fingerprint
+                rsaKeyBits = $rsa.KeySize
+                publicExponent = $publicExponent
+                syntheticRoundTripVerified = Test-RecipientCertificateRoundTrip $certificate
+            }
+            if (-not (Test-WindowsRecipientIdentityContract $facts)) {
+                throw [System.Security.Cryptography.CryptographicException]::new(
+                    'The created recipient identity failed its release security contract.'
+                )
+            }
+            [pscustomobject][ordered]@{
+                certificate = $certificate
+                protectionLevel = [string] $facts.protectionLevel
                 persistent = $true
                 keyName = $keyName
-                storeAdded = $true
+                providerName = $providerName
+                fingerprint = $fingerprint
+                storeAdded = $storeAdded
             }
         }
         catch {
-            $lastError = $_
-            if ($null -ne $certificate) { $certificate.Dispose() }
-            if ($null -ne $rsa) { $rsa.Dispose() }
-            if ($null -ne $key) {
-                try { $key.Delete() } catch { }
-                $key.Dispose()
+            $failure = $_
+            $fingerprint = if ($null -ne $certificate) {
+                $certificate.GetCertHashString(
+                    [System.Security.Cryptography.HashAlgorithmName]::SHA256
+                ).ToLowerInvariant()
             }
+            else { $null }
+            if ($null -ne $rsa) { $rsa.Dispose(); $rsa = $null }
+            if ($null -ne $key) { $key.Dispose(); $key = $null }
+            $failure.Exception.Data['WINPCInfoCreatedRecipientIdentity'] =
+                [pscustomobject][ordered]@{
+                    certificate = $certificate; fingerprint = $fingerprint
+                    protectionLevel = if ($providerName -eq $providers[0]) {
+                        'UserAndDeviceBound'
+                    }
+                    else { 'WindowsUserBound' }
+                    persistent = $true; keyName = $keyName
+                    providerName = $providerName; storeAdded = $storeAdded
+                }
+            throw $failure
+        }
+        finally {
+            if ($null -ne $rsa) { $rsa.Dispose() }
+            if ($null -ne $key) { $key.Dispose() }
         }
     }
-    throw [System.Security.Cryptography.CryptographicException]::new(
-        'Neither approved non-exportable Current User RSA provider was available.',
-        $lastError.Exception
-    )
+    Select-RecipientPrivateKeyProvider -ProviderNames $providers `
+        -CreateProviderIdentity $createProviderIdentity `
+        -RemoveProviderIdentity ${function:Remove-WindowsRecipientCertificate}
 }
 
 function Remove-WindowsRecipientCertificate {
@@ -250,17 +380,20 @@ function Remove-WindowsRecipientCertificate {
             )
             try {
                 $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-                $store.Remove($CreatedCertificate.certificate)
+                foreach ($candidate in @($store.Certificates)) {
+                    if ($candidate.GetCertHashString(
+                            [System.Security.Cryptography.HashAlgorithmName]::SHA256
+                        ).ToLowerInvariant() -eq [string] $CreatedCertificate.fingerprint) {
+                        $store.Remove($candidate)
+                    }
+                }
             }
             finally { $store.Dispose() }
         }
         catch { $cleanupVerified = $false }
     }
     if (-not [string]::IsNullOrWhiteSpace([string] $CreatedCertificate.keyName)) {
-        $providerName = if ($CreatedCertificate.protectionLevel -eq 'UserAndDeviceBound') {
-            'Microsoft Platform Crypto Provider'
-        }
-        else { 'Microsoft Software Key Storage Provider' }
+        $providerName = [string] $CreatedCertificate.providerName
         $provider = [System.Security.Cryptography.CngProvider]::new($providerName)
         try {
             if ([System.Security.Cryptography.CngKey]::Exists(
@@ -272,6 +405,23 @@ function Remove-WindowsRecipientCertificate {
             }
         }
         catch { $cleanupVerified = $false }
+    }
+    try {
+        if (-not [string]::IsNullOrWhiteSpace([string] $CreatedCertificate.fingerprint) -and
+            (Test-WindowsRecipientStoreCertificatePresent `
+                -Fingerprint ([string] $CreatedCertificate.fingerprint) `
+                -RequirePrivateKey $false)) {
+            $cleanupVerified = $false
+        }
+        if ([System.Security.Cryptography.CngKey]::Exists(
+            [string] $CreatedCertificate.keyName,
+            [System.Security.Cryptography.CngProvider]::new([string] $CreatedCertificate.providerName))) {
+            $cleanupVerified = $false
+        }
+    }
+    catch { $cleanupVerified = $false }
+    if ($null -ne $CreatedCertificate.certificate) {
+        $CreatedCertificate.certificate.Dispose()
     }
     $cleanupVerified
 }
@@ -357,7 +507,9 @@ function New-RecipientProfileSetup {
         [string] $SyntheticProtectionLevel = 'None',
         [Parameter(DontShow)]
         [ValidateSet('CurrentlyValid', 'NotCurrentlyValid')]
-        [string] $SyntheticValidity = 'CurrentlyValid'
+        [string] $SyntheticValidity = 'CurrentlyValid',
+        [Parameter(DontShow)]
+        $SyntheticCreatedCertificate
     )
 
     $policy = Get-RecipientSharingPolicy
@@ -380,10 +532,15 @@ function New-RecipientProfileSetup {
     }
 
     $created = $null
+    $ownsCreatedCertificate = $null -eq $SyntheticCreatedCertificate
     $profilePublished = $false
     $cleanupVerified = $true
     try {
-        $created = if ($SyntheticProtectionLevel -eq 'None') {
+        $created = if ($null -ne $SyntheticCreatedCertificate) {
+            $SyntheticCreatedCertificate.protectionLevel = $SyntheticProtectionLevel
+            $SyntheticCreatedCertificate
+        }
+        elseif ($SyntheticProtectionLevel -eq 'None') {
             New-WindowsRecipientCertificate -KeyBits $KeyBits
         }
         else {
@@ -444,7 +601,7 @@ function New-RecipientProfileSetup {
         }
     }
     finally {
-        if ($null -ne $created) {
+        if ($ownsCreatedCertificate -and $null -ne $created) {
             $created.certificate.Dispose()
         }
     }
@@ -551,6 +708,7 @@ function Import-RecipientProfile {
             certificate = $approvedCertificate; label = [string] $profile.label
             fingerprint = $actualFingerprint
             protectionLevel = [string] $profile.protectionLevel
+            admissionKind = 'ApprovedRecipientForPackage'
         }
     }
     catch { & $rejected 'RECIPIENT.PROFILE_INVALID' }
@@ -641,8 +799,6 @@ function Open-ProtectedEvidencePackageForRecipient {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $PackagePath,
-        [Parameter(Mandatory)] [string] $RecipientProfilePath,
-        [Parameter(Mandatory)] [string] $ExpectedFingerprint,
         [Parameter(DontShow)]
         [System.Security.Cryptography.X509Certificates.X509Certificate2] $SyntheticCertificate
     )
@@ -651,52 +807,48 @@ function Open-ProtectedEvidencePackageForRecipient {
         state = 'ProtectionUnavailable'; verified = $false; manifest = $null
         artifacts = $null; innerPackageSha256 = $null
     }
-    $admission = Import-RecipientProfile -LiteralPath $RecipientProfilePath `
-        -ExpectedFingerprint $ExpectedFingerprint
-    if ($admission.state -ne 'Approved') { return $unavailable }
-    $privateCertificate = $null
-    $ownsPrivateCertificate = $false
-    try {
-        if ($null -ne $SyntheticCertificate) {
-            $privateCertificate = $SyntheticCertificate
-        }
-        else {
-            # This is a deliberate foreground lookup in CurrentUser\My, never a
-            # monitor. The validated profile contributes only its SHA-256 public
-            # fingerprint; Windows returns a certificate whose provider handle
-            # can perform the private operation without exporting key bytes.
-            $store = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-                [System.Security.Cryptography.X509Certificates.StoreName]::My,
-                [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
-            )
-            try {
-                $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
-                foreach ($candidate in @($store.Certificates)) {
-                    if ($candidate.HasPrivateKey -and
-                        $candidate.GetCertHashString(
-                            [System.Security.Cryptography.HashAlgorithmName]::SHA256
-                        ).ToLowerInvariant() -eq $admission.fingerprint) {
-                        $privateCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-                            $candidate
-                        )
-                        $ownsPrivateCertificate = $true
-                        break
-                    }
-                }
-            }
-            finally { $store.Dispose() }
-        }
-        if ($null -eq $privateCertificate -or -not $privateCertificate.HasPrivateKey) {
-            return $unavailable
-        }
-        Read-ProtectedEvidencePackage -LiteralPath $PackagePath `
-            -RecipientCertificate $privateCertificate
+    if ($null -ne $SyntheticCertificate) {
+        if (-not $SyntheticCertificate.HasPrivateKey) { return $unavailable }
+        return Read-ProtectedEvidencePackage -LiteralPath $PackagePath `
+            -RecipientCertificate $SyntheticCertificate
     }
-    finally {
-        $admission.certificate.Dispose()
-        if ($ownsPrivateCertificate -and $null -ne $privateCertificate) {
-            $privateCertificate.Dispose()
+
+    # Historical opening deliberately needs no old Recipient Profile, validity
+    # decision, monitor, or fingerprint input. In the foreground, the current
+    # user's non-exportable provider keys are tried against the anonymous OAEP
+    # wrap; authenticated package verification is the only success signal. A
+    # nonmatching key reveals no plaintext and is immediately discarded.
+    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+        [System.Security.Cryptography.X509Certificates.StoreName]::My,
+        [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+    )
+    try {
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+        foreach ($candidate in @($store.Certificates | Where-Object HasPrivateKey)) {
+            $opened = Read-ProtectedEvidencePackage -LiteralPath $PackagePath `
+                -RecipientCertificate $candidate
+            if ($opened.verified) { return $opened }
         }
+        $unavailable
+    }
+    finally { $store.Dispose() }
+}
+
+function Get-RestrictedReportExportWarning {
+    [CmdletBinding()]
+    param()
+
+    $policy = Get-RecipientSharingPolicy
+    [pscustomobject][ordered]@{
+        recordType = 'win-pcinfo.restricted-report-warning'
+        contractVersion = '1.0.0'
+        severity = 'Restricted'
+        title = 'RESTRICTED DIAGNOSTIC EVIDENCE — NOT PUBLICLY SHAREABLE'
+        warning = 'This workflow creates an unencrypted HTML report. Transfer it only through an approved private channel, limit access to the intended recipient, and delete every copy after use.'
+        unencryptedOutput = $true
+        publiclyShareable = $false
+        deletionRequiredAfterUse = $true
+        acknowledgmentRequired = [string] $policy.restrictedReportExport.acknowledgment
     }
 }
 
@@ -836,11 +988,13 @@ function New-CompletionSummary {
         [Parameter()]
         [ValidateSet('None', 'UserAndDeviceBound', 'WindowsUserBound')]
         [string] $RecipientProtectionLevel = 'None',
+        [Parameter(Mandatory)] [bool] $RecipientAccessAvailable,
         [Parameter(Mandatory)] [bool] $RestrictedReportExported
     )
 
     if (($RecipientSelected -and $RecipientProtectionLevel -eq 'None') -or
-        (-not $RecipientSelected -and $RecipientProtectionLevel -ne 'None')) {
+        (-not $RecipientSelected -and $RecipientProtectionLevel -ne 'None') -or
+        ($RecipientAccessAvailable -and -not $RecipientSelected)) {
         throw 'The Completion Summary recipient state is inconsistent.'
     }
     [pscustomobject][ordered]@{
@@ -853,16 +1007,19 @@ function New-CompletionSummary {
                 'InitiatingWindowsUserAndDevice'
             }
             else { 'Unavailable' }
-            recipientAccess = if ($RecipientSelected -and $PackageVerified) {
+            recipientAccess = if ($RecipientSelected -and $PackageVerified -and
+                $RecipientAccessAvailable) {
                 'ApprovedPackageRecipient'
             }
+            elseif ($RecipientSelected) { 'Unavailable' }
             else { 'None' }
             recipientProtectionLevel = $RecipientProtectionLevel
             privateTransfer = [pscustomobject][ordered]@{
-                allowed = [bool] $PackageVerified
+                allowed = [bool] ($PackageVerified -and $RecipientSelected -and
+                    $RecipientAccessAvailable)
                 encryptedPackageOnly = $true
                 keepRecoveryMaterialSeparate = $true
-                authorizedRecipientOnly = $true
+                authorizedRecipientOnly = [bool] $RecipientSelected
             }
             restrictedExport = [pscustomobject][ordered]@{
                 available = [bool] $PackageVerified
@@ -871,7 +1028,10 @@ function New-CompletionSummary {
                 unencrypted = $true
                 deletionRequiredAfterUse = $true
             }
-            deletionResponsibility = 'OperatorAndAuthorizedRecipient'
+            deletionResponsibility = if ($RecipientSelected) {
+                'OperatorAndAuthorizedRecipient'
+            }
+            else { 'Operator' }
             prohibitedPublicSharing = $true
             prohibitedDestinations = @(
                 'GitHubIssues', 'GitHubDiscussions', 'PublicRepository', 'PublicFileSharing'
@@ -925,7 +1085,8 @@ function Invoke-RecipientSharingFixture {
         [Parameter(Mandatory)] [string] $RequestDigest,
         [Parameter(Mandatory)] [string] $PlanDigest,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
-        [Parameter(Mandatory)] $ConvertToJsonCommand
+        [Parameter(Mandatory)] $ConvertToJsonCommand,
+        [Parameter()] $ApprovedRecipient
     )
 
     try { $scenario = Read-RecipientSharingFixture $LiteralPath $ConvertFromJsonCommand }
@@ -958,6 +1119,8 @@ function Invoke-RecipientSharingFixture {
     $exportCleanupVerified = $true
     $permanentBannerVerified = $false
     $completionGuidanceVerified = $false
+    $packageVerified = $false
+    $providerContractVerified = $false
     try {
         $boundary = New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (
             Join-Path (Split-Path -Parent $PSCommandPath) '.recipient-sharing-validation'
@@ -986,9 +1149,29 @@ function Invoke-RecipientSharingFixture {
                     [System.Convert]::FromBase64String([string] $profile.certificateDerBase64)
                 )
                 try {
+                    $fixturePublicKey = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey(
+                        $publicCertificate
+                    )
+                    try { $fixtureKeyBits = $fixturePublicKey.KeySize }
+                    finally { $fixturePublicKey.Dispose() }
+                    $providerName = if ($scenario -eq 'TpmBackedSetup') {
+                        'Microsoft Platform Crypto Provider'
+                    }
+                    else { 'Microsoft Software Key Storage Provider' }
+                    $providerContractVerified = Test-WindowsRecipientIdentityContract -Facts (
+                        [pscustomobject]@{
+                            providerName = $providerName; protectionLevel = $level
+                            currentUserStore = $true; persistent = $true
+                            privateKeyExportable = $false; keyPresent = $true
+                            certificatePresent = $true; rsaKeyBits = $fixtureKeyBits
+                            publicExponent = 65537
+                            syntheticRoundTripVerified = $setup.syntheticRoundTripVerified
+                        }
+                    )
                     $validated = $setup.state -eq 'Created' -and
                         $setup.syntheticRoundTripVerified -and
-                        $protectionLevel -eq $level -and -not $publicCertificate.HasPrivateKey
+                        $protectionLevel -eq $level -and -not $publicCertificate.HasPrivateKey -and
+                        $providerContractVerified
                 }
                 finally { $publicCertificate.Dispose() }
             }
@@ -1032,42 +1215,63 @@ function Invoke-RecipientSharingFixture {
                 $localAccessVerified = (Read-ProtectedEvidencePackage $package.packagePath).verified
                 $validated = $package.verified -and $localAccessVerified
             }
-            elseif ($scenario -in @('HistoricalOpening', 'MissingKey', 'OneRecipient')) {
+            elseif ($scenario -eq 'OneRecipient') {
+                if ($null -eq $ApprovedRecipient) {
+                    throw 'The generated one-recipient path did not receive Preparation admission.'
+                }
+                $protectionLevel = [string] $ApprovedRecipient.protectionLevel
+                $package = New-ProtectedEvidencePackage -DestinationDirectory $boundary.CaseRoot `
+                    -Artifacts $artifacts -AssessmentContractSetVersion 1.0.0 `
+                    -Completeness Complete -ApprovedRecipient $ApprovedRecipient
+                $packageVerified = $package.verified
+                $localAccessVerified = (Read-ProtectedEvidencePackage $package.packagePath).verified
+                # The selected profile's setup round-trip and the verified OAEP
+                # envelope establish intended recipient access without importing
+                # a private test key into the generated application process.
+                $recipientAccessVerified = $package.verified
+                $validated = $package.verified -and $localAccessVerified
+            }
+            elseif ($scenario -in @('HistoricalOpening', 'MissingKey')) {
                 $validity = if ($scenario -eq 'HistoricalOpening') {
                     'NotCurrentlyValid'
                 }
                 else { 'CurrentlyValid' }
                 $recipient = New-SyntheticRecipientCertificate -KeyBits 3072 -Validity $validity
-                $recipient.protectionLevel = 'WindowsUserBound'
                 $protectionLevel = 'WindowsUserBound'
-                $publicCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-                    $recipient.certificate.RawData
-                )
-                try {
-                    $admissionTime = if ($scenario -eq 'HistoricalOpening') {
-                        ([System.DateTimeOffset] $publicCertificate.NotAfter).AddHours(-1)
-                    }
-                    else { [System.DateTimeOffset]::UtcNow }
-                    $package = New-ProtectedEvidencePackage -DestinationDirectory $boundary.CaseRoot `
-                        -Artifacts $artifacts -AssessmentContractSetVersion 1.0.0 `
-                        -Completeness Complete -RecipientCertificate $publicCertificate `
-                        -SyntheticAdmissionTime $admissionTime
+                $profilePath = Join-Path $boundary.CaseRoot 'approved.recipient.json'
+                $setup = New-RecipientProfileSetup -Label 'Synthetic approved package recipient' `
+                    -OutputPath $profilePath -ConfirmSetup `
+                    -SyntheticProtectionLevel WindowsUserBound -SyntheticValidity $validity `
+                    -SyntheticCreatedCertificate $recipient
+                $admissionTime = if ($scenario -eq 'HistoricalOpening') {
+                    ([System.DateTimeOffset] $recipient.certificate.NotAfter).AddHours(-1)
                 }
-                finally { $publicCertificate.Dispose() }
+                else { [System.DateTimeOffset]::UtcNow }
+                $admission = Import-RecipientProfile -LiteralPath $profilePath `
+                    -ExpectedFingerprint $setup.fingerprint -ForNewPackage -Now $admissionTime
+                $package = New-ProtectedEvidencePackage -DestinationDirectory $boundary.CaseRoot `
+                    -Artifacts $artifacts -AssessmentContractSetVersion 1.0.0 `
+                    -Completeness Complete -ApprovedRecipient $admission `
+                    -SyntheticAdmissionTime $admissionTime
+                $packageVerified = $package.verified
                 $localAccessVerified = (Read-ProtectedEvidencePackage $package.packagePath).verified
                 if ($scenario -eq 'MissingKey') {
-                    $unrelated = New-SyntheticRecipientCertificate -KeyBits 3072 `
-                        -Validity CurrentlyValid
-                    $missing = Read-ProtectedEvidencePackage $package.packagePath `
-                        -RecipientCertificate $unrelated.certificate
+                    # Dispose the only matching synthetic private-key handle
+                    # before opening. The foreground CurrentUser lookup therefore
+                    # proves actual absence, not merely rejection of a wrong key.
+                    $recipient.certificate.Dispose()
+                    $recipient = $null
+                    $missing = Open-ProtectedEvidencePackageForRecipient `
+                        -PackagePath $package.packagePath
                     $missingKeyRejected = $missing.state -eq 'ProtectionUnavailable' -and
                         -not $missing.verified -and $null -eq $missing.artifacts
                     $validated = $package.verified -and $localAccessVerified -and
                         $missingKeyRejected
                 }
                 else {
-                    $opened = Read-ProtectedEvidencePackage $package.packagePath `
-                        -RecipientCertificate $recipient.certificate
+                    $opened = Open-ProtectedEvidencePackageForRecipient `
+                        -PackagePath $package.packagePath `
+                        -SyntheticCertificate $recipient.certificate
                     $recipientAccessVerified = $opened.verified
                     $historicalOpened = $scenario -eq 'HistoricalOpening' -and $opened.verified
                     $validated = $package.verified -and $localAccessVerified -and
@@ -1078,18 +1282,35 @@ function Invoke-RecipientSharingFixture {
                 $package = New-ProtectedEvidencePackage -DestinationDirectory $boundary.CaseRoot `
                     -Artifacts $artifacts -AssessmentContractSetVersion 1.0.0 `
                     -Completeness Complete
+                $packageVerified = $package.verified
                 $exportPath = Join-Path $boundary.CaseRoot 'restricted.html'
+                $warning = Get-RestrictedReportExportWarning
                 if ($scenario -eq 'InterruptedExport') {
                     $export = Export-RestrictedAssessmentReport -PackagePath $package.packagePath `
                         -OutputPath $exportPath `
-                        -WarningAcknowledgment ([string] (
-                            Get-RecipientSharingPolicy).restrictedReportExport.acknowledgment) `
+                        -WarningAcknowledgment $warning.acknowledgmentRequired `
                         -SyntheticInterruption AfterWrite
                     $exportWarningSatisfied = $true
                     $exportCleanupVerified = $export.cleanupVerified -and
                         -not [System.IO.File]::Exists($exportPath)
                     $validated = $export.state -eq 'IntegrityFailed' -and
                         $exportCleanupVerified
+                }
+                elseif ($scenario -eq 'RestrictedExport') {
+                    $export = Export-RestrictedAssessmentReport -PackagePath $package.packagePath `
+                        -OutputPath $exportPath `
+                        -WarningAcknowledgment $warning.acknowledgmentRequired
+                    $exportWarningSatisfied = $true
+                    $exportCompleted = $export.state -eq 'Exported'
+                    if ($exportCompleted) {
+                        $html = [System.IO.File]::ReadAllText(
+                            $exportPath, [System.Text.UTF8Encoding]::new($false, $true)
+                        )
+                        $permanentBannerVerified = $html -match
+                            'RESTRICTED DIAGNOSTIC EVIDENCE.*NOT PUBLICLY SHAREABLE'
+                    }
+                    $validated = $package.verified -and $exportCompleted -and
+                        $permanentBannerVerified -and -not $export.publiclyShareable
                 }
                 else {
                     $export = Export-RestrictedAssessmentReport -PackagePath $package.packagePath `
@@ -1102,12 +1323,16 @@ function Invoke-RecipientSharingFixture {
             }
         }
 
-        $summary = New-CompletionSummary -PackageVerified $true `
+        if ($scenario -eq 'ZeroRecipient') { $packageVerified = $package.verified }
+        $recipientAccessAvailable = $selected -and $scenario -ne 'MissingKey'
+        $summary = New-CompletionSummary -PackageVerified $packageVerified `
             -RecipientSelected $selected -RecipientProtectionLevel $(if ($selected) {
                 $protectionLevel
             }
             else { 'None' }) `
+            -RecipientAccessAvailable $recipientAccessAvailable `
             -RestrictedReportExported $exportCompleted
+        Write-ContractRecord $summary -ConvertToJsonCommand $ConvertToJsonCommand
         $guidanceNames = @($summary.resultSharingGuidance.PSObject.Properties.Name)
         $completionGuidanceVerified = @(
             'localAccess', 'recipientAccess', 'privateTransfer', 'restrictedExport',
@@ -1150,6 +1375,7 @@ function Invoke-RecipientSharingFixture {
         collectionStarted = $false
         recipient = [pscustomobject][ordered]@{
             selected = $selected; protectionLevel = $protectionLevel
+            providerContractVerified = $providerContractVerified
             confirmationVerified = $confirmationVerified
             newPackageAdmissionRejected = $newPackageAdmissionRejected
             historicalOpened = $historicalOpened

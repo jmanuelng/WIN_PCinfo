@@ -810,8 +810,7 @@ function New-ProtectedEvidencePackage {
         [Parameter(Mandatory)] [ValidateSet('1.0.0')] [string] $AssessmentContractSetVersion,
         [Parameter(Mandatory)] [ValidateSet('Complete', 'RecoverablePartial')] [string] $Completeness,
         [Parameter()] [string] $JournalPath,
-        [Parameter()]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2] $RecipientCertificate,
+        [Parameter()] $ApprovedRecipient,
         [Parameter(DontShow)]
         [System.DateTimeOffset] $SyntheticAdmissionTime = [System.DateTimeOffset]::UtcNow,
         [Parameter(DontShow)]
@@ -828,7 +827,42 @@ function New-ProtectedEvidencePackage {
     $finalPath = $null
     $provisionalIdentity = ''
     $finalNamed = $false
+    $ownedRecipientCertificate = $null
     try {
+        $recipientCertificate = $null
+        if ($null -ne $ApprovedRecipient) {
+            if ([string] $ApprovedRecipient.state -cne 'Approved' -or
+                [string] $ApprovedRecipient.admissionKind -cne 'ApprovedRecipientForPackage' -or
+                [string]::IsNullOrWhiteSpace([string] $ApprovedRecipient.fingerprint)) {
+                return $failure
+            }
+            $certificateProperty = $ApprovedRecipient.PSObject.Properties['certificate']
+            $encodedCertificateProperty =
+                $ApprovedRecipient.PSObject.Properties['certificateDerBase64']
+            $recipientCertificate = if ($null -ne $certificateProperty -and
+                $null -ne $certificateProperty.Value) {
+                $certificateProperty.Value
+            }
+            elseif ($null -ne $encodedCertificateProperty -and
+                -not [string]::IsNullOrWhiteSpace([string] $encodedCertificateProperty.Value)) {
+                $ownedRecipientCertificate =
+                    [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+                        [System.Convert]::FromBase64String(
+                            [string] $encodedCertificateProperty.Value
+                        )
+                    )
+                $ownedRecipientCertificate
+            }
+            else { return $failure }
+            $certificateFingerprint = $recipientCertificate.GetCertHashString(
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256
+            ).ToLowerInvariant()
+            if ($certificateFingerprint -cne [string] $ApprovedRecipient.fingerprint -or
+                -not (Test-RecipientCertificateForNewPackage `
+                    -Certificate $recipientCertificate -Now $SyntheticAdmissionTime)) {
+                return $failure
+            }
+        }
         $destination = [System.IO.Path]::GetFullPath($DestinationDirectory)
         if (-not [System.IO.Directory]::Exists($destination)) { return $failure }
         # A product-generated opaque name prevents assessment, user, device, or
@@ -839,7 +873,7 @@ function New-ProtectedEvidencePackage {
         $inner = New-DeterministicAssessmentPackage -Artifacts $Artifacts `
             -AssessmentContractSetVersion $AssessmentContractSetVersion -Completeness $Completeness
         $writeResult = Write-ProtectedPackageEnvelope -Plaintext $inner.bytes -LiteralPath $provisionalPath `
-            -RecipientCertificate $RecipientCertificate -SyntheticAdmissionTime $SyntheticAdmissionTime `
+            -RecipientCertificate $recipientCertificate -SyntheticAdmissionTime $SyntheticAdmissionTime `
             -SyntheticWriteFailure $SyntheticWriteFailure
         $provisionalIdentity = [string] $writeResult.fileSystemIdentity
 
@@ -895,6 +929,9 @@ function New-ProtectedEvidencePackage {
         $failure
     }
     finally {
+        if ($null -ne $ownedRecipientCertificate) {
+            $ownedRecipientCertificate.Dispose()
+        }
         if ($null -ne $inner -and $null -ne $inner.bytes) {
             [System.Security.Cryptography.CryptographicOperations]::ZeroMemory([byte[]] $inner.bytes)
         }

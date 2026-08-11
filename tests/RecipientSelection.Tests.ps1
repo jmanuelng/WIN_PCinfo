@@ -8,9 +8,11 @@ $candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 . (Join-Path $repositoryRoot 'src/Contracts.ps1')
+. (Join-Path $repositoryRoot 'src/ContractValidator.ps1')
 . (Join-Path $repositoryRoot 'src/EvidenceWorkspace.ps1')
 . (Join-Path $repositoryRoot 'src/RecipientSharing.ps1')
 . (Join-Path $repositoryRoot 'src/ProtectedPackage.ps1')
+. (Join-Path $repositoryRoot 'src/Preparation.ps1')
 
 $testRoot = Join-Path $repositoryRoot ".test-output/recipient-selection-$([guid]::NewGuid().ToString('N'))"
 $null = [System.IO.Directory]::CreateDirectory($testRoot)
@@ -43,6 +45,35 @@ try {
     $requestPath = Join-Path $testRoot 'request.json'
     [System.IO.File]::WriteAllText($requestPath, ($request | ConvertTo-Json -Compress -Depth 10),
         [System.Text.UTF8Encoding]::new($false))
+    $frozenSelection = Resolve-PreparationRecipientSelection -Request (
+        [pscustomobject] $request
+    )
+    Assert-Equal 'ApprovedRecipientForPackage' `
+        $frozenSelection.approvedRecipient.admissionKind `
+        'preparation carries the exact approved public certificate into packaging'
+    [byte[]] $recordBytes = [System.IO.File]::ReadAllBytes(
+        (Join-Path $PSScriptRoot 'fixtures/contract-positive.json')
+    )
+    [byte[]] $reportBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
+        '<!doctype html><title>Frozen recipient binding</title>'
+    )
+    try {
+        $boundPackage = New-ProtectedEvidencePackage -DestinationDirectory $testRoot `
+            -Artifacts ([ordered]@{
+                'assessment-record.json' = $recordBytes
+                'assessment-report.html' = $reportBytes
+            }) -AssessmentContractSetVersion 1.0.0 -Completeness Complete `
+            -ApprovedRecipient $frozenSelection.approvedRecipient
+        Assert-Equal $true $boundPackage.verified `
+            'packaging accepts the certificate frozen by preparation admission'
+        Assert-Equal 'RSA-OAEP-SHA-256' `
+            (Get-ProtectedPackageEnvelopeHeader $boundPackage.packagePath).recipientKeyProtection `
+            'the frozen recipient drives the package key wrap'
+    }
+    finally {
+        [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($recordBytes)
+        [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($reportBytes)
+    }
     & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
     $result = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Mode', 'Automation', '-RequestPath', $requestPath,

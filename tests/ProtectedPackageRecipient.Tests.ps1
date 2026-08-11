@@ -14,7 +14,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $testRoot = Join-Path $repositoryRoot ".test-output/package-recipient-$([guid]::NewGuid().ToString('N'))"
 $null = [System.IO.Directory]::CreateDirectory($testRoot)
 $recipient = $null
-$unrelated = $null
+$admission = $null
 $recordBytes = $null
 $reportBytes = $null
 try {
@@ -42,18 +42,20 @@ try {
         'the Local Package Protector retains access'
 
     $recipient = New-SyntheticRecipientCertificate -KeyBits 3072 -Validity NotCurrentlyValid
-    $recipient.protectionLevel = 'WindowsUserBound'
-    $publicRecipient = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-        $recipient.certificate.RawData
-    )
+    $profilePath = Join-Path $testRoot 'approved-recipient.json'
+    $setup = New-RecipientProfileSetup -Label 'Synthetic approved recipient' `
+        -OutputPath $profilePath -ConfirmSetup -SyntheticProtectionLevel WindowsUserBound `
+        -SyntheticValidity NotCurrentlyValid -SyntheticCreatedCertificate $recipient
+    $admission = Import-RecipientProfile -LiteralPath $profilePath `
+        -ExpectedFingerprint $setup.fingerprint
     try {
         $recipientPackage = New-ProtectedEvidencePackage -DestinationDirectory $testRoot `
             -Artifacts $artifacts -AssessmentContractSetVersion '1.0.0' -Completeness Complete `
-            -RecipientCertificate $publicRecipient -SyntheticAdmissionTime (
-                [System.DateTimeOffset] $publicRecipient.NotAfter
+            -ApprovedRecipient $admission -SyntheticAdmissionTime (
+                [System.DateTimeOffset] $admission.certificate.NotAfter
             ).AddHours(-1)
     }
-    finally { $publicRecipient.Dispose() }
+    finally { $admission.certificate.Dispose(); $admission = $null }
     Assert-Equal $true $recipientPackage.verified 'one approved recipient is wrapped into the package'
     $header = Get-ProtectedPackageEnvelopeHeader $recipientPackage.packagePath
     Assert-Equal 'RSA-OAEP-SHA-256' $header.recipientKeyProtection `
@@ -69,15 +71,16 @@ try {
 
     # The certificate is intentionally expired at the current clock. Historical
     # opening must use the matching usable private key, not current validity.
-    $historical = Read-ProtectedEvidencePackage $recipientPackage.packagePath `
-        -RecipientCertificate $recipient.certificate
+    $historical = Open-ProtectedEvidencePackageForRecipient `
+        -PackagePath $recipientPackage.packagePath -SyntheticCertificate $recipient.certificate
     Assert-Equal 'Verified' $historical.state `
         'the matching provider-held key opens a historical package after expiry'
     Assert-Equal $true $historical.verified 'recipient historical opening validates the full package'
 
-    $unrelated = New-SyntheticRecipientCertificate -KeyBits 3072 -Validity CurrentlyValid
-    $missing = Read-ProtectedEvidencePackage $recipientPackage.packagePath `
-        -RecipientCertificate $unrelated.certificate
+    $recipient.certificate.Dispose()
+    $recipient = $null
+    $missing = Open-ProtectedEvidencePackageForRecipient `
+        -PackagePath $recipientPackage.packagePath
     Assert-Equal 'ProtectionUnavailable' $missing.state `
         'an unrelated private key cannot be substituted for the approved recipient'
     Assert-Equal $false $missing.verified 'missing matching key exposes no content'
@@ -86,8 +89,8 @@ try {
     }
 }
 finally {
+    if ($null -ne $admission -and $null -ne $admission.certificate) { $admission.certificate.Dispose() }
     if ($null -ne $recipient) { $recipient.certificate.Dispose() }
-    if ($null -ne $unrelated) { $unrelated.certificate.Dispose() }
     if ($null -ne $recordBytes) {
         [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($recordBytes)
     }

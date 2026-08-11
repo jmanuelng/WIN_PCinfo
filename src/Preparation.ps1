@@ -177,6 +177,7 @@ function Resolve-PreparationRecipientSelection {
             resolved = $true; mode = 'None'; label = $null; fingerprint = $null
             protectionLevel = $null; profileValidated = $true
             fingerprintConfirmed = $false; reasonCode = 'RECIPIENT.NONE_SELECTED'
+            approvedRecipient = $null
         }
     }
     if (-not (Get-Command Import-RecipientProfile -CommandType Function `
@@ -185,6 +186,7 @@ function Resolve-PreparationRecipientSelection {
             resolved = $false; mode = 'Profile'; label = $null; fingerprint = $null
             protectionLevel = $null; profileValidated = $false
             fingerprintConfirmed = $false; reasonCode = 'RECIPIENT.PROFILE_VALIDATOR_UNAVAILABLE'
+            approvedRecipient = $null
         }
     }
     $admission = Import-RecipientProfile -LiteralPath $Request.recipientSelection.profilePath `
@@ -206,6 +208,23 @@ function Resolve-PreparationRecipientSelection {
             profileValidated = $admission.state -eq 'Approved'
             fingerprintConfirmed = $admission.state -eq 'Approved'
             reasonCode = [string] $admission.reasonCode
+            # The execution fact freezes the exact admitted public certificate,
+            # not merely its display label. New-ProtectedEvidencePackage accepts
+            # this closed admission object and rechecks the fingerprint/validity
+            # before OAEP wrapping. New-PreparationPlan intentionally projects
+            # only the human-review fields into the public summary.
+            approvedRecipient = if ($admission.state -eq 'Approved') {
+                [pscustomobject][ordered]@{
+                    state = 'Approved'; admissionKind = 'ApprovedRecipientForPackage'
+                    fingerprint = [string] $admission.fingerprint
+                    label = [string] $admission.label
+                    protectionLevel = [string] $admission.protectionLevel
+                    certificateDerBase64 = [System.Convert]::ToBase64String(
+                        $admission.certificate.RawData
+                    )
+                }
+            }
+            else { $null }
         }
     }
     finally { if ($null -ne $admission.certificate) { $admission.certificate.Dispose() } }
@@ -515,7 +534,8 @@ function Invoke-PreparationGate {
         return Invoke-RecipientSharingFixture -LiteralPath $recipientSharingFixturePath `
             -RuntimeResult $RuntimeResult -RequestDigest $requestDigest `
             -PlanDigest $planResult.Digest -ConvertFromJsonCommand $ConvertFromJsonCommand `
-            -ConvertToJsonCommand $ConvertToJsonCommand
+            -ConvertToJsonCommand $ConvertToJsonCommand `
+            -ApprovedRecipient $recipientSelection.approvedRecipient
     }
     $reasonCode = if ($accepted -and $ValidationFixture) {
         # Synthetic facts can prove resolution but can never reach collectors.
