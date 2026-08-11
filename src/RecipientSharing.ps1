@@ -984,7 +984,9 @@ function New-CompletionSummary {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [bool] $PackageVerified,
-        [Parameter(Mandatory)] [bool] $PackageAvailable,
+        [Parameter(Mandatory)]
+        [ValidateSet('Available', 'VerifiedAbsent', 'Uncertain')]
+        [string] $PackageAvailability,
         [Parameter(Mandatory)] [bool] $RecipientSelected,
         [Parameter()]
         [ValidateSet('None', 'UserAndDeviceBound', 'WindowsUserBound')]
@@ -993,45 +995,50 @@ function New-CompletionSummary {
         [Parameter(Mandatory)] [bool] $RestrictedReportExported
     )
 
-    if (($PackageAvailable -and -not $PackageVerified) -or
+    if (($PackageAvailability -eq 'Available' -and -not $PackageVerified) -or
         ($RecipientSelected -and $RecipientProtectionLevel -eq 'None') -or
         (-not $RecipientSelected -and $RecipientProtectionLevel -ne 'None') -or
         ($RecipientAccessAvailable -and -not $RecipientSelected)) {
         throw 'The Completion Summary recipient state is inconsistent.'
     }
+    $packageAvailable = $PackageAvailability -eq 'Available'
+    $packageUncertain = $PackageAvailability -eq 'Uncertain'
     [pscustomobject][ordered]@{
         recordType = 'win-pcinfo.completion-summary'
         contractVersion = '1.0.0'
         packageVerified = $PackageVerified
-        packageAvailable = $PackageAvailable
+        packageAvailability = $PackageAvailability
         resultSharingGuidance = [pscustomobject][ordered]@{
             kind = 'ResultSharingGuidance'
-            localAccess = if ($PackageVerified -and $PackageAvailable) {
+            localAccess = if ($PackageVerified -and $packageAvailable) {
                 'InitiatingWindowsUserAndDevice'
             }
+            elseif ($packageUncertain) { 'Uncertain' }
             else { 'Unavailable' }
-            recipientAccess = if ($RecipientSelected -and $PackageVerified -and $PackageAvailable -and
+            recipientAccess = if ($RecipientSelected -and $PackageVerified -and $packageAvailable -and
                 $RecipientAccessAvailable) {
                 'ApprovedPackageRecipient'
             }
+            elseif ($RecipientSelected -and $packageUncertain) { 'Uncertain' }
             elseif ($RecipientSelected) { 'Unavailable' }
             else { 'None' }
             recipientProtectionLevel = $RecipientProtectionLevel
             privateTransfer = [pscustomobject][ordered]@{
-                allowed = [bool] ($PackageVerified -and $PackageAvailable -and $RecipientSelected -and
+                allowed = [bool] ($PackageVerified -and $packageAvailable -and $RecipientSelected -and
                     $RecipientAccessAvailable)
                 encryptedPackageOnly = $true
                 keepRecoveryMaterialSeparate = $true
                 authorizedRecipientOnly = [bool] $RecipientSelected
             }
             restrictedExport = [pscustomobject][ordered]@{
-                available = [bool] ($PackageVerified -and $PackageAvailable)
+                available = [bool] ($PackageVerified -and $packageAvailable)
                 completed = $RestrictedReportExported
                 classification = 'RestrictedDiagnosticEvidence'
                 unencrypted = $true
                 deletionRequiredAfterUse = $true
             }
-            deletionResponsibility = if (-not $PackageAvailable) { 'None' }
+            deletionResponsibility = if ($PackageAvailability -eq 'VerifiedAbsent') { 'None' }
+            elseif ($packageUncertain) { 'Operator' }
             elseif ($RecipientSelected) {
                 'OperatorAndAuthorizedRecipient'
             }
@@ -1354,7 +1361,7 @@ function Invoke-RecipientSharingFixture {
     # mistaken for a retained artifact that anyone can still open or transfer.
     $recipientAccessAvailable = $selected -and $scenario -ne 'MissingKey'
     $summary = New-CompletionSummary -PackageVerified $packageVerified `
-        -PackageAvailable $false `
+        -PackageAvailability $(if ($cleanupVerified) { 'VerifiedAbsent' } else { 'Uncertain' }) `
         -RecipientSelected $selected -RecipientProtectionLevel $(if ($selected) {
             $protectionLevel
         }

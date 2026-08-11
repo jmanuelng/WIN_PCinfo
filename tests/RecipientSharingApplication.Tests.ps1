@@ -109,7 +109,7 @@ foreach ($scenario in $cases) {
     )
     Assert-Equal $expectedPackageVerified $summaries[0].packageVerified `
         "$scenario guidance reflects whether a package was actually verified"
-    Assert-Equal $false $summaries[0].packageAvailable `
+    Assert-Equal 'VerifiedAbsent' $summaries[0].packageAvailability `
         "$scenario does not claim its removed validation package remains available"
     $expectedRecipientAccess = if ($scenario -in @(
         'HistoricalOpening', 'MissingKey', 'OneRecipient'

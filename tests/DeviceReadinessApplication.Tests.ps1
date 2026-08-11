@@ -65,7 +65,7 @@ Assert-Equal $true $records[0].validationCleanupVerified `
     'the generated application removes every test-owned workspace and package'
 Assert-Equal $true $completion[0].packageVerified `
     'validation records that local package verification passed'
-Assert-Equal $false $completion[0].packageAvailable `
+Assert-Equal 'VerifiedAbsent' $completion[0].packageAvailability `
     'validation cleanup records that its synthetic package is not retained'
 Assert-Equal 'Unavailable' `
     $completion[0].resultSharingGuidance.localAccess `

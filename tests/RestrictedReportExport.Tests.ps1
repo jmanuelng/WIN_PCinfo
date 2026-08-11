@@ -91,7 +91,7 @@ try {
         throw 'Restricted Report Export leaked the machine-readable Assessment Record.'
     }
 
-    $summary = New-CompletionSummary -PackageVerified $true -PackageAvailable $true `
+    $summary = New-CompletionSummary -PackageVerified $true -PackageAvailability Available `
         -RecipientSelected $true `
         -RecipientProtectionLevel WindowsUserBound -RecipientAccessAvailable $true `
         -RestrictedReportExported $true
@@ -108,7 +108,7 @@ try {
     Assert-Equal 'OperatorAndAuthorizedRecipient' `
         $summary.resultSharingGuidance.deletionResponsibility `
         'the summary assigns deletion responsibility'
-    $localSummary = New-CompletionSummary -PackageVerified $true -PackageAvailable $true `
+    $localSummary = New-CompletionSummary -PackageVerified $true -PackageAvailability Available `
         -RecipientSelected $false `
         -RecipientProtectionLevel None -RecipientAccessAvailable $false `
         -RestrictedReportExported $false
@@ -116,6 +116,16 @@ try {
         'zero-recipient guidance does not invent an authorized recipient'
     Assert-Equal $false $localSummary.resultSharingGuidance.privateTransfer.allowed `
         'a DPAPI-only package is not described as transferable recipient access'
+    $uncertainSummary = New-CompletionSummary -PackageVerified $true `
+        -PackageAvailability Uncertain -RecipientSelected $true `
+        -RecipientProtectionLevel WindowsUserBound -RecipientAccessAvailable $true `
+        -RestrictedReportExported $false
+    Assert-Equal 'Uncertain' $uncertainSummary.resultSharingGuidance.localAccess `
+        'unverified cleanup does not claim that protected artifacts are absent or accessible'
+    Assert-Equal $false $uncertainSummary.resultSharingGuidance.privateTransfer.allowed `
+        'uncertain residue is never approved for transfer'
+    Assert-Equal 'Operator' $uncertainSummary.resultSharingGuidance.deletionResponsibility `
+        'uncertain residue retains operator recovery and deletion responsibility'
     Assert-Equal $true $summary.resultSharingGuidance.prohibitedPublicSharing `
         'the summary prohibits public issue, Discussion, and repository sharing'
 }

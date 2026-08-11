@@ -1120,8 +1120,15 @@ function Invoke-DeviceReadinessSlice {
         $recipientKeyProtection -eq 'RSA-OAEP-SHA-256'
     $packageAvailable = $packageVerified -and -not $isFixture -and
         $null -ne $package -and [System.IO.File]::Exists([string]$package.packagePath)
+    $packageAvailability = if ($packageAvailable) { 'Available' }
+    elseif ($isFixture -and $cleanupVerified) { 'VerifiedAbsent' }
+    elseif (-not $packageVerified -and
+        ($null -eq $package -or [string]::IsNullOrWhiteSpace([string]$package.packagePath))) {
+        'VerifiedAbsent'
+    }
+    else { 'Uncertain' }
     Write-ContractRecord (New-CompletionSummary -PackageVerified $packageVerified `
-        -PackageAvailable $packageAvailable `
+        -PackageAvailability $packageAvailability `
         -RecipientSelected $recipientSelected `
         -RecipientProtectionLevel $recipientProtectionLevel `
         -RecipientAccessAvailable $recipientAccessAvailable `

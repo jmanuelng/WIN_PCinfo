@@ -112,7 +112,7 @@ try {
         'the normal completed slice emits exactly one Completion Summary'
     Assert-Equal $true $completion[0].packageVerified `
         'validation records that recipient-wrapped package verification passed'
-    Assert-Equal $false $completion[0].packageAvailable `
+    Assert-Equal 'VerifiedAbsent' $completion[0].packageAvailability `
         'validation cleanup reports that its synthetic package is not retained'
     Assert-Equal 'Unavailable' `
         $completion[0].resultSharingGuidance.recipientAccess `
