@@ -1,0 +1,86 @@
+{
+  "kind": "win-pcinfo.protected-package-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.protected-package/1.0.0",
+  "envelope": {
+    "magic": "WINPCPK1",
+    "formatVersion": 1,
+    "maximumHeaderUtf8Bytes": 8192,
+    "maximumPlaintextBytes": 1048576,
+    "contentEncryption": {
+      "algorithm": "AES-256-GCM",
+      "keyBytes": 32,
+      "chunkPlaintextBytes": 16384,
+      "nonceBytes": 12,
+      "noncePrefixBytes": 8,
+      "tagBytes": 16,
+      "freshKeyPerPackage": true,
+      "uniqueNoncePerChunk": true
+    },
+    "keyProtection": {
+      "algorithm": "DPAPI-CurrentUser",
+      "scope": "CurrentUser",
+      "additionalEntropyUtf8": "WIN-PCInfo|2.0.0-preview.1|ProtectedEvidencePackage|v1"
+    },
+    "associatedData": {
+      "bindHeader": true,
+      "chunkFields": ["chunkIndex", "plaintextLength", "ciphertextLength", "nonce"]
+    },
+    "outerMetadata": {
+      "allowedFields": ["formatVersion", "algorithm", "keyProtection", "chunkPlaintextBytes", "plaintextLength", "chunkCount", "noncePrefix", "protectedContentKey"],
+      "prohibitedIdentityClasses": ["Assessment", "User", "Device", "Organization", "Certificate"]
+    }
+  },
+  "innerPackage": {
+    "format": "ZIP-Store",
+    "manifestPath": "package-manifest.json",
+    "manifestContract": "win-pcinfo.assessment-package-manifest/1.0.0",
+    "deterministic": true,
+    "artifacts": [
+      { "relativePath": "assessment-record.json", "mediaType": "application/json", "required": true, "maximumBytes": 32768 },
+      { "relativePath": "assessment-report.html", "mediaType": "text/html", "required": true, "maximumBytes": 262144 }
+    ],
+    "maximumEntryCount": 3,
+    "maximumArchiveBytes": 1048576
+  },
+  "manifest": {
+    "governingVersions": ["productRelease", "assessmentContractSet", "packagePolicy", "manifestContract"],
+    "contentFields": ["relativePath", "mediaType", "byteLength", "sha256"],
+    "completenessStates": ["Complete", "RecoverablePartial"],
+    "protectionState": "EncryptedAuthenticated",
+    "authorshipClaim": false,
+    "durableTamperEvidenceClaim": false
+  },
+  "finalization": {
+    "provisionalSuffix": ".partial",
+    "finalSuffix": ".winpcinfo",
+    "flushCiphertextToDisk": true,
+    "reopenBeforeFinalName": true,
+    "validateEnvelope": true,
+    "validateArchive": true,
+    "validateManifest": true,
+    "validateDigests": true,
+    "removeIncompleteCiphertext": true,
+    "zeroControllableKeyBuffers": true
+  },
+  "viewing": {
+    "exposure": "RequestedArtifactOnly",
+    "newRestrictedBoundary": true,
+    "removeAndVerifyOnClose": true,
+    "recoveryJournalOnInterruption": true,
+    "persistentPlaintextAllowed": false
+  },
+  "validationScenarios": [
+    "KnownAnswer",
+    "MaximumSize",
+    "Corruption",
+    "WrongUser",
+    "WrongDevice",
+    "InterruptedWrite",
+    "DiskExhaustion",
+    "MalformedArchive",
+    "InvalidManifest",
+    "ViewingCleanup"
+  ]
+}

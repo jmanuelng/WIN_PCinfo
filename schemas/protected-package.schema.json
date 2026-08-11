@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/protected-package.schema.json",
+  "title": "WIN-PCInfo Protected Evidence Package policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "envelope", "innerPackage", "manifest", "finalization", "viewing", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.protected-package-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.protected-package/1.0.0" },
+    "envelope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["magic", "formatVersion", "maximumHeaderUtf8Bytes", "maximumPlaintextBytes", "contentEncryption", "keyProtection", "associatedData", "outerMetadata"],
+      "properties": {
+        "magic": { "const": "WINPCPK1" }, "formatVersion": { "const": 1 },
+        "maximumHeaderUtf8Bytes": { "const": 8192 }, "maximumPlaintextBytes": { "const": 1048576 },
+        "contentEncryption": {
+          "type": "object", "additionalProperties": false,
+          "required": ["algorithm", "keyBytes", "chunkPlaintextBytes", "nonceBytes", "noncePrefixBytes", "tagBytes", "freshKeyPerPackage", "uniqueNoncePerChunk"],
+          "properties": {
+            "algorithm": { "const": "AES-256-GCM" }, "keyBytes": { "const": 32 },
+            "chunkPlaintextBytes": { "const": 16384 }, "nonceBytes": { "const": 12 },
+            "noncePrefixBytes": { "const": 8 }, "tagBytes": { "const": 16 },
+            "freshKeyPerPackage": { "const": true }, "uniqueNoncePerChunk": { "const": true }
+          }
+        },
+        "keyProtection": {
+          "type": "object", "additionalProperties": false,
+          "required": ["algorithm", "scope", "additionalEntropyUtf8"],
+          "properties": {
+            "algorithm": { "const": "DPAPI-CurrentUser" }, "scope": { "const": "CurrentUser" },
+            "additionalEntropyUtf8": { "const": "WIN-PCInfo|2.0.0-preview.1|ProtectedEvidencePackage|v1" }
+          }
+        },
+        "associatedData": {
+          "type": "object", "additionalProperties": false,
+          "required": ["bindHeader", "chunkFields"],
+          "properties": {
+            "bindHeader": { "const": true },
+            "chunkFields": { "type": "array", "prefixItems": [{"const":"chunkIndex"},{"const":"plaintextLength"},{"const":"ciphertextLength"},{"const":"nonce"}], "items": false, "minItems": 4, "maxItems": 4 }
+          }
+        },
+        "outerMetadata": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowedFields", "prohibitedIdentityClasses"],
+          "properties": {
+            "allowedFields": { "type": "array", "prefixItems": [{"const":"formatVersion"},{"const":"algorithm"},{"const":"keyProtection"},{"const":"chunkPlaintextBytes"},{"const":"plaintextLength"},{"const":"chunkCount"},{"const":"noncePrefix"},{"const":"protectedContentKey"}], "items": false, "minItems": 8, "maxItems": 8 },
+            "prohibitedIdentityClasses": { "type": "array", "prefixItems": [{"const":"Assessment"},{"const":"User"},{"const":"Device"},{"const":"Organization"},{"const":"Certificate"}], "items": false, "minItems": 5, "maxItems": 5 }
+          }
+        }
+      }
+    },
+    "innerPackage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["format", "manifestPath", "manifestContract", "deterministic", "artifacts", "maximumEntryCount", "maximumArchiveBytes"],
+      "properties": {
+        "format": { "const": "ZIP-Store" }, "manifestPath": { "const": "package-manifest.json" },
+        "manifestContract": { "const": "win-pcinfo.assessment-package-manifest/1.0.0" }, "deterministic": { "const": true },
+        "artifacts": { "type": "array", "prefixItems": [
+          { "type":"object", "additionalProperties":false, "required":["relativePath","mediaType","required","maximumBytes"], "properties":{"relativePath":{"const":"assessment-record.json"},"mediaType":{"const":"application/json"},"required":{"const":true},"maximumBytes":{"const":32768}} },
+          { "type":"object", "additionalProperties":false, "required":["relativePath","mediaType","required","maximumBytes"], "properties":{"relativePath":{"const":"assessment-report.html"},"mediaType":{"const":"text/html"},"required":{"const":true},"maximumBytes":{"const":262144}} }
+        ], "items": false, "minItems": 2, "maxItems": 2 },
+        "maximumEntryCount": { "const": 3 }, "maximumArchiveBytes": { "const": 1048576 }
+      }
+    },
+    "manifest": {
+      "type":"object", "additionalProperties":false,
+      "required":["governingVersions","contentFields","completenessStates","protectionState","authorshipClaim","durableTamperEvidenceClaim"],
+      "properties": {
+        "governingVersions":{"type":"array","prefixItems":[{"const":"productRelease"},{"const":"assessmentContractSet"},{"const":"packagePolicy"},{"const":"manifestContract"}],"items":false,"minItems":4,"maxItems":4},
+        "contentFields":{"type":"array","prefixItems":[{"const":"relativePath"},{"const":"mediaType"},{"const":"byteLength"},{"const":"sha256"}],"items":false,"minItems":4,"maxItems":4},
+        "completenessStates":{"type":"array","prefixItems":[{"const":"Complete"},{"const":"RecoverablePartial"}],"items":false,"minItems":2,"maxItems":2},
+        "protectionState":{"const":"EncryptedAuthenticated"},"authorshipClaim":{"const":false},"durableTamperEvidenceClaim":{"const":false}
+      }
+    },
+    "finalization": {
+      "type":"object","additionalProperties":false,
+      "required":["provisionalSuffix","finalSuffix","flushCiphertextToDisk","reopenBeforeFinalName","validateEnvelope","validateArchive","validateManifest","validateDigests","removeIncompleteCiphertext","zeroControllableKeyBuffers"],
+      "properties":{"provisionalSuffix":{"const":".partial"},"finalSuffix":{"const":".winpcinfo"},"flushCiphertextToDisk":{"const":true},"reopenBeforeFinalName":{"const":true},"validateEnvelope":{"const":true},"validateArchive":{"const":true},"validateManifest":{"const":true},"validateDigests":{"const":true},"removeIncompleteCiphertext":{"const":true},"zeroControllableKeyBuffers":{"const":true}}
+    },
+    "viewing": {
+      "type":"object","additionalProperties":false,
+      "required":["exposure","newRestrictedBoundary","removeAndVerifyOnClose","recoveryJournalOnInterruption","persistentPlaintextAllowed"],
+      "properties":{"exposure":{"const":"RequestedArtifactOnly"},"newRestrictedBoundary":{"const":true},"removeAndVerifyOnClose":{"const":true},"recoveryJournalOnInterruption":{"const":true},"persistentPlaintextAllowed":{"const":false}}
+    },
+    "validationScenarios": { "type":"array", "prefixItems":[{"const":"KnownAnswer"},{"const":"MaximumSize"},{"const":"Corruption"},{"const":"WrongUser"},{"const":"WrongDevice"},{"const":"InterruptedWrite"},{"const":"DiskExhaustion"},{"const":"MalformedArchive"},{"const":"InvalidManifest"},{"const":"ViewingCleanup"}], "items":false,"minItems":10,"maxItems":10 }
+  }
+}

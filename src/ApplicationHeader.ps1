@@ -53,7 +53,12 @@ param(
     # fault only. It cannot supply a destination, cleanup target, identity,
     # journal field, evidence value, process, command, or Windows Feature.
     [Parameter(DontShow)]
-    [string] $EvidenceWorkspaceFixturePath
+    [string] $EvidenceWorkspaceFixturePath,
+
+    # A package fixture selects one release-owned cryptographic or viewing
+    # scenario. It cannot supply plaintext, keys, identities, paths, or metadata.
+    [Parameter(DontShow)]
+    [string] $ProtectedPackageFixturePath
 )
 
 Set-StrictMode -Version Latest

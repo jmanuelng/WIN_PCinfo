@@ -343,6 +343,7 @@ function Invoke-PreparationGate {
     $privilegedCollectionFixturePath = [string] $ValidationContext.PrivilegedCollectionFixturePath
     $systemCollectionFixturePath = [string] $ValidationContext.SystemCollectionFixturePath
     $evidenceWorkspaceFixturePath = [string] $ValidationContext.EvidenceWorkspaceFixturePath
+    $protectedPackageFixturePath = [string] $ValidationContext.ProtectedPackageFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -408,7 +409,8 @@ function Invoke-PreparationGate {
     $decision = if ($accepted) { 'Accepted' } else { 'Declined' }
     $selectedExecutionFixtures = @(
         @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath,
-            $systemCollectionFixturePath, $evidenceWorkspaceFixturePath) |
+            $systemCollectionFixturePath, $evidenceWorkspaceFixturePath,
+            $protectedPackageFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -447,6 +449,12 @@ function Invoke-PreparationGate {
             -PlanDigest $planResult.Digest -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand `
             -RecoveryAuthorized ([bool] $Request.automationChoices.allowStaleRecovery)
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($protectedPackageFixturePath)) {
+        return Invoke-ProtectedPackageFixture -LiteralPath $protectedPackageFixturePath `
+            -RuntimeResult $RuntimeResult -RequestDigest $requestDigest `
+            -PlanDigest $planResult.Digest -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand
     }
     $reasonCode = if ($accepted -and $ValidationFixture) {
         # Synthetic facts can prove resolution but can never reach collectors.
