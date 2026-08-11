@@ -95,7 +95,7 @@ The operator owns secure transfer and deletion of a completed export. Ordinary d
 
 ## Completion Summary guidance
 
-Every completed normal Device Readiness path and generated recipient-validation path emits a Completion Summary whose `ResultSharingGuidance` reflects whether a package and export actually completed. It covers:
+Every completed normal Device Readiness path and generated recipient-validation path emits a Completion Summary. It records package verification separately from package availability, so validation-only runs can prove packaging and cleanup without claiming that their removed synthetic package remains accessible or transferable. `ResultSharingGuidance` covers:
 
 - actual Local Package Protector access;
 - whether one approved Package Recipient has access and at which protection level;

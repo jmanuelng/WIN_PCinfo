@@ -63,9 +63,13 @@ Assert-Equal $true $records[0].protectedPackageVerified `
     'the report and canonical record end in a reopened Protected Evidence Package'
 Assert-Equal $true $records[0].validationCleanupVerified `
     'the generated application removes every test-owned workspace and package'
-Assert-Equal 'InitiatingWindowsUserAndDevice' `
+Assert-Equal $true $completion[0].packageVerified `
+    'validation records that local package verification passed'
+Assert-Equal $false $completion[0].packageAvailable `
+    'validation cleanup records that its synthetic package is not retained'
+Assert-Equal 'Unavailable' `
     $completion[0].resultSharingGuidance.localAccess `
-    'the Completion Summary explains verified local access'
+    'the Completion Summary does not claim access to a removed validation package'
 Assert-Equal 'None' $completion[0].resultSharingGuidance.recipientAccess `
     'a zero-recipient package does not claim recipient access'
 Assert-Equal $false $completion[0].resultSharingGuidance.privateTransfer.allowed `

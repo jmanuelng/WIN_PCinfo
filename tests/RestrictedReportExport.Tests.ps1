@@ -91,7 +91,8 @@ try {
         throw 'Restricted Report Export leaked the machine-readable Assessment Record.'
     }
 
-    $summary = New-CompletionSummary -PackageVerified $true -RecipientSelected $true `
+    $summary = New-CompletionSummary -PackageVerified $true -PackageAvailable $true `
+        -RecipientSelected $true `
         -RecipientProtectionLevel WindowsUserBound -RecipientAccessAvailable $true `
         -RestrictedReportExported $true
     Assert-Equal 'win-pcinfo.completion-summary' $summary.recordType `
@@ -107,7 +108,8 @@ try {
     Assert-Equal 'OperatorAndAuthorizedRecipient' `
         $summary.resultSharingGuidance.deletionResponsibility `
         'the summary assigns deletion responsibility'
-    $localSummary = New-CompletionSummary -PackageVerified $true -RecipientSelected $false `
+    $localSummary = New-CompletionSummary -PackageVerified $true -PackageAvailable $true `
+        -RecipientSelected $false `
         -RecipientProtectionLevel None -RecipientAccessAvailable $false `
         -RestrictedReportExported $false
     Assert-Equal 'Operator' $localSummary.resultSharingGuidance.deletionResponsibility `

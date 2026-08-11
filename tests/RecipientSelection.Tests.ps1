@@ -110,11 +110,15 @@ try {
         recordType -eq 'win-pcinfo.completion-summary')
     Assert-Equal 1 $completion.Count `
         'the normal completed slice emits exactly one Completion Summary'
-    Assert-Equal 'ApprovedPackageRecipient' `
+    Assert-Equal $true $completion[0].packageVerified `
+        'validation records that recipient-wrapped package verification passed'
+    Assert-Equal $false $completion[0].packageAvailable `
+        'validation cleanup reports that its synthetic package is not retained'
+    Assert-Equal 'Unavailable' `
         $completion[0].resultSharingGuidance.recipientAccess `
-        'the Completion Summary explains actual recipient access'
-    Assert-Equal $true $completion[0].resultSharingGuidance.privateTransfer.allowed `
-        'the Completion Summary permits private transfer only for the recipient-wrapped package'
+        'the Completion Summary does not claim access to a removed validation package'
+    Assert-Equal $false $completion[0].resultSharingGuidance.privateTransfer.allowed `
+        'the Completion Summary does not permit transfer after validation cleanup'
     Assert-Equal $true $completion[0].resultSharingGuidance.prohibitedPublicSharing `
         'the Completion Summary prohibits public sharing'
 

@@ -984,6 +984,7 @@ function New-CompletionSummary {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [bool] $PackageVerified,
+        [Parameter(Mandatory)] [bool] $PackageAvailable,
         [Parameter(Mandatory)] [bool] $RecipientSelected,
         [Parameter()]
         [ValidateSet('None', 'UserAndDeviceBound', 'WindowsUserBound')]
@@ -992,7 +993,8 @@ function New-CompletionSummary {
         [Parameter(Mandatory)] [bool] $RestrictedReportExported
     )
 
-    if (($RecipientSelected -and $RecipientProtectionLevel -eq 'None') -or
+    if (($PackageAvailable -and -not $PackageVerified) -or
+        ($RecipientSelected -and $RecipientProtectionLevel -eq 'None') -or
         (-not $RecipientSelected -and $RecipientProtectionLevel -ne 'None') -or
         ($RecipientAccessAvailable -and -not $RecipientSelected)) {
         throw 'The Completion Summary recipient state is inconsistent.'
@@ -1001,13 +1003,14 @@ function New-CompletionSummary {
         recordType = 'win-pcinfo.completion-summary'
         contractVersion = '1.0.0'
         packageVerified = $PackageVerified
+        packageAvailable = $PackageAvailable
         resultSharingGuidance = [pscustomobject][ordered]@{
             kind = 'ResultSharingGuidance'
-            localAccess = if ($PackageVerified) {
+            localAccess = if ($PackageVerified -and $PackageAvailable) {
                 'InitiatingWindowsUserAndDevice'
             }
             else { 'Unavailable' }
-            recipientAccess = if ($RecipientSelected -and $PackageVerified -and
+            recipientAccess = if ($RecipientSelected -and $PackageVerified -and $PackageAvailable -and
                 $RecipientAccessAvailable) {
                 'ApprovedPackageRecipient'
             }
@@ -1015,20 +1018,21 @@ function New-CompletionSummary {
             else { 'None' }
             recipientProtectionLevel = $RecipientProtectionLevel
             privateTransfer = [pscustomobject][ordered]@{
-                allowed = [bool] ($PackageVerified -and $RecipientSelected -and
+                allowed = [bool] ($PackageVerified -and $PackageAvailable -and $RecipientSelected -and
                     $RecipientAccessAvailable)
                 encryptedPackageOnly = $true
                 keepRecoveryMaterialSeparate = $true
                 authorizedRecipientOnly = [bool] $RecipientSelected
             }
             restrictedExport = [pscustomobject][ordered]@{
-                available = [bool] $PackageVerified
+                available = [bool] ($PackageVerified -and $PackageAvailable)
                 completed = $RestrictedReportExported
                 classification = 'RestrictedDiagnosticEvidence'
                 unencrypted = $true
                 deletionRequiredAfterUse = $true
             }
-            deletionResponsibility = if ($RecipientSelected) {
+            deletionResponsibility = if (-not $PackageAvailable) { 'None' }
+            elseif ($RecipientSelected) {
                 'OperatorAndAuthorizedRecipient'
             }
             else { 'Operator' }
@@ -1325,7 +1329,10 @@ function Invoke-RecipientSharingFixture {
 
         if ($scenario -eq 'ZeroRecipient') { $packageVerified = $package.verified }
         $recipientAccessAvailable = $selected -and $scenario -ne 'MissingKey'
+        $packageAvailable = $packageVerified -and $null -ne $package -and
+            [System.IO.File]::Exists([string]$package.packagePath)
         $summary = New-CompletionSummary -PackageVerified $packageVerified `
+            -PackageAvailable $packageAvailable `
             -RecipientSelected $selected -RecipientProtectionLevel $(if ($selected) {
                 $protectionLevel
             }

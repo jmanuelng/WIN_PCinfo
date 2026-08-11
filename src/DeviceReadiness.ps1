@@ -891,7 +891,7 @@ function Invoke-DeviceReadinessSlice {
 
     $isFixture = -not [string]::IsNullOrWhiteSpace($LiteralPath)
     $scenario = if ($isFixture) { '' } else { 'Actual' }
-    $policy = $null; $boundary = $null; $opened = $null
+    $policy = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
     $packageVerified = $false; $coverageState = 'Unavailable'; $findingOutcome = 'Indeterminate'
     $activationFindingOutcome = 'Indeterminate'; $platformFindingOutcome = 'Indeterminate'
@@ -1118,7 +1118,10 @@ function Invoke-DeviceReadinessSlice {
     else { 'None' }
     $recipientAccessAvailable = $packageVerified -and
         $recipientKeyProtection -eq 'RSA-OAEP-SHA-256'
+    $packageAvailable = $packageVerified -and -not $isFixture -and
+        $null -ne $package -and [System.IO.File]::Exists([string]$package.packagePath)
     Write-ContractRecord (New-CompletionSummary -PackageVerified $packageVerified `
+        -PackageAvailable $packageAvailable `
         -RecipientSelected $recipientSelected `
         -RecipientProtectionLevel $recipientProtectionLevel `
         -RecipientAccessAvailable $recipientAccessAvailable `
