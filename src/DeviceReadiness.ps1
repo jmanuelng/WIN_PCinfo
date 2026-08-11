@@ -1,0 +1,612 @@
+$script:DeviceReadinessPolicyBase64 = '__DEVICE_READINESS_POLICY_BASE64__'
+$script:DeviceReadinessPolicyDigest = '__DEVICE_READINESS_POLICY_SHA256__'
+
+function Get-DeviceReadinessPolicy {
+    param([Parameter(Mandatory)] $ConvertFromJsonCommand)
+
+    if ($script:DeviceReadinessPolicyBase64 -eq '__DEVICE_READINESS_POLICY_BASE64__') {
+        $path = Join-Path (Split-Path -Parent $PSScriptRoot) `
+            'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
+        $bytes = Get-CanonicalSupervisorTextBytes -LiteralPath $path
+        $expectedDigest = Get-Sha256ForSupervisorBytes -Bytes $bytes
+    }
+    else {
+        $bytes = [System.Convert]::FromBase64String($script:DeviceReadinessPolicyBase64)
+        $expectedDigest = $script:DeviceReadinessPolicyDigest
+    }
+    if ((Get-Sha256ForSupervisorBytes -Bytes $bytes) -ne $expectedDigest) {
+        throw 'The Device Readiness policy failed integrity validation.'
+    }
+    $policy = & $ConvertFromJsonCommand -InputObject (
+        [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+    ) -Depth 20 -ErrorAction Stop
+    if ($policy.kind -ne 'win-pcinfo.device-readiness-policy' -or
+        $policy.release -ne '2.0.0-preview.1' -or
+        $policy.collector.operationId -ne 'op:device.windows-readiness.collect' -or
+        $policy.rule.operationId -ne 'op:rule.device-windows-readiness.evaluate' -or
+        $policy.rule.deadlineMilliseconds -ne 100 -or
+        @($policy.fieldIds).Count -ne 8 -or @($policy.validationScenarios).Count -ne 8) {
+        throw 'The Device Readiness policy is not the closed release policy.'
+    }
+    $policy
+}
+
+function Read-DeviceReadinessFixture {
+    param(
+        [Parameter(Mandatory)] [string] $LiteralPath,
+        [Parameter(Mandatory)] $ConvertFromJsonCommand,
+        [Parameter(Mandatory)] $Policy
+    )
+
+    try {
+        [byte[]] $bytes = [System.IO.File]::ReadAllBytes([System.IO.Path]::GetFullPath($LiteralPath))
+        if ($bytes.Length -lt 1 -or $bytes.Length -gt 1024) { throw 'Fixture size is invalid.' }
+        $json = [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+        $document = [System.Text.Json.JsonDocument]::Parse($json)
+        try {
+            $names = @($document.RootElement.EnumerateObject() | ForEach-Object Name)
+            if ($names.Count -ne 2 -or @($names | Sort-Object) -join '|' -ne
+                'contractVersion|scenario') { throw 'Fixture shape is invalid.' }
+        }
+        finally { $document.Dispose() }
+        $fixture = & $ConvertFromJsonCommand -InputObject $json -Depth 5 -ErrorAction Stop
+        if ($fixture.contractVersion -ne '1.0.0' -or
+            [string] $fixture.scenario -notin @($Policy.validationScenarios)) {
+            throw 'Fixture scenario is not release-owned.'
+        }
+        [string] $fixture.scenario
+    }
+    catch {
+        $exception = [System.ArgumentException]::new('The Device Readiness fixture is invalid.')
+        $exception.Data['ReasonCode'] = 'DEVICE_READINESS.FIXTURE_INVALID'
+        throw $exception
+    }
+}
+
+function Get-NormalizedWindowsEdition {
+    param([Parameter(Mandatory)] [int] $OperatingSystemSku)
+
+    # Windows exposes a numeric PRODUCT_* identifier through
+    # OperatingSystemSKU. Mapping that number here makes the stored value stable
+    # across display languages; an unknown number remains explicit instead of
+    # guessing from localized marketing text.
+    switch ($OperatingSystemSku) {
+        4 { 'Enterprise' }
+        27 { 'EnterpriseN' }
+        48 { 'Professional' }
+        49 { 'ProfessionalN' }
+        101 { 'Home' }
+        98 { 'HomeN' }
+        121 { 'Education' }
+        122 { 'EducationN' }
+        125 { 'EnterpriseS' }
+        default { "Sku-$OperatingSystemSku" }
+    }
+}
+
+function ConvertTo-NormalizedDeviceReadinessEvidence {
+    param([Parameter(Mandatory)] $Payload)
+
+    $locale = [string] $Payload.sourceLocale
+    if ($locale -notmatch '^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$') { $locale = 'und' }
+    $architecture = if ($null -eq $Payload.architecture) { $null } else {
+        switch -Regex ([string] $Payload.architecture) {
+            '^(?i:x64|amd64)$' { 'X64'; break }
+            '^(?i:arm64)$' { 'Arm64'; break }
+            '^(?i:x86)$' { 'X86'; break }
+            default { $null }
+        }
+    }
+    [pscustomobject][ordered]@{
+        sourceLocale = $locale
+        manufacturer = if ($null -eq $Payload.manufacturer) { $null } else { ([string]$Payload.manufacturer).Trim() }
+        model = if ($null -eq $Payload.model) { $null } else { ([string]$Payload.model).Trim() }
+        processorName = if ($null -eq $Payload.processorName) { $null } else { ([string]$Payload.processorName).Trim() }
+        memoryBytes = if ($null -eq $Payload.memoryBytes) { $null } else { [long] $Payload.memoryBytes }
+        windowsEdition = if ($null -eq $Payload.operatingSystemSku) { $null } else {
+            Get-NormalizedWindowsEdition -OperatingSystemSku ([int] $Payload.operatingSystemSku)
+        }
+        build = if ($null -eq $Payload.build) { $null } else { ([string]$Payload.build).Trim() }
+        architecture = $architecture
+        virtualizationDetected = $null
+    }
+}
+
+function New-DeviceReadinessAssessmentRecord {
+    param(
+        [Parameter(Mandatory)] [string] $RunId,
+        [Parameter(Mandatory)] $Evidence,
+        [Parameter(Mandatory)] $CollectorResult,
+        [Parameter(Mandatory)] $Policy,
+        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter()] [ValidateSet('', 'Partial', 'Unavailable', 'Malformed', 'Failed')]
+        [string] $CoverageStateOverride = '',
+        [Parameter()] [string] $CoverageReasonCode = ''
+    )
+
+    $subjectId = 'subject:device:primary'
+    $fieldSpecs = @(
+        @{ id='field:device.manufacturer'; source='source:windows.cim.computer-system'; property='manufacturer' },
+        @{ id='field:device.model'; source='source:windows.cim.computer-system'; property='model' },
+        @{ id='field:device.processor.name'; source='source:windows.cim.processor'; property='processorName' },
+        @{ id='field:device.memory.physical-bytes'; source='source:windows.cim.computer-system'; property='memoryBytes' },
+        @{ id='field:device.windows.edition'; source='source:windows.cim.operating-system'; property='windowsEdition' },
+        @{ id='field:device.windows.build'; source='source:windows.cim.operating-system'; property='build' },
+        @{ id='field:device.architecture'; source='source:dotnet.runtime-information'; property='architecture' },
+        @{ id='field:device.virtualization.detected'; source='source:win-pcinfo.virtualization-rule'; property='virtualizationDetected' }
+    )
+    $observations = [System.Collections.Generic.List[object]]::new()
+    $provenance = [System.Collections.Generic.List[object]]::new()
+    $collectionExaminedFields = $CoverageStateOverride -notin @('Unavailable', 'Malformed', 'Failed')
+    if ($collectionExaminedFields) {
+        foreach ($field in $fieldSpecs) {
+            $suffix = ([string] $field.id).Substring('field:'.Length).Replace('.', '-')
+            $observationId = "observation:$suffix`:$RunId"
+            $provenanceId = "provenance:$suffix`:$RunId"
+            $value = $Evidence.([string] $field.property)
+            $provenance.Add([pscustomobject][ordered]@{
+                provenanceId = $provenanceId; fieldId = [string] $field.id; subjectId = $subjectId
+                sourceId = [string] $field.source; collectorId = [string] $Policy.collector.collectorId
+                collectorVersion = [string] $Policy.collector.collectorVersion
+                executionContext = if ($ValidationFixture) { 'Synthetic' } else { 'StandardUser' }
+                collectedAt = [string] $CollectorResult.Envelope.completedAt
+                sourceLocale = [string] $Evidence.sourceLocale
+            })
+            $observation = [ordered]@{
+                observationId = $observationId; fieldId = [string] $field.id
+                subjectId = $subjectId; provenanceId = $provenanceId
+                valueState = if ($null -eq $value) { 'SourceReportedUnknown' } else { 'ObservedValue' }
+            }
+            if ($null -ne $value) { $observation.value = $value }
+            $observations.Add([pscustomobject] $observation)
+        }
+    }
+
+    # The first contract pass deliberately leaves the derived virtualization
+    # observation unknown. That lets the validator establish trusted source
+    # observations before any rule reads them.
+    $coverageState = if ($CoverageStateOverride) { $CoverageStateOverride } else { 'Partial' }
+    if (-not $CoverageReasonCode) {
+        $CoverageReasonCode = if (@($observations | Where-Object {
+            $_.fieldId -ne 'field:device.virtualization.detected' -and
+            $_.valueState -ne 'ObservedValue'
+        }).Count -gt 0) { 'COLLECTION.FIELD_UNAVAILABLE' } else { 'COLLECTION.DERIVATION_PENDING' }
+    }
+    $diagnostics = @([pscustomobject][ordered]@{
+            diagnosticId = "diagnostic:device-field-unavailable:$RunId"
+            scopeId = [string] $Policy.scopeId; phase = 'Collection'
+            reasonCode = $CoverageReasonCode
+            operatorMessageId = switch ($CoverageReasonCode) {
+                'COLLECTION.SOURCE_UNAVAILABLE' { 'device.readiness.source-unavailable' }
+                'COLLECTION.PAYLOAD_MALFORMED' { 'device.readiness.payload-malformed' }
+                'COLLECTION.OUTPUT_LIMIT_EXCEEDED' { 'device.readiness.output-limit-exceeded' }
+                'COLLECTION.DERIVATION_PENDING' { 'device.readiness.derivation-pending' }
+                default { 'device.readiness.field-unavailable' }
+            }
+    })
+    $coverageId = "coverage:device-windows-readiness:$RunId"
+    $observationIds = @($observations | ForEach-Object { [string]$_.observationId })
+    $diagnosticIds = @($diagnostics | ForEach-Object { [string] $_.diagnosticId })
+
+    $ruleEvidence = @($observations | Where-Object fieldId -in @(
+        'field:device.memory.physical-bytes', 'field:device.windows.build',
+        'field:device.architecture'
+    ))
+    $finding = [ordered]@{
+        findingId = "finding:device-windows-readiness:$RunId"
+        ruleId = [string] $Policy.rule.ruleId; targetSubjectId = $subjectId
+        outcome = 'Indeterminate'
+        evidenceReferences = @($ruleEvidence | ForEach-Object {
+            [pscustomobject][ordered]@{
+                observationId = $_.observationId; fieldId = $_.fieldId; subjectId = $_.subjectId
+            }
+        })
+    }
+    $finding.reasonCode = 'FINDING.EVALUATION_PENDING'
+
+    [pscustomobject][ordered]@{
+        recordType = 'win-pcinfo.assessment-record'; contractVersion = '1.0.0'
+        requiredFeatures = @('closed-scope-coverage','evidence-references','prohibited-material-omission')
+        run = [pscustomobject][ordered]@{
+            runId = $RunId
+            outcome = 'CompletedWithGaps'
+            validationFixture = $ValidationFixture
+            evidenceProfileId = 'profile:device-windows-readiness'
+        }
+        subjects = @([pscustomobject][ordered]@{ subjectId=$subjectId; kind='Device' })
+        provenance = @($provenance)
+        observations = @($observations)
+        coverage = @([pscustomobject][ordered]@{
+            coverageId=$coverageId; scopeId=[string]$Policy.scopeId; state=$coverageState
+            reasonCode=$CoverageReasonCode
+            observationIds=$observationIds; diagnosticIds=$diagnosticIds
+        })
+        diagnostics = @($diagnostics)
+        collectorResults = @([pscustomobject][ordered]@{
+            envelopeId="envelope:device-windows-readiness:$RunId"
+            collectorId=[string]$Policy.collector.collectorId
+            collectorVersion=[string]$Policy.collector.collectorVersion
+            operationId=[string]$Policy.collector.operationId
+            intendedScopeIds=@([string]$Policy.scopeId); subjectIds=@($subjectId)
+            startedAt=[string]$CollectorResult.Envelope.startedAt
+            completedAt=[string]$CollectorResult.Envelope.completedAt
+            executionContext=if($ValidationFixture){'Synthetic'}else{'StandardUser'}
+            attempts=1; observationIds=$observationIds; coverageIds=@($coverageId)
+            diagnosticIds=$diagnosticIds
+        })
+        findings = @([pscustomobject]$finding)
+        recommendations = @(); recommendationRelationships = @()
+    }
+}
+
+function Complete-ValidatedDeviceReadinessAssessmentRecord {
+    param(
+        [Parameter(Mandatory)] $ValidatedRecord,
+        [Parameter(Mandatory)] $Policy,
+        [Parameter(Mandatory)] $ContractValidation
+    )
+
+    if (-not $ContractValidation.accepted -or
+        $ContractValidation.reasonCode -ne 'CONTRACT.ACCEPTED') {
+        throw 'Device Readiness rules require an accepted source-observation contract pass.'
+    }
+    if (@($ValidatedRecord.observations).Count -gt [int]$Policy.rule.maximumInputObservations -or
+        @($ValidatedRecord.findings).Count -gt [int]$Policy.rule.maximumOutputFindings) {
+        throw 'The Device Readiness rule input or output exceeds its frozen finite bound.'
+    }
+
+    $ruleWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $byField = @{}
+    foreach ($observation in @($ValidatedRecord.observations)) {
+        $byField[[string]$observation.fieldId] = $observation
+    }
+    $coverage = @($ValidatedRecord.coverage)[0]
+    $sourceFailureState = [string]$coverage.state -in @('Unavailable','Malformed','Failed')
+    if (-not $sourceFailureState) {
+        $manufacturer = $byField['field:device.manufacturer']
+        $model = $byField['field:device.model']
+        $virtualization = $byField['field:device.virtualization.detected']
+        if ($manufacturer.valueState -eq 'ObservedValue' -and $model.valueState -eq 'ObservedValue') {
+            $virtualization.valueState = 'ObservedValue'
+            $virtualization | Add-Member -NotePropertyName value -NotePropertyValue ([bool](
+                [string]$manufacturer.value -match '(?i)Microsoft Corporation|VMware|Xen|QEMU|VirtualBox' -or
+                [string]$model.value -match '(?i)Virtual Machine|VMware|VirtualBox|KVM|HVM'
+            )) -Force
+        }
+    }
+    $allObserved = @($ValidatedRecord.observations | Where-Object valueState -ne 'ObservedValue').Count -eq 0
+    if (-not $sourceFailureState -and $allObserved) {
+        $coverage.state = 'Complete'
+        $coverage.PSObject.Properties.Remove('reasonCode')
+        $coverage.diagnosticIds = @()
+        $ValidatedRecord.diagnostics = @()
+        $ValidatedRecord.collectorResults[0].diagnosticIds = @()
+        $ValidatedRecord.run.outcome = 'Completed'
+    }
+    elseif (-not $sourceFailureState) {
+        $coverage.state = 'Partial'
+        $coverage.reasonCode = 'COLLECTION.FIELD_UNAVAILABLE'
+        $ValidatedRecord.diagnostics[0].reasonCode = 'COLLECTION.FIELD_UNAVAILABLE'
+        $ValidatedRecord.diagnostics[0].operatorMessageId = 'device.readiness.field-unavailable'
+    }
+
+    # Both this readiness rule and the virtualization derivation read only the
+    # observations from the record accepted by the first contract pass. A
+    # second pass below validates their final references and coverage state.
+    $finding = @($ValidatedRecord.findings)[0]
+    if ($coverage.state -eq 'Complete') {
+        $memory = $byField['field:device.memory.physical-bytes']
+        $build = $byField['field:device.windows.build']
+        $architecture = $byField['field:device.architecture']
+        $ready = [long]$memory.value -ge [long]$Policy.rule.minimumMemoryBytes -and
+            [long]$build.value -ge [long]$Policy.rule.minimumWindowsBuild -and
+            [string]$architecture.value -in @($Policy.rule.supportedArchitectures)
+        $finding.outcome = if ($ready) { 'ExpectedCondition' } else { 'NeedsAttention' }
+        $finding.PSObject.Properties.Remove('reasonCode')
+    }
+    else {
+        $finding.outcome = 'Indeterminate'
+        $finding.reasonCode = 'FINDING.EVIDENCE_INCOMPLETE'
+    }
+    $ruleWatch.Stop()
+    if ($ruleWatch.ElapsedMilliseconds -gt [int]$Policy.rule.deadlineMilliseconds) {
+        throw 'The release-owned Device Readiness rule exceeded its finite deadline.'
+    }
+    $ValidatedRecord
+}
+
+function New-DeviceReadinessReportBytes {
+    param([Parameter(Mandatory)] $Record)
+
+    $finding = @($Record.findings)[0]
+    $coverage = @($Record.coverage)[0]
+    $values = @{}
+    foreach ($fieldId in @(
+        'field:device.manufacturer', 'field:device.model', 'field:device.processor.name',
+        'field:device.memory.physical-bytes', 'field:device.windows.edition',
+        'field:device.windows.build', 'field:device.architecture',
+        'field:device.virtualization.detected'
+    )) { $values[$fieldId] = 'Not available' }
+    foreach ($observation in @($Record.observations)) {
+        $values[[string]$observation.fieldId] = if ($observation.valueState -eq 'ObservedValue') {
+            [System.Net.WebUtility]::HtmlEncode([string]$observation.value)
+        } else { 'Not available' }
+    }
+    $summary = switch ([string]$finding.outcome) {
+        'ExpectedCondition' { 'The available device facts meet this preview readiness check.' }
+        'NeedsAttention' { 'One or more available device facts need attention.' }
+        default { 'There is not enough evidence to make a readiness claim.' }
+    }
+    $html = @"
+<!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
+<h1>Device and Windows readiness</h1><p>$summary</p>
+<p>This is advisory information, not a guarantee that every application or future update will work.</p>
+<dl><dt>Coverage</dt><dd>$([System.Net.WebUtility]::HtmlEncode([string]$coverage.state))</dd>
+<dt>Windows edition</dt><dd>$($values['field:device.windows.edition'])</dd>
+<dt>Windows build</dt><dd>$($values['field:device.windows.build'])</dd>
+<dt>Architecture</dt><dd>$($values['field:device.architecture'])</dd></dl>
+<details><summary>Device details and where they came from</summary>
+<p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
+<dl><dt>Manufacturer</dt><dd>$($values['field:device.manufacturer'])</dd>
+<dt>Model</dt><dd>$($values['field:device.model'])</dd>
+<dt>Processor</dt><dd>$($values['field:device.processor.name'])</dd>
+<dt>Physical memory (bytes)</dt><dd>$($values['field:device.memory.physical-bytes'])</dd></dl>
+<p>Provenance: explicit Windows property projections normalized by WIN-PCInfo; see assessment-record.json for canonical typed evidence.</p>
+</details></html>
+"@
+    [System.Text.UTF8Encoding]::new($false).GetBytes($html.Replace("`r`n", "`n"))
+}
+
+function Write-DeviceReadinessTerminal {
+    param(
+        [Parameter(Mandatory)] [string] $Outcome,
+        [Parameter(Mandatory)] [int] $ExitCode,
+        [Parameter(Mandatory)] [string] $ReasonCode,
+        [Parameter(Mandatory)] [bool] $CollectionStarted,
+        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] [bool] $CleanupVerified,
+        [Parameter(Mandatory)] [string] $RequestDigest,
+        [Parameter(Mandatory)] [string] $PlanDigest,
+        [Parameter(Mandatory)] $ConvertToJsonCommand
+    )
+    Write-ContractRecord ([pscustomobject][ordered]@{
+        recordType='win-pcinfo.terminal'; contractVersion='1.0.0'; outcome=$Outcome
+        exitCode=$ExitCode; reasonCode=$ReasonCode; phase='DeviceReadiness'
+        collectionStarted=$CollectionStarted; requestDigest=$RequestDigest
+        planDigest=$PlanDigest; preparationDecision='Accepted'
+        validationFixture=$ValidationFixture
+        cleanup=[pscustomobject][ordered]@{required=$true;verified=$CleanupVerified}
+    }) -ConvertToJsonCommand $ConvertToJsonCommand
+}
+
+function Get-DeviceReadinessNoPayloadDisposition {
+    param(
+        [Parameter(Mandatory)] $Supervision,
+        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter()] [string] $Scenario = ''
+    )
+
+    # Malformed and over-limit fixtures are approved evidence-attempt seams.
+    # Every other missing payload is a lifecycle failure, not evidence that may
+    # be repackaged as a successful run with gaps.
+    $recognizedAttemptFailure = [bool]$Supervision.processStarted -and (
+        ($Scenario -eq 'Malformed' -and [string]$Supervision.reasonCode -eq
+            'PROCESS.PAYLOAD_MALFORMED') -or
+        ($Scenario -eq 'Oversize' -and [string]$Supervision.reasonCode -eq
+            'PROCESS.OUTPUT_LIMIT_EXCEEDED')
+    )
+    if ($ValidationFixture -and $recognizedAttemptFailure) {
+        return [pscustomobject][ordered]@{
+            buildCanonicalRecord = $true
+            coverageState = if ($Scenario -eq 'Malformed') { 'Malformed' } else { 'Unavailable' }
+            coverageReasonCode = if ($Scenario -eq 'Malformed') {
+                'COLLECTION.PAYLOAD_MALFORMED'
+            } else { 'COLLECTION.OUTPUT_LIMIT_EXCEEDED' }
+            outcome = 'CompletedWithGaps'; exitCode = 10
+            reasonCode = 'DEVICE_READINESS.COMPLETED_WITH_GAPS'
+        }
+    }
+
+    $reason = [string]$Supervision.reasonCode
+    if (-not [bool]$Supervision.processStarted) {
+        $outcome = 'NotStarted'; $exitCode = 20; $terminalReason = 'DEVICE_READINESS.NOT_STARTED'
+    }
+    elseif ($reason -eq 'PROCESS.DEADLINE_EXCEEDED') {
+        $outcome = 'TimedOut'; $exitCode = 40; $terminalReason = 'DEVICE_READINESS.TIMED_OUT'
+    }
+    elseif ($reason -like 'PROCESS.CANCELLED_*') {
+        $outcome = 'Cancelled'; $exitCode = 30; $terminalReason = 'DEVICE_READINESS.CANCELLED'
+    }
+    elseif ($reason -eq 'PROCESS.TERMINATION_INCOMPLETE') {
+        $outcome = 'CleanupIncomplete'; $exitCode = 60
+        $terminalReason = 'DEVICE_READINESS.COLLECTOR_CLEANUP_INCOMPLETE'
+    }
+    else {
+        $outcome = 'IntegrityFailed'; $exitCode = 50
+        $terminalReason = 'DEVICE_READINESS.COLLECTOR_FAILED'
+    }
+    [pscustomobject][ordered]@{
+        buildCanonicalRecord = $false; coverageState = 'Unavailable'
+        coverageReasonCode = ''; outcome = $outcome; exitCode = $exitCode
+        reasonCode = $terminalReason
+    }
+}
+
+function Invoke-DeviceReadinessSlice {
+    param(
+        [Parameter()] [string] $LiteralPath,
+        [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
+        [Parameter(Mandatory)] [string] $RequestDigest,
+        [Parameter(Mandatory)] [string] $PlanDigest,
+        [Parameter(Mandatory)] $ConvertFromJsonCommand,
+        [Parameter(Mandatory)] $ConvertToJsonCommand,
+        [Parameter(Mandatory)] $TestJsonCommand
+    )
+
+    $isFixture = -not [string]::IsNullOrWhiteSpace($LiteralPath)
+    $scenario = if ($isFixture) { '' } else { 'Actual' }
+    $policy = $null; $boundary = $null; $opened = $null
+    $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
+    $packageVerified = $false; $coverageState = 'Unavailable'; $findingOutcome = 'Indeterminate'
+    $collectionStarted = $false
+    $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
+    try {
+        $policy = Get-DeviceReadinessPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
+        if ($isFixture) {
+            $scenario = Read-DeviceReadinessFixture -LiteralPath $LiteralPath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $policy
+        }
+        $collectorScenario = if ($isFixture) { $scenario } else { '' }
+        $collector = Invoke-ApprovedCollectorProcess -OperationId ([string]$policy.collector.operationId) `
+            -DeviceReadinessScenario $collectorScenario
+        $collectionStarted = [bool]$collector.Supervision.processStarted
+        if (-not $collector.Supervision.completeOwnedTreeAbsent -or
+            -not $collector.Supervision.temporaryArtifactsAbsent) {
+            $outcome='CleanupIncomplete';$exitCode=60;$reasonCode='DEVICE_READINESS.COLLECTOR_CLEANUP_INCOMPLETE'
+        }
+        else {
+            $coverageOverride = ''
+            $coverageReason = ''
+            $buildCanonicalRecord = $true
+            if (-not $collector.PSObject.Properties['PrivatePayload']) {
+                $disposition = Get-DeviceReadinessNoPayloadDisposition `
+                    -Supervision $collector.Supervision -ValidationFixture $isFixture -Scenario $scenario
+                $buildCanonicalRecord = [bool]$disposition.buildCanonicalRecord
+                $coverageOverride = [string]$disposition.coverageState
+                $coverageReason = [string]$disposition.coverageReasonCode
+                if (-not $buildCanonicalRecord) {
+                    $outcome = [string]$disposition.outcome
+                    $exitCode = [int]$disposition.exitCode
+                    $reasonCode = [string]$disposition.reasonCode
+                }
+                $evidence = [pscustomobject][ordered]@{
+                    sourceLocale='und';manufacturer=$null;model=$null;processorName=$null
+                    memoryBytes=$null;windowsEdition=$null;build=$null;architecture=$null
+                    virtualizationDetected=$null
+                }
+            }
+            elseif ($collector.PrivatePayload.PSObject.Properties['availability']) {
+                $coverageOverride = 'Unavailable'
+                $coverageReason = 'COLLECTION.SOURCE_UNAVAILABLE'
+                $evidence = [pscustomobject][ordered]@{
+                    sourceLocale='und';manufacturer=$null;model=$null;processorName=$null
+                    memoryBytes=$null;windowsEdition=$null;build=$null;architecture=$null
+                    virtualizationDetected=$null
+                }
+            }
+            else {
+                $evidence = ConvertTo-NormalizedDeviceReadinessEvidence -Payload $collector.PrivatePayload
+            }
+            if ($buildCanonicalRecord) {
+                $runId = "run:device:$([guid]::NewGuid().ToString('N'))"
+                $record = New-DeviceReadinessAssessmentRecord -RunId $runId -Evidence $evidence `
+                    -CollectorResult $collector -Policy $policy -ValidationFixture $isFixture `
+                    -CoverageStateOverride $coverageOverride -CoverageReasonCode $coverageReason
+                [byte[]]$candidateBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
+                    (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                )
+                $sourceValidation = Test-AssessmentContract -Utf8Bytes $candidateBytes `
+                    -ConvertFromJsonCommand $ConvertFromJsonCommand -TestJsonCommand $TestJsonCommand
+                if ([bool]$sourceValidation.accepted) {
+                    $record = Complete-ValidatedDeviceReadinessAssessmentRecord `
+                        -ValidatedRecord $record -Policy $policy -ContractValidation $sourceValidation
+                }
+                [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
+                    (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                )
+                $finalValidation = Test-AssessmentContract -Utf8Bytes $recordBytes `
+                    -ConvertFromJsonCommand $ConvertFromJsonCommand -TestJsonCommand $TestJsonCommand
+                $recordAccepted = [bool]$sourceValidation.accepted -and [bool]$finalValidation.accepted
+                $coverageState = [string]@($record.coverage)[0].state
+                $findingOutcome = [string]@($record.findings)[0].outcome
+                if (-not $recordAccepted) {
+                    $outcome='IntegrityFailed';$exitCode=50;$reasonCode='DEVICE_READINESS.CONTRACT_INVALID'
+                }
+                else {
+                    [byte[]]$reportBytes = New-DeviceReadinessReportBytes -Record $record
+                    $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
+                    $reportVerified = $reportText.StartsWith('<!doctype html>') -and
+                        $reportText.Contains('Device and Windows readiness') -and
+                        $reportText.Contains('<details><summary>Device details and where they came from</summary>') -and
+                        $reportText.Contains('canonical typed evidence')
+                    if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
+                    if ($isFixture) {
+                        $boundary = New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (
+                            Join-Path (Split-Path -Parent $PSCommandPath) '.device-readiness-validation'
+                        )
+                        $destination = $boundary.CaseRoot
+                    }
+                    else {
+                        # Use the exact destination frozen into the approved plan,
+                        # not the caller's earlier relative request text. That
+                        # closes working-directory drift between approval and
+                        # packaging without inventing a new destination.
+                        $destination = [System.IO.Path]::GetFullPath($ApprovedOutputDestination)
+                        $null = [System.IO.Directory]::CreateDirectory($destination)
+                    }
+                    $artifacts = [ordered]@{
+                        'assessment-record.json'=$recordBytes
+                        'assessment-report.html'=$reportBytes
+                    }
+                    $packageCompleteness = if ($coverageState -eq 'Complete') {
+                        'Complete'
+                    }
+                    else { 'RecoverablePartial' }
+                    $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
+                        -Artifacts $artifacts -AssessmentContractSetVersion '1.0.0' `
+                        -Completeness $packageCompleteness
+                    if ($package.verified) {
+                        $opened = Read-ProtectedEvidencePackage -LiteralPath $package.packagePath
+                        $packageVerified = [bool]$opened.verified -and
+                            $opened.artifacts.Contains('assessment-record.json') -and
+                            $opened.artifacts.Contains('assessment-report.html')
+                    }
+                    if (-not $packageVerified) {
+                        $outcome='IntegrityFailed';$exitCode=50;$reasonCode='DEVICE_READINESS.PACKAGE_INVALID'
+                    }
+                    elseif ($coverageState -eq 'Complete') {
+                        $outcome='Completed';$exitCode=0;$reasonCode='DEVICE_READINESS.COMPLETED'
+                    }
+                    else {
+                        $outcome='CompletedWithGaps';$exitCode=10;$reasonCode='DEVICE_READINESS.COMPLETED_WITH_GAPS'
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        if ($scenario -eq '') { $scenario = 'InvalidFixture' }
+        $outcome=if($collectionStarted){'IntegrityFailed'}else{'NotStarted'}
+        $exitCode=if($collectionStarted){50}else{20}
+        $reasonCode=if($_.Exception.Data['ReasonCode']){
+            [string]$_.Exception.Data['ReasonCode']
+        }else{'DEVICE_READINESS.INTEGRITY_FAILED'}
+    }
+    finally {
+        if ($null -ne $opened -and $null -ne $opened.artifacts) {
+            foreach ($bytes in @($opened.artifacts.Values)) {
+                [System.Security.Cryptography.CryptographicOperations]::ZeroMemory([byte[]]$bytes)
+            }
+        }
+        if ($null -ne $boundary) {
+            $cleanupVerified = Remove-EvidenceWorkspaceValidationBoundary -Boundary $boundary
+            if (-not $cleanupVerified) {
+                $outcome='CleanupIncomplete';$exitCode=60;$reasonCode='DEVICE_READINESS.CLEANUP_INCOMPLETE'
+            }
+        }
+    }
+    if ($isFixture) {
+        Write-ContractRecord ([pscustomobject][ordered]@{
+            recordType='win-pcinfo.device-readiness-validation';contractVersion='1.0.0'
+            scenario=$scenario;coverageState=$coverageState;findingOutcome=$findingOutcome
+            assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
+            protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
+        }) -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    Write-DeviceReadinessTerminal -Outcome $outcome -ExitCode $exitCode -ReasonCode $reasonCode `
+        -CollectionStarted $collectionStarted `
+        -ValidationFixture $isFixture -CleanupVerified $cleanupVerified `
+        -RequestDigest $RequestDigest -PlanDigest $PlanDigest `
+        -ConvertToJsonCommand $ConvertToJsonCommand
+    $exitCode
+}

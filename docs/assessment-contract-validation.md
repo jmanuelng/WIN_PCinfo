@@ -1,6 +1,6 @@
 # Assessment Contract validation
 
-This tracer bullet proves that WIN-PCInfo can carry one safe synthetic observation through the same contracts that later collectors and reports will use. It does **not** collect information from your PC, create an Evidence Workspace, produce a Protected Evidence Package, or mark a Product Capability delivered.
+The Assessment Contract began with one safe synthetic observation. It now has two explicit profiles: the original one-field synthetic tracer and the eight-field Device and Windows readiness slice. The latter can collect after approval and produce a Protected Evidence Package, but it does not by itself mark a Product Capability delivered.
 
 The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contract-set.json) is the dictionary and rulebook for this slice. Its [schema](../schemas/assessment-contract-set.schema.json) requires every admitted Evidence Field Definition to state:
 
@@ -11,7 +11,7 @@ The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contra
 - how prohibited material is omitted; and
 - whether the definition or a value may appear in a public projection.
 
-Only `field:device.os.display-name` is admitted in the original lifecycle Assessment Record profile. Its source is explicitly `SyntheticContractFixture`; it is not a Windows collector or a claim about the machine running the test. The separate SYSTEM Collection Sub-plan keeps its own one-field, one-scope release definition rather than forcing earlier lifecycle fixtures to fabricate SYSTEM evidence. Its successful generated path emits a normal Assessment Record and applies the shared schema plus semantic graph checks against that narrow definition. The schema admits honest `Synthetic` and verified `LocalSystem` execution provenance; a live pre-identity failure remains `NotStarted` in the phase result and produces no fabricated observation record.
+Only `field:device.os.display-name` is admitted in the original lifecycle profile, `profile:synthetic-contract-tracer`. Its source remains `SyntheticContractFixture`. The separate `profile:device-windows-readiness` owns `scope:device.windows-readiness` and exactly eight fields from the real standard-user collector. `Complete` coverage must contain the exact field set for the selected profile. A source-reported unknown field remains an explicit observation under `Partial`; a source-wide or payload failure produces no field observation and is carried by coverage, diagnostics, and the collector envelope. The schema admits honest `Synthetic`, `StandardUser`, and verified `LocalSystem` provenance.
 
 ## What validation does
 
@@ -53,4 +53,4 @@ pwsh -NoLogo -NoProfile -File ./tests/ContractSemanticMatrix.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/AssessmentContractSet.Tests.ps1
 ```
 
-The generated-application cases use the existing synthetic preparation fixture and the hidden `-ContractFixturePath` test input. Even an accepted fixture ends with `NotStarted`, exit code `20`, `collectionStarted: false`, and `validationFixture: true`. The input cannot enable elevation, a collector, network access, device mutation, package creation, authentication, or Azure activity.
+The original `-ContractFixturePath` conformance seam still ends `NotStarted` and cannot enable collection. Device Readiness uses its separate closed scenario seam through the generated application; it produces typed synthetic samples and removes their protected packages before returning. Neither fixture can add elevation, network access, device mutation, authentication, or Azure activity.

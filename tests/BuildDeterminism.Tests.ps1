@@ -38,6 +38,7 @@ $expectedSourcePaths = @(
     'src/SystemCollectionPlan.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/ProtectedPackage.ps1'
+    'src/DeviceReadiness.ps1'
     'src/RunLifecycle.ps1'
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
@@ -67,6 +68,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/protected-package.schema.json'
     'schemas/protected-package-envelope.schema.json'
     'schemas/assessment-package-manifest.schema.json'
+    'schemas/device-readiness.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -74,6 +76,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
     'docs/spec/releases/2.0.0-preview.1-evidence-workspace.json'
     'docs/spec/releases/2.0.0-preview.1-protected-package.json'
+    'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq
     (@($expectedApplicationResourcePaths | Sort-Object) -join '|')) `
@@ -117,7 +120,20 @@ foreach ($representation in @('lf', 'crlf')) {
     $mirrorBytes = [System.IO.File]::ReadAllBytes($mirrorBuild.outputPath)
     Assert-True ([System.Linq.Enumerable]::SequenceEqual[byte]($firstBytes, $mirrorBytes)) `
         "$representation input trees of the same reviewed text must generate identical application bytes"
+    if ($representation -eq 'crlf') { $relocatedCandidatePath = $mirrorBuild.outputPath }
 }
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$relocated = Invoke-GeneratedApplication -CandidatePath $relocatedCandidatePath -Arguments @(
+    '-Mode','Automation','-RequestPath',(Join-Path $PSScriptRoot 'fixtures/automation-request.json'),
+    '-AcceptPreparation','-PreparationFixturePath',(Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'),
+    '-DeviceReadinessFixturePath',(Join-Path $PSScriptRoot 'fixtures/device-complete.json')
+)
+Assert-True ($relocated.ExitCode -eq 0) `
+    'a relocated generated artifact uses its embedded Device Readiness policy without repository sidecars'
+Assert-True (@($relocated.Records | Where-Object {
+    $_.recordType -eq 'win-pcinfo.device-readiness-validation'
+}).Count -eq 1) `
+    'the relocated artifact completes the public Device Readiness seam'
 Assert-True ($firstBytes[0] -eq 0xEF -and $firstBytes[1] -eq 0xBB -and $firstBytes[2] -eq 0xBF) `
     'the signing representation starts with a UTF-8 BOM'
 

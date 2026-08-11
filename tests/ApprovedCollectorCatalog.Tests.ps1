@@ -35,8 +35,10 @@ Assert-CatalogEqual 'WindowsJobObjectRequired' $catalog.collectors[0].treeContro
     'the release does not claim a root-only process fallback'
 Assert-CatalogEqual 'NotStarted' $catalog.collectors[0].treeControl.incompatibleDisposition `
     'Job incompatibility fails before collector code runs'
+Assert-CatalogEqual 2 @($catalog.collectors).Count `
+    'the legacy synthetic and real Device Readiness collectors have distinct identities'
 Assert-CatalogEqual 1 @($catalog.collectors[0].operations).Count `
-    'only one synthetic collector operation is approved for execution'
+    'the synthetic collector exposes only its legacy probe'
 Assert-CatalogEqual 8 @($catalog.validationFixtures).Count `
     'the eight negative and lifecycle fixtures accompany the approved success operation'
 
@@ -50,6 +52,13 @@ Assert-CatalogEqual 750 $operation.cancellationGraceMilliseconds `
     'cooperative cancellation has a bounded grace interval before hard termination'
 Assert-CatalogEqual 2000 $operation.terminationVerificationMilliseconds `
     'hard termination verification cannot wait indefinitely'
+$deviceOperation = $catalog.collectors[1].operations[0]
+Assert-CatalogEqual 'collector:windows.device-readiness' $catalog.collectors[1].collectorId `
+    'real device evidence never carries the synthetic collector identity'
+Assert-CatalogEqual 'op:device.windows-readiness.collect' $deviceOperation.operationId `
+    'Device Readiness has a separate stable approved operation identity'
+Assert-CatalogEqual 8192 $deviceOperation.standardOutputMaximumBytes `
+    'the larger structured device payload remains independently bounded'
 if ($catalog.collectors[0].payload.sha256 -notmatch '^[0-9a-f]{64}$') {
     throw 'The staged synthetic collector payload needs an exact release identity.'
 }

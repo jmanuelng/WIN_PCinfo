@@ -58,7 +58,12 @@ param(
     # A package fixture selects one release-owned cryptographic or viewing
     # scenario. It cannot supply plaintext, keys, identities, paths, or metadata.
     [Parameter(DontShow)]
-    [string] $ProtectedPackageFixturePath
+    [string] $ProtectedPackageFixturePath,
+
+    # A Device Readiness fixture selects one release-owned adapter scenario.
+    # It cannot provide device evidence, a query, command, path, or authority.
+    [Parameter(DontShow)]
+    [string] $DeviceReadinessFixturePath
 )
 
 Set-StrictMode -Version Latest

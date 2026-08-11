@@ -11,6 +11,7 @@
     "requestDigest",
     "scope",
     "operations",
+    "deviceReadiness",
     "privilege",
     "dependencies",
     "estimates",
@@ -62,6 +63,57 @@
       "minItems": 29,
       "maxItems": 29,
       "items": { "$ref": "#/definitions/operation" }
+    },
+    "deviceReadiness": {
+      "const": {
+        "kind": "win-pcinfo.device-readiness-policy",
+        "contractVersion": "1.0.0",
+        "release": "2.0.0-preview.1",
+        "policyId": "win-pcinfo.device-readiness/1.0.0",
+        "scopeId": "scope:device.windows-readiness",
+        "collector": {
+          "collectorId": "collector:windows.device-readiness",
+          "collectorVersion": "1.0.0",
+          "operationId": "op:device.windows-readiness.collect",
+          "source": "Release-embedded PowerShell using explicit Win32_ComputerSystem, Win32_Processor, Win32_OperatingSystem property projections and RuntimeInformation.OSArchitecture",
+          "executionContext": "StandardUser",
+          "privilege": "NoElevation",
+          "networkBehavior": "OfflineOnly",
+          "executable": "ActiveMicrosoftSignedPowerShellHost",
+          "dependencies": ["Windows CIM provider", ".NET RuntimeInformation"],
+          "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+          "maySelfElevate": false, "writesAllowed": false,
+          "maximumAttempts": 1, "deadlineMilliseconds": 5000,
+          "standardOutputMaximumBytes": 8192, "standardErrorMaximumBytes": 4096,
+          "cleanup": "WindowsJobObjectAndNamedCancellationEventVerifiedAbsent"
+        },
+        "rule": {
+          "ruleId": "rule:device.windows-readiness/1.0.0",
+          "operationId": "op:rule.device-windows-readiness.evaluate",
+          "source": "ReleaseEmbeddedValidatedObservationRule",
+          "executionContext": "InProcessValidatedAssessmentRecord",
+          "privilege": "NoElevation",
+          "networkBehavior": "OfflineOnly",
+          "executable": "NoneInProcess",
+          "dependencies": [],
+          "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+          "maySelfElevate": false, "writesAllowed": false,
+          "maximumAttempts": 1, "deadlineMilliseconds": 100,
+          "maximumInputObservations": 8, "maximumOutputFindings": 1,
+          "cleanup": "NoArtifacts",
+          "minimumMemoryBytes": 8589934592,
+          "minimumWindowsBuild": 19045,
+          "supportedArchitectures": ["X64", "Arm64"],
+          "missingEvidenceOutcome": "Indeterminate"
+        },
+        "fieldIds": [
+          "field:device.manufacturer", "field:device.model", "field:device.processor.name",
+          "field:device.memory.physical-bytes", "field:device.windows.edition",
+          "field:device.windows.build", "field:device.architecture",
+          "field:device.virtualization.detected"
+        ],
+        "validationScenarios": ["Complete", "Partial", "Unavailable", "Malformed", "Oversize", "Virtual", "Unicode", "NonEnglish"]
+      }
     },
     "privilege": {
       "type": "object",
