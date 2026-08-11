@@ -547,6 +547,7 @@ function Invoke-PreparationGate {
     if ($accepted -and -not [string]::IsNullOrWhiteSpace($deviceReadinessFixturePath)) {
         return Invoke-DeviceReadinessSlice -LiteralPath $deviceReadinessFixturePath `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
             -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
@@ -554,6 +555,7 @@ function Invoke-PreparationGate {
     if ($accepted -and -not $ValidationFixture) {
         return Invoke-DeviceReadinessSlice `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
             -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand

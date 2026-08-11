@@ -27,10 +27,12 @@ $result = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @
 $records = @($result.Records | Where-Object `
     recordType -eq 'win-pcinfo.device-readiness-validation')
 $terminals = @($result.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+$completion = @($result.Records | Where-Object recordType -eq 'win-pcinfo.completion-summary')
 $summary = @($result.Records | Where-Object recordType -eq 'win-pcinfo.preparation-summary')[0]
 
 Assert-Equal 1 $records.Count 'Complete emits one sanitized Device Readiness result'
 Assert-Equal 1 $terminals.Count 'Complete emits one terminal result'
+Assert-Equal 1 $completion.Count 'Complete emits one actual Completion Summary'
 Assert-Equal 0 $result.ExitCode 'Complete uses the stable Completed exit code'
 Assert-Equal 'Completed' $terminals[0].outcome 'Complete reaches one honest terminal outcome'
 Assert-Equal $summary.requestDigest $terminals[0].requestDigest `
@@ -61,6 +63,13 @@ Assert-Equal $true $records[0].protectedPackageVerified `
     'the report and canonical record end in a reopened Protected Evidence Package'
 Assert-Equal $true $records[0].validationCleanupVerified `
     'the generated application removes every test-owned workspace and package'
+Assert-Equal 'InitiatingWindowsUserAndDevice' `
+    $completion[0].resultSharingGuidance.localAccess `
+    'the Completion Summary explains verified local access'
+Assert-Equal 'None' $completion[0].resultSharingGuidance.recipientAccess `
+    'a zero-recipient package does not claim recipient access'
+Assert-Equal $false $completion[0].resultSharingGuidance.privateTransfer.allowed `
+    'a zero-recipient package does not claim portable recipient access'
 Assert-Equal $false ([System.IO.Directory]::Exists($validationRoot)) `
     'the generated application leaves no Device Readiness validation root'
 if ($result.StandardOutput -match '(?i)Fabrikam|Model-4[89]|Synthetic Processor|product.?key|entitlement|purchase') {

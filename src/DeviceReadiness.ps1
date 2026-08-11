@@ -881,6 +881,7 @@ function Invoke-DeviceReadinessSlice {
     param(
         [Parameter()] [string] $LiteralPath,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
+        [Parameter()] $ApprovedRecipient,
         [Parameter(Mandatory)] [string] $RequestDigest,
         [Parameter(Mandatory)] [string] $PlanDigest,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
@@ -897,6 +898,7 @@ function Invoke-DeviceReadinessSlice {
     $powerFindingOutcome = 'Indeterminate'; $sourceAccessDiagnostics = ''
     $activationContext = 'Unknown'; $virtualizationContext = 'Unknown'
     $formFactor = 'Unknown'; $batteryPresence = 'Unknown'
+    $recipientKeyProtection = 'None'
     $collectionStarted = $false
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
     try {
@@ -1051,8 +1053,11 @@ function Invoke-DeviceReadinessSlice {
                     else { 'RecoverablePartial' }
                     $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
                         -Artifacts $artifacts -AssessmentContractSetVersion '1.0.0' `
-                        -Completeness $packageCompleteness
+                        -Completeness $packageCompleteness -ApprovedRecipient $ApprovedRecipient
                     if ($package.verified) {
+                        $recipientKeyProtection = [string](
+                            Get-ProtectedPackageEnvelopeHeader $package.packagePath
+                        ).recipientKeyProtection
                         $opened = Read-ProtectedEvidencePackage -LiteralPath $package.packagePath
                         $packageVerified = [bool]$opened.verified -and
                             $opened.artifacts.Contains('assessment-record.json') -and
@@ -1103,8 +1108,21 @@ function Invoke-DeviceReadinessSlice {
             sourceAccessDiagnostics=$sourceAccessDiagnostics
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
+            recipientKeyProtection=$recipientKeyProtection
         }) -ConvertToJsonCommand $ConvertToJsonCommand
     }
+    $recipientSelected = $null -ne $ApprovedRecipient
+    $recipientProtectionLevel = if ($recipientSelected) {
+        [string]$ApprovedRecipient.protectionLevel
+    }
+    else { 'None' }
+    $recipientAccessAvailable = $packageVerified -and
+        $recipientKeyProtection -eq 'RSA-OAEP-SHA-256'
+    Write-ContractRecord (New-CompletionSummary -PackageVerified $packageVerified `
+        -RecipientSelected $recipientSelected `
+        -RecipientProtectionLevel $recipientProtectionLevel `
+        -RecipientAccessAvailable $recipientAccessAvailable `
+        -RestrictedReportExported $false) -ConvertToJsonCommand $ConvertToJsonCommand
     Write-DeviceReadinessTerminal -Outcome $outcome -ExitCode $exitCode -ReasonCode $reasonCode `
         -CollectionStarted $collectionStarted `
         -ValidationFixture $isFixture -CleanupVerified $cleanupVerified `

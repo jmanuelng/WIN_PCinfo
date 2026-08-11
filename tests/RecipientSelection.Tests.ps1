@@ -97,6 +97,27 @@ try {
         throw 'The private local Recipient Profile path leaked into the Preparation Summary.'
     }
 
+    $completed = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Mode', 'Automation', '-RequestPath', $requestPath, '-AcceptPreparation',
+        '-PreparationFixturePath', $preparationPath,
+        '-DeviceReadinessFixturePath', (Join-Path $PSScriptRoot 'fixtures/device-complete.json')
+    )
+    $deviceResult = @($completed.Records | Where-Object `
+        recordType -eq 'win-pcinfo.device-readiness-validation')[0]
+    Assert-Equal 'RSA-OAEP-SHA-256' $deviceResult.recipientKeyProtection `
+        'the normal post-approval slice wraps the package key for the Preparation-approved recipient'
+    $completion = @($completed.Records | Where-Object `
+        recordType -eq 'win-pcinfo.completion-summary')
+    Assert-Equal 1 $completion.Count `
+        'the normal completed slice emits exactly one Completion Summary'
+    Assert-Equal 'ApprovedPackageRecipient' `
+        $completion[0].resultSharingGuidance.recipientAccess `
+        'the Completion Summary explains actual recipient access'
+    Assert-Equal $true $completion[0].resultSharingGuidance.privateTransfer.allowed `
+        'the Completion Summary permits private transfer only for the recipient-wrapped package'
+    Assert-Equal $true $completion[0].resultSharingGuidance.prohibitedPublicSharing `
+        'the Completion Summary prohibits public sharing'
+
     $guided = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Mode', 'Guided', '-PreparationFixturePath', $preparationPath,
         '-AssessmentRecipientProfilePath', $profilePath,

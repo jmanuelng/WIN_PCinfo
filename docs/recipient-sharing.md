@@ -1,6 +1,6 @@
 # Recipient Profiles, private package transfer, and restricted report export
 
-This tracer bullet proves three separate safety paths: a consultant can create a portable public Recipient Profile, an assessment operator can fix zero or one confirmed Package Recipient before collection, and an authorized user can deliberately export only the HTML report after accepting a prominent warning. It does not make a Preview or Supported capability claim. Ordinary assessment execution still stops after Preparation, and an unsigned development build fails the trust gate before persistent setup or plaintext export.
+This tracer bullet proves three separate safety paths: a consultant can create a portable public Recipient Profile, an assessment operator can fix zero or one confirmed Package Recipient before collection, and an authorized user can deliberately export only the HTML report after accepting a prominent warning. The normal Device Readiness slice now carries that approved zero-or-one choice from Preparation into package creation and emits access guidance matching the resulting package. It does not make a Preview or Supported capability claim. An unsigned development build still fails the trust gate before persistent setup or plaintext export.
 
 ## First understand what is—and is not—shared
 
@@ -95,7 +95,7 @@ The operator owns secure transfer and deletion of a completed export. Ordinary d
 
 ## Completion Summary guidance
 
-Every generated validation path emits a Completion Summary whose `ResultSharingGuidance` reflects whether a package and export actually completed. It covers:
+Every completed normal Device Readiness path and generated recipient-validation path emits a Completion Summary whose `ResultSharingGuidance` reflects whether a package and export actually completed. It covers:
 
 - actual Local Package Protector access;
 - whether one approved Package Recipient has access and at which protection level;
