@@ -59,6 +59,12 @@ Assert-Equal 'CAP-0015' @($automationSummary.plan.scope.capabilities | Where-Obj
     'the controlled-run dependency is resolved'
 
 Assert-Equal 29 $automationSummary.plan.operations.Count 'every release-enabled capability has one frozen operation or control'
+Assert-Equal 'observe-firmware-tpm' $automationSummary.plan.firmwareReadiness.collector.operationId `
+    'the Firmware Readiness collector is frozen before the one approval'
+Assert-Equal 'Administrator' $automationSummary.plan.firmwareReadiness.collector.executionContext `
+    'the summary discloses the exact privileged collection context'
+Assert-Equal $false $automationSummary.plan.firmwareReadiness.collector.writesAllowed `
+    'the summary freezes the no-platform-change boundary'
 Assert-Equal 5 $automationSummary.plan.privilege.privilegedOperations.Count 'administrator and SYSTEM work is concrete and frozen'
 Assert-Equal 'LocalOnly' $automationSummary.plan.network.behavior 'local-only behavior is explicit'
 Assert-Equal 0 $automationSummary.plan.network.plannedRequests.Count 'local-only plans no assessment requests'

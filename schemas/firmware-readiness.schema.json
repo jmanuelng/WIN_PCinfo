@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/firmware-readiness.schema.json",
+  "title": "WIN-PCInfo Firmware Readiness release policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "evidenceProfileId", "collector", "scopes", "rules", "discoveryTasks", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.firmware-readiness-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.firmware-readiness/1.0.0" },
+    "evidenceProfileId": { "const": "profile:device-and-firmware-readiness" },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collectorId", "collectorVersion", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "resultMaximumUtf8Bytes", "cleanup"],
+      "properties": {
+        "collectorId": { "const": "collector:windows.firmware-security" },
+        "collectorVersion": { "const": "1.0.0" },
+        "operationId": { "const": "observe-firmware-tpm" },
+        "source": { "const": "Release-embedded PowerShell using GetFirmwareType, an explicit Win32_BIOS property projection, Confirm-SecureBootUEFI, and an explicit Win32_Tpm property projection" },
+        "executionContext": { "const": "Administrator" },
+        "privilege": { "const": "RequiresAdministrator" },
+        "networkBehavior": { "const": "OfflineOnly" },
+        "executable": { "const": "ActiveMicrosoftSignedPowerShellHost" },
+        "dependencies": {
+          "type": "array", "minItems": 3, "maxItems": 3,
+          "prefixItems": [
+            { "const": "Windows GetFirmwareType API" },
+            { "const": "Windows CIM provider" },
+            { "const": "Microsoft.SecureBoot PowerShell module" }
+          ],
+          "items": false
+        },
+        "mayPrompt": { "const": false },
+        "mayInstall": { "const": false },
+        "mayDownload": { "const": false },
+        "maySelfElevate": { "const": false },
+        "writesAllowed": { "const": false },
+        "maximumAttempts": { "const": 1 },
+        "deadlineMilliseconds": { "const": 5000 },
+        "resultMaximumUtf8Bytes": { "const": 8192 },
+        "cleanup": { "const": "CoordinatorOwnedJobObjectAndOneUsePipeVerifiedAbsent" }
+      }
+    },
+    "scopes": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "prefixItems": [
+        { "$ref": "#/$defs/firmwareScope" },
+        { "$ref": "#/$defs/secureBootScope" },
+        { "$ref": "#/$defs/tpmScope" }
+      ],
+      "items": false
+    },
+    "rules": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "prefixItems": [
+        { "$ref": "#/$defs/firmwareRule" },
+        { "$ref": "#/$defs/secureBootRule" },
+        { "$ref": "#/$defs/tpmRule" }
+      ],
+      "items": false
+    },
+    "discoveryTasks": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [
+        { "$ref": "#/$defs/physicalTask" },
+        { "$ref": "#/$defs/oemTask" }
+      ],
+      "items": false
+    },
+    "validationScenarios": {
+      "type": "array", "minItems": 10, "maxItems": 10, "uniqueItems": true,
+      "prefixItems": [
+        { "const": "Supported" }, { "const": "Disabled" }, { "const": "Absent" },
+        { "const": "Virtual" }, { "const": "NonUefi" }, { "const": "AccessDenied" },
+        { "const": "Unsupported" }, { "const": "Malformed" }, { "const": "Timeout" },
+        { "const": "CollectorFailure" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scopeId", "fieldIds"],
+      "properties": {
+        "scopeId": { "type": "string" },
+        "fieldIds": { "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "firmwareScope": {
+      "allOf": [
+        { "$ref": "#/$defs/scope" },
+        { "properties": {
+          "scopeId": { "const": "scope:device.firmware-context" },
+          "fieldIds": { "const": ["field:device.firmware.type", "field:device.firmware.bios-version", "field:device.firmware.smbios-version"] }
+        } }
+      ]
+    },
+    "secureBootScope": {
+      "allOf": [
+        { "$ref": "#/$defs/scope" },
+        { "properties": {
+          "scopeId": { "const": "scope:device.secure-boot" },
+          "fieldIds": { "const": ["field:device.secure-boot.enabled"] }
+        } }
+      ]
+    },
+    "tpmScope": {
+      "allOf": [
+        { "$ref": "#/$defs/scope" },
+        { "properties": {
+          "scopeId": { "const": "scope:device.tpm-readiness" },
+          "fieldIds": { "const": ["field:device.tpm.present", "field:device.tpm.enabled", "field:device.tpm.activated", "field:device.tpm.specification"] }
+        } }
+      ]
+    },
+    "rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["findingKind", "ruleId", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "maximumInputObservations", "maximumOutputFindings", "cleanup", "missingEvidenceOutcome"],
+      "properties": {
+        "findingKind": { "type": "string" }, "ruleId": { "type": "string" }, "operationId": { "type": "string" },
+        "source": { "const": "ReleaseEmbeddedValidatedObservationRule" },
+        "executionContext": { "const": "InProcessValidatedAssessmentRecord" },
+        "privilege": { "const": "NoElevation" }, "networkBehavior": { "const": "OfflineOnly" },
+        "executable": { "const": "NoneInProcess" },
+        "dependencies": { "type": "array", "maxItems": 0 },
+        "mayPrompt": { "const": false }, "mayInstall": { "const": false },
+        "mayDownload": { "const": false }, "maySelfElevate": { "const": false },
+        "writesAllowed": { "const": false }, "maximumAttempts": { "const": 1 },
+        "deadlineMilliseconds": { "const": 100 },
+        "maximumInputObservations": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "maximumOutputFindings": { "const": 1 }, "cleanup": { "const": "NoArtifacts" },
+        "missingEvidenceOutcome": { "const": "Indeterminate" }
+      }
+    },
+    "firmwareRule": { "allOf": [{ "$ref": "#/$defs/rule" }, { "properties": { "findingKind": { "const": "firmware-context" }, "ruleId": { "const": "rule:device.firmware-context/1.0.0" }, "operationId": { "const": "op:rule.firmware-context.evaluate" }, "maximumInputObservations": { "const": 3 } } }] },
+    "secureBootRule": { "allOf": [{ "$ref": "#/$defs/rule" }, { "properties": { "findingKind": { "const": "secure-boot-readiness" }, "ruleId": { "const": "rule:device.secure-boot-readiness/1.0.0" }, "operationId": { "const": "op:rule.secure-boot-readiness.evaluate" }, "maximumInputObservations": { "const": 2 } } }] },
+    "tpmRule": { "allOf": [{ "$ref": "#/$defs/rule" }, { "properties": { "findingKind": { "const": "tpm-readiness" }, "ruleId": { "const": "rule:device.tpm-readiness/1.0.0" }, "operationId": { "const": "op:rule.tpm-readiness.evaluate" }, "maximumInputObservations": { "const": 5 } } }] },
+    "task": {
+      "type": "object", "additionalProperties": false,
+      "required": ["definitionId", "purpose", "requiredRole", "approvedDestination", "expectedSafeResult"],
+      "properties": {
+        "definitionId": { "type": "string" }, "purpose": { "type": "string" },
+        "requiredRole": { "type": "string" }, "approvedDestination": { "type": "string" },
+        "expectedSafeResult": { "type": "string" }
+      }
+    },
+    "physicalTask": { "allOf": [{ "$ref": "#/$defs/task" }, { "properties": { "definitionId": { "const": "task:confirm-physical-tpm-attestation/1.0.0" }, "purpose": { "const": "Confirm physical TPM identity and attestation outside guest-visible evidence." }, "requiredRole": { "const": "EndpointSecurityOrHardwareOwner" }, "approvedDestination": { "const": "AuthorizedTenantOrOEMManagementBoundary" }, "expectedSafeResult": { "const": "A yes, no, or unavailable attestation conclusion without exporting TPM secrets." } } }] },
+    "oemTask": { "allOf": [{ "$ref": "#/$defs/task" }, { "properties": { "definitionId": { "const": "task:confirm-oem-firmware-support/1.0.0" }, "purpose": { "const": "Confirm model-specific firmware and Secure Boot support with the authorized OEM or hardware owner." }, "requiredRole": { "const": "EndpointEngineeringOrHardwareOwner" }, "approvedDestination": { "const": "AuthorizedOEMOrDeviceManagementBoundary" }, "expectedSafeResult": { "const": "A support conclusion for the exact managed device model without publishing device identifiers." } } }] }
+  }
+}

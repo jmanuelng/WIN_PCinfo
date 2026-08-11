@@ -18,10 +18,12 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal 18 @($contractSet.fieldDefinitions).Count `
-    'the tracer and readiness fields remain while nine bounded context fields are admitted'
-Assert-Equal 3 @($contractSet.scopeDefinitions).Count `
-    'legacy tracer, Device Readiness, and expanded device-context scopes remain distinct'
+Assert-Equal '1.1.0' $contractSet.contractVersion `
+    'the additive firmware contract has an explicit version'
+Assert-Equal 26 @($contractSet.fieldDefinitions).Count `
+    'the historical fields remain while eight bounded firmware fields are admitted'
+Assert-Equal 6 @($contractSet.scopeDefinitions).Count `
+    'historical, device-context, firmware, Secure Boot, and TPM scopes remain distinct'
 
 $definition = @($contractSet.fieldDefinitions | Where-Object fieldId -eq 'field:device.os.display-name')[0]
 Assert-Equal 'field:device.os.display-name' $definition.fieldId 'the admitted field identity is release-bound'
@@ -66,6 +68,28 @@ Assert-Equal 'collector:windows.device-context' $contextScope.collectorIds[0] `
     'the expanded scope resolves its release-approved Windows collector'
 Assert-Equal 'collector:win-pcinfo.device-context-classifier' $contextScope.collectorIds[1] `
     'the expanded scope resolves its release-approved post-validation classifier'
+$firmwareScope = @($contractSet.scopeDefinitions | Where-Object {
+    $_.scopeId -eq 'scope:device.firmware-context'
+})[0]
+$secureBootScope = @($contractSet.scopeDefinitions | Where-Object {
+    $_.scopeId -eq 'scope:device.secure-boot'
+})[0]
+$tpmScope = @($contractSet.scopeDefinitions | Where-Object {
+    $_.scopeId -eq 'scope:device.tpm-readiness'
+})[0]
+Assert-Equal 3 @($firmwareScope.fieldIds).Count `
+    'firmware context resolves its exact three-field projection'
+Assert-Equal 1 @($secureBootScope.fieldIds).Count `
+    'Secure Boot remains a distinct one-field scope'
+Assert-Equal 4 @($tpmScope.fieldIds).Count `
+    'TPM readiness resolves only its four non-secret readiness fields'
+foreach ($scope in @($firmwareScope, $secureBootScope, $tpmScope)) {
+    Assert-Equal 'collector:windows.firmware-security' $scope.collectorIds[0] `
+        'each privileged scope resolves only to the approved firmware collector'
+    if ('profile:device-and-firmware-readiness' -notin @($scope.profileIds)) {
+        throw 'Every firmware scope must belong to the combined evidence profile.'
+    }
+}
 if (@($contextScope.fieldIds | Where-Object {
     [string]$_ -match '(?i)(product.?key|license.?key|private.?key|secret|token)'
 }).Count -gt 0) {
@@ -96,4 +120,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: the release Contract Set binds synthetic, readiness, and expanded device-context scopes to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.1 binds historical, device-context, firmware, Secure Boot, and TPM scopes to Draft 2020-12 contracts.'

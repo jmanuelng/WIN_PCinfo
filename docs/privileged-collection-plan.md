@@ -1,10 +1,10 @@
 # Privileged Collection Plan
 
-WIN-PCInfo now has a narrow Privileged Collection Plan runner that can execute the four Administrator operations already shown in the approved Preparation Summary as one contiguous Privileged Collection Phase. The plan is immutable and run-bound. This is a security tracer bullet: the operations return synthetic status only. They do not collect real device evidence, deliver a Product Capability, or make Preview/Supported claims.
+WIN-PCInfo has a narrow Privileged Collection Plan runner that executes the four Administrator operations already shown in the approved Preparation Summary as one contiguous Privileged Collection Phase. The plan is immutable and run-bound. Its original no-evidence tracer remains the default validation operation. The firmware-readiness slice may additionally return only the exact private `FirmwareTpmProjectionV1` declared by the release policy; it does not create a general assessment-evidence channel, deliver a Product Capability, or make Preview/Supported claims.
 
 The prepared LocalSystem operation is not added to this administrator worker. It is reduced again into a separate [SYSTEM Collection Sub-plan](system-collection-sub-plan.md), because Administrator and LocalSystem are different Windows trust contexts. This keeps the four-operation administrator interface unchanged and prevents a SYSTEM-only source from silently widening it.
 
-The generated application exposes the same contract through hidden synthetic validation fixtures. Ordinary generated execution still cannot reach real collection because Local Package Protector and final package work belongs to later slices. A local development build is also unsigned and therefore fails Preparation integrity before collection. These limitations prevent this security test from becoming an accidental product-completion claim.
+The generated application exposes the same contract through hidden synthetic validation fixtures and integrates the firmware projection through canonical validation, reporting, and packaging. A local development build is unsigned and therefore fails Preparation integrity before ordinary collection. These limitations prevent repository validation from becoming an accidental product-completion claim.
 
 ## What happens at elevation
 
@@ -17,7 +17,7 @@ After approval:
 3. Otherwise it uses Windows `runas` once. There is no retry and no second product prompt.
 4. Before launch, the coordinator creates and retains a protected kill-on-close Windows Job Object. The elevated worker joins that exact object before connecting or receiving the plan.
 5. Both processes verify the other process and PowerShell artifact through the connected named-pipe handle.
-6. The worker validates the nonce, plan digest, exact ordered operation IDs, and closed empty parameter objects. It runs all four in one phase and returns only operation status.
+6. The worker validates the nonce, plan digest, exact ordered operation IDs, and closed parameters. It runs all four in one phase and returns operation status plus, only when the frozen firmware operation is requested, the release-shaped firmware projection.
 7. Both processes close the one-use pipe. The coordinator queries its Job Object until the complete owned tree is empty, then closes the handle and permits standard-user work to continue.
 
 If the operator denies UAC, all four privileged operations become explicitly `Unavailable` with `PRIVILEGE.ELEVATION_DENIED`. Safe standard-user work continues and WIN-PCInfo never asks again.
@@ -54,9 +54,10 @@ Worker to coordinator:
 
 - protocol version and the same nonce/digest;
 - sanitized peer/artifact proof; and
-- `Completed` status for each synthetic operation in one phase.
+- status for each operation in one phase; and
+- for the firmware-readiness operation only, the bounded firmware, Secure Boot, and TPM projection with stable source states.
 
-Assessment evidence, user identity facts, package-protector facts, raw errors, paths, credentials, secrets, script text, and command text never cross the pipe.
+No arbitrary Assessment Record, user identity fact, package-protector fact, raw error, path, credential, secret, hardware identifier, script text, or command text can cross the pipe. The firmware projection is Restricted Diagnostic Evidence until the standard-user coordinator validates and reprojects it into the canonical contract; public progress and terminal records omit it.
 
 ## Cancellation, deadlines, and cleanup
 

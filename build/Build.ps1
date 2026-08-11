@@ -16,6 +16,7 @@ $sourcePaths = @(
     'src/RuntimeCompatibility.ps1'
     'src/Preparation.ps1'
     'src/ProcessSupervisor.ps1'
+    'src/FirmwareReadiness.ps1'
     'src/PrivilegedCollectionPlan.ps1'
     'src/SystemCollectionPlan.ps1'
     'src/EvidenceWorkspace.ps1'
@@ -55,6 +56,8 @@ $protectedPackagePolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.
 $protectedPackageSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package.schema.json'
 $deviceReadinessPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
 $deviceReadinessSchemaPath = Join-Path $repositoryRoot 'schemas/device-readiness.schema.json'
+$firmwareReadinessPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-firmware-readiness.json'
+$firmwareReadinessSchemaPath = Join-Path $repositoryRoot 'schemas/firmware-readiness.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
 $assessmentPackageManifestSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-package-manifest.schema.json'
 $recipientSharingPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
@@ -71,7 +74,8 @@ foreach ($requiredDefinitionPath in @(
     $runRecoveryJournalSchemaPath, $protectedPackagePolicyPath, $protectedPackageSchemaPath,
     $protectedPackageEnvelopeSchemaPath, $assessmentPackageManifestSchemaPath,
     $recipientSharingPolicyPath, $recipientProfileSchemaPath, $recipientSharingSchemaPath,
-    $deviceReadinessPolicyPath, $deviceReadinessSchemaPath
+    $deviceReadinessPolicyPath, $deviceReadinessSchemaPath,
+    $firmwareReadinessPolicyPath, $firmwareReadinessSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -142,6 +146,12 @@ $deviceReadinessPolicyBytes = Get-Utf8LfBytes -LiteralPath $deviceReadinessPolic
 $deviceReadinessPolicyBase64 = [System.Convert]::ToBase64String($deviceReadinessPolicyBytes)
 $deviceReadinessPolicyDigest = Get-Sha256Hex -Bytes $deviceReadinessPolicyBytes
 $deviceReadinessPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString($deviceReadinessPolicyBytes)
+$firmwareReadinessPolicyBytes = Get-Utf8LfBytes -LiteralPath $firmwareReadinessPolicyPath
+$firmwareReadinessPolicyBase64 = [System.Convert]::ToBase64String($firmwareReadinessPolicyBytes)
+$firmwareReadinessPolicyDigest = Get-Sha256Hex -Bytes $firmwareReadinessPolicyBytes
+$firmwareReadinessPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+    $firmwareReadinessPolicyBytes
+)
 if (-not (Test-Json -Json $approvedCollectorCatalogJson -SchemaFile $approvedCollectorCatalogSchemaPath)) {
     throw 'The approved collector catalog does not satisfy its release schema.'
 }
@@ -165,6 +175,9 @@ if (-not (Test-Json -Json $recipientSharingPolicyJson -SchemaFile $recipientShar
 }
 if (-not (Test-Json -Json $deviceReadinessPolicyJson -SchemaFile $deviceReadinessSchemaPath)) {
     throw 'The Device Readiness policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $firmwareReadinessPolicyJson -SchemaFile $firmwareReadinessSchemaPath)) {
+    throw 'The Firmware Readiness policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -211,6 +224,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/recipient-profile.schema.json'
     'schemas/recipient-sharing.schema.json'
     'schemas/device-readiness.schema.json'
+    'schemas/firmware-readiness.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -220,6 +234,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-protected-package.json'
     'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
     'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
+    'docs/spec/releases/2.0.0-preview.1-firmware-readiness.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -245,6 +260,7 @@ $preparationDefinition = [pscustomobject][ordered]@{
     capabilities = @($resolvedCapabilities)
     operations = @($preparationPlan.operations)
     deviceReadiness = ($deviceReadinessPolicyJson | ConvertFrom-Json -Depth 20)
+    firmwareReadiness = ($firmwareReadinessPolicyJson | ConvertFrom-Json -Depth 20)
     requiredFreeDiskMiB = [int] $preparationPlan.requiredFreeDiskMiB
     governingResources = @(
         foreach ($path in @(
@@ -387,6 +403,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__DEVICE_READINESS_POLICY_SHA256__', $deviceReadinessPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/FirmwareReadiness.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__FIRMWARE_READINESS_POLICY_BASE64__', $firmwareReadinessPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__FIRMWARE_READINESS_POLICY_SHA256__', $firmwareReadinessPolicyDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"
