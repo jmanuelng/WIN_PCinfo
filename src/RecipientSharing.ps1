@@ -1328,24 +1328,6 @@ function Invoke-RecipientSharingFixture {
         }
 
         if ($scenario -eq 'ZeroRecipient') { $packageVerified = $package.verified }
-        $recipientAccessAvailable = $selected -and $scenario -ne 'MissingKey'
-        $packageAvailable = $packageVerified -and $null -ne $package -and
-            [System.IO.File]::Exists([string]$package.packagePath)
-        $summary = New-CompletionSummary -PackageVerified $packageVerified `
-            -PackageAvailable $packageAvailable `
-            -RecipientSelected $selected -RecipientProtectionLevel $(if ($selected) {
-                $protectionLevel
-            }
-            else { 'None' }) `
-            -RecipientAccessAvailable $recipientAccessAvailable `
-            -RestrictedReportExported $exportCompleted
-        Write-ContractRecord $summary -ConvertToJsonCommand $ConvertToJsonCommand
-        $guidanceNames = @($summary.resultSharingGuidance.PSObject.Properties.Name)
-        $completionGuidanceVerified = @(
-            'localAccess', 'recipientAccess', 'privateTransfer', 'restrictedExport',
-            'deletionResponsibility', 'prohibitedPublicSharing' |
-                Where-Object { $_ -notin $guidanceNames }
-        ).Count -eq 0 -and $summary.resultSharingGuidance.prohibitedPublicSharing
     }
     catch { $validated = $false }
     finally {
@@ -1365,6 +1347,27 @@ function Invoke-RecipientSharingFixture {
         }
         else { $true }
     }
+
+    # Validation packages and exports are deliberately gone before a Completion
+    # Summary describes the terminal state. Package verification remains useful
+    # evidence about the exercised cryptographic path, but it must not be
+    # mistaken for a retained artifact that anyone can still open or transfer.
+    $recipientAccessAvailable = $selected -and $scenario -ne 'MissingKey'
+    $summary = New-CompletionSummary -PackageVerified $packageVerified `
+        -PackageAvailable $false `
+        -RecipientSelected $selected -RecipientProtectionLevel $(if ($selected) {
+            $protectionLevel
+        }
+        else { 'None' }) `
+        -RecipientAccessAvailable $recipientAccessAvailable `
+        -RestrictedReportExported $exportCompleted
+    Write-ContractRecord $summary -ConvertToJsonCommand $ConvertToJsonCommand
+    $guidanceNames = @($summary.resultSharingGuidance.PSObject.Properties.Name)
+    $completionGuidanceVerified = @(
+        'localAccess', 'recipientAccess', 'privateTransfer', 'restrictedExport',
+        'deletionResponsibility', 'prohibitedPublicSharing' |
+            Where-Object { $_ -notin $guidanceNames }
+    ).Count -eq 0 -and $summary.resultSharingGuidance.prohibitedPublicSharing
 
     $state = if ($validated -and $cleanupVerified -and $completionGuidanceVerified) {
         'Validated'

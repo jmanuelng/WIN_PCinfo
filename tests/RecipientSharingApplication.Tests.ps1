@@ -109,15 +109,20 @@ foreach ($scenario in $cases) {
     )
     Assert-Equal $expectedPackageVerified $summaries[0].packageVerified `
         "$scenario guidance reflects whether a package was actually verified"
-    $expectedRecipientAccess = if ($scenario -eq 'MissingKey') {
+    Assert-Equal $false $summaries[0].packageAvailable `
+        "$scenario does not claim its removed validation package remains available"
+    $expectedRecipientAccess = if ($scenario -in @(
+        'HistoricalOpening', 'MissingKey', 'OneRecipient'
+    )) {
         'Unavailable'
-    }
-    elseif ($scenario -in @('HistoricalOpening', 'OneRecipient')) {
-        'ApprovedPackageRecipient'
     }
     else { 'None' }
     Assert-Equal $expectedRecipientAccess $summaries[0].resultSharingGuidance.recipientAccess `
         "$scenario guidance reflects actual recipient access"
+    Assert-Equal $false $summaries[0].resultSharingGuidance.privateTransfer.allowed `
+        "$scenario does not permit transfer after validation cleanup"
+    Assert-Equal 'None' $summaries[0].resultSharingGuidance.deletionResponsibility `
+        "$scenario assigns no deletion duty for artifacts already removed"
     Assert-Equal ($scenario -eq 'RestrictedExport') `
         $summaries[0].resultSharingGuidance.restrictedExport.completed `
         "$scenario guidance reflects actual restricted export completion"
