@@ -49,7 +49,8 @@ function Read-DeviceReadinessFixture {
     param(
         [Parameter(Mandatory)] [string] $LiteralPath,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
-        [Parameter(Mandatory)] $Policy
+        [Parameter(Mandatory)] $Policy,
+        [Parameter(Mandatory)] $FirmwarePolicy
     )
 
     try {
@@ -59,16 +60,31 @@ function Read-DeviceReadinessFixture {
         $document = [System.Text.Json.JsonDocument]::Parse($json)
         try {
             $names = @($document.RootElement.EnumerateObject() | ForEach-Object Name)
-            if ($names.Count -ne 2 -or @($names | Sort-Object) -join '|' -ne
-                'contractVersion|scenario') { throw 'Fixture shape is invalid.' }
+            $shape = @($names | Sort-Object) -join '|'
+            if ($shape -notin @(
+                'contractVersion|scenario',
+                'contractVersion|firmwareScenario|privilegeScenario|scenario'
+            )) { throw 'Fixture shape is invalid.' }
         }
         finally { $document.Dispose() }
         $fixture = & $ConvertFromJsonCommand -InputObject $json -Depth 5 -ErrorAction Stop
+        $firmwareScenario = if ($fixture.PSObject.Properties['firmwareScenario']) {
+            [string]$fixture.firmwareScenario
+        } else { 'None' }
+        $privilegeScenario = if ($fixture.PSObject.Properties['privilegeScenario']) {
+            [string]$fixture.privilegeScenario
+        } else { 'None' }
         if ($fixture.contractVersion -ne '1.0.0' -or
-            [string] $fixture.scenario -notin @($Policy.validationScenarios)) {
+            [string]$fixture.scenario -notin @($Policy.validationScenarios) -or
+            $firmwareScenario -notin (@('None') + @($FirmwarePolicy.validationScenarios)) -or
+            $privilegeScenario -notin @('None','AcceptedElevation','AlreadyElevated')) {
             throw 'Fixture scenario is not release-owned.'
         }
-        [string] $fixture.scenario
+        [pscustomobject][ordered]@{
+            DeviceScenario=[string]$fixture.scenario
+            FirmwareScenario=$firmwareScenario
+            PrivilegeScenario=$privilegeScenario
+        }
     }
     catch {
         $exception = [System.ArgumentException]::new('The Device Readiness fixture is invalid.')
@@ -704,7 +720,10 @@ function Complete-ValidatedDeviceReadinessAssessmentRecord {
 }
 
 function New-DeviceReadinessReportBytes {
-    param([Parameter(Mandatory)] $Record)
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter()] $FirmwarePolicy
+    )
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
     $activationFinding = @($Record.findings | Where-Object {
@@ -716,6 +735,15 @@ function New-DeviceReadinessReportBytes {
     $powerFinding = @($Record.findings | Where-Object {
         $_.findingId -like 'finding:power-context:*'
     })[0]
+    $firmwareFinding = $Record.findings | Where-Object {
+        $_.findingId -like 'finding:firmware-context:*'
+    } | Select-Object -First 1
+    $secureBootFinding = $Record.findings | Where-Object {
+        $_.findingId -like 'finding:secure-boot-readiness:*'
+    } | Select-Object -First 1
+    $tpmFinding = $Record.findings | Where-Object {
+        $_.findingId -like 'finding:tpm-readiness:*'
+    } | Select-Object -First 1
     $coverage = @($Record.coverage)[0]
     $values = @{}
     foreach ($fieldId in @(
@@ -759,6 +787,69 @@ function New-DeviceReadinessReportBytes {
     else {
         'No virtual signal was detected by this bounded rule. That does not prove the device is physical or establish firmware, TPM-attestation, OEM, or performance facts.'
     }
+    $firmwareSection = if ($null -ne $firmwareFinding) {
+        $firmwareCoverage = @($Record.coverage | Where-Object {
+            $_.scopeId -eq 'scope:device.firmware-context'
+        })[0]
+        $secureBootCoverage = @($Record.coverage | Where-Object {
+            $_.scopeId -eq 'scope:device.secure-boot'
+        })[0]
+        $tpmCoverage = @($Record.coverage | Where-Object {
+            $_.scopeId -eq 'scope:device.tpm-readiness'
+        })[0]
+        $discoveryTasks = @($Record.recommendations | Where-Object {
+            $_.kind -eq 'TenantSideDiscoveryTask'
+        })
+        $discoveryCount = $discoveryTasks.Count
+        $discoveryGuidance = if ($discoveryCount -eq 0) {
+            '<p>No external firmware or physical-attestation follow-up is required by these rules.</p>'
+        }
+        else {
+            if ($null -eq $FirmwarePolicy) {
+                throw 'Firmware discovery guidance requires its frozen policy definitions.'
+            }
+            $definitions = @{}
+            foreach ($definition in @($FirmwarePolicy.discoveryTasks)) {
+                $definitions[[string]$definition.definitionId] = $definition
+            }
+            $items = @($discoveryTasks | ForEach-Object {
+                $definition = $definitions[[string]$_.definitionId]
+                if ($null -eq $definition) {
+                    throw 'A firmware discovery task does not resolve to its frozen definition.'
+                }
+                '<li><strong>Purpose:</strong> ' +
+                    [Net.WebUtility]::HtmlEncode([string]$definition.purpose) +
+                    '<br><strong>Owner:</strong> ' +
+                    [Net.WebUtility]::HtmlEncode([string]$definition.requiredRole) +
+                    '<br><strong>Approved destination:</strong> ' +
+                    [Net.WebUtility]::HtmlEncode([string]$definition.approvedDestination) +
+                    '<br><strong>Expected safe result:</strong> ' +
+                    [Net.WebUtility]::HtmlEncode([string]$definition.expectedSafeResult) + '</li>'
+            })
+            '<h3>Safe follow-up</h3><ul>' + ($items -join '') + '</ul>'
+        }
+        @"
+<h2>Firmware, Secure Boot, and TPM readiness</h2>
+<p>These are bounded, read-only Windows observations. Disabled is different from absent; unsupported, denied, malformed, timed-out, and failed sources remain explicit coverage gaps.</p>
+<dl><dt>Firmware coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$firmwareCoverage.state))</dd>
+<dt>Firmware interface</dt><dd>$($values['field:device.firmware.type'])</dd>
+<dt>BIOS/firmware version</dt><dd>$($values['field:device.firmware.bios-version'])</dd>
+<dt>SMBIOS version</dt><dd>$($values['field:device.firmware.smbios-version'])</dd>
+<dt>Firmware finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$firmwareFinding.outcome))</dd>
+<dt>Secure Boot coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$secureBootCoverage.state))</dd>
+<dt>Secure Boot enabled</dt><dd>$($values['field:device.secure-boot.enabled'])</dd>
+<dt>Secure Boot finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$secureBootFinding.outcome))</dd>
+<dt>TPM coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$tpmCoverage.state))</dd>
+<dt>TPM present</dt><dd>$($values['field:device.tpm.present'])</dd>
+<dt>TPM enabled</dt><dd>$($values['field:device.tpm.enabled'])</dd>
+<dt>TPM activated</dt><dd>$($values['field:device.tpm.activated'])</dd>
+<dt>TPM specification</dt><dd>$($values['field:device.tpm.specification'])</dd>
+<dt>TPM finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$tpmFinding.outcome))</dd></dl>
+<p>A virtual machine can expose a vTPM and guest-visible Secure Boot. Those signals cannot establish physical TPM attestation, the host's hardware state, or universal OEM behavior. WIN-PCInfo creates a Tenant-side Discovery Task when that context needs authorized follow-up. Discovery tasks in this result: $discoveryCount.</p>
+$discoveryGuidance
+<p>No owner authorization, endorsement secret, key, recovery data, TPM provisioning action, Secure Boot variable write, or firmware change is requested or retained.</p>
+"@
+    } else { '' }
     $html = @"
 <!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
 <h1>Device, Windows, activation, and power context</h1><p>$summary</p>
@@ -779,6 +870,7 @@ function New-DeviceReadinessReportBytes {
 <dt>Estimated runtime minutes</dt><dd>$($values['field:device.battery.estimated-runtime-minutes'])</dd></dl>
 <p>Advisory finding: $([System.Net.WebUtility]::HtmlEncode([string]$powerFinding.outcome)).</p>
 <p>These are bounded Windows observations, not a battery-health, calibration, capacity, or performance test. WIN-PCInfo does not change the active power plan.</p>
+$firmwareSection
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -925,9 +1017,35 @@ function Get-DeviceReadinessPackageDisposition {
     }
 }
 
+function Get-DeviceReadinessFailureDisposition {
+    param(
+        [Parameter(Mandatory)] [string] $ReasonCode,
+        [Parameter(Mandatory)] [bool] $CollectionStarted
+    )
+
+    switch ($ReasonCode) {
+        'FIRMWARE.PRIVILEGE_TIMED_OUT' {
+            [pscustomobject]@{outcome='TimedOut';exitCode=40;reasonCode=$ReasonCode}
+        }
+        'FIRMWARE.PRIVILEGE_CANCELLED' {
+            [pscustomobject]@{outcome='Cancelled';exitCode=30;reasonCode=$ReasonCode}
+        }
+        'FIRMWARE.PRIVILEGE_CLEANUP_INCOMPLETE' {
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode}
+        }
+        default {
+            [pscustomobject]@{
+                outcome=if($CollectionStarted){'IntegrityFailed'}else{'NotStarted'}
+                exitCode=if($CollectionStarted){50}else{20};reasonCode=$ReasonCode
+            }
+        }
+    }
+}
+
 function Invoke-DeviceReadinessSlice {
     param(
         [Parameter()] [string] $LiteralPath,
+        [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
         [Parameter()] $ApprovedRecipient,
         [Parameter(Mandatory)] [string] $RequestDigest,
@@ -939,7 +1057,10 @@ function Invoke-DeviceReadinessSlice {
 
     $isFixture = -not [string]::IsNullOrWhiteSpace($LiteralPath)
     $scenario = if ($isFixture) { '' } else { 'Actual' }
-    $policy = $null; $boundary = $null; $opened = $null; $package = $null
+    $firmwareScenario = if ($isFixture) { 'None' } else { 'Live' }
+    $privilegeScenario = if ($isFixture) { 'None' } else { 'Live' }
+    $policy = $null; $firmwarePolicy = $null; $privilegeResult = $null
+    $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
     $packageVerified = $false; $coverageState = 'Unavailable'; $findingOutcome = 'Indeterminate'
     $activationFindingOutcome = 'Indeterminate'; $platformFindingOutcome = 'Indeterminate'
@@ -947,18 +1068,71 @@ function Invoke-DeviceReadinessSlice {
     $activationContext = 'Unknown'; $virtualizationContext = 'Unknown'
     $formFactor = 'Unknown'; $batteryPresence = 'Unknown'
     $recipientKeyProtection = 'None'
+    $privilegeState = 'NotAttempted'; $privilegeUacInteractionCount = 0
+    $firmwareCoverageState = 'NotAttempted'; $secureBootCoverageState = 'NotAttempted'
+    $tpmCoverageState = 'NotAttempted'; $firmwareFindingOutcome = 'Indeterminate'
+    $secureBootFindingOutcome = 'Indeterminate'; $tpmFindingOutcome = 'Indeterminate'
+    $tenantDiscoveryTaskCount = 0
     $collectionStarted = $false
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
     try {
         $policy = Get-DeviceReadinessPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $firmwarePolicy = Get-FirmwareReadinessPolicy `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand
         if ($isFixture) {
-            $scenario = Read-DeviceReadinessFixture -LiteralPath $LiteralPath `
-                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $policy
+            $fixtureSelection = Read-DeviceReadinessFixture -LiteralPath $LiteralPath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $policy `
+                -FirmwarePolicy $firmwarePolicy
+            $scenario = [string]$fixtureSelection.DeviceScenario
+            $firmwareScenario = [string]$fixtureSelection.FirmwareScenario
+            $privilegeScenario = [string]$fixtureSelection.PrivilegeScenario
+        }
+        $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
+        if ($firmwareRequested) {
+            $privilegeResult = Invoke-PrivilegedCollectionPlan `
+                -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
+                -AssessmentUserContext 'subject:assessment-user:primary' `
+                -LocalPackageProtector 'protector:initiating-windows-user' `
+                -ValidationScenario $privilegeScenario -FirmwareScenario $firmwareScenario
+            $privilegeState = [string]$privilegeResult.state
+            $privilegeUacInteractionCount = [int]$privilegeResult.elevation.uacInteractionCount
+            $collectionStarted = @($privilegeResult.operations).Count -gt 0
+            if ($privilegeResult.state -in @('TimedOut','Cancelled')) {
+                # These states are produced only after the bounded worker path
+                # begins. Preserve that lifecycle fact even though a failed
+                # worker cannot return its four operation envelopes.
+                $collectionStarted = $true
+            }
+            if (-not [bool]$privilegeResult.cleanup.verified) {
+                $exception = [InvalidOperationException]::new(
+                    'The privileged firmware worker cleanup was not verified.'
+                )
+                $exception.Data['ReasonCode'] = 'FIRMWARE.PRIVILEGE_CLEANUP_INCOMPLETE'
+                throw $exception
+            }
+            if ($privilegeResult.PSObject.Properties['PrivateFirmwareCollectorResult']) {
+                $firmwareCollector = $privilegeResult.PrivateFirmwareCollectorResult
+            }
+            elseif ($privilegeResult.state -eq 'Unavailable') {
+                $firmwareCollector = New-FirmwareReadinessPrivilegeGapResult `
+                    -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
+            }
+            else {
+                $exception = [InvalidOperationException]::new(
+                    'The privileged firmware phase did not return a usable collector result.'
+                )
+                $exception.Data['ReasonCode'] = switch ([string]$privilegeResult.state) {
+                    'TimedOut' { 'FIRMWARE.PRIVILEGE_TIMED_OUT' }
+                    'Cancelled' { 'FIRMWARE.PRIVILEGE_CANCELLED' }
+                    default { 'FIRMWARE.PRIVILEGE_INTEGRITY_FAILED' }
+                }
+                throw $exception
+            }
         }
         $collectorScenario = if ($isFixture) { $scenario } else { '' }
         $collector = Invoke-ApprovedCollectorProcess -OperationId ([string]$policy.collector.operationId) `
             -DeviceReadinessScenario $collectorScenario
-        $collectionStarted = [bool]$collector.Supervision.processStarted
+        $collectionStarted = $collectionStarted -or [bool]$collector.Supervision.processStarted
         if (-not $collector.Supervision.completeOwnedTreeAbsent -or
             -not $collector.Supervision.temporaryArtifactsAbsent) {
             $outcome='CleanupIncomplete';$exitCode=60;$reasonCode='DEVICE_READINESS.COLLECTOR_CLEANUP_INCOMPLETE'
@@ -1018,6 +1192,28 @@ function Invoke-DeviceReadinessSlice {
                     $record = Complete-ValidatedDeviceReadinessAssessmentRecord `
                         -ValidatedRecord $record -Policy $policy -ContractValidation $sourceValidation
                 }
+                if ($null -ne $firmwareCollector) {
+                    # Privileged source evidence crosses the same canonical
+                    # contract before any firmware rule runs. The worker's
+                    # private payload is never trusted as a finding or report
+                    # input until exact fields, provenance, coverage, and its
+                    # one Collector Result Envelope are accepted here.
+                    $record = Add-FirmwareReadinessEvidenceRecord -Record $record `
+                        -CollectorResult $firmwareCollector -Policy $firmwarePolicy
+                    [byte[]]$firmwareSourceBytes = [Text.UTF8Encoding]::new($false).GetBytes(
+                        (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                    )
+                    $firmwareSourceValidation = Test-AssessmentContract `
+                        -Utf8Bytes $firmwareSourceBytes `
+                        -ConvertFromJsonCommand $ConvertFromJsonCommand `
+                        -TestJsonCommand $TestJsonCommand
+                    if ([bool]$firmwareSourceValidation.accepted) {
+                        $record = Complete-ValidatedFirmwareReadinessAssessmentRecord `
+                            -Record $record -Policy $firmwarePolicy `
+                            -ContractValidation $firmwareSourceValidation
+                    }
+                    $sourceValidation = $firmwareSourceValidation
+                }
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
                 )
@@ -1025,6 +1221,29 @@ function Invoke-DeviceReadinessSlice {
                     -ConvertFromJsonCommand $ConvertFromJsonCommand -TestJsonCommand $TestJsonCommand
                 $recordAccepted = [bool]$sourceValidation.accepted -and [bool]$finalValidation.accepted
                 $coverageState = [string]@($record.coverage)[0].state
+                if ($null -ne $firmwareCollector) {
+                    $firmwareCoverageState = [string]@($record.coverage | Where-Object {
+                        $_.scopeId -eq 'scope:device.firmware-context'
+                    })[0].state
+                    $secureBootCoverageState = [string]@($record.coverage | Where-Object {
+                        $_.scopeId -eq 'scope:device.secure-boot'
+                    })[0].state
+                    $tpmCoverageState = [string]@($record.coverage | Where-Object {
+                        $_.scopeId -eq 'scope:device.tpm-readiness'
+                    })[0].state
+                    $firmwareFindingOutcome = [string]@($record.findings | Where-Object {
+                        $_.findingId -like 'finding:firmware-context:*'
+                    })[0].outcome
+                    $secureBootFindingOutcome = [string]@($record.findings | Where-Object {
+                        $_.findingId -like 'finding:secure-boot-readiness:*'
+                    })[0].outcome
+                    $tpmFindingOutcome = [string]@($record.findings | Where-Object {
+                        $_.findingId -like 'finding:tpm-readiness:*'
+                    })[0].outcome
+                    $tenantDiscoveryTaskCount = @($record.recommendations | Where-Object {
+                        $_.kind -eq 'TenantSideDiscoveryTask'
+                    }).Count
+                }
                 $findingOutcome = [string]@($record.findings | Where-Object {
                     $_.findingId -like 'finding:device-readiness:*'
                 })[0].outcome
@@ -1070,12 +1289,20 @@ function Invoke-DeviceReadinessSlice {
                     $outcome='IntegrityFailed';$exitCode=50;$reasonCode='DEVICE_READINESS.CONTRACT_INVALID'
                 }
                 else {
-                    [byte[]]$reportBytes = New-DeviceReadinessReportBytes -Record $record
+                    [byte[]]$reportBytes = New-DeviceReadinessReportBytes -Record $record `
+                        -FirmwarePolicy $(if ($null -ne $firmwareCollector) {
+                            $firmwarePolicy
+                        } else { $null })
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportVerified = $reportText.StartsWith('<!doctype html>') -and
                         $reportText.Contains('Device, Windows, activation, and power context') -and
                         $reportText.Contains('<details><summary>Device details and where they came from</summary>') -and
                         $reportText.Contains('canonical typed evidence')
+                    if ($null -ne $firmwareCollector) {
+                        $reportVerified = $reportVerified -and
+                            $reportText.Contains('Firmware, Secure Boot, and TPM readiness') -and
+                            $reportText.Contains('cannot establish physical TPM attestation')
+                    }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
                     if ($isFixture) {
                         $boundary = New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (
@@ -1095,12 +1322,14 @@ function Invoke-DeviceReadinessSlice {
                         'assessment-record.json'=$recordBytes
                         'assessment-report.html'=$reportBytes
                     }
-                    $packageCompleteness = if ($coverageState -eq 'Complete') {
+                    $packageCompleteness = if (@($record.coverage | Where-Object {
+                        $_.state -ne 'Complete'
+                    }).Count -eq 0) {
                         'Complete'
                     }
                     else { 'RecoverablePartial' }
                     $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
-                        -Artifacts $artifacts -AssessmentContractSetVersion '1.0.0' `
+                        -Artifacts $artifacts -AssessmentContractSetVersion '1.1.0' `
                         -Completeness $packageCompleteness -ApprovedRecipient $ApprovedRecipient
                     if ($package.verified) {
                         $recipientKeyProtection = [string](
@@ -1120,7 +1349,9 @@ function Invoke-DeviceReadinessSlice {
                         $exitCode=[int]$packageDisposition.exitCode
                         $reasonCode=[string]$packageDisposition.reasonCode
                     }
-                    elseif ($coverageState -eq 'Complete') {
+                    elseif (@($record.coverage | Where-Object {
+                        $_.state -ne 'Complete'
+                    }).Count -eq 0) {
                         $outcome='Completed';$exitCode=0;$reasonCode='DEVICE_READINESS.COMPLETED'
                     }
                     else {
@@ -1132,11 +1363,14 @@ function Invoke-DeviceReadinessSlice {
     }
     catch {
         if ($scenario -eq '') { $scenario = 'InvalidFixture' }
-        $outcome=if($collectionStarted){'IntegrityFailed'}else{'NotStarted'}
-        $exitCode=if($collectionStarted){50}else{20}
-        $reasonCode=if($_.Exception.Data['ReasonCode']){
+        $failureReasonCode = if ($_.Exception.Data['ReasonCode']) {
             [string]$_.Exception.Data['ReasonCode']
-        }else{'DEVICE_READINESS.INTEGRITY_FAILED'}
+        } else { 'DEVICE_READINESS.INTEGRITY_FAILED' }
+        $failureDisposition = Get-DeviceReadinessFailureDisposition `
+            -ReasonCode $failureReasonCode -CollectionStarted $collectionStarted
+        $outcome=[string]$failureDisposition.outcome
+        $exitCode=[int]$failureDisposition.exitCode
+        $reasonCode=[string]$failureDisposition.reasonCode
     }
     finally {
         if ($null -ne $opened -and $null -ne $opened.artifacts) {
@@ -1160,6 +1394,14 @@ function Invoke-DeviceReadinessSlice {
             activationFindingOutcome=$activationFindingOutcome
             platformFindingOutcome=$platformFindingOutcome;powerFindingOutcome=$powerFindingOutcome
             sourceAccessDiagnostics=$sourceAccessDiagnostics
+            firmwareScenario=$firmwareScenario;privilegeState=$privilegeState
+            privilegeUacInteractionCount=$privilegeUacInteractionCount
+            firmwareCoverageState=$firmwareCoverageState
+            secureBootCoverageState=$secureBootCoverageState;tpmCoverageState=$tpmCoverageState
+            firmwareFindingOutcome=$firmwareFindingOutcome
+            secureBootFindingOutcome=$secureBootFindingOutcome;tpmFindingOutcome=$tpmFindingOutcome
+            tenantDiscoveryTaskCount=$tenantDiscoveryTaskCount
+            physicalTpmAttestationEstablished=$false;platformSecurityStateChanged=$false
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
             recipientKeyProtection=$recipientKeyProtection

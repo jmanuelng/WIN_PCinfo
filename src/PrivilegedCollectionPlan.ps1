@@ -141,8 +141,8 @@ try {
         $configurationRoot.EnumerateObject() | ForEach-Object Name
     )
     if ($configurationRoot.ValueKind -ne [System.Text.Json.JsonValueKind]::Object -or
-        $configurationNames.Count -ne 10 -or
-        @($configurationNames | Sort-Object -Unique).Count -ne 10) {
+        $configurationNames.Count -ne 11 -or
+        @($configurationNames | Sort-Object -Unique).Count -ne 11) {
         throw 'The privilege worker configuration is invalid.'
     }
 }
@@ -167,6 +167,8 @@ public static class WinPCInfoPrivilegedWorkerPipe
     private static extern bool CloseHandle(IntPtr handle);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint processId);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFirmwareType(out uint firmwareType);
     public static void JoinOwnedProcessTree(string name)
     {
         IntPtr job = OpenJobObject(JOB_OBJECT_ASSIGN_PROCESS, false, name);
@@ -185,6 +187,13 @@ public static class WinPCInfoPrivilegedWorkerPipe
         if (!GetNamedPipeServerProcessId(pipe.SafePipeHandle, out processId))
             throw new InvalidOperationException("Unable to bind the coordinator process.");
         return checked((int)processId);
+    }
+    public static uint ReadFirmwareType()
+    {
+        uint value;
+        if (!GetFirmwareType(out value))
+            throw new InvalidOperationException("Unable to read the Windows firmware type.");
+        return value;
     }
 }
 "@
@@ -228,6 +237,191 @@ function Write-Frame {
     $null = $Stream.WriteAsync($lengthBytes, 0, 4, $Token).GetAwaiter().GetResult()
     $null = $Stream.WriteAsync($payload, 0, $payload.Length, $Token).GetAwaiter().GetResult()
     $null = $Stream.FlushAsync($Token).GetAwaiter().GetResult()
+}
+
+function New-EmptyFirmwareResult {
+    param([string] $State)
+    [ordered]@{
+        sourceLocale = 'und'
+        firmwareState = $State; firmwareType = $null; biosVersion = $null
+        smbiosVersion = $null; secureBootState = $State; secureBootEnabled = $null
+        tpmState = $State; tpmPresent = $null; tpmEnabled = $null
+        tpmActivated = $null; tpmSpecification = $null
+    }
+}
+
+function New-SyntheticFirmwareResult {
+    param([string] $Scenario)
+    $base = [ordered]@{
+        sourceLocale='und';firmwareState='Complete';firmwareType='Uefi'
+        biosVersion='SYNTHETIC-UEFI-1.0';smbiosVersion='3.4'
+        secureBootState='Complete';secureBootEnabled=$true
+        tpmState='Complete';tpmPresent=$true;tpmEnabled=$true
+        tpmActivated=$true;tpmSpecification='2.0'
+    }
+    switch ($Scenario) {
+        'Supported' { }
+        'Disabled' {
+            $base.secureBootEnabled = $false
+            $base.tpmEnabled = $false; $base.tpmActivated = $false
+        }
+        'Absent' {
+            $base.tpmPresent = $false; $base.tpmEnabled = $null
+            $base.tpmActivated = $null; $base.tpmSpecification = $null
+        }
+        'Virtual' { }
+        'NonUefi' {
+            $base.firmwareType = 'LegacyBios'
+            $base.secureBootState = 'Unsupported'; $base.secureBootEnabled = $null
+        }
+        'AccessDenied' { return New-EmptyFirmwareResult -State Denied }
+        'Unsupported' {
+            $base.secureBootState = 'Unsupported'; $base.secureBootEnabled = $null
+            $base.tpmState = 'Unsupported'; $base.tpmPresent = $null
+            $base.tpmEnabled = $null; $base.tpmActivated = $null
+            $base.tpmSpecification = $null
+        }
+        'Malformed' { return New-EmptyFirmwareResult -State Malformed }
+        'Timeout' { return New-EmptyFirmwareResult -State TimedOut }
+        'CollectorFailure' { return New-EmptyFirmwareResult -State Failed }
+        default { throw 'The firmware validation scenario is not release-defined.' }
+    }
+    $base
+}
+
+function Get-WorkerAccessState {
+    param($Failure)
+    $exception = $Failure.Exception
+    $nativeCode = [int]($exception.HResult -band 0xffff)
+    $providerCode = ''
+    $cursor = $exception
+    while ($null -ne $cursor -and [string]::IsNullOrWhiteSpace($providerCode)) {
+        if ($cursor.PSObject.Properties['NativeErrorCode']) {
+            $providerCode = [string]$cursor.NativeErrorCode
+        }
+        $cursor = $cursor.InnerException
+    }
+    if ($exception -is [System.UnauthorizedAccessException] -or $nativeCode -eq 5 -or
+        $providerCode -eq 'AccessDenied') {
+        'Denied'
+    }
+    elseif ($exception -is [System.PlatformNotSupportedException] -or
+        [string]$Failure.FullyQualifiedErrorId -match '^CmdletNotSupported' -or
+        $providerCode -in @('InvalidNamespace','InvalidClass','NotSupported','MethodNotAvailable')) {
+        'Unsupported'
+    }
+    else { 'Failed' }
+}
+
+function Get-LiveFirmwareResult {
+    # Firmware and TPM interfaces sit behind powerful Windows providers. The
+    # worker performs only explicit reads: no WMI method, Secure Boot variable
+    # write, TPM provisioning call, ownership action, or feature change exists.
+    # Serial numbers, manufacturer identifiers, keys, owner authorization, and
+    # endorsement/recovery material are never projected. This trusts Windows'
+    # structured API/CIM/module results; access or provider failure becomes a
+    # typed coverage gap instead of a guessed disabled/absent value.
+    $result = New-EmptyFirmwareResult -State Failed
+    try {
+        $nativeFirmware = [WinPCInfoPrivilegedWorkerPipe]::ReadFirmwareType()
+        $bios = @(Get-CimInstance -ClassName Win32_BIOS -Property @(
+            'SMBIOSBIOSVersion','SMBIOSMajorVersion','SMBIOSMinorVersion'
+        ) -ErrorAction Stop)
+        if ($bios.Count -ne 1) {
+            $result.firmwareState = 'Malformed'
+        }
+        else {
+            $firmwareType = switch ([uint32]$nativeFirmware) {
+                1 { 'LegacyBios' } 2 { 'Uefi' } default { 'Unknown' }
+            }
+            $biosVersion = if ($null -eq $bios[0].SMBIOSBIOSVersion) {
+                $null
+            } else { ([string]$bios[0].SMBIOSBIOSVersion).Trim() }
+            $smbiosVersion = if ($null -eq $bios[0].SMBIOSMajorVersion -or
+                $null -eq $bios[0].SMBIOSMinorVersion) {
+                $null
+            } else {
+                "$([int]$bios[0].SMBIOSMajorVersion).$([int]$bios[0].SMBIOSMinorVersion)"
+            }
+            if (($null -ne $biosVersion -and (
+                    [string]::IsNullOrWhiteSpace($biosVersion) -or
+                    [Text.Encoding]::UTF8.GetByteCount($biosVersion) -gt 128
+                )) -or ($null -ne $smbiosVersion -and (
+                    [string]::IsNullOrWhiteSpace($smbiosVersion) -or
+                    [Text.Encoding]::UTF8.GetByteCount($smbiosVersion) -gt 16
+                ))) {
+                $result.firmwareState = 'Malformed'
+            }
+            else {
+                $result.firmwareState='Complete';$result.firmwareType=$firmwareType
+                $result.biosVersion=$biosVersion;$result.smbiosVersion=$smbiosVersion
+            }
+        }
+    }
+    catch {
+        $result.firmwareState = Get-WorkerAccessState -Failure $_
+    }
+    if ($result.firmwareState -eq 'Complete' -and $result.firmwareType -eq 'LegacyBios') {
+        $result.secureBootState = 'Unsupported'
+    }
+    elseif ($result.firmwareState -eq 'Complete') {
+        $secureBootCommand = Get-Command -Name Confirm-SecureBootUEFI `
+            -CommandType Cmdlet -ErrorAction SilentlyContinue
+        if ($null -eq $secureBootCommand -or $secureBootCommand.ModuleName -ne 'SecureBoot') {
+            $result.secureBootState = 'Unsupported'
+        }
+        else {
+            try {
+                $secureBootValue = & $secureBootCommand -ErrorAction Stop
+                if ($secureBootValue -isnot [bool]) {
+                    $result.secureBootState = 'Malformed'
+                }
+                else {
+                    $result.secureBootEnabled = [bool]$secureBootValue
+                    $result.secureBootState = 'Complete'
+                }
+            }
+            catch { $result.secureBootState = Get-WorkerAccessState -Failure $_ }
+        }
+    }
+    else { $result.secureBootState = $result.firmwareState }
+    try {
+        $tpm = @(Get-CimInstance -Namespace 'root/CIMV2/Security/MicrosoftTpm' `
+            -ClassName Win32_Tpm -Property @(
+                'SpecVersion','IsEnabled_InitialValue','IsActivated_InitialValue'
+            ) -ErrorAction Stop)
+        if ($tpm.Count -gt 1) {
+            $result.tpmState = 'Malformed'
+        }
+        elseif ($tpm.Count -eq 0) {
+            $result.tpmState = 'Complete';$result.tpmPresent = $false
+        }
+        else {
+            $enabled = $tpm[0].IsEnabled_InitialValue
+            $activated = $tpm[0].IsActivated_InitialValue
+            $specification = if ($null -eq $tpm[0].SpecVersion) {
+                $null
+            } else { ([string]$tpm[0].SpecVersion).Trim() }
+            if ($enabled -isnot [bool] -or $activated -isnot [bool] -or
+                ($null -ne $specification -and (
+                    [string]::IsNullOrWhiteSpace($specification) -or
+                    [Text.Encoding]::UTF8.GetByteCount($specification) -gt 32
+                ))) {
+                $result.tpmState = 'Malformed'
+            }
+            else {
+                $result.tpmState='Complete';$result.tpmPresent=$true
+                $result.tpmEnabled=$enabled;$result.tpmActivated=$activated
+                $result.tpmSpecification=$specification
+            }
+        }
+    }
+    catch {
+        $result.tpmState = Get-WorkerAccessState -Failure $_
+        $result.tpmPresent=$null;$result.tpmEnabled=$null
+        $result.tpmActivated=$null;$result.tpmSpecification=$null
+    }
+    $result
 }
 
 $maximumBytes = [int] $configuration.maximumBytes
@@ -343,8 +537,8 @@ try {
         $null = [System.Diagnostics.Process]::Start($childStartInfo)
         [System.Threading.Thread]::Sleep(10000)
     }
-    $phaseId = 'phase:synthetic-privileged:primary'
-    $result = [ordered]@{
+    $phaseId = 'phase:privileged:primary'
+    $resultBody = [ordered]@{
         kind = 'PlanResult'
         contractVersion = '1.0.0'
         nonce = [string] $configuration.nonce
@@ -354,7 +548,13 @@ try {
             'observe-firmware-tpm', 'observe-local-administrators',
             'observe-effective-policy', 'observe-certificate-trust'
         ) | ForEach-Object { [ordered]@{ operationId = $_; state = 'Completed'; phaseId = $phaseId } }
-    } | ConvertTo-Json -Compress -Depth 5
+    }
+    if ([string]$configuration.firmwareScenario -ne 'None') {
+        $resultBody.firmwareTpm = if ([string]$configuration.firmwareScenario -eq 'Live') {
+            Get-LiveFirmwareResult
+        } else { New-SyntheticFirmwareResult -Scenario ([string]$configuration.firmwareScenario) }
+    }
+    $result = $resultBody | ConvertTo-Json -Compress -Depth 5
     Write-Frame -Stream $pipe -Json $result -MaximumBytes $maximumBytes -Token $tokenSource.Token
 }
 catch {
@@ -715,7 +915,8 @@ function New-PrivilegedCollectionResult {
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Operations,
         [Parameter(Mandatory)] [bool] $ChannelVerified,
         [Parameter(Mandatory)] [bool] $CleanupVerified,
-        [Parameter(Mandatory)] [string] $ValidationScenario
+        [Parameter(Mandatory)] [string] $ValidationScenario,
+        [Parameter()] $PrivateFirmwareCollectorResult
     )
 
     $coverageState = switch ($State) {
@@ -726,7 +927,7 @@ function New-PrivilegedCollectionResult {
         default { 'Failed' }
     }
     $liveValidation = $ValidationScenario -eq 'Live'
-    [pscustomobject][ordered]@{
+    $result = [ordered]@{
         recordType = 'win-pcinfo.privileged-collection-phase'
         contractVersion = '1.0.0'
         state = $State
@@ -756,7 +957,7 @@ function New-PrivilegedCollectionResult {
             schemaValidated = $ChannelVerified
             peerProcessVerified = $ChannelVerified
             peerArtifactVerified = $ChannelVerified
-            assessmentEvidenceCrossed = $false
+            assessmentEvidenceCrossed = $null -ne $PrivateFirmwareCollectorResult
         }
         standardUserWorkMayContinue = $State -in @('Completed', 'Unavailable')
         cleanup = [pscustomobject][ordered]@{
@@ -780,6 +981,13 @@ function New-PrivilegedCollectionResult {
             }
         }
     }
+    if ($null -ne $PrivateFirmwareCollectorResult) {
+        # This property is an in-memory Restricted Diagnostic Evidence handoff
+        # to the assessment orchestrator. Callers that emit the public privilege
+        # record must re-project the closed public properties and omit it.
+        $result.PrivateFirmwareCollectorResult = $PrivateFirmwareCollectorResult
+    }
+    [pscustomobject]$result
 }
 
 function New-PrivilegedCollectionStoppedResult {
@@ -835,12 +1043,23 @@ function Invoke-PrivilegedCollectionPlan {
             'WrongPipeClient', 'AlteredPlan', 'LostWorker', 'Timeout', 'Cancellation'
         )]
         [string] $ValidationScenario = 'Live',
+        [Parameter()]
+        [ValidateSet(
+            'None','Live','Supported','Disabled','Absent','Virtual','NonUefi',
+            'AccessDenied','Unsupported','Malformed','Timeout','CollectorFailure'
+        )]
+        [string] $FirmwareScenario = 'None',
         [Parameter()] [System.Threading.CancellationToken] $CancellationToken =
             [System.Threading.CancellationToken]::None
     )
 
     $policy = Get-PrivilegedCollectionPlanPolicy
     $scenario = Get-PrivilegedCollectionValidationScenario -Name $ValidationScenario
+    if (($ValidationScenario -eq 'Live' -and
+            $FirmwareScenario -notin @('None','Live')) -or
+        ($ValidationScenario -ne 'Live' -and $FirmwareScenario -eq 'Live')) {
+        throw 'Live and synthetic firmware collection boundaries cannot be mixed.'
+    }
     $resultContext = @{
         PlanDigest = $PlanDigest
         AssessmentUserContext = $AssessmentUserContext
@@ -949,6 +1168,8 @@ function Invoke-PrivilegedCollectionPlan {
     $state = 'IntegrityFailed'
     $reasonCode = 'PRIVILEGE.CHANNEL_FAILED'
     $failureStage = 'CREATE_CHANNEL'
+    $firmwareOperationStartedAt = [DateTimeOffset]::UtcNow
+    $privateFirmwareCollectorResult = $null
     try {
         $ownedJob = [WinPCInfo.PrivilegedCollectionPlan.OwnedJob]::Create(
             $jobName, "D:P(A;;GA;;;$initiatingSid)(A;;GA;;;BA)"
@@ -977,6 +1198,7 @@ function Invoke-PrivilegedCollectionPlan {
             workerPayloadSha256 = $workerDigest
             planDigest = $PlanDigest
             workerFault = [string] $scenario.workerFault
+            firmwareScenario = $FirmwareScenario
             jobName = $jobName
         }
         $encodedConfiguration = [System.Convert]::ToBase64String(
@@ -1128,7 +1350,14 @@ finally { $pipe.Dispose() }
             -CancellationToken $deadline.Token
         $workerResult = $resultJson | ConvertFrom-Json -Depth 10
         $resultNames = @($workerResult.PSObject.Properties.Name)
-        if ($resultNames.Count -ne 6 -or @($resultNames | Sort-Object -Unique).Count -ne 6 -or
+        $expectedResultNames = if ($FirmwareScenario -eq 'None') {
+            @('kind','contractVersion','nonce','planDigest','phaseId','operations')
+        } else {
+            @('kind','contractVersion','nonce','planDigest','phaseId','operations','firmwareTpm')
+        }
+        if ($resultNames.Count -ne $expectedResultNames.Count -or
+            (@($resultNames | Sort-Object) -join '|') -ne
+                (@($expectedResultNames | Sort-Object) -join '|') -or
             $workerResult.kind -ne 'PlanResult' -or
             $workerResult.contractVersion -ne '1.0.0' -or
             $workerResult.nonce -ne $nonce -or $workerResult.planDigest -ne $PlanDigest -or
@@ -1154,6 +1383,40 @@ finally { $pipe.Dispose() }
                 phaseId = [string] $_.phaseId
             }
         })
+        if ($FirmwareScenario -ne 'None') {
+            # The pipe has a wider framing ceiling because it also carries the
+            # four operation results. Enforce the narrower firmware contract
+            # independently so a valid frame cannot silently widen evidence.
+            $firmwareResultUtf8Bytes = [System.Text.Encoding]::UTF8.GetByteCount(
+                ($workerResult.firmwareTpm | ConvertTo-Json -Compress -Depth 5)
+            )
+            if ($firmwareResultUtf8Bytes -gt 8192 -or
+                -not (Test-FirmwareReadinessCollectorPayload -Payload $workerResult.firmwareTpm)) {
+                throw 'The privileged firmware projection failed its closed evidence contract.'
+            }
+            $privateFirmwareCollectorResult = [pscustomobject][ordered]@{
+                state='Completed';reasonCode='FIRMWARE.COLLECTION_COMPLETED'
+                validationFixture=[bool]$validationFixture
+                envelope=[pscustomobject][ordered]@{
+                    startedAt=$firmwareOperationStartedAt.ToString('o')
+                    completedAt=[DateTimeOffset]::UtcNow.ToString('o');attempts=1
+                }
+                payload=[pscustomobject][ordered]@{
+                    sourceLocale=[string]$workerResult.firmwareTpm.sourceLocale
+                    firmwareState=[string]$workerResult.firmwareTpm.firmwareState
+                    firmwareType=$workerResult.firmwareTpm.firmwareType
+                    biosVersion=$workerResult.firmwareTpm.biosVersion
+                    smbiosVersion=$workerResult.firmwareTpm.smbiosVersion
+                    secureBootState=[string]$workerResult.firmwareTpm.secureBootState
+                    secureBootEnabled=$workerResult.firmwareTpm.secureBootEnabled
+                    tpmState=[string]$workerResult.firmwareTpm.tpmState
+                    tpmPresent=$workerResult.firmwareTpm.tpmPresent
+                    tpmEnabled=$workerResult.firmwareTpm.tpmEnabled
+                    tpmActivated=$workerResult.firmwareTpm.tpmActivated
+                    tpmSpecification=$workerResult.firmwareTpm.tpmSpecification
+                }
+            }
+        }
         $channelVerified = $true
         $state = 'Completed'
         $reasonCode = 'PRIVILEGE.COMPLETED'
@@ -1230,7 +1493,8 @@ finally { $pipe.Dispose() }
         -UacInteractionCount $uacInteractionCount -AlreadyElevated $alreadyElevated `
         -WorkerPrincipalRelationship $workerRelationship -Operations $operations `
         -ChannelVerified $channelVerified -CleanupVerified $cleanupVerified `
-        -ValidationScenario $ValidationScenario
+        -ValidationScenario $ValidationScenario `
+        -PrivateFirmwareCollectorResult $privateFirmwareCollectorResult
 }
 
 function Read-PrivilegedCollectionPlanFixture {

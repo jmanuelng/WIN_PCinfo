@@ -9,7 +9,7 @@
     "kind": { "const": "win-pcinfo.assessment-package-manifest" },
     "contractVersion": { "const": "1.0.0" },
     "productRelease": { "const": "2.0.0-preview.1" },
-    "assessmentContractSet": { "const": "1.0.0" },
+    "assessmentContractSet": { "enum": ["1.0.0", "1.1.0"] },
     "packagePolicy": { "const": "win-pcinfo.protected-package/1.0.0" },
     "manifestContract": { "const": "win-pcinfo.assessment-package-manifest/1.0.0" },
     "completeness": { "enum": ["Complete", "RecoverablePartial"] },
@@ -38,7 +38,7 @@
       "properties": {
         "relativePath": { "const": "assessment-record.json" },
         "mediaType": { "const": "application/json" },
-        "byteLength": { "type": "integer", "minimum": 1, "maximum": 32768 },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 65536 },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
       }
     },

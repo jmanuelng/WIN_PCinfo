@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.0.0",
+  "contractVersion": "1.1.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
@@ -9,7 +9,7 @@
     "prohibited-material-omission"
   ],
   "limits": {
-    "maximumDocumentUtf8Bytes": 32768,
+    "maximumDocumentUtf8Bytes": 65536,
     "maximumJsonDepth": 16,
     "maximumSafeInteger": 9007199254740991,
     "maximumStringUtf8Bytes": 1024,
@@ -219,6 +219,86 @@
       "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
       "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
       "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.firmware.type",
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Distinguish UEFI, legacy BIOS, and an explicitly unknown firmware interface through the Windows GetFirmwareType API.",
+      "source": { "sourceId": "source:windows.api.get-firmware-type", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Windows GetFirmwareType API normalized by the release" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.firmware.bios-version",
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Carry the bounded firmware version reported by the explicit Win32_BIOS projection without a serial number.",
+      "source": { "sourceId": "source:windows.cim.bios", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_BIOS.SMBIOSBIOSVersion explicit property projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 128, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.firmware.smbios-version",
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Carry the bounded SMBIOS major and minor version from the explicit Win32_BIOS projection.",
+      "source": { "sourceId": "source:windows.cim.bios", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_BIOS.SMBIOSMajorVersion and SMBIOSMinorVersion explicit property projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.secure-boot.enabled",
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Record the Boolean Secure Boot state returned by Confirm-SecureBootUEFI when the UEFI source is applicable and accessible.",
+      "source": { "sourceId": "source:windows.secure-boot.confirm", "kind": "StructuredWindowsSource", "authoritativeIdentity": "SecureBoot module Confirm-SecureBootUEFI Boolean result" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.tpm.present",
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Record whether the bounded Win32_Tpm query returned a TPM instance.",
+      "source": { "sourceId": "source:windows.cim.tpm", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_Tpm instance presence from an explicit property projection" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.tpm.enabled",
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Record the initial enabled state reported by Win32_Tpm without invoking a state-changing method.",
+      "source": { "sourceId": "source:windows.cim.tpm", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_Tpm.IsEnabled_InitialValue explicit property projection" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.tpm.activated",
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Record the initial activated state reported by Win32_Tpm without collecting ownership authorization.",
+      "source": { "sourceId": "source:windows.cim.tpm", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_Tpm.IsActivated_InitialValue explicit property projection" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.tpm.specification",
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Carry the bounded TPM specification version reported by Win32_Tpm without vendor or device identifiers.",
+      "source": { "sourceId": "source:windows.cim.tpm", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_Tpm.SpecVersion explicit property projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
     }
   ],
   "scopeDefinitions": [
@@ -249,7 +329,7 @@
     },
     {
       "scopeId": "scope:device.windows-context",
-      "profileIds": ["profile:device-windows-context"],
+      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness"],
       "capabilityIds": ["CAP-0001", "CAP-0002", "CAP-0004"],
       "purpose": "Close coverage for the bounded Device, Windows, activation, form, virtualization, chassis, battery, and power field set.",
       "fieldIds": [
@@ -275,6 +355,39 @@
         "collector:windows.device-context",
         "collector:win-pcinfo.device-context-classifier"
       ]
+    },
+    {
+      "scopeId": "scope:device.firmware-context",
+      "profileIds": ["profile:device-and-firmware-readiness"],
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Close coverage for the bounded firmware interface and version context.",
+      "fieldIds": [
+        "field:device.firmware.type",
+        "field:device.firmware.bios-version",
+        "field:device.firmware.smbios-version"
+      ],
+      "collectorIds": ["collector:windows.firmware-security"]
+    },
+    {
+      "scopeId": "scope:device.secure-boot",
+      "profileIds": ["profile:device-and-firmware-readiness"],
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Close coverage for the applicable structured Secure Boot state.",
+      "fieldIds": ["field:device.secure-boot.enabled"],
+      "collectorIds": ["collector:windows.firmware-security"]
+    },
+    {
+      "scopeId": "scope:device.tpm-readiness",
+      "profileIds": ["profile:device-and-firmware-readiness"],
+      "capabilityIds": ["CAP-0003"],
+      "purpose": "Close coverage for bounded TPM presence, enabled, activated, and specification evidence.",
+      "fieldIds": [
+        "field:device.tpm.present",
+        "field:device.tpm.enabled",
+        "field:device.tpm.activated",
+        "field:device.tpm.specification"
+      ],
+      "collectorIds": ["collector:windows.firmware-security"]
     }
   ],
   "vocabularies": {

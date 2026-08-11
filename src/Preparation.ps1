@@ -266,6 +266,12 @@ function New-PreparationPlan {
         # privilege, network behavior, bounds, and safe-failure restrictions;
         # the collector cannot renegotiate any of them after approval.
         deviceReadiness = $Definition.deviceReadiness
+        # Firmware, Secure Boot, and TPM use the Administrator operation that
+        # is already present in the immutable Privileged Collection Plan. This
+        # second release policy freezes its sources, exact evidence fields,
+        # deadlines, interpretation rules, and no-write boundary before the
+        # single preparation approval and before Windows may display UAC.
+        firmwareReadiness = $Definition.firmwareReadiness
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -546,6 +552,7 @@ function Invoke-PreparationGate {
     }
     if ($accepted -and -not [string]::IsNullOrWhiteSpace($deviceReadinessFixturePath)) {
         return Invoke-DeviceReadinessSlice -LiteralPath $deviceReadinessFixturePath `
+            -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `
             -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
@@ -554,6 +561,7 @@ function Invoke-PreparationGate {
     }
     if ($accepted -and -not $ValidationFixture) {
         return Invoke-DeviceReadinessSlice `
+            -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `
             -RequestDigest $requestDigest -PlanDigest $planResult.Digest `

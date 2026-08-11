@@ -56,8 +56,8 @@ Assert-Equal $true $policy.channel.requirePeerProcessId `
     'both peers bind the pipe handle to the expected process'
 Assert-Equal $true $policy.channel.requireArtifactDigest `
     'both peers bind the handshake to reviewed worker source'
-Assert-Equal $false $policy.channel.assessmentEvidenceAllowed `
-    'assessment evidence cannot cross the privilege channel'
+Assert-Equal 'FirmwareTpmProjectionV1Only' $policy.channel.assessmentEvidenceContract `
+    'only the release-owned bounded firmware projection may cross the privilege channel'
 $canonicalWorkerSource = (Get-PrivilegedCollectionWorkerSource).Replace("`r`n", "`n").Replace("`r", "`n")
 $workerDigest = Get-PrivilegedCollectionPlanSha256 -Bytes (
     [System.Text.UTF8Encoding]::new($false).GetBytes($canonicalWorkerSource)

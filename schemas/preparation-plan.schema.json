@@ -12,6 +12,7 @@
     "scope",
     "operations",
     "deviceReadiness",
+    "firmwareReadiness",
     "privilege",
     "dependencies",
     "estimates",
@@ -178,6 +179,100 @@
           "field:device.battery.estimated-runtime-minutes"
         ],
         "validationScenarios": ["Complete", "Partial", "Unavailable", "Malformed", "Oversize", "Virtual", "Unicode", "NonEnglish", "Activated", "Physical", "Desktop", "BatteryAbsent", "Unactivated", "Laptop", "BatteryPresent", "BatteryUnavailable", "Denied", "ProhibitedMaterial"]
+      }
+    },
+    "firmwareReadiness": {
+      "const": {
+        "kind": "win-pcinfo.firmware-readiness-policy",
+        "contractVersion": "1.0.0",
+        "release": "2.0.0-preview.1",
+        "policyId": "win-pcinfo.firmware-readiness/1.0.0",
+        "evidenceProfileId": "profile:device-and-firmware-readiness",
+        "collector": {
+          "collectorId": "collector:windows.firmware-security",
+          "collectorVersion": "1.0.0",
+          "operationId": "observe-firmware-tpm",
+          "source": "Release-embedded PowerShell using GetFirmwareType, an explicit Win32_BIOS property projection, Confirm-SecureBootUEFI, and an explicit Win32_Tpm property projection",
+          "executionContext": "Administrator",
+          "privilege": "RequiresAdministrator",
+          "networkBehavior": "OfflineOnly",
+          "executable": "ActiveMicrosoftSignedPowerShellHost",
+          "dependencies": ["Windows GetFirmwareType API", "Windows CIM provider", "SecureBoot PowerShell module"],
+          "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+          "maySelfElevate": false, "writesAllowed": false,
+          "maximumAttempts": 1, "deadlineMilliseconds": 5000,
+          "resultMaximumUtf8Bytes": 8192,
+          "cleanup": "CoordinatorOwnedJobObjectAndOneUsePipeVerifiedAbsent"
+        },
+        "scopes": [
+          {
+            "scopeId": "scope:device.firmware-context",
+            "fieldIds": ["field:device.firmware.type", "field:device.firmware.bios-version", "field:device.firmware.smbios-version"]
+          },
+          {
+            "scopeId": "scope:device.secure-boot",
+            "fieldIds": ["field:device.secure-boot.enabled"]
+          },
+          {
+            "scopeId": "scope:device.tpm-readiness",
+            "fieldIds": ["field:device.tpm.present", "field:device.tpm.enabled", "field:device.tpm.activated", "field:device.tpm.specification"]
+          }
+        ],
+        "rules": [
+          {
+            "findingKind": "firmware-context", "ruleId": "rule:device.firmware-context/1.0.0",
+            "operationId": "op:rule.firmware-context.evaluate",
+            "source": "ReleaseEmbeddedValidatedObservationRule",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 3,
+            "maximumOutputFindings": 1, "cleanup": "NoArtifacts",
+            "missingEvidenceOutcome": "Indeterminate"
+          },
+          {
+            "findingKind": "secure-boot-readiness", "ruleId": "rule:device.secure-boot-readiness/1.0.0",
+            "operationId": "op:rule.secure-boot-readiness.evaluate",
+            "source": "ReleaseEmbeddedValidatedObservationRule",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 2,
+            "maximumOutputFindings": 1, "cleanup": "NoArtifacts",
+            "missingEvidenceOutcome": "Indeterminate"
+          },
+          {
+            "findingKind": "tpm-readiness", "ruleId": "rule:device.tpm-readiness/1.0.0",
+            "operationId": "op:rule.tpm-readiness.evaluate",
+            "source": "ReleaseEmbeddedValidatedObservationRule",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 5,
+            "maximumOutputFindings": 1, "cleanup": "NoArtifacts",
+            "missingEvidenceOutcome": "Indeterminate"
+          }
+        ],
+        "discoveryTasks": [
+          {
+            "definitionId": "task:confirm-physical-tpm-attestation/1.0.0",
+            "purpose": "Confirm physical TPM identity and attestation outside guest-visible evidence.",
+            "requiredRole": "EndpointSecurityOrHardwareOwner",
+            "approvedDestination": "AuthorizedTenantOrOEMManagementBoundary",
+            "expectedSafeResult": "A yes, no, or unavailable attestation conclusion without exporting TPM secrets."
+          },
+          {
+            "definitionId": "task:confirm-oem-firmware-support/1.0.0",
+            "purpose": "Confirm model-specific firmware and Secure Boot support with the authorized OEM or hardware owner.",
+            "requiredRole": "EndpointEngineeringOrHardwareOwner",
+            "approvedDestination": "AuthorizedOEMOrDeviceManagementBoundary",
+            "expectedSafeResult": "A support conclusion for the exact managed device model without publishing device identifiers."
+          }
+        ],
+        "validationScenarios": ["Supported", "Disabled", "Absent", "Virtual", "NonUefi", "AccessDenied", "Unsupported", "Malformed", "Timeout", "CollectorFailure"]
       }
     },
     "privilege": {

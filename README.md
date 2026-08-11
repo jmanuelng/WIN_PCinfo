@@ -1,9 +1,9 @@
 # WIN-PCInfo
 
-WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect narrow Device, Windows, activation, form, virtualization, chassis, battery, and power context after approval, validate typed evidence, supervise approved work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, protect an assessment package for the local user and optionally one preapproved recipient, reopen one requested artifact safely, exercise warned restricted HTML export, and drive each validation path to one honest terminal outcome.
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect narrow Device, Windows, activation, form, virtualization, chassis, battery, power, firmware, Secure Boot, and TPM-readiness context after approval, validate typed evidence, supervise approved work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, protect an assessment package for the local user and optionally one preapproved recipient, reopen one requested artifact safely, exercise warned restricted HTML export, and drive each validation path to one honest terminal outcome.
 
 > [!IMPORTANT]
-> The v2 application implements only the narrow device-context slice described below. It is not the complete assessment and does not by itself create a Preview/Supported capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance; repository validation uses closed synthetic fixtures.
+> The v2 application implements only the narrow device-context and firmware-security slices described below. It is not the complete assessment and does not by itself create a Preview/Supported capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance; repository validation uses closed synthetic fixtures.
 
 ## Try the v2 launch safely
 
@@ -23,6 +23,8 @@ Before approving anything, read [Preparation Summary and approval](docs/preparat
 To understand how one synthetic source becomes a typed observation, Collector Result Envelope, closed Evidence Coverage State, diagnostic, finding, recommendation, and canonical Assessment Record, read [Assessment Contract validation](docs/assessment-contract-validation.md). It explains the Draft 2020-12 schema, semantic reason codes, I-JSON-style safety rules, and Secret Exclusion boundary in beginner-friendly terms.
 
 To understand the current real collection slice—manufacturer, model, processor, memory, normalized Windows edition/build/architecture, product-key-free activation state, form, virtualization, chassis, and bounded battery/power context—read [Device, Windows, activation, form, virtualization, and power context](docs/device-windows-readiness.md). It explains the exact Windows properties, privacy boundary, claim limits, missing-evidence behavior, report, package, and troubleshooting.
+
+To understand the privileged, read-only firmware-security slice—firmware mode, BIOS/SMBIOS version, Secure Boot state, TPM readiness, virtual/physical limits, follow-up discovery, and beginner guidance—read [Firmware, Secure Boot, and TPM readiness](docs/firmware-readiness.md).
 
 To understand how WIN-PCInfo launches predefined synthetic and real collectors without exposing a shell or plug-in path, read [Process Supervisor](docs/process-supervisor.md). It explains the release-owned executable catalog, compact source identity, suspended Windows Job Object assignment, bounded output, cooperative and hard cancellation, untrusted-output privacy, and verified cleanup.
 

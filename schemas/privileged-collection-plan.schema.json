@@ -35,7 +35,7 @@
     "channel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pipeNamePrefix", "jobNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireArtifactDigest", "assessmentEvidenceAllowed"],
+      "required": ["pipeNamePrefix", "jobNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireArtifactDigest", "assessmentEvidenceContract"],
       "properties": {
         "pipeNamePrefix": { "const": "WINPCInfo-PrivilegedCollectionPlan-v1-" },
         "jobNamePrefix": { "const": "Local\\WINPCInfo-PrivilegedCollectionPlan-v1-" },
@@ -45,7 +45,7 @@
         "acl": { "const": "InitiatingUserAndAdministrators" },
         "requirePeerProcessId": { "const": true },
         "requireArtifactDigest": { "const": true },
-        "assessmentEvidenceAllowed": { "const": false }
+        "assessmentEvidenceContract": { "const": "FirmwareTpmProjectionV1Only" }
       }
     },
     "worker": {

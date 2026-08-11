@@ -42,6 +42,18 @@ foreach ($requestPath in @($localRequestPath, $connectivityRequestPath)) {
             { param($value) $value.deviceReadiness.collector.standardOutputMaximumBytes = 999999 },
             { param($value) $value.deviceReadiness.fieldIds = @('field:widened') },
             { param($value) $value.deviceReadiness.collector.cleanup = 'BestEffort' }
+            { param($value) $value.firmwareReadiness.collector.operationId = 'caller-supplied' }
+            { param($value) $value.firmwareReadiness.collector.source = 'caller supplied' }
+            { param($value) $value.firmwareReadiness.collector.executionContext = 'StandardUser' }
+            { param($value) $value.firmwareReadiness.collector.privilege = 'SelfElevating' }
+            { param($value) $value.firmwareReadiness.collector.networkBehavior = 'Internet' }
+            { param($value) $value.firmwareReadiness.collector.executable = 'CallerSelected' }
+            { param($value) $value.firmwareReadiness.collector.dependencies = @('download') }
+            { param($value) $value.firmwareReadiness.collector.deadlineMilliseconds = -1 }
+            { param($value) $value.firmwareReadiness.collector.resultMaximumUtf8Bytes = 999999 }
+            { param($value) $value.firmwareReadiness.scopes[0].fieldIds = @('field:widened') }
+            { param($value) $value.firmwareReadiness.rules[0].operationId = 'caller-supplied' }
+            { param($value) $value.firmwareReadiness.collector.cleanup = 'BestEffort' }
         )
         foreach ($mutation in $mutations) {
             $changed = $planJson | ConvertFrom-Json -Depth 30

@@ -23,14 +23,14 @@
     "acl": "InitiatingUserAndAdministrators",
     "requirePeerProcessId": true,
     "requireArtifactDigest": true,
-    "assessmentEvidenceAllowed": false
+    "assessmentEvidenceContract": "FirmwareTpmProjectionV1Only"
   },
   "worker": {
     "executableResolver": "ActivePowerShellHost",
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "EncodedReleaseSource",
-    "payloadSha256": "8deb625838e4b7c1cbaa3fa0a7e18413bf317b3a5d329da86d7b51040a9ba9ad"
+    "payloadSha256": "da276d946e68aca40bd298a5eb32ce72ef93dce1307b2ff34bea420ad52caf8d"
   },
   "deadlines": {
     "connectMaximumMilliseconds": 5000,
