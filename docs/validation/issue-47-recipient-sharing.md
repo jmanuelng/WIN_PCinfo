@@ -1,6 +1,6 @@
 # Issue 47 public-safe validation evidence
 
-This projection describes only release-owned contracts and synthetic validation. It contains no real Recipient Profile, fingerprint, certificate, private key, PFX, password, credential, recovery phrase, package, report, Assessment Record, user/device/organization identity, local path, or provider diagnostic.
+This projection describes release-owned contracts, synthetic validation, and sanitized live certificate-store validation. It contains no real Recipient Profile, fingerprint, certificate, private key, PFX, password, credential, recovery phrase, package, report, Assessment Record, user/device/organization identity, local path, or provider diagnostic.
 
 ## Automated evidence
 
@@ -18,6 +18,14 @@ The generated scenarios are `TpmBackedSetup`, `SoftwareFallbackSetup`, `ProfileV
 
 ## Live certificate-store boundary
 
-The actual consultant setup implementation uses the Current User certificate store and prefers the Microsoft Platform Crypto Provider before the explicitly labeled Microsoft Software Key Storage Provider fallback. An approved dedicated disposable Windows user was supplied for live validation, but its profile had never been initialized and this non-elevated host could not start the disclosed cross-user execution boundary without secure-desktop administrator consent. Both attempts stopped before task registration or cryptographic mutation and left no task or staging residue. Disposable certificate-store creation/removal evidence therefore remains `NotStarted`; after the user profile is initialized or the disclosed elevation boundary is completed, validation must resolve and remove the exact certificate, private key, Recipient Profile, and temporary artifact and verify absence before the round ends.
+The actual consultant setup implementation uses the Current User certificate store and prefers the Microsoft Platform Crypto Provider before the explicitly labeled Microsoft Software Key Storage Provider fallback. Live validation completed under an approved dedicated disposable standard-user profile. The bounded worker used the production setup and rollback functions and proved all of these public-safe facts:
+
+- the profile was loaded and the worker was not an administrator;
+- the selected provider was release-approved and reported `WindowsUserBound` protection;
+- the key was RSA 3072, non-exportable, present in the Current User store and provider during the test, and usable for an RSA-OAEP-SHA-256 round trip;
+- production rollback removed the exact certificate and provider key and verified both absent;
+- the worker terminated and the protected staging boundary, recovery descriptor, and transient execution artifact were absent after validation.
+
+The dedicated account password was rotated to an undisclosed random value after the worker exited. No fingerprint, key name, certificate, private key, password, user/device identifier, local path, or provider diagnostic is retained in this public evidence.
 
 Passing these tests proves this tracer-bullet contract only. It does not mark a Product Capability delivered, publish a release, identify a real recipient, or create a Preview/Supported claim.
