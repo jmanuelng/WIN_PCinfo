@@ -407,8 +407,11 @@ function Get-AssessmentStateReason {
     $envelopedCoverage = @(
         $Record.collectorResults | ForEach-Object { @($_.coverageIds) }
     )
-    if ($envelopedCoverage.Count -ne @($Record.coverage).Count -or
-        @($envelopedCoverage | Sort-Object -Unique).Count -ne @($Record.coverage).Count) {
+    # Coverage is scope-level aggregate state. Multiple approved collectors may
+    # contribute disjoint observations to the same scope and therefore bind the
+    # same final coverage identity; every coverage item still has to be bound at
+    # least once, while observation ownership below remains exactly once.
+    if (@($envelopedCoverage | Sort-Object -Unique).Count -ne @($Record.coverage).Count) {
         return 'CONTRACT.COVERAGE_INCONSISTENT'
     }
     $coveredObservations = @(

@@ -1,12 +1,12 @@
 # Process Supervisor
 
-WIN-PCInfo uses one Process Supervisor whenever an Approved Collector Executable must run outside the main PowerShell process. It now supervises both the original synthetic safety probe and the narrow Device Readiness collector. That slice still does not by itself create a Preview/Supported claim.
+WIN-PCInfo uses one Process Supervisor whenever an Approved Collector Executable must run outside the main PowerShell process. It supervises the original synthetic safety probe, the historical eight-field Device Readiness collector, and the versioned 17-field device-context collector. These slices still do not by themselves create a Preview/Supported claim.
 
 ## Why a supervisor is necessary
 
 Starting a process is easy. Starting only reviewed code, bounding everything it can do through the launch channel, stopping its descendants, and reporting failure honestly are the difficult parts. A direct `Start-Process`, shell command, plug-in path, or collector-selected script would bypass those controls, so collectors receive no executable, command, script, argument, environment, working-directory, timeout, or output-limit parameter.
 
-The exported interface accepts only a release-defined operation ID and, when needed, a cancellation token. The hidden validation parameter accepts only eight published scenario names and cannot carry evidence or commands:
+The exported interface accepts only a release-defined operation ID and, when needed, a cancellation token. The hidden device-context validation parameter accepts only 18 release-owned scenario names and cannot carry evidence or commands:
 
 ```powershell
 $result = Invoke-ApprovedCollectorProcess `
@@ -25,7 +25,7 @@ The schema-validated [Approved Collector Catalog](spec/releases/2.0.0-preview.1-
 - the exact embedded collector-payload digest and fixed `-EncodedCommand` argument vector;
 - a replacement four-variable environment instead of parent-environment inheritance;
 - the validated active `PSHOME` as a non-writing working boundary;
-- a five-second operation deadline, per-operation stdout bounds (4 KiB for the original probe and 8 KiB for Device Readiness), a 4 KiB stderr bound, and a 750 ms cooperative-cancellation grace interval;
+- a five-second operation deadline, per-operation stdout bounds (4 KiB for the original probe, 8 KiB for historical Device Readiness, and 16 KiB for device context), a 4 KiB stderr bound, and a 750 ms cooperative-cancellation grace interval;
 - a two-second hard-termination verification bound; and
 - suspended startup, mandatory Windows Job Object assignment, kill-on-close behavior, and `NotStarted` when Job assignment is incompatible.
 
@@ -49,10 +49,10 @@ A deadline is independent of cancellation. Deadline expiry immediately terminate
 
 Authenticode verifies executable provenance, not live output. Stdout and stderr are drained concurrently into separately capped buffers so one full pipe cannot deadlock the other. Passing either cap terminates the Job and produces `PROCESS.OUTPUT_LIMIT_EXCEEDED`.
 
-Only an approved success payload is decoded as strict UTF-8 and checked against its fixed JSON shape. Device Readiness accepts exactly eight bounded properties, or the one-property unavailable shape. Raw pipe text is never copied into progress or diagnostics, and it is not hashed: unexpected Prohibited Secret Material must not gain a second representation through a digest. Retained buffers are zeroed after normalization or failure handling as best-effort memory hygiene, without making a forensic secure-erasure claim.
+Only an approved success payload is decoded as strict UTF-8 and checked against its fixed JSON shape. Historical Device Readiness accepts exactly eight bounded properties. Device context accepts exactly 19 transport properties—bounded source values plus three source-availability controls—or the one-property unavailable shape. Two additional record fields are derived only after the source observations pass contract validation. A key-like property name is rejected before `PrivatePayload` admission and produces only a typed prohibited-material marker. Raw pipe text is never copied into progress or diagnostics, and it is not hashed: unexpected Prohibited Secret Material must not gain a second representation through a digest. Retained buffers are zeroed after normalization or failure handling as best-effort memory hygiene, without making a forensic secure-erasure claim.
 
 ## Files and other residue
 
-The supervisor creates no script file or working directory. The digest-verified release source is encoded directly into the fixed PowerShell argument, closing the validate-then-execute file-replacement window. The active `PSHOME` is validated as the working directory and treated as non-writing. The run-unique cancellation event disappears when the last owned handle closes. No scheduled task, service, persistent process, marker, log, or lock is created. Every success, rejection, overflow, timeout, cancellation, child-process, and incompatibility fixture verifies the owned process tree and named event absent before return.
+The supervisor creates no script file or working directory. The reviewed source remains commented in the repository; its deterministic compact representation is digest-verified and encoded directly into the fixed PowerShell argument, closing the validate-then-execute file-replacement window while staying below the Windows launch bound. The active `PSHOME` is validated as the working directory and treated as non-writing. The run-unique cancellation event disappears when the last owned handle closes. No scheduled task, service, persistent process, marker, log, or lock is created. Every success, rejection, overflow, timeout, cancellation, child-process, and incompatibility fixture verifies the owned process tree and named event absent before return.
 
 For the public-safe validation matrix and commands, see [Issue #41 validation evidence](validation/issue-41-process-supervisor.md).

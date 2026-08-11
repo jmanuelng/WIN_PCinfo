@@ -20,12 +20,26 @@ function Get-DeviceReadinessPolicy {
     $policy = & $ConvertFromJsonCommand -InputObject (
         [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
     ) -Depth 20 -ErrorAction Stop
+    $ruleOperations = @($policy.rules | ForEach-Object { [string]$_.operationId })
+    $derivationOperations = @($policy.derivations | ForEach-Object { [string]$_.operationId })
     if ($policy.kind -ne 'win-pcinfo.device-readiness-policy' -or
         $policy.release -ne '2.0.0-preview.1' -or
-        $policy.collector.operationId -ne 'op:device.windows-readiness.collect' -or
-        $policy.rule.operationId -ne 'op:rule.device-windows-readiness.evaluate' -or
-        $policy.rule.deadlineMilliseconds -ne 100 -or
-        @($policy.fieldIds).Count -ne 8 -or @($policy.validationScenarios).Count -ne 8) {
+        $policy.collector.operationId -ne 'op:device.windows-context.collect' -or
+        @($policy.derivations).Count -ne 2 -or
+        ($derivationOperations -join '|') -ne
+            'op:device.virtualization.classify|op:device.form-factor.classify' -or
+        @($policy.derivations | Where-Object {
+            $_.deadlineMilliseconds -ne 100 -or $_.maximumOutputObservations -ne 1
+        }).Count -gt 0 -or
+        @($policy.rules).Count -ne 4 -or
+        ($ruleOperations -join '|') -ne (
+            'op:rule.device-readiness.evaluate|op:rule.windows-activation-context.evaluate|' +
+            'op:rule.device-platform-context.evaluate|op:rule.device-power-context.evaluate'
+        ) -or
+        @($policy.rules | Where-Object {
+            $_.deadlineMilliseconds -ne 100 -or $_.maximumOutputFindings -ne 1
+        }).Count -gt 0 -or
+        @($policy.fieldIds).Count -ne 17 -or @($policy.validationScenarios).Count -ne 18) {
         throw 'The Device Readiness policy is not the closed release policy.'
     }
     $policy
@@ -84,6 +98,72 @@ function Get-NormalizedWindowsEdition {
     }
 }
 
+function Get-NormalizedWindowsActivationState {
+    param($LicenseStatus)
+
+    # SoftwareLicensingProduct exposes many tempting identity and key-adjacent
+    # properties. The approved child process projects LicenseStatus only. This
+    # mapper therefore receives one bounded numeric state, never a product key,
+    # partial key, product identifier, or free-form licensing description.
+    if ($null -eq $LicenseStatus) { return $null }
+    switch ([int] $LicenseStatus) {
+        1 { 'Activated' }
+        { $_ -in 0,2,3,4,5,6 } { 'NotActivated'; break }
+        default { $null }
+    }
+}
+
+function Get-NormalizedBatteryStatus {
+    param($BatteryStatus)
+
+    if ($null -eq $BatteryStatus) { return $null }
+    switch ([int] $BatteryStatus) {
+        1 { 'Discharging' }
+        2 { 'ExternalPower' }
+        3 { 'FullyCharged' }
+        4 { 'Low' }
+        5 { 'Critical' }
+        6 { 'Charging' }
+        7 { 'ChargingHigh' }
+        8 { 'ChargingLow' }
+        9 { 'ChargingCritical' }
+        10 { 'Undefined' }
+        11 { 'PartiallyCharged' }
+        default { $null }
+    }
+}
+
+function New-DeviceContextFinding {
+    param(
+        [Parameter(Mandatory)] [string] $Kind,
+        [Parameter(Mandatory)] [string] $RunId,
+        [Parameter(Mandatory)] [string] $RuleId,
+        [Parameter(Mandatory)] [string] $SubjectId,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Observations,
+        [Parameter(Mandatory)] [string[]] $FieldIds
+    )
+
+    # Findings never reach back into collector output. Each one freezes the
+    # exact admitted observations it may interpret, which keeps activation,
+    # platform, and power advice independently auditable when another source is
+    # unavailable or denied.
+    $evidence = @($Observations | Where-Object fieldId -in $FieldIds)
+    [pscustomobject][ordered]@{
+        findingId = "finding:$Kind`:$RunId"
+        ruleId = $RuleId
+        targetSubjectId = $SubjectId
+        outcome = 'Indeterminate'
+        reasonCode = 'FINDING.EVALUATION_PENDING'
+        evidenceReferences = @($evidence | ForEach-Object {
+            [pscustomobject][ordered]@{
+                observationId = $_.observationId
+                fieldId = $_.fieldId
+                subjectId = $_.subjectId
+            }
+        })
+    }
+}
+
 function ConvertTo-NormalizedDeviceReadinessEvidence {
     param([Parameter(Mandatory)] $Payload)
 
@@ -108,7 +188,31 @@ function ConvertTo-NormalizedDeviceReadinessEvidence {
         }
         build = if ($null -eq $Payload.build) { $null } else { ([string]$Payload.build).Trim() }
         architecture = $architecture
+        activationState = Get-NormalizedWindowsActivationState -LicenseStatus $Payload.activationStatus
+        activationAvailability = [string] $Payload.activationAvailability
+        systemTypeCode = if ($null -eq $Payload.computerSystemType) { $null } else {
+            [int] $Payload.computerSystemType
+        }
+        hypervisorPresent = if ($null -eq $Payload.hypervisorPresent) { $null } else {
+            [bool] $Payload.hypervisorPresent
+        }
+        chassisTypeCodes = if ($null -eq $Payload.chassisTypeCodes) { $null } else {
+            ([string] $Payload.chassisTypeCodes).Trim()
+        }
+        chassisAvailability = [string] $Payload.chassisAvailability
         virtualizationDetected = $null
+        formFactor = $null
+        batteryAvailability = [string] $Payload.batteryAvailability
+        batteryPresence = if ($null -eq $Payload.batteryPresent) { $null } else {
+            [bool] $Payload.batteryPresent
+        }
+        batteryStatus = Get-NormalizedBatteryStatus -BatteryStatus $Payload.batteryStatus
+        batteryChargePercent = if ($null -eq $Payload.batteryChargePercent) { $null } else {
+            [int] $Payload.batteryChargePercent
+        }
+        batteryRuntimeMinutes = if ($null -eq $Payload.batteryRuntimeMinutes) { $null } else {
+            [int] $Payload.batteryRuntimeMinutes
+        }
     }
 }
 
@@ -119,7 +223,8 @@ function New-DeviceReadinessAssessmentRecord {
         [Parameter(Mandatory)] $CollectorResult,
         [Parameter(Mandatory)] $Policy,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
-        [Parameter()] [ValidateSet('', 'Partial', 'Unavailable', 'Malformed', 'Failed')]
+        [Parameter()] [ValidateSet('', 'Partial', 'Unavailable', 'Malformed', 'Failed',
+            'Denied', 'ProhibitedMaterialBlocked')]
         [string] $CoverageStateOverride = '',
         [Parameter()] [string] $CoverageReasonCode = ''
     )
@@ -133,13 +238,34 @@ function New-DeviceReadinessAssessmentRecord {
         @{ id='field:device.windows.edition'; source='source:windows.cim.operating-system'; property='windowsEdition' },
         @{ id='field:device.windows.build'; source='source:windows.cim.operating-system'; property='build' },
         @{ id='field:device.architecture'; source='source:dotnet.runtime-information'; property='architecture' },
-        @{ id='field:device.virtualization.detected'; source='source:win-pcinfo.virtualization-rule'; property='virtualizationDetected' }
+        @{ id='field:device.windows.activation-state'; source='source:windows.cim.software-licensing-product'; property='activationState' },
+        @{ id='field:device.system-type-code'; source='source:windows.cim.computer-system'; property='systemTypeCode' },
+        @{ id='field:device.hypervisor-present'; source='source:windows.cim.computer-system'; property='hypervisorPresent' },
+        @{ id='field:device.chassis.type-codes'; source='source:windows.cim.system-enclosure'; property='chassisTypeCodes' },
+        @{ id='field:device.battery.presence'; source='source:windows.cim.battery'; property='batteryPresence' },
+        @{ id='field:device.battery.status'; source='source:windows.cim.battery'; property='batteryStatus'; batteryDetail=$true },
+        @{ id='field:device.battery.charge-percent'; source='source:windows.cim.battery'; property='batteryChargePercent'; batteryDetail=$true },
+        @{ id='field:device.battery.estimated-runtime-minutes'; source='source:windows.cim.battery'; property='batteryRuntimeMinutes'; batteryDetail=$true }
     )
     $observations = [System.Collections.Generic.List[object]]::new()
     $provenance = [System.Collections.Generic.List[object]]::new()
-    $collectionExaminedFields = $CoverageStateOverride -notin @('Unavailable', 'Malformed', 'Failed')
+    $collectionExaminedFields = $CoverageStateOverride -notin @(
+        'Unavailable', 'Malformed', 'Failed', 'ProhibitedMaterialBlocked'
+    )
     if ($collectionExaminedFields) {
         foreach ($field in $fieldSpecs) {
+            # A source-access failure is coverage and diagnostic evidence, not
+            # a field examination. Skip that source's observations entirely so
+            # SourceReportedUnknown keeps its domain meaning: Windows actually
+            # examined the field and reported no usable value.
+            if (([string]$field.source -eq 'source:windows.cim.software-licensing-product' -and
+                    $Evidence.activationAvailability -ne 'Available') -or
+                ([string]$field.source -eq 'source:windows.cim.system-enclosure' -and
+                    $Evidence.chassisAvailability -ne 'Available') -or
+                ([string]$field.source -eq 'source:windows.cim.battery' -and
+                    $Evidence.batteryAvailability -ne 'Available')) {
+                continue
+            }
             $suffix = ([string] $field.id).Substring('field:'.Length).Replace('.', '-')
             $observationId = "observation:$suffix`:$RunId"
             $provenanceId = "provenance:$suffix`:$RunId"
@@ -152,27 +278,48 @@ function New-DeviceReadinessAssessmentRecord {
                 collectedAt = [string] $CollectorResult.Envelope.completedAt
                 sourceLocale = [string] $Evidence.sourceLocale
             })
+            $valueState = if ($field.ContainsKey('batteryDetail') -and
+                $Evidence.batteryPresence -eq $false) {
+                'ObservedAbsent'
+            }
+            elseif ($null -eq $value) { 'SourceReportedUnknown' }
+            else { 'ObservedValue' }
             $observation = [ordered]@{
                 observationId = $observationId; fieldId = [string] $field.id
                 subjectId = $subjectId; provenanceId = $provenanceId
-                valueState = if ($null -eq $value) { 'SourceReportedUnknown' } else { 'ObservedValue' }
+                valueState = $valueState
             }
-            if ($null -ne $value) { $observation.value = $value }
+            if ($valueState -eq 'ObservedValue') { $observation.value = $value }
             $observations.Add([pscustomobject] $observation)
         }
     }
 
-    # The first contract pass deliberately leaves the derived virtualization
-    # observation unknown. That lets the validator establish trusted source
-    # observations before any rule reads them.
+    # The first contract pass omits derived fields altogether. Absence here is
+    # not a source-reported unknown: the classifiers have not run yet. They may
+    # append their own observations only after these source facts are accepted.
+    $availabilitySpecs = @(
+        @{ kind='activation'; state=[string]$Evidence.activationAvailability },
+        @{ kind='chassis'; state=[string]$Evidence.chassisAvailability },
+        @{ kind='battery'; state=[string]$Evidence.batteryAvailability }
+    )
+    $availabilityGap = @($availabilitySpecs | Where-Object state -ne 'Available').Count -gt 0
+    $requiredSourceGap = @(
+        $Evidence.manufacturer, $Evidence.model, $Evidence.processorName,
+        $Evidence.memoryBytes, $Evidence.windowsEdition, $Evidence.build,
+        $Evidence.architecture | Where-Object { $null -eq $_ }
+    ).Count -gt 0
     $coverageState = if ($CoverageStateOverride) { $CoverageStateOverride } else { 'Partial' }
     if (-not $CoverageReasonCode) {
-        $CoverageReasonCode = if (@($observations | Where-Object {
-            $_.fieldId -ne 'field:device.virtualization.detected' -and
-            $_.valueState -ne 'ObservedValue'
-        }).Count -gt 0) { 'COLLECTION.FIELD_UNAVAILABLE' } else { 'COLLECTION.DERIVATION_PENDING' }
+        $CoverageReasonCode = if (@($availabilitySpecs | Where-Object state -eq 'Denied').Count -gt 0) {
+            'COLLECTION.FIELD_INACCESSIBLE'
+        }
+            elseif ($availabilityGap) { 'COLLECTION.FIELD_UNAVAILABLE' }
+            elseif ($requiredSourceGap) { 'COLLECTION.FIELD_UNAVAILABLE' }
+            else { 'COLLECTION.DERIVATION_PENDING' }
     }
-    $diagnostics = @([pscustomobject][ordered]@{
+    $diagnostics = [System.Collections.Generic.List[object]]::new()
+    if ($CoverageStateOverride -or -not $availabilityGap) {
+        $diagnostics.Add([pscustomobject][ordered]@{
             diagnosticId = "diagnostic:device-field-unavailable:$RunId"
             scopeId = [string] $Policy.scopeId; phase = 'Collection'
             reasonCode = $CoverageReasonCode
@@ -180,29 +327,34 @@ function New-DeviceReadinessAssessmentRecord {
                 'COLLECTION.SOURCE_UNAVAILABLE' { 'device.readiness.source-unavailable' }
                 'COLLECTION.PAYLOAD_MALFORMED' { 'device.readiness.payload-malformed' }
                 'COLLECTION.OUTPUT_LIMIT_EXCEEDED' { 'device.readiness.output-limit-exceeded' }
+                'COLLECTION.PROHIBITED_MATERIAL_BLOCKED' { 'device.context.prohibited-material-blocked' }
                 'COLLECTION.DERIVATION_PENDING' { 'device.readiness.derivation-pending' }
                 default { 'device.readiness.field-unavailable' }
             }
-    })
-    $coverageId = "coverage:device-windows-readiness:$RunId"
-    $observationIds = @($observations | ForEach-Object { [string]$_.observationId })
-    $diagnosticIds = @($diagnostics | ForEach-Object { [string] $_.diagnosticId })
-
-    $ruleEvidence = @($observations | Where-Object fieldId -in @(
-        'field:device.memory.physical-bytes', 'field:device.windows.build',
-        'field:device.architecture'
-    ))
-    $finding = [ordered]@{
-        findingId = "finding:device-windows-readiness:$RunId"
-        ruleId = [string] $Policy.rule.ruleId; targetSubjectId = $subjectId
-        outcome = 'Indeterminate'
-        evidenceReferences = @($ruleEvidence | ForEach-Object {
-            [pscustomobject][ordered]@{
-                observationId = $_.observationId; fieldId = $_.fieldId; subjectId = $_.subjectId
-            }
         })
     }
-    $finding.reasonCode = 'FINDING.EVALUATION_PENDING'
+    else {
+        foreach ($availability in @($availabilitySpecs | Where-Object state -ne 'Available')) {
+            $upperKind = ([string]$availability.kind).ToUpperInvariant()
+            $isDenied = [string]$availability.state -eq 'Denied'
+            $diagnostics.Add([pscustomobject][ordered]@{
+                diagnosticId = "diagnostic:device-$($availability.kind)-access:$RunId"
+                scopeId = [string] $Policy.scopeId; phase = 'Collection'
+                reasonCode = if ($isDenied) { "COLLECTION.$upperKind`_ACCESS_DENIED" }
+                    else { "COLLECTION.$upperKind`_SOURCE_UNAVAILABLE" }
+                operatorMessageId = if ($isDenied) { "device.context.$($availability.kind)-access-denied" }
+                    else { "device.context.$($availability.kind)-source-unavailable" }
+            })
+        }
+    }
+    if ($CoverageStateOverride -eq 'ProhibitedMaterialBlocked') {
+        $diagnostics[0] | Add-Member -NotePropertyName prohibitedMaterial -NotePropertyValue (
+            [pscustomobject][ordered]@{ encountered=$true; retained=$false; hashed=$false }
+        )
+    }
+    $coverageId = "coverage:device-windows-context:$RunId"
+    $observationIds = @($observations | ForEach-Object { [string]$_.observationId })
+    $diagnosticIds = @($diagnostics | ForEach-Object { [string] $_.diagnosticId })
 
     [pscustomobject][ordered]@{
         recordType = 'win-pcinfo.assessment-record'; contractVersion = '1.0.0'
@@ -211,7 +363,7 @@ function New-DeviceReadinessAssessmentRecord {
             runId = $RunId
             outcome = 'CompletedWithGaps'
             validationFixture = $ValidationFixture
-            evidenceProfileId = 'profile:device-windows-readiness'
+            evidenceProfileId = 'profile:device-windows-context'
         }
         subjects = @([pscustomobject][ordered]@{ subjectId=$subjectId; kind='Device' })
         provenance = @($provenance)
@@ -223,7 +375,7 @@ function New-DeviceReadinessAssessmentRecord {
         })
         diagnostics = @($diagnostics)
         collectorResults = @([pscustomobject][ordered]@{
-            envelopeId="envelope:device-windows-readiness:$RunId"
+            envelopeId="envelope:device-windows-context:$RunId"
             collectorId=[string]$Policy.collector.collectorId
             collectorVersion=[string]$Policy.collector.collectorVersion
             operationId=[string]$Policy.collector.operationId
@@ -234,8 +386,168 @@ function New-DeviceReadinessAssessmentRecord {
             attempts=1; observationIds=$observationIds; coverageIds=@($coverageId)
             diagnosticIds=$diagnosticIds
         })
-        findings = @([pscustomobject]$finding)
+        findings = @()
         recommendations = @(); recommendationRelationships = @()
+    }
+}
+
+function Invoke-DeviceContextRuleEvaluation {
+    param(
+        [Parameter(Mandatory)] $Rule,
+        [Parameter(Mandatory)] [scriptblock] $Evaluation
+    )
+
+    # A Rule Evaluation has one declared operation and returns one outcome for
+    # one finding. Keeping the stopwatch here makes the four finite boundaries
+    # executable rather than treating their policy deadlines as documentation.
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $results = @(& $Evaluation)
+    $watch.Stop()
+    if ($watch.ElapsedMilliseconds -gt [int]$Rule.deadlineMilliseconds) {
+        throw "The release-owned $($Rule.operationId) rule exceeded its finite deadline."
+    }
+    if ($results.Count -ne 1 -or [string]$results[0].outcome -notin @(
+        'ExpectedCondition','NeedsAttention','Informational','Indeterminate','NotApplicable'
+    )) {
+        throw "The release-owned $($Rule.operationId) rule returned an invalid result."
+    }
+    $results[0]
+}
+
+function Set-DeviceContextFindingResult {
+    param(
+        [Parameter(Mandatory)] $Finding,
+        [Parameter(Mandatory)] $Result
+    )
+
+    $Finding.outcome = [string]$Result.outcome
+    if ($null -ne $Result.PSObject.Properties['reasonCode'] -and
+        -not [string]::IsNullOrWhiteSpace([string]$Result.reasonCode)) {
+        $Finding.reasonCode = [string]$Result.reasonCode
+    }
+    else {
+        $Finding.PSObject.Properties.Remove('reasonCode')
+    }
+}
+
+function Invoke-DeviceContextDerivation {
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] $Definition,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $InputObservations,
+        [Parameter(Mandatory)] [scriptblock] $Evaluation,
+        [Parameter(Mandatory)] [hashtable] $ByField
+    )
+
+    if ($InputObservations.Count -gt [int]$Definition.maximumInputObservations) {
+        throw "The $($Definition.operationId) classifier input exceeded its frozen bound."
+    }
+    $startedAt = [System.DateTimeOffset]::UtcNow
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $results = @(& $Evaluation)
+    $watch.Stop()
+    $completedAt = [System.DateTimeOffset]::UtcNow
+    $expectedFieldId = if ([string]$Definition.derivedKind -eq 'virtualization') {
+        'field:device.virtualization.detected'
+    } else { 'field:device.form-factor' }
+    if ($watch.ElapsedMilliseconds -gt [int]$Definition.deadlineMilliseconds) {
+        throw "The $($Definition.operationId) classifier exceeded its finite deadline."
+    }
+    if ($results.Count -ne [int]$Definition.maximumOutputObservations -or
+        [string]$results[0].fieldId -ne $expectedFieldId) {
+        throw "The $($Definition.operationId) classifier returned an invalid output."
+    }
+
+    # A classifier has its own identity and real timing. Its output is never
+    # backdated into the already-completed Windows collector attempt.
+    $derived = $results[0]
+    $subjectId = [string]@($Record.subjects)[0].subjectId
+    $runId = [string]$Record.run.runId
+    $suffix = $expectedFieldId.Substring('field:'.Length).Replace('.', '-')
+    $observationId = "observation:$suffix`:$runId"
+    $provenanceId = "provenance:$suffix`:$runId"
+    $sourceLocale = if (@($Record.provenance).Count -gt 0) {
+        [string]@($Record.provenance)[0].sourceLocale
+    } else { 'und' }
+    $provenance = [pscustomobject][ordered]@{
+        provenanceId=$provenanceId;fieldId=$expectedFieldId;subjectId=$subjectId
+        sourceId=[string]$Definition.sourceId;collectorId=[string]$Definition.collectorId
+        collectorVersion=[string]$Definition.collectorVersion
+        executionContext=[string]$Definition.executionContext
+        collectedAt=$completedAt.ToString('o');sourceLocale=$sourceLocale
+    }
+    $observation = [ordered]@{
+        observationId=$observationId;fieldId=$expectedFieldId
+        subjectId=$subjectId;provenanceId=$provenanceId
+        valueState=if($null -eq $derived.value){'SourceReportedUnknown'}else{'ObservedValue'}
+    }
+    if ($null -ne $derived.value) { $observation.value = $derived.value }
+    $observation = [pscustomobject]$observation
+    $Record.provenance = @($Record.provenance) + $provenance
+    $Record.observations = @($Record.observations) + $observation
+    $Record.coverage[0].observationIds = @($Record.coverage[0].observationIds) + $observationId
+    $Record.collectorResults = @($Record.collectorResults) + [pscustomobject][ordered]@{
+        envelopeId="envelope:$($Definition.derivedKind):$runId"
+        collectorId=[string]$Definition.collectorId
+        collectorVersion=[string]$Definition.collectorVersion
+        operationId=[string]$Definition.operationId
+        intendedScopeIds=@([string]$Record.coverage[0].scopeId);subjectIds=@($subjectId)
+        startedAt=$startedAt.ToString('o');completedAt=$completedAt.ToString('o')
+        executionContext=[string]$Definition.executionContext;attempts=1
+        observationIds=@($observationId)
+        coverageIds=@([string]$Record.coverage[0].coverageId);diagnosticIds=@()
+    }
+    $ByField[$expectedFieldId] = $observation
+}
+
+function Add-ValidatedDeviceContextDerivations {
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] $Policy,
+        [Parameter(Mandatory)] [hashtable] $ByField
+    )
+
+    $definitions = @{}
+    foreach ($definition in @($Policy.derivations)) {
+        $definitions[[string]$definition.derivedKind] = $definition
+    }
+    $manufacturer = $ByField['field:device.manufacturer']
+    $model = $ByField['field:device.model']
+    Invoke-DeviceContextDerivation -Record $Record -Definition $definitions.virtualization `
+        -InputObservations @($manufacturer,$model | Where-Object { $null -ne $_ }) `
+        -ByField $ByField -Evaluation {
+        $value = if ($null -ne $manufacturer -and $manufacturer.valueState -eq 'ObservedValue' -and
+            $null -ne $model -and $model.valueState -eq 'ObservedValue') {
+            [bool]([string]$manufacturer.value -match
+                '(?i)Microsoft Corporation|VMware|Xen|QEMU|VirtualBox' -or
+                [string]$model.value -match '(?i)Virtual Machine|VMware|VirtualBox|KVM|HVM')
+        } else { $null }
+        [pscustomobject]@{fieldId='field:device.virtualization.detected';value=$value}
+    }
+
+    $virtualization = $ByField['field:device.virtualization.detected']
+    $systemType = $ByField['field:device.system-type-code']
+    $chassis = $ByField['field:device.chassis.type-codes']
+    Invoke-DeviceContextDerivation -Record $Record -Definition $definitions['form-factor'] `
+        -InputObservations @($virtualization,$systemType,$chassis | Where-Object { $null -ne $_ }) `
+        -ByField $ByField -Evaluation {
+        $codes = if ($null -ne $chassis -and $chassis.valueState -eq 'ObservedValue') {
+            @(([string]$chassis.value -split ',') | ForEach-Object { [int]$_ })
+        } else { @() }
+        $systemCode = if ($null -ne $systemType -and $systemType.valueState -eq 'ObservedValue') {
+            [int]$systemType.value
+        } else { -1 }
+        $value = if ($virtualization.valueState -eq 'ObservedValue' -and
+            [bool]$virtualization.value) { 'Virtual' }
+            elseif (@($codes | Where-Object { $_ -in 30,31,32 }).Count -gt 0 -or
+                $systemCode -eq 8) { 'Tablet' }
+            elseif (@($codes | Where-Object { $_ -in 8,9,10,11,14 }).Count -gt 0 -or
+                $systemCode -eq 2) { 'Laptop' }
+            elseif (@($codes | Where-Object { $_ -in 3,4,5,6,7,13,15,16,23 }).Count -gt 0 -or
+                $systemCode -eq 1) { 'Desktop' }
+            elseif ($codes.Count -gt 0 -or $systemCode -ge 0) { 'Other' }
+            else { $null }
+        [pscustomobject]@{fieldId='field:device.form-factor';value=$value}
     }
 }
 
@@ -250,32 +562,97 @@ function Complete-ValidatedDeviceReadinessAssessmentRecord {
         $ContractValidation.reasonCode -ne 'CONTRACT.ACCEPTED') {
         throw 'Device Readiness rules require an accepted source-observation contract pass.'
     }
-    if (@($ValidatedRecord.observations).Count -gt [int]$Policy.rule.maximumInputObservations -or
-        @($ValidatedRecord.findings).Count -gt [int]$Policy.rule.maximumOutputFindings) {
-        throw 'The Device Readiness rule input or output exceeds its frozen finite bound.'
+    $rulesByKind = @{}
+    foreach ($rule in @($Policy.rules)) { $rulesByKind[[string]$rule.findingKind] = $rule }
+    if (@($ValidatedRecord.observations).Count -gt 15 -or
+        @($ValidatedRecord.findings).Count -ne 0) {
+        throw 'The source pass contains output that belongs after rule admission.'
     }
 
-    $ruleWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $byField = @{}
     foreach ($observation in @($ValidatedRecord.observations)) {
         $byField[[string]$observation.fieldId] = $observation
     }
     $coverage = @($ValidatedRecord.coverage)[0]
-    $sourceFailureState = [string]$coverage.state -in @('Unavailable','Malformed','Failed')
+    $sourceFailureState = [string]$coverage.state -in @(
+        'Unavailable','Malformed','Failed','Denied','ProhibitedMaterialBlocked'
+    )
     if (-not $sourceFailureState) {
-        $manufacturer = $byField['field:device.manufacturer']
-        $model = $byField['field:device.model']
-        $virtualization = $byField['field:device.virtualization.detected']
-        if ($manufacturer.valueState -eq 'ObservedValue' -and $model.valueState -eq 'ObservedValue') {
-            $virtualization.valueState = 'ObservedValue'
-            $virtualization | Add-Member -NotePropertyName value -NotePropertyValue ([bool](
-                [string]$manufacturer.value -match '(?i)Microsoft Corporation|VMware|Xen|QEMU|VirtualBox' -or
-                [string]$model.value -match '(?i)Virtual Machine|VMware|VirtualBox|KVM|HVM'
-            )) -Force
+        Add-ValidatedDeviceContextDerivations -Record $ValidatedRecord -Policy $Policy `
+            -ByField $byField
+    }
+
+    $runId = [string]$ValidatedRecord.run.runId
+    $subjectId = [string]@($ValidatedRecord.subjects)[0].subjectId
+    $ValidatedRecord.findings = @(
+        New-DeviceContextFinding -Kind 'device-readiness' -RunId $runId `
+            -RuleId ([string]$rulesByKind['device-readiness'].ruleId) -SubjectId $subjectId `
+            -Observations @($ValidatedRecord.observations) -FieldIds @(
+                'field:device.memory.physical-bytes','field:device.windows.build',
+                'field:device.architecture'
+            )
+        New-DeviceContextFinding -Kind 'activation-context' -RunId $runId `
+            -RuleId ([string]$rulesByKind['activation-context'].ruleId) -SubjectId $subjectId `
+            -Observations @($ValidatedRecord.observations) `
+            -FieldIds @('field:device.windows.activation-state')
+        New-DeviceContextFinding -Kind 'platform-context' -RunId $runId `
+            -RuleId ([string]$rulesByKind['platform-context'].ruleId) -SubjectId $subjectId `
+            -Observations @($ValidatedRecord.observations) -FieldIds @(
+                'field:device.manufacturer','field:device.model',
+                'field:device.virtualization.detected','field:device.system-type-code',
+                'field:device.chassis.type-codes','field:device.form-factor'
+            )
+        New-DeviceContextFinding -Kind 'power-context' -RunId $runId `
+            -RuleId ([string]$rulesByKind['power-context'].ruleId) -SubjectId $subjectId `
+            -Observations @($ValidatedRecord.observations) -FieldIds @(
+                'field:device.battery.presence','field:device.battery.status',
+                'field:device.battery.charge-percent',
+                'field:device.battery.estimated-runtime-minutes'
+            )
+    )
+    foreach ($findingToCheck in @($ValidatedRecord.findings)) {
+        $matchingRules = @($Policy.rules | Where-Object ruleId -eq $findingToCheck.ruleId)
+        if ($matchingRules.Count -ne 1 -or
+            @($findingToCheck.evidenceReferences).Count -gt
+                [int]$matchingRules[0].maximumInputObservations -or
+            [string]$findingToCheck.findingId -notlike
+                "finding:$([string]$matchingRules[0].findingKind):*") {
+            throw 'A Device Context Rule Evaluation is not bound to exactly one finite finding.'
         }
     }
-    $allObserved = @($ValidatedRecord.observations | Where-Object valueState -ne 'ObservedValue').Count -eq 0
-    if (-not $sourceFailureState -and $allObserved) {
+
+    # Each declared rule now reads only completed observations and produces
+    # exactly one result for its one canonical finding.
+    $readinessFinding = @($ValidatedRecord.findings | Where-Object {
+        $_.findingId -like 'finding:device-readiness:*'
+    })[0]
+    $activationFinding = @($ValidatedRecord.findings | Where-Object {
+        $_.findingId -like 'finding:activation-context:*'
+    })[0]
+    $platformFinding = @($ValidatedRecord.findings | Where-Object {
+        $_.findingId -like 'finding:platform-context:*'
+    })[0]
+    $powerFinding = @($ValidatedRecord.findings | Where-Object {
+        $_.findingId -like 'finding:power-context:*'
+    })[0]
+    $virtualization = $byField['field:device.virtualization.detected']
+    $platformResult = Invoke-DeviceContextRuleEvaluation `
+        -Rule $rulesByKind['platform-context'] -Evaluation {
+        if ($null -ne $virtualization -and $virtualization.valueState -eq 'ObservedValue' -and
+            [bool]$virtualization.value) {
+            [pscustomobject]@{outcome='Informational'}
+        }
+        elseif ($null -ne $virtualization -and $virtualization.valueState -eq 'ObservedValue') {
+            [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.PHYSICAL_DEVICE_NOT_ESTABLISHED'}
+        }
+        else {
+            [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.PLATFORM_EVIDENCE_INCOMPLETE'}
+        }
+    }
+    Set-DeviceContextFindingResult -Finding $platformFinding -Result $platformResult
+
+    if (-not $sourceFailureState -and
+        [string]$coverage.reasonCode -eq 'COLLECTION.DERIVATION_PENDING') {
         $coverage.state = 'Complete'
         $coverage.PSObject.Properties.Remove('reasonCode')
         $coverage.diagnosticIds = @()
@@ -283,49 +660,74 @@ function Complete-ValidatedDeviceReadinessAssessmentRecord {
         $ValidatedRecord.collectorResults[0].diagnosticIds = @()
         $ValidatedRecord.run.outcome = 'Completed'
     }
-    elseif (-not $sourceFailureState) {
-        $coverage.state = 'Partial'
-        $coverage.reasonCode = 'COLLECTION.FIELD_UNAVAILABLE'
-        $ValidatedRecord.diagnostics[0].reasonCode = 'COLLECTION.FIELD_UNAVAILABLE'
-        $ValidatedRecord.diagnostics[0].operatorMessageId = 'device.readiness.field-unavailable'
-    }
 
-    # Both this readiness rule and the virtualization derivation read only the
-    # observations from the record accepted by the first contract pass. A
-    # second pass below validates their final references and coverage state.
-    $finding = @($ValidatedRecord.findings)[0]
-    if ($coverage.state -eq 'Complete') {
-        $memory = $byField['field:device.memory.physical-bytes']
-        $build = $byField['field:device.windows.build']
-        $architecture = $byField['field:device.architecture']
-        $ready = [long]$memory.value -ge [long]$Policy.rule.minimumMemoryBytes -and
-            [long]$build.value -ge [long]$Policy.rule.minimumWindowsBuild -and
-            [string]$architecture.value -in @($Policy.rule.supportedArchitectures)
-        $finding.outcome = if ($ready) { 'ExpectedCondition' } else { 'NeedsAttention' }
-        $finding.PSObject.Properties.Remove('reasonCode')
+    $memory = $byField['field:device.memory.physical-bytes']
+    $build = $byField['field:device.windows.build']
+    $architecture = $byField['field:device.architecture']
+    $readinessResult = Invoke-DeviceContextRuleEvaluation `
+        -Rule $rulesByKind['device-readiness'] -Evaluation {
+        if ($null -ne $memory -and $memory.valueState -eq 'ObservedValue' -and
+            $null -ne $build -and $build.valueState -eq 'ObservedValue' -and
+            $null -ne $architecture -and $architecture.valueState -eq 'ObservedValue') {
+            $rule = $rulesByKind['device-readiness']
+            $ready = [long]$memory.value -ge [long]$rule.minimumMemoryBytes -and
+                [long]$build.value -ge [long]$rule.minimumWindowsBuild -and
+                [string]$architecture.value -in @($rule.supportedArchitectures)
+            [pscustomobject]@{outcome=if($ready){'ExpectedCondition'}else{'NeedsAttention'}}
+        }
+        else { [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.EVIDENCE_INCOMPLETE'} }
     }
-    else {
-        $finding.outcome = 'Indeterminate'
-        $finding.reasonCode = 'FINDING.EVIDENCE_INCOMPLETE'
+    Set-DeviceContextFindingResult -Finding $readinessFinding -Result $readinessResult
+
+    $activation = $byField['field:device.windows.activation-state']
+    $activationResult = Invoke-DeviceContextRuleEvaluation `
+        -Rule $rulesByKind['activation-context'] -Evaluation {
+        if ($null -ne $activation -and $activation.valueState -eq 'ObservedValue') {
+            [pscustomobject]@{outcome=if([string]$activation.value -eq 'Activated'){
+                'ExpectedCondition'
+            }else{'NeedsAttention'}}
+        }
+        else { [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.ACTIVATION_EVIDENCE_INCOMPLETE'} }
     }
-    $ruleWatch.Stop()
-    if ($ruleWatch.ElapsedMilliseconds -gt [int]$Policy.rule.deadlineMilliseconds) {
-        throw 'The release-owned Device Readiness rule exceeded its finite deadline.'
+    Set-DeviceContextFindingResult -Finding $activationFinding -Result $activationResult
+
+    $batteryPresence = $byField['field:device.battery.presence']
+    $powerResult = Invoke-DeviceContextRuleEvaluation `
+        -Rule $rulesByKind['power-context'] -Evaluation {
+        if ($null -ne $batteryPresence -and $batteryPresence.valueState -eq 'ObservedValue') {
+            [pscustomobject]@{outcome='Informational'}
+        }
+        else { [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.POWER_EVIDENCE_INCOMPLETE'} }
     }
+    Set-DeviceContextFindingResult -Finding $powerFinding -Result $powerResult
     $ValidatedRecord
 }
 
 function New-DeviceReadinessReportBytes {
     param([Parameter(Mandatory)] $Record)
 
-    $finding = @($Record.findings)[0]
+    $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
+    $activationFinding = @($Record.findings | Where-Object {
+        $_.findingId -like 'finding:activation-context:*'
+    })[0]
+    $platformFinding = @($Record.findings | Where-Object {
+        $_.findingId -like 'finding:platform-context:*'
+    })[0]
+    $powerFinding = @($Record.findings | Where-Object {
+        $_.findingId -like 'finding:power-context:*'
+    })[0]
     $coverage = @($Record.coverage)[0]
     $values = @{}
     foreach ($fieldId in @(
         'field:device.manufacturer', 'field:device.model', 'field:device.processor.name',
         'field:device.memory.physical-bytes', 'field:device.windows.edition',
         'field:device.windows.build', 'field:device.architecture',
-        'field:device.virtualization.detected'
+        'field:device.windows.activation-state', 'field:device.system-type-code',
+        'field:device.hypervisor-present', 'field:device.chassis.type-codes',
+        'field:device.virtualization.detected', 'field:device.form-factor',
+        'field:device.battery.presence', 'field:device.battery.status',
+        'field:device.battery.charge-percent',
+        'field:device.battery.estimated-runtime-minutes'
     )) { $values[$fieldId] = 'Not available' }
     foreach ($observation in @($Record.observations)) {
         $values[[string]$observation.fieldId] = if ($observation.valueState -eq 'ObservedValue') {
@@ -337,20 +739,55 @@ function New-DeviceReadinessReportBytes {
         'NeedsAttention' { 'One or more available device facts need attention.' }
         default { 'There is not enough evidence to make a readiness claim.' }
     }
+    $activation = $values['field:device.windows.activation-state']
+    $virtualization = $values['field:device.virtualization.detected']
+    $formFactor = $values['field:device.form-factor']
+    $batteryPresence = $values['field:device.battery.presence']
+    $accessDiagnostics = @($Record.diagnostics | Where-Object {
+        $_.reasonCode -match '^COLLECTION\.(ACTIVATION|CHASSIS|BATTERY)_(ACCESS_DENIED|SOURCE_UNAVAILABLE)$'
+    } |
+        ForEach-Object { [string]$_.reasonCode } | Sort-Object)
+    $accessSummary = if ($accessDiagnostics.Count -eq 0) {
+        'No source-specific access limitation was recorded.'
+    }
+    else {
+        'Source limitations: ' + [System.Net.WebUtility]::HtmlEncode(($accessDiagnostics -join ', ')) + '.'
+    }
+    $virtualLimitation = if ($virtualization -eq 'True') {
+        'Windows evidence identifies this as virtual. Guest-visible battery and hardware values cannot support physical battery, firmware, TPM-attestation, OEM, or performance claims.'
+    }
+    else {
+        'No virtual signal was detected by this bounded rule. That does not prove the device is physical or establish firmware, TPM-attestation, OEM, or performance facts.'
+    }
     $html = @"
 <!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
-<h1>Device and Windows readiness</h1><p>$summary</p>
-<p>This is advisory information, not a guarantee that every application or future update will work.</p>
+<h1>Device, Windows, activation, and power context</h1><p>$summary</p>
+<p>This is advisory information, not a compliance result or a guarantee that every application or future update will work.</p>
 <dl><dt>Coverage</dt><dd>$([System.Net.WebUtility]::HtmlEncode([string]$coverage.state))</dd>
 <dt>Windows edition</dt><dd>$($values['field:device.windows.edition'])</dd>
 <dt>Windows build</dt><dd>$($values['field:device.windows.build'])</dd>
 <dt>Architecture</dt><dd>$($values['field:device.architecture'])</dd></dl>
+<h2>Activation context</h2><p>Windows-reported state: $activation.</p>
+<p>Advisory finding: $([System.Net.WebUtility]::HtmlEncode([string]$activationFinding.outcome)).</p>
+<p>This point-in-time status contains no product key and cannot establish legal entitlement, license ownership, purchasing need, or purchasing guidance.</p>
+<h2>Form and virtualization context</h2><dl><dt>Form</dt><dd>$formFactor</dd>
+<dt>Virtualization detected</dt><dd>$virtualization</dd></dl>
+<p>Advisory finding: $([System.Net.WebUtility]::HtmlEncode([string]$platformFinding.outcome)). $virtualLimitation</p>
+<h2>Bounded battery and power context</h2><dl><dt>Guest-visible battery</dt><dd>$batteryPresence</dd>
+<dt>Status</dt><dd>$($values['field:device.battery.status'])</dd>
+<dt>Charge percent</dt><dd>$($values['field:device.battery.charge-percent'])</dd>
+<dt>Estimated runtime minutes</dt><dd>$($values['field:device.battery.estimated-runtime-minutes'])</dd></dl>
+<p>Advisory finding: $([System.Net.WebUtility]::HtmlEncode([string]$powerFinding.outcome)).</p>
+<p>These are bounded Windows observations, not a battery-health, calibration, capacity, or performance test. WIN-PCInfo does not change the active power plan.</p>
+<h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
 <dl><dt>Manufacturer</dt><dd>$($values['field:device.manufacturer'])</dd>
 <dt>Model</dt><dd>$($values['field:device.model'])</dd>
 <dt>Processor</dt><dd>$($values['field:device.processor.name'])</dd>
-<dt>Physical memory (bytes)</dt><dd>$($values['field:device.memory.physical-bytes'])</dd></dl>
+<dt>Physical memory (bytes)</dt><dd>$($values['field:device.memory.physical-bytes'])</dd>
+<dt>Windows system type code</dt><dd>$($values['field:device.system-type-code'])</dd>
+<dt>Chassis type codes</dt><dd>$($values['field:device.chassis.type-codes'])</dd></dl>
 <p>Provenance: explicit Windows property projections normalized by WIN-PCInfo; see assessment-record.json for canonical typed evidence.</p>
 </details></html>
 "@
@@ -393,15 +830,23 @@ function Get-DeviceReadinessNoPayloadDisposition {
         ($Scenario -eq 'Malformed' -and [string]$Supervision.reasonCode -eq
             'PROCESS.PAYLOAD_MALFORMED') -or
         ($Scenario -eq 'Oversize' -and [string]$Supervision.reasonCode -eq
-            'PROCESS.OUTPUT_LIMIT_EXCEEDED')
+            'PROCESS.OUTPUT_LIMIT_EXCEEDED') -or
+        ($Scenario -eq 'ProhibitedMaterial' -and [string]$Supervision.reasonCode -eq
+            'PROCESS.PROHIBITED_MATERIAL_BLOCKED')
     )
     if ($ValidationFixture -and $recognizedAttemptFailure) {
         return [pscustomobject][ordered]@{
             buildCanonicalRecord = $true
-            coverageState = if ($Scenario -eq 'Malformed') { 'Malformed' } else { 'Unavailable' }
+            coverageState = if ($Scenario -eq 'Malformed') { 'Malformed' }
+                elseif ($Scenario -eq 'ProhibitedMaterial') { 'ProhibitedMaterialBlocked' }
+                else { 'Unavailable' }
             coverageReasonCode = if ($Scenario -eq 'Malformed') {
                 'COLLECTION.PAYLOAD_MALFORMED'
-            } else { 'COLLECTION.OUTPUT_LIMIT_EXCEEDED' }
+            }
+            elseif ($Scenario -eq 'ProhibitedMaterial') {
+                'COLLECTION.PROHIBITED_MATERIAL_BLOCKED'
+            }
+            else { 'COLLECTION.OUTPUT_LIMIT_EXCEEDED' }
             outcome = 'CompletedWithGaps'; exitCode = 10
             reasonCode = 'DEVICE_READINESS.COMPLETED_WITH_GAPS'
         }
@@ -448,6 +893,10 @@ function Invoke-DeviceReadinessSlice {
     $policy = $null; $boundary = $null; $opened = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
     $packageVerified = $false; $coverageState = 'Unavailable'; $findingOutcome = 'Indeterminate'
+    $activationFindingOutcome = 'Indeterminate'; $platformFindingOutcome = 'Indeterminate'
+    $powerFindingOutcome = 'Indeterminate'; $sourceAccessDiagnostics = ''
+    $activationContext = 'Unknown'; $virtualizationContext = 'Unknown'
+    $formFactor = 'Unknown'; $batteryPresence = 'Unknown'
     $collectionStarted = $false
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
     try {
@@ -482,7 +931,11 @@ function Invoke-DeviceReadinessSlice {
                 $evidence = [pscustomobject][ordered]@{
                     sourceLocale='und';manufacturer=$null;model=$null;processorName=$null
                     memoryBytes=$null;windowsEdition=$null;build=$null;architecture=$null
-                    virtualizationDetected=$null
+                    activationState=$null;activationAvailability='Unavailable'
+                    systemTypeCode=$null;hypervisorPresent=$null;chassisTypeCodes=$null
+                    chassisAvailability='Unavailable';virtualizationDetected=$null;formFactor=$null
+                    batteryAvailability='Unavailable';batteryPresence=$null;batteryStatus=$null
+                    batteryChargePercent=$null;batteryRuntimeMinutes=$null
                 }
             }
             elseif ($collector.PrivatePayload.PSObject.Properties['availability']) {
@@ -491,7 +944,11 @@ function Invoke-DeviceReadinessSlice {
                 $evidence = [pscustomobject][ordered]@{
                     sourceLocale='und';manufacturer=$null;model=$null;processorName=$null
                     memoryBytes=$null;windowsEdition=$null;build=$null;architecture=$null
-                    virtualizationDetected=$null
+                    activationState=$null;activationAvailability='Unavailable'
+                    systemTypeCode=$null;hypervisorPresent=$null;chassisTypeCodes=$null
+                    chassisAvailability='Unavailable';virtualizationDetected=$null;formFactor=$null
+                    batteryAvailability='Unavailable';batteryPresence=$null;batteryStatus=$null
+                    batteryChargePercent=$null;batteryRuntimeMinutes=$null
                 }
             }
             else {
@@ -518,7 +975,47 @@ function Invoke-DeviceReadinessSlice {
                     -ConvertFromJsonCommand $ConvertFromJsonCommand -TestJsonCommand $TestJsonCommand
                 $recordAccepted = [bool]$sourceValidation.accepted -and [bool]$finalValidation.accepted
                 $coverageState = [string]@($record.coverage)[0].state
-                $findingOutcome = [string]@($record.findings)[0].outcome
+                $findingOutcome = [string]@($record.findings | Where-Object {
+                    $_.findingId -like 'finding:device-readiness:*'
+                })[0].outcome
+                $activationFindingOutcome = [string]@($record.findings | Where-Object {
+                    $_.findingId -like 'finding:activation-context:*'
+                })[0].outcome
+                $platformFindingOutcome = [string]@($record.findings | Where-Object {
+                    $_.findingId -like 'finding:platform-context:*'
+                })[0].outcome
+                $powerFindingOutcome = [string]@($record.findings | Where-Object {
+                    $_.findingId -like 'finding:power-context:*'
+                })[0].outcome
+                $sourceAccessDiagnostics = @($record.diagnostics | Where-Object {
+                    $_.reasonCode -match '^COLLECTION\.(ACTIVATION|CHASSIS|BATTERY)_(ACCESS_DENIED|SOURCE_UNAVAILABLE)$'
+                } |
+                    ForEach-Object { [string]$_.reasonCode } | Sort-Object) -join '|'
+                $contextByField = @{}
+                foreach ($contextObservation in @($record.observations)) {
+                    $contextByField[[string]$contextObservation.fieldId] = $contextObservation
+                }
+                $activationObservation = $contextByField['field:device.windows.activation-state']
+                if ($null -ne $activationObservation -and
+                    $activationObservation.valueState -eq 'ObservedValue') {
+                    $activationContext = [string]$activationObservation.value
+                }
+                $virtualizationObservation = $contextByField['field:device.virtualization.detected']
+                if ($null -ne $virtualizationObservation -and
+                    $virtualizationObservation.valueState -eq 'ObservedValue') {
+                    $virtualizationContext = if ([bool]$virtualizationObservation.value) {
+                        'Detected'
+                    } else { 'NotDetected' }
+                }
+                $formObservation = $contextByField['field:device.form-factor']
+                if ($null -ne $formObservation -and $formObservation.valueState -eq 'ObservedValue') {
+                    $formFactor = [string]$formObservation.value
+                }
+                $batteryObservation = $contextByField['field:device.battery.presence']
+                if ($null -ne $batteryObservation -and
+                    $batteryObservation.valueState -eq 'ObservedValue') {
+                    $batteryPresence = if ([bool]$batteryObservation.value) { 'Present' } else { 'Absent' }
+                }
                 if (-not $recordAccepted) {
                     $outcome='IntegrityFailed';$exitCode=50;$reasonCode='DEVICE_READINESS.CONTRACT_INVALID'
                 }
@@ -526,7 +1023,7 @@ function Invoke-DeviceReadinessSlice {
                     [byte[]]$reportBytes = New-DeviceReadinessReportBytes -Record $record
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportVerified = $reportText.StartsWith('<!doctype html>') -and
-                        $reportText.Contains('Device and Windows readiness') -and
+                        $reportText.Contains('Device, Windows, activation, and power context') -and
                         $reportText.Contains('<details><summary>Device details and where they came from</summary>') -and
                         $reportText.Contains('canonical typed evidence')
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
@@ -599,6 +1096,11 @@ function Invoke-DeviceReadinessSlice {
         Write-ContractRecord ([pscustomobject][ordered]@{
             recordType='win-pcinfo.device-readiness-validation';contractVersion='1.0.0'
             scenario=$scenario;coverageState=$coverageState;findingOutcome=$findingOutcome
+            activationContext=$activationContext;virtualizationContext=$virtualizationContext
+            formFactor=$formFactor;batteryPresence=$batteryPresence;physicalClaimsAllowed=$false
+            activationFindingOutcome=$activationFindingOutcome
+            platformFindingOutcome=$platformFindingOutcome;powerFindingOutcome=$powerFindingOutcome
+            sourceAccessDiagnostics=$sourceAccessDiagnostics
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
         }) -ConvertToJsonCommand $ConvertToJsonCommand

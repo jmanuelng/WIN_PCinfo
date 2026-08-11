@@ -16,7 +16,7 @@ Review the whole summary once. It discloses:
 - the protected output destination, Local Package Protector, and fixed zero-recipient choice;
 - Windows Feature observations, with no feature changes;
 - limitations, later side effects, and cleanup work.
-- the complete Device Readiness collector/rule contract: structured sources, standard-user context, offline behavior, signed executable, dependencies, deadlines, output/evidence bounds, and verified cleanup.
+- the complete device-context collector/rule contract: structured readiness, activation, form, virtualization, chassis, battery, and power sources; standard-user context; offline behavior; signed executable; dependencies; deadlines; output/evidence bounds; and verified cleanup.
 
 The plan digest appears with the summary and terminal record. If the request or any governed scope changes, the digest changes and the old approval cannot apply. The plan records the absolute local destination resolved during preflight, not a relative path that could later move. Preparation rejects UNC and mapped-network storage before readiness/free-space access, then checks output-path eligibility, required free disk, Local Package Protector availability, the recipient choice, and the no-Windows-Feature-change boundary without creating files. Missing critical prerequisites return `PREPARATION.PREREQUISITE_UNRESOLVED`. An unsigned or invalidly signed application, corrupt embedded release definition, or invalid application manifest returns `PREPARATION.INTEGRITY_FAILED`; there is no **Run Anyway** path for a digest, manifest, signature, attestation, or governing-resource failure.
 

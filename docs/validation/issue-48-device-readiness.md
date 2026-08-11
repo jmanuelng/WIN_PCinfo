@@ -4,7 +4,7 @@ This page records public-safe, identifier-free validation for the narrow Device 
 
 ## Generated-application matrix
 
-`tests/DeviceReadinessApplication.Tests.ps1` proves the complete vertical slice through the generated public application. `tests/DeviceReadinessScenarios.Tests.ps1` runs partial, unavailable, malformed, oversize, virtual, Unicode, and non-English scenarios through the same application seam.
+`tests/DeviceReadinessApplication.Tests.ps1` proves the complete vertical slice through the generated public application. The original partial, unavailable, malformed, oversize, virtual, Unicode, and non-English scenarios remain a tested subset of the expanded issue #49 matrix. See [Issue #49 validation evidence](issue-49-activation-form-power.md) for current behavior.
 
 The assertions cover:
 
