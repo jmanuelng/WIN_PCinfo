@@ -12,6 +12,19 @@ foreach ($source in @('Contracts','ContractValidator','RuntimeCompatibility','Pr
 $moduleFacts = Get-BuiltInModuleCompatibilityFacts
 $policy = Get-DeviceReadinessPolicy -ConvertFromJsonCommand $moduleFacts.convertFromJsonCommand
 
+$cleanupIncompletePackage = [pscustomobject]@{
+    state = 'CleanupIncomplete'; verified = $false; packagePath = $null
+}
+$cleanupDisposition = Get-DeviceReadinessPackageDisposition `
+    -Package $cleanupIncompletePackage -ValidationFixture $false `
+    -ValidationCleanupVerified $true
+Assert-Equal 'Uncertain' $cleanupDisposition.packageAvailability `
+    'typed package cleanup failure is never mislabeled VerifiedAbsent'
+Assert-Equal 'CleanupIncomplete' $cleanupDisposition.outcome `
+    'typed package cleanup failure preserves the cleanup terminal outcome'
+Assert-Equal 60 $cleanupDisposition.exitCode `
+    'typed package cleanup failure preserves the stable cleanup exit code'
+
 function Test-ReadinessRecord {
     param($Record)
     [byte[]]$bytes = [Text.UTF8Encoding]::new($false).GetBytes(

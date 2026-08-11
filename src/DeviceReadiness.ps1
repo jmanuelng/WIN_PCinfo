@@ -877,6 +877,47 @@ function Get-DeviceReadinessNoPayloadDisposition {
     }
 }
 
+function Get-DeviceReadinessPackageDisposition {
+    param(
+        [Parameter()] $Package,
+        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] [bool] $ValidationCleanupVerified
+    )
+
+    $packageState = if ($null -ne $Package -and $Package.PSObject.Properties['state']) {
+        [string]$Package.state
+    }
+    else { 'NotCreated' }
+    $packageVerified = $null -ne $Package -and
+        $Package.PSObject.Properties['verified'] -and [bool]$Package.verified
+    $packagePath = if ($null -ne $Package -and $Package.PSObject.Properties['packagePath']) {
+        [string]$Package.packagePath
+    }
+    else { '' }
+
+    $cleanupUncertain = $packageState -eq 'CleanupIncomplete' -or
+        ($packageVerified -and $ValidationFixture -and -not $ValidationCleanupVerified) -or
+        ($packageVerified -and -not $ValidationFixture -and
+            ([string]::IsNullOrWhiteSpace($packagePath) -or
+                -not [System.IO.File]::Exists($packagePath)))
+    if ($cleanupUncertain) {
+        return [pscustomobject][ordered]@{
+            packageAvailability = 'Uncertain'; outcome = 'CleanupIncomplete'
+            exitCode = 60; reasonCode = 'DEVICE_READINESS.PACKAGE_CLEANUP_INCOMPLETE'
+        }
+    }
+    if ($packageVerified) {
+        return [pscustomobject][ordered]@{
+            packageAvailability = if ($ValidationFixture) { 'VerifiedAbsent' } else { 'Available' }
+            outcome = ''; exitCode = -1; reasonCode = ''
+        }
+    }
+    [pscustomobject][ordered]@{
+        packageAvailability = 'VerifiedAbsent'; outcome = 'IntegrityFailed'
+        exitCode = 50; reasonCode = 'DEVICE_READINESS.PACKAGE_INVALID'
+    }
+}
+
 function Invoke-DeviceReadinessSlice {
     param(
         [Parameter()] [string] $LiteralPath,
@@ -1064,7 +1105,12 @@ function Invoke-DeviceReadinessSlice {
                             $opened.artifacts.Contains('assessment-report.html')
                     }
                     if (-not $packageVerified) {
-                        $outcome='IntegrityFailed';$exitCode=50;$reasonCode='DEVICE_READINESS.PACKAGE_INVALID'
+                        $packageDisposition = Get-DeviceReadinessPackageDisposition `
+                            -Package $package -ValidationFixture $isFixture `
+                            -ValidationCleanupVerified $true
+                        $outcome=[string]$packageDisposition.outcome
+                        $exitCode=[int]$packageDisposition.exitCode
+                        $reasonCode=[string]$packageDisposition.reasonCode
                     }
                     elseif ($coverageState -eq 'Complete') {
                         $outcome='Completed';$exitCode=0;$reasonCode='DEVICE_READINESS.COMPLETED'
@@ -1118,15 +1164,15 @@ function Invoke-DeviceReadinessSlice {
     else { 'None' }
     $recipientAccessAvailable = $packageVerified -and
         $recipientKeyProtection -eq 'RSA-OAEP-SHA-256'
-    $packageAvailable = $packageVerified -and -not $isFixture -and
-        $null -ne $package -and [System.IO.File]::Exists([string]$package.packagePath)
-    $packageAvailability = if ($packageAvailable) { 'Available' }
-    elseif ($isFixture -and $cleanupVerified) { 'VerifiedAbsent' }
-    elseif (-not $packageVerified -and
-        ($null -eq $package -or [string]::IsNullOrWhiteSpace([string]$package.packagePath))) {
-        'VerifiedAbsent'
+    $packageDisposition = Get-DeviceReadinessPackageDisposition `
+        -Package $package -ValidationFixture $isFixture `
+        -ValidationCleanupVerified $cleanupVerified
+    $packageAvailability = [string]$packageDisposition.packageAvailability
+    if ($packageDisposition.outcome -eq 'CleanupIncomplete') {
+        $outcome=[string]$packageDisposition.outcome
+        $exitCode=[int]$packageDisposition.exitCode
+        $reasonCode=[string]$packageDisposition.reasonCode
     }
-    else { 'Uncertain' }
     Write-ContractRecord (New-CompletionSummary -PackageVerified $packageVerified `
         -PackageAvailability $packageAvailability `
         -RecipientSelected $recipientSelected `
