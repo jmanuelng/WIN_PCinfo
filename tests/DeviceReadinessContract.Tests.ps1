@@ -17,13 +17,29 @@ $cleanupIncompletePackage = [pscustomobject]@{
 }
 $cleanupDisposition = Get-DeviceReadinessPackageDisposition `
     -Package $cleanupIncompletePackage -ValidationFixture $false `
-    -ValidationCleanupVerified $true
+    -ValidationCleanupVerified $true -FinalVerificationSucceeded $false
 Assert-Equal 'Uncertain' $cleanupDisposition.packageAvailability `
     'typed package cleanup failure is never mislabeled VerifiedAbsent'
 Assert-Equal 'CleanupIncomplete' $cleanupDisposition.outcome `
     'typed package cleanup failure preserves the cleanup terminal outcome'
 Assert-Equal 60 $cleanupDisposition.exitCode `
     'typed package cleanup failure preserves the stable cleanup exit code'
+$failedBoundaryDisposition = Get-DeviceReadinessPackageDisposition `
+    -Package ([pscustomobject]@{ state='IntegrityFailed'; verified=$false; packagePath=$null }) `
+    -ValidationFixture $true -ValidationCleanupVerified $false `
+    -FinalVerificationSucceeded $false
+Assert-Equal 'Uncertain' $failedBoundaryDisposition.packageAvailability `
+    'failed fixture cleanup remains uncertain even when package verification also failed'
+Assert-Equal 'CleanupIncomplete' $failedBoundaryDisposition.outcome `
+    'failed fixture cleanup takes terminal precedence over package integrity failure'
+$failedReopenDisposition = Get-DeviceReadinessPackageDisposition `
+    -Package ([pscustomobject]@{ state='Verified'; verified=$true; packagePath='synthetic-retained' }) `
+    -ValidationFixture $false -ValidationCleanupVerified $true `
+    -FinalVerificationSucceeded $false
+Assert-Equal 'Uncertain' $failedReopenDisposition.packageAvailability `
+    'a package that fails the final reopen is never advertised as available'
+Assert-Equal 'IntegrityFailed' $failedReopenDisposition.outcome `
+    'a retained but unverified package preserves the integrity terminal outcome'
 
 function Test-ReadinessRecord {
     param($Record)

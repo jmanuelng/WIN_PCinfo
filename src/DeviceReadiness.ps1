@@ -881,14 +881,15 @@ function Get-DeviceReadinessPackageDisposition {
     param(
         [Parameter()] $Package,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
-        [Parameter(Mandatory)] [bool] $ValidationCleanupVerified
+        [Parameter(Mandatory)] [bool] $ValidationCleanupVerified,
+        [Parameter(Mandatory)] [bool] $FinalVerificationSucceeded
     )
 
     $packageState = if ($null -ne $Package -and $Package.PSObject.Properties['state']) {
         [string]$Package.state
     }
     else { 'NotCreated' }
-    $packageVerified = $null -ne $Package -and
+    $packageCreatedVerified = $null -ne $Package -and
         $Package.PSObject.Properties['verified'] -and [bool]$Package.verified
     $packagePath = if ($null -ne $Package -and $Package.PSObject.Properties['packagePath']) {
         [string]$Package.packagePath
@@ -896,8 +897,8 @@ function Get-DeviceReadinessPackageDisposition {
     else { '' }
 
     $cleanupUncertain = $packageState -eq 'CleanupIncomplete' -or
-        ($packageVerified -and $ValidationFixture -and -not $ValidationCleanupVerified) -or
-        ($packageVerified -and -not $ValidationFixture -and
+        ($ValidationFixture -and -not $ValidationCleanupVerified) -or
+        ($FinalVerificationSucceeded -and -not $ValidationFixture -and
             ([string]::IsNullOrWhiteSpace($packagePath) -or
                 -not [System.IO.File]::Exists($packagePath)))
     if ($cleanupUncertain) {
@@ -906,10 +907,16 @@ function Get-DeviceReadinessPackageDisposition {
             exitCode = 60; reasonCode = 'DEVICE_READINESS.PACKAGE_CLEANUP_INCOMPLETE'
         }
     }
-    if ($packageVerified) {
+    if ($FinalVerificationSucceeded) {
         return [pscustomobject][ordered]@{
             packageAvailability = if ($ValidationFixture) { 'VerifiedAbsent' } else { 'Available' }
             outcome = ''; exitCode = -1; reasonCode = ''
+        }
+    }
+    if ($packageCreatedVerified) {
+        return [pscustomobject][ordered]@{
+            packageAvailability = 'Uncertain'; outcome = 'IntegrityFailed'
+            exitCode = 50; reasonCode = 'DEVICE_READINESS.PACKAGE_INVALID'
         }
     }
     [pscustomobject][ordered]@{
@@ -1107,7 +1114,8 @@ function Invoke-DeviceReadinessSlice {
                     if (-not $packageVerified) {
                         $packageDisposition = Get-DeviceReadinessPackageDisposition `
                             -Package $package -ValidationFixture $isFixture `
-                            -ValidationCleanupVerified $true
+                            -ValidationCleanupVerified $true `
+                            -FinalVerificationSucceeded $packageVerified
                         $outcome=[string]$packageDisposition.outcome
                         $exitCode=[int]$packageDisposition.exitCode
                         $reasonCode=[string]$packageDisposition.reasonCode
@@ -1166,7 +1174,8 @@ function Invoke-DeviceReadinessSlice {
         $recipientKeyProtection -eq 'RSA-OAEP-SHA-256'
     $packageDisposition = Get-DeviceReadinessPackageDisposition `
         -Package $package -ValidationFixture $isFixture `
-        -ValidationCleanupVerified $cleanupVerified
+        -ValidationCleanupVerified $cleanupVerified `
+        -FinalVerificationSucceeded $packageVerified
     $packageAvailability = [string]$packageDisposition.packageAvailability
     if ($packageDisposition.outcome -eq 'CleanupIncomplete') {
         $outcome=[string]$packageDisposition.outcome
