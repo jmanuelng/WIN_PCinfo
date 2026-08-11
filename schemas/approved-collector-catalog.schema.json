@@ -22,9 +22,19 @@
     },
     "collectors": {
       "type": "array",
-      "minItems": 1,
-      "maxItems": 1,
-      "items": { "$ref": "#/$defs/collector" }
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "allOf": [
+          { "$ref": "#/$defs/collector" },
+          { "properties": { "collectorId": { "const": "collector:synthetic.windows.os" }, "operations": { "prefixItems": [{ "$ref": "#/$defs/legacyOperation" }] } } }
+        ] },
+        { "allOf": [
+          { "$ref": "#/$defs/collector" },
+          { "properties": { "collectorId": { "const": "collector:windows.device-readiness" }, "operations": { "prefixItems": [{ "$ref": "#/$defs/deviceReadinessOperation" }] } } }
+        ] }
+      ],
+      "items": false
     },
     "validationFixtures": {
       "type": "array",
@@ -40,7 +50,7 @@
       "additionalProperties": false,
       "required": ["collectorId", "collectorVersion", "purpose", "executable", "payload", "workingBoundary", "environment", "treeControl", "operations"],
       "properties": {
-        "collectorId": { "const": "collector:synthetic.windows.os" },
+        "collectorId": { "enum": ["collector:synthetic.windows.os", "collector:windows.device-readiness"] },
         "collectorVersion": { "const": "1.0.0" },
         "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
         "executable": {
@@ -107,11 +117,14 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 1,
-          "items": { "$ref": "#/$defs/operation" }
+          "items": { "oneOf": [
+            { "$ref": "#/$defs/legacyOperation" },
+            { "$ref": "#/$defs/deviceReadinessOperation" }
+          ] }
         }
       }
     },
-    "operation": {
+    "legacyOperation": {
       "type": "object",
       "additionalProperties": false,
       "required": ["operationId", "arguments", "deadlineMilliseconds", "standardOutputMaximumBytes", "standardErrorMaximumBytes", "cancellationGraceMilliseconds", "terminationVerificationMilliseconds", "intendedScopeIds", "subjectIds"],
@@ -137,6 +150,32 @@
         "terminationVerificationMilliseconds": { "type": "integer", "minimum": 100, "maximum": 5000 },
         "intendedScopeIds": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "const": "scope:synthetic.device.os" } },
         "subjectIds": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "const": "subject:synthetic-device:primary" } }
+      }
+    },
+    "deviceReadinessOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "arguments", "deadlineMilliseconds", "standardOutputMaximumBytes", "standardErrorMaximumBytes", "cancellationGraceMilliseconds", "terminationVerificationMilliseconds", "intendedScopeIds", "subjectIds"],
+      "properties": {
+        "operationId": { "const": "op:device.windows-readiness.collect" },
+        "arguments": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "const": "-NoLogo" }, { "const": "-NoProfile" },
+            { "const": "-NonInteractive" }, { "const": "-EncodedCommand" },
+            { "const": "{EncodedCollectorPayload}" }
+          ],
+          "items": false
+        },
+        "deadlineMilliseconds": { "type": "integer", "minimum": 100, "maximum": 60000 },
+        "standardOutputMaximumBytes": { "type": "integer", "minimum": 256, "maximum": 65536 },
+        "standardErrorMaximumBytes": { "type": "integer", "minimum": 256, "maximum": 65536 },
+        "cancellationGraceMilliseconds": { "type": "integer", "minimum": 100, "maximum": 2000 },
+        "terminationVerificationMilliseconds": { "type": "integer", "minimum": 100, "maximum": 5000 },
+        "intendedScopeIds": { "const": ["scope:device.windows-readiness"] },
+        "subjectIds": { "const": ["subject:device:primary"] }
       }
     },
     "validationFixture": {

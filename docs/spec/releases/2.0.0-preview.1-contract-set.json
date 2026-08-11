@@ -49,15 +49,113 @@
         "definition": true,
         "values": false
       }
+    },
+    {
+      "fieldId": "field:device.manufacturer",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Identify the device manufacturer for local diagnostic context.",
+      "source": { "sourceId": "source:windows.cim.computer-system", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_ComputerSystem.Manufacturer explicit property projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.model",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Identify the device model for local diagnostic context.",
+      "source": { "sourceId": "source:windows.cim.computer-system", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_ComputerSystem.Model explicit property projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.processor.name",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Describe the first processor reported by Windows for advisory readiness.",
+      "source": { "sourceId": "source:windows.cim.processor", "kind": "StructuredWindowsSource", "authoritativeIdentity": "First Win32_Processor.Name from an explicit property projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 512, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.memory.physical-bytes",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Carry bounded physical-memory capacity for advisory readiness.",
+      "source": { "sourceId": "source:windows.cim.computer-system", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_ComputerSystem.TotalPhysicalMemory explicit property projection" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 20, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.windows.edition",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Normalize the numeric Windows OperatingSystemSKU without using localized Caption text.",
+      "source": { "sourceId": "source:windows.cim.operating-system", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_OperatingSystem.OperatingSystemSKU mapped by the release" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 64, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.windows.build",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Carry the bounded numeric Windows build identifier.",
+      "source": { "sourceId": "source:windows.cim.operating-system", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Win32_OperatingSystem.BuildNumber explicit property projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.architecture",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Normalize the process-independent operating-system architecture.",
+      "source": { "sourceId": "source:dotnet.runtime-information", "kind": "StructuredWindowsSource", "authoritativeIdentity": "System.Runtime.InteropServices.RuntimeInformation.OSArchitecture" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.virtualization.detected",
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Record the release-owned advisory classification derived from validated manufacturer and model observations.",
+      "source": { "sourceId": "source:win-pcinfo.virtualization-rule", "kind": "DerivedValidatedObservation", "authoritativeIdentity": "win-pcinfo.virtualization-classifier/1.0.0" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
     }
   ],
   "scopeDefinitions": [
     {
       "scopeId": "scope:synthetic.device.os",
+      "profileIds": ["profile:synthetic-contract-tracer"],
       "capabilityIds": ["CAP-0001"],
-      "purpose": "Close coverage for the single approved synthetic operating-system observation carried by this tracer bullet.",
+      "purpose": "Close coverage for the single approved synthetic operating-system observation carried by the original tracer bullet.",
       "fieldIds": ["field:device.os.display-name"],
       "collectorIds": ["collector:synthetic.windows.os"]
+    },
+    {
+      "scopeId": "scope:device.windows-readiness",
+      "profileIds": ["profile:device-windows-readiness"],
+      "capabilityIds": ["CAP-0001"],
+      "purpose": "Close coverage for the bounded Device and Windows readiness field set.",
+      "fieldIds": [
+        "field:device.manufacturer",
+        "field:device.model",
+        "field:device.processor.name",
+        "field:device.memory.physical-bytes",
+        "field:device.windows.edition",
+        "field:device.windows.build",
+        "field:device.architecture",
+        "field:device.virtualization.detected"
+      ],
+      "collectorIds": ["collector:windows.device-readiness"]
     }
   ],
   "vocabularies": {

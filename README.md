@@ -1,9 +1,9 @@
 # WIN-PCInfo
 
-WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, validate synthetic evidence, supervise approved synthetic work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, protect one synthetic assessment package, reopen one requested artifact safely, and drive each validation path to one honest terminal outcome.
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect a narrow device-and-Windows readiness slice after approval, validate typed evidence, protect and reopen its package, and drive each validation path to one honest terminal outcome.
 
 > [!IMPORTANT]
-> The v2 tracer bullets do not collect computer information yet. Ordinary execution still stops safely after Preparation; the new package finalizer is integrated only through closed synthetic validation fixtures, not a real assessment workflow. Those fixtures remain visibly synthetic and cannot create device evidence or a capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance.
+> The v2 application implements only the narrow device-and-Windows readiness slice described below. It is not the complete assessment and does not by itself create a Preview/Supported capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance; repository validation uses closed synthetic fixtures.
 
 ## Try the v2 launch safely
 
@@ -18,11 +18,13 @@ pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Guided
 
 The tracked code under `src/` is the source of truth. `build/Build.ps1` deterministically assembles it into the ignored `artifacts/WIN-PCInfo.ps1`; do not edit the generated file.
 
-Before approving anything, read [Preparation Summary and approval](docs/preparation-summary.md). It explains the two network choices, every disclosure in the summary, guided and automation approval, and why neither approval nor validation fixtures can start collection in this implementation slice.
+Before approving anything, read [Preparation Summary and approval](docs/preparation-summary.md). It explains the two network choices, every disclosure in the summary, guided and automation approval, and the exact Device Readiness operation that approval can start.
 
 To understand how one synthetic source becomes a typed observation, Collector Result Envelope, closed Evidence Coverage State, diagnostic, finding, recommendation, and canonical Assessment Record, read [Assessment Contract validation](docs/assessment-contract-validation.md). It explains the Draft 2020-12 schema, semantic reason codes, I-JSON-style safety rules, and Secret Exclusion boundary in beginner-friendly terms.
 
-To understand how WIN-PCInfo launches one predefined synthetic collector without exposing a shell or plug-in path, read [Process Supervisor](docs/process-supervisor.md). It explains the release-owned executable catalog, suspended Windows Job Object assignment, bounded output, cooperative and hard cancellation, untrusted-output privacy, and verified cleanup.
+To understand the first real collection slice—manufacturer, model, processor, memory, normalized Windows edition/build/architecture, virtualization context, and the advisory readiness rule—read [Device and Windows readiness](docs/device-windows-readiness.md). It explains the exact Windows properties, privacy boundary, missing-evidence behavior, report, package, and troubleshooting.
+
+To understand how WIN-PCInfo launches the predefined synthetic probe and distinct real Device Readiness collector without exposing a shell or plug-in path, read [Process Supervisor](docs/process-supervisor.md). It explains the release-owned executable catalog, suspended Windows Job Object assignment, bounded output, cooperative and hard cancellation, untrusted-output privacy, and verified cleanup.
 
 To understand the finite Assessment Run state machine, stable exit codes, structured progress and heartbeat budgets, device-wide Active Run Lock, cleanup-only crash recovery, package-integrity gate, and failure precedence, read [Assessment Run lifecycle](docs/run-lifecycle.md).
 

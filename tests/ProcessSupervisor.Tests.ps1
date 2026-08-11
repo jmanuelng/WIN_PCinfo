@@ -32,6 +32,8 @@ $catalogBytes = Get-Utf8LfBytes -LiteralPath (
     Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
 )
 $expectedCatalogDigest = Get-Sha256ForSupervisorBytes -Bytes $catalogBytes
+$catalog = [System.Text.UTF8Encoding]::new($false, $true).GetString($catalogBytes) |
+    ConvertFrom-Json -Depth 20
 
 $result = Invoke-ApprovedCollectorProcess -OperationId 'op:synthetic.windows.os.success'
 
@@ -51,7 +53,7 @@ Assert-SupervisorEqual 'ActivePowerShellHome' $result.Supervision.workingBoundar
     'the collector uses the validated release-defined non-writing working boundary'
 Assert-SupervisorEqual $expectedCatalogDigest $result.Supervision.policyDigest `
     'the result binds the exact canonical release collector catalog'
-Assert-SupervisorEqual '1e0bd6ec3ea4dbe51eee1ac32500fde79b84a9899997181e1f8db4213e1e469c' `
+Assert-SupervisorEqual ([string]$catalog.collectors[0].payload.sha256) `
     $result.Supervision.payloadDigest `
     'the encoded collector source matches the release-owned payload identity'
 Assert-SupervisorEqual $false $result.Supervision.standardOutput.exceeded `

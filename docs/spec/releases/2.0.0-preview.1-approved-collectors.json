@@ -4,9 +4,9 @@
   "release": "2.0.0-preview.1",
   "limits": {
     "maximumArgumentCount": 8,
-    "maximumArgumentUtf8Bytes": 8192,
+    "maximumArgumentUtf8Bytes": 16384,
     "maximumEnvironmentVariables": 4,
-    "maximumEnvironmentValueUtf8Bytes": 8192
+    "maximumEnvironmentValueUtf8Bytes": 16384
   },
   "collectors": [
     {
@@ -21,7 +21,7 @@
       "payload": {
         "kind": "EncodedReleaseSource",
         "encoding": "PowerShellEncodedCommandUtf16Le",
-        "sha256": "1e0bd6ec3ea4dbe51eee1ac32500fde79b84a9899997181e1f8db4213e1e469c"
+        "sha256": "57489123f9d28e795a8190d5b15e906454c288910859af8d24660309ff2506ce"
       },
       "workingBoundary": {
         "kind": "ActivePowerShellHome",
@@ -59,6 +59,56 @@
           "terminationVerificationMilliseconds": 2000,
           "intendedScopeIds": ["scope:synthetic.device.os"],
           "subjectIds": ["subject:synthetic-device:primary"]
+        }
+      ]
+    },
+    {
+      "collectorId": "collector:windows.device-readiness",
+      "collectorVersion": "1.0.0",
+      "purpose": "Collect the bounded Device and Windows readiness field set from explicit structured Windows properties.",
+      "executable": {
+        "resolver": "ActivePowerShellHost",
+        "fileName": "pwsh.exe",
+        "signerCommonName": "Microsoft Corporation"
+      },
+      "payload": {
+        "kind": "EncodedReleaseSource",
+        "encoding": "PowerShellEncodedCommandUtf16Le",
+        "sha256": "57489123f9d28e795a8190d5b15e906454c288910859af8d24660309ff2506ce"
+      },
+      "workingBoundary": { "kind": "ActivePowerShellHome", "writesAllowed": false },
+      "environment": {
+        "inheritParent": false,
+        "variables": [
+          { "name": "SystemRoot", "valueSource": "WindowsDirectory" },
+          { "name": "WINPCINFO_CANCEL_EVENT", "valueSource": "CancellationEventName" },
+          { "name": "WINPCINFO_OPERATION_MODE", "valueSource": "OperationMode" },
+          { "name": "WINPCINFO_ENCODED_PAYLOAD", "valueSource": "EncodedPayload" }
+        ]
+      },
+      "treeControl": {
+        "mode": "WindowsJobObjectRequired",
+        "startSuspendedBeforeAssignment": true,
+        "killOnClose": true,
+        "incompatibleDisposition": "NotStarted"
+      },
+      "operations": [
+        {
+          "operationId": "op:device.windows-readiness.collect",
+          "arguments": [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-EncodedCommand",
+            "{EncodedCollectorPayload}"
+          ],
+          "deadlineMilliseconds": 5000,
+          "standardOutputMaximumBytes": 8192,
+          "standardErrorMaximumBytes": 4096,
+          "cancellationGraceMilliseconds": 750,
+          "terminationVerificationMilliseconds": 2000,
+          "intendedScopeIds": ["scope:device.windows-readiness"],
+          "subjectIds": ["subject:device:primary"]
         }
       ]
     }

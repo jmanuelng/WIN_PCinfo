@@ -18,10 +18,12 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal 1 @($contractSet.fieldDefinitions).Count 'this narrow tracer bullet admits one field'
-Assert-Equal 1 @($contractSet.scopeDefinitions).Count 'this narrow tracer bullet declares one closed Evidence Scope'
+Assert-Equal 9 @($contractSet.fieldDefinitions).Count `
+    'the tracer contract retains its legacy probe and admits eight Device Readiness fields'
+Assert-Equal 2 @($contractSet.scopeDefinitions).Count `
+    'the legacy tracer and real Device Readiness slice have distinct closed Evidence Scopes'
 
-$definition = $contractSet.fieldDefinitions[0]
+$definition = @($contractSet.fieldDefinitions | Where-Object fieldId -eq 'field:device.os.display-name')[0]
 Assert-Equal 'field:device.os.display-name' $definition.fieldId 'the admitted field identity is release-bound'
 Assert-Equal 'CAP-0001' $definition.capabilityIds[0] 'the field has an explicit Product Capability purpose'
 Assert-Equal 'SyntheticContractFixture' $definition.source.kind 'the source cannot be mistaken for device collection'
@@ -30,18 +32,31 @@ Assert-Equal 'RestrictedDiagnosticEvidence' $definition.sensitivity 'the evidenc
 Assert-Equal 'OmitProhibitedMaterial' $definition.redaction.behavior 'secret handling omits rather than masks or hashes'
 Assert-Equal $true $definition.publicEligibility.definition 'the reusable definition is public'
 Assert-Equal $false $definition.publicEligibility.values 'record values remain restricted even when synthetic tests are public'
-if ($definition.bounds.maximumUtf8Bytes -le 0 -or $definition.bounds.maximumOccurrencesPerSubject -le 0) {
-    throw 'Every admitted field requires positive release-owned size and occurrence bounds.'
-}
 $releaseDefinition = Get-Content -LiteralPath $releaseDefinitionPath -Raw | ConvertFrom-Json -Depth 30
-if (@($definition.capabilityIds | Where-Object { $_ -notin $releaseDefinition.releaseEnabledCapabilityIds }).Count -gt 0) {
-    throw 'Every Evidence Field Definition must resolve to a release-enabled Product Capability.'
+foreach ($fieldDefinition in @($contractSet.fieldDefinitions)) {
+    if ($fieldDefinition.bounds.maximumUtf8Bytes -le 0 -or
+        $fieldDefinition.bounds.maximumOccurrencesPerSubject -le 0) {
+        throw 'Every admitted field requires positive release-owned size and occurrence bounds.'
+    }
+    Assert-Equal 'RestrictedDiagnosticEvidence' $fieldDefinition.sensitivity `
+        'every Device Readiness value remains restricted'
+    Assert-Equal $false $fieldDefinition.publicEligibility.values `
+        'no Device Readiness value is eligible for public output'
+    if (@($fieldDefinition.capabilityIds | Where-Object {
+        $_ -notin $releaseDefinition.releaseEnabledCapabilityIds
+    }).Count -gt 0) {
+        throw 'Every Evidence Field Definition must resolve to a release-enabled Product Capability.'
+    }
 }
 $scopeDefinition = $contractSet.scopeDefinitions[0]
 Assert-Equal 'scope:synthetic.device.os' $scopeDefinition.scopeId 'coverage is bound to a release-declared Evidence Scope'
-Assert-Equal $definition.fieldId $scopeDefinition.fieldIds[0] 'the scope resolves its admitted field'
+Assert-Equal 1 @($scopeDefinition.fieldIds).Count 'the legacy scope retains only its admitted field'
 Assert-Equal $definition.source.sourceId.Replace('source:', 'collector:') $scopeDefinition.collectorIds[0] `
     'the scope resolves its approved synthetic collector'
+$deviceScope = @($contractSet.scopeDefinitions | Where-Object scopeId -eq 'scope:device.windows-readiness')[0]
+Assert-Equal 8 @($deviceScope.fieldIds).Count 'the Device Readiness scope resolves exactly eight fields'
+Assert-Equal 'collector:windows.device-readiness' $deviceScope.collectorIds[0] `
+    'real evidence resolves only to the real approved collector'
 $schemaKinds = @($contractSet.schemas.documentKind | Sort-Object -Unique)
 Assert-Equal 2 $schemaKinds.Count 'schema document kinds are unambiguous'
 foreach ($schemaResource in @($contractSet.schemas)) {

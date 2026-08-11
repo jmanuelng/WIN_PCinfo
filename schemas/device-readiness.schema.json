@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/device-readiness.schema.json",
+  "title": "WIN-PCInfo Device Readiness Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "scopeId", "collector", "rule", "fieldIds", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.device-readiness-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.device-readiness/1.0.0" },
+    "scopeId": { "const": "scope:device.windows-readiness" },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collectorId", "collectorVersion", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "standardOutputMaximumBytes", "standardErrorMaximumBytes", "cleanup"],
+      "properties": {
+        "collectorId": { "const": "collector:windows.device-readiness" },
+        "collectorVersion": { "const": "1.0.0" },
+        "operationId": { "const": "op:device.windows-readiness.collect" },
+        "source": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "executionContext": { "const": "StandardUser" },
+        "privilege": { "const": "NoElevation" },
+        "networkBehavior": { "const": "OfflineOnly" },
+        "executable": { "const": "ActiveMicrosoftSignedPowerShellHost" },
+        "dependencies": { "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+        "mayPrompt": { "const": false }, "mayInstall": { "const": false },
+        "mayDownload": { "const": false }, "maySelfElevate": { "const": false },
+        "writesAllowed": { "const": false },
+        "maximumAttempts": { "const": 1 },
+        "deadlineMilliseconds": { "type": "integer", "minimum": 100, "maximum": 60000 },
+        "standardOutputMaximumBytes": { "type": "integer", "minimum": 256, "maximum": 65536 },
+        "standardErrorMaximumBytes": { "type": "integer", "minimum": 256, "maximum": 65536 },
+        "cleanup": { "const": "WindowsJobObjectAndNamedCancellationEventVerifiedAbsent" }
+      }
+    },
+    "rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ruleId", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "maximumInputObservations", "maximumOutputFindings", "cleanup", "minimumMemoryBytes", "minimumWindowsBuild", "supportedArchitectures", "missingEvidenceOutcome"],
+      "properties": {
+        "ruleId": { "const": "rule:device.windows-readiness/1.0.0" },
+        "operationId": { "const": "op:rule.device-windows-readiness.evaluate" },
+        "source": { "const": "ReleaseEmbeddedValidatedObservationRule" },
+        "executionContext": { "const": "InProcessValidatedAssessmentRecord" },
+        "privilege": { "const": "NoElevation" },
+        "networkBehavior": { "const": "OfflineOnly" },
+        "executable": { "const": "NoneInProcess" },
+        "dependencies": { "const": [] },
+        "mayPrompt": { "const": false }, "mayInstall": { "const": false },
+        "mayDownload": { "const": false }, "maySelfElevate": { "const": false },
+        "writesAllowed": { "const": false },
+        "maximumAttempts": { "const": 1 },
+        "deadlineMilliseconds": { "const": 100 },
+        "maximumInputObservations": { "const": 8 },
+        "maximumOutputFindings": { "const": 1 },
+        "cleanup": { "const": "NoArtifacts" },
+        "minimumMemoryBytes": { "type": "integer", "minimum": 1 },
+        "minimumWindowsBuild": { "type": "integer", "minimum": 1 },
+        "supportedArchitectures": { "const": ["X64", "Arm64"] },
+        "missingEvidenceOutcome": { "const": "Indeterminate" }
+      }
+    },
+    "fieldIds": { "type": "array", "minItems": 8, "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "pattern": "^field:[a-z0-9.-]+$" } },
+    "validationScenarios": { "const": ["Complete", "Partial", "Unavailable", "Malformed", "Oversize", "Virtual", "Unicode", "NonEnglish"] }
+  }
+}
