@@ -29,6 +29,29 @@ foreach ($requestPath in @($localRequestPath, $connectivityRequestPath)) {
     if (-not (Test-Json -Json $planJson -SchemaFile $planSchemaPath)) {
         throw "The generated $($summary.plan.network.behavior) plan does not satisfy the public plan schema."
     }
+    if ($summary.plan.network.behavior -eq 'LocalOnly') {
+        $mutations = @(
+            { param($value) $value.deviceReadiness.scopeId = 'scope:widened' },
+            { param($value) $value.deviceReadiness.collector.source = 'caller supplied' },
+            { param($value) $value.deviceReadiness.collector.executionContext = 'Administrator' },
+            { param($value) $value.deviceReadiness.collector.privilege = 'ElevationAllowed' },
+            { param($value) $value.deviceReadiness.collector.networkBehavior = 'Internet' },
+            { param($value) $value.deviceReadiness.collector.executable = 'CallerSelected' },
+            { param($value) $value.deviceReadiness.collector.dependencies = @('download') },
+            { param($value) $value.deviceReadiness.collector.deadlineMilliseconds = -1 },
+            { param($value) $value.deviceReadiness.collector.standardOutputMaximumBytes = 999999 },
+            { param($value) $value.deviceReadiness.fieldIds = @('field:widened') },
+            { param($value) $value.deviceReadiness.collector.cleanup = 'BestEffort' }
+        )
+        foreach ($mutation in $mutations) {
+            $changed = $planJson | ConvertFrom-Json -Depth 30
+            & $mutation $changed
+            $changedJson = $changed | ConvertTo-Json -Compress -Depth 30
+            if (Test-Json -Json $changedJson -SchemaFile $planSchemaPath -ErrorAction SilentlyContinue) {
+                throw 'The immutable plan schema accepted a widened Device Readiness operation.'
+            }
+        }
+    }
 
     Assert-Equal $plan.requestDigest $summary.requestDigest 'summary is bound to the schema-valid request'
     Assert-Equal $plan.scope.capabilities.Count $summary.plan.scope.capabilities.Count `

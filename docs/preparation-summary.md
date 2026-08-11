@@ -2,7 +2,7 @@
 
 WIN-PCInfo prepares one complete plan before it can elevate, install anything, change Windows, contact a network service, collect evidence, or create an Evidence Workspace. The generated application prints one beginner-readable `win-pcinfo.preparation-summary`; its `plan` field contains the immutable plan so each disclosure appears once.
 
-Ordinary execution in this implementation slice still stops before collection. A trusted artifact's ordinary approval and decline both end as `NotStarted` with exit code `20`; approval reaches the unimplemented real-package boundary, while decline returns `PREPARATION.DECLINED`. The repository's local development build is unsigned, so normal use fails `PREPARATION.INTEGRITY_FAILED` before a summary. Strict hidden lifecycle and privilege validation fixtures may cross Preparation only to run release-owned synthetic operations. Privilege fixtures exercise the immutable Privileged Collection Plan, protected local channel, and synthetic elevation outcomes without displaying UAC; they cannot select real collection, device mutation, network access, identities, executable or script content, evidence, or a package finalizer.
+A trusted artifact's approval starts the frozen standard-user Device and Windows readiness operation, validates its Assessment Record, renders the report, and finalizes the Protected Evidence Package. Decline remains `NotStarted` with `PREPARATION.DECLINED`. The repository's local development build is unsigned, so ordinary use fails `PREPARATION.INTEGRITY_FAILED`; closed fixtures exercise the generated path without claiming real device evidence. Privilege fixtures remain synthetic and cannot widen the real collector, device mutation, network access, identities, executable or script content.
 
 ## What the summary tells you
 
@@ -16,6 +16,7 @@ Review the whole summary once. It discloses:
 - the protected output destination, Local Package Protector, and a fixed zero-or-one Recipient Profile choice;
 - Windows Feature observations, with no feature changes;
 - limitations, later side effects, and cleanup work.
+- the complete device-context collector/rule contract: structured readiness, activation, form, virtualization, chassis, battery, and power sources; standard-user context; offline behavior; signed executable; dependencies; deadlines; output/evidence bounds; and verified cleanup.
 
 The plan digest appears with the summary and terminal record. If the request or any governed scope changes, the digest changes and the old approval cannot apply. The plan records the absolute local destination resolved during preflight, not a relative path that could later move. Preparation rejects UNC and mapped-network storage before readiness/free-space access, then checks output-path eligibility, required free disk, Local Package Protector availability, the recipient choice, and the no-Windows-Feature-change boundary without creating files. Missing critical prerequisites return `PREPARATION.PREREQUISITE_UNRESOLVED`. An unsigned or invalidly signed application, corrupt embedded release definition, or invalid application manifest returns `PREPARATION.INTEGRITY_FAILED`; there is no **Run Anyway** path for a digest, manifest, signature, attestation, or governing-resource failure.
 
@@ -55,6 +56,6 @@ To select one Package Recipient in Automation, add the `recipientSelection` obje
 
 Omit `-AcceptPreparation` to decline. The switch cannot repair an invalid request, missing prerequisite, or integrity failure. It cannot approve later input, new authority, a new agreement, another elevation, or a recipient change; those require a new request and plan.
 
-The immutable output contract is documented by [`schemas/preparation-plan.schema.json`](../schemas/preparation-plan.schema.json). Hidden runtime and preparation fixtures are for synthetic validation only and always stop before collection.
+The immutable output contract is documented by [`schemas/preparation-plan.schema.json`](../schemas/preparation-plan.schema.json). Hidden Device Readiness scenarios can cross approval only through their separate generated validation seam; they cannot supply evidence or authority.
 
 The post-approval Privileged Collection Plan is explained in [Privileged Collection Plan](privileged-collection-plan.md). Its one LocalSystem operation is further reduced to the separate [SYSTEM Collection Sub-plan](system-collection-sub-plan.md). Both synthetic fixture families are validation-only and do not change the ordinary Preparation prerequisites.

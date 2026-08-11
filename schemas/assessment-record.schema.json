@@ -36,7 +36,8 @@
       "properties": {
         "runId": { "$ref": "#/$defs/id" },
         "outcome": { "enum": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"] },
-        "validationFixture": { "type": "boolean" }
+        "validationFixture": { "type": "boolean" },
+        "evidenceProfileId": { "enum": ["profile:synthetic-contract-tracer", "profile:device-windows-readiness", "profile:device-windows-context"] }
       }
     },
     "subjects": {
@@ -55,13 +56,13 @@
     },
     "provenance": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 64,
       "items": { "$ref": "#/$defs/provenance" }
     },
     "observations": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 64,
       "items": { "$ref": "#/$defs/observation" }
     },
@@ -84,7 +85,7 @@
     },
     "findings": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 64,
       "items": { "$ref": "#/$defs/finding" }
     },
@@ -120,7 +121,7 @@
         "sourceId": { "$ref": "#/$defs/id" },
         "collectorId": { "$ref": "#/$defs/id" },
         "collectorVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-        "executionContext": { "enum": ["Synthetic", "LocalSystem"] },
+        "executionContext": { "enum": ["Synthetic", "StandardUser", "LocalSystem", "InProcessValidatedAssessmentRecord"] },
         "collectedAt": { "$ref": "#/$defs/timestamp" },
         "sourceLocale": { "type": "string", "minLength": 2, "maxLength": 35 }
       }
@@ -189,7 +190,7 @@
         "subjectIds": { "$ref": "#/$defs/idArray" },
         "startedAt": { "$ref": "#/$defs/timestamp" },
         "completedAt": { "$ref": "#/$defs/timestamp" },
-        "executionContext": { "enum": ["Synthetic", "LocalSystem"] },
+        "executionContext": { "enum": ["Synthetic", "StandardUser", "LocalSystem", "InProcessValidatedAssessmentRecord"] },
         "attempts": { "type": "integer", "minimum": 1, "maximum": 3 },
         "observationIds": { "$ref": "#/$defs/idArray" },
         "coverageIds": { "$ref": "#/$defs/idArray" },

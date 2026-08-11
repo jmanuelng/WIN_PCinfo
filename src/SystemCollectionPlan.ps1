@@ -581,6 +581,7 @@ function Get-SystemAssessmentContractDefinition {
         })
         scopeDefinitions = @([pscustomobject][ordered]@{
             scopeId = [string] $operation.intendedScopeIds[0]
+            profileIds = @('profile:synthetic-contract-tracer')
             fieldIds = @([string] $operation.result.fieldId)
             collectorIds = @([string] $operation.collectorId)
         })

@@ -84,7 +84,7 @@
           "required": ["sourceId", "kind", "authoritativeIdentity"],
           "properties": {
             "sourceId": { "type": "string", "pattern": "^source:[a-z0-9.-]+$" },
-            "kind": { "const": "SyntheticContractFixture" },
+            "kind": { "enum": ["SyntheticContractFixture", "StructuredWindowsSource", "DerivedValidatedObservation"] },
             "authoritativeIdentity": { "type": "string", "minLength": 1, "maxLength": 256 }
           }
         },
@@ -122,9 +122,10 @@
     "scopeDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["scopeId", "capabilityIds", "purpose", "fieldIds", "collectorIds"],
+      "required": ["scopeId", "profileIds", "capabilityIds", "purpose", "fieldIds", "collectorIds"],
       "properties": {
         "scopeId": { "type": "string", "pattern": "^scope:[a-z0-9.-]+$" },
+        "profileIds": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "type": "string", "pattern": "^profile:[a-z0-9.-]+$" } },
         "capabilityIds": { "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "pattern": "^CAP-[0-9]{4}$" } },
         "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
         "fieldIds": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "pattern": "^field:[a-z0-9.-]+$" } },

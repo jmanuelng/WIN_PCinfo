@@ -102,7 +102,12 @@ param(
     # scenario. It cannot supply a certificate, key, fingerprint, profile,
     # package, report, path, warning text, or persistent Windows identity.
     [Parameter(DontShow)]
-    [string] $RecipientSharingFixturePath
+    [string] $RecipientSharingFixturePath,
+
+    # A Device Readiness fixture selects one release-owned adapter scenario.
+    # It cannot provide device evidence, a query, command, path, or authority.
+    [Parameter(DontShow)]
+    [string] $DeviceReadinessFixturePath
 )
 
 Set-StrictMode -Version Latest

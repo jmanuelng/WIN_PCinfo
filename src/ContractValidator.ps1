@@ -325,7 +325,15 @@ function Get-AssessmentStateReason {
         [Parameter(Mandatory)] $ContractDefinition
     )
 
-    $declaredScopes = @($ContractDefinition.scopeDefinitions.scopeId | ForEach-Object { [string] $_ } | Sort-Object -Unique)
+    $evidenceProfileId = if ($Record.run.PSObject.Properties['evidenceProfileId']) {
+        [string] $Record.run.evidenceProfileId
+    }
+    else { 'profile:synthetic-contract-tracer' }
+    $profileScopeDefinitions = @($ContractDefinition.scopeDefinitions | Where-Object {
+        $evidenceProfileId -in @($_.profileIds)
+    })
+    if ($profileScopeDefinitions.Count -eq 0) { return 'CONTRACT.COVERAGE_INCONSISTENT' }
+    $declaredScopes = @($profileScopeDefinitions.scopeId | ForEach-Object { [string] $_ } | Sort-Object -Unique)
     $reportedScopes = @($Record.coverage.scopeId | ForEach-Object { [string] $_ } | Sort-Object -Unique)
     if (@(Compare-Object -ReferenceObject $declaredScopes -DifferenceObject $reportedScopes).Count -gt 0) {
         return 'CONTRACT.COVERAGE_INCONSISTENT'
@@ -339,11 +347,25 @@ function Get-AssessmentStateReason {
     foreach ($coverage in @($Record.coverage)) {
         $coverageById[[string] $coverage.coverageId] = $coverage
     }
+    $observationById = @{}
+    foreach ($observation in @($Record.observations)) {
+        $observationById[[string] $observation.observationId] = $observation
+    }
     foreach ($item in @($Record.coverage)) {
         $hasReason = $null -ne $item.PSObject.Properties['reasonCode'] -and
             -not [string]::IsNullOrWhiteSpace([string] $item.reasonCode)
         if ([string] $item.state -eq 'Complete') {
             if ($hasReason -or @($item.diagnosticIds).Count -gt 0) {
+                return 'CONTRACT.COVERAGE_INCONSISTENT'
+            }
+            $scopeDefinition = @($profileScopeDefinitions | Where-Object scopeId -eq $item.scopeId)[0]
+            $coveredFieldIds = @($item.observationIds | ForEach-Object {
+                [string] $observationById[[string] $_].fieldId
+            } | Sort-Object -Unique)
+            $expectedFieldIds = @($scopeDefinition.fieldIds | ForEach-Object { [string] $_ } |
+                Sort-Object -Unique)
+            if (@(Compare-Object -ReferenceObject $expectedFieldIds `
+                    -DifferenceObject $coveredFieldIds).Count -gt 0) {
                 return 'CONTRACT.COVERAGE_INCONSISTENT'
             }
         }
@@ -385,8 +407,11 @@ function Get-AssessmentStateReason {
     $envelopedCoverage = @(
         $Record.collectorResults | ForEach-Object { @($_.coverageIds) }
     )
-    if ($envelopedCoverage.Count -ne @($Record.coverage).Count -or
-        @($envelopedCoverage | Sort-Object -Unique).Count -ne @($Record.coverage).Count) {
+    # Coverage is scope-level aggregate state. Multiple approved collectors may
+    # contribute disjoint observations to the same scope and therefore bind the
+    # same final coverage identity; every coverage item still has to be bound at
+    # least once, while observation ownership below remains exactly once.
+    if (@($envelopedCoverage | Sort-Object -Unique).Count -ne @($Record.coverage).Count) {
         return 'CONTRACT.COVERAGE_INCONSISTENT'
     }
     $coveredObservations = @(

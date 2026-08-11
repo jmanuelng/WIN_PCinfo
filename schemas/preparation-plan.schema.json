@@ -11,6 +11,7 @@
     "requestDigest",
     "scope",
     "operations",
+    "deviceReadiness",
     "privilege",
     "dependencies",
     "estimates",
@@ -62,6 +63,122 @@
       "minItems": 29,
       "maxItems": 29,
       "items": { "$ref": "#/definitions/operation" }
+    },
+    "deviceReadiness": {
+      "const": {
+        "kind": "win-pcinfo.device-readiness-policy",
+        "contractVersion": "1.0.0",
+        "release": "2.0.0-preview.1",
+        "policyId": "win-pcinfo.device-windows-context/1.0.0",
+        "scopeId": "scope:device.windows-context",
+        "collector": {
+          "collectorId": "collector:windows.device-context",
+          "collectorVersion": "1.0.0",
+          "operationId": "op:device.windows-context.collect",
+          "source": "Release-embedded PowerShell using explicit Win32_ComputerSystem, Win32_Processor, Win32_OperatingSystem, SoftwareLicensingProduct, Win32_SystemEnclosure, and Win32_Battery property projections plus RuntimeInformation.OSArchitecture",
+          "executionContext": "StandardUser",
+          "privilege": "NoElevation",
+          "networkBehavior": "OfflineOnly",
+          "executable": "ActiveMicrosoftSignedPowerShellHost",
+          "dependencies": ["Windows CIM provider", ".NET RuntimeInformation"],
+          "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+          "maySelfElevate": false, "writesAllowed": false,
+          "maximumAttempts": 1, "deadlineMilliseconds": 5000,
+          "standardOutputMaximumBytes": 16384, "standardErrorMaximumBytes": 4096,
+          "cleanup": "WindowsJobObjectAndNamedCancellationEventVerifiedAbsent"
+        },
+        "derivations": [
+          {
+            "derivedKind": "virtualization",
+            "collectorId": "collector:win-pcinfo.device-context-classifier",
+            "collectorVersion": "1.0.0", "operationId": "op:device.virtualization.classify",
+            "sourceId": "source:win-pcinfo.virtualization-rule",
+            "authoritativeIdentity": "win-pcinfo.virtualization-classifier/1.0.0",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 2,
+            "maximumOutputObservations": 1, "cleanup": "NoArtifacts"
+          },
+          {
+            "derivedKind": "form-factor",
+            "collectorId": "collector:win-pcinfo.device-context-classifier",
+            "collectorVersion": "1.0.0", "operationId": "op:device.form-factor.classify",
+            "sourceId": "source:win-pcinfo.form-factor-rule",
+            "authoritativeIdentity": "win-pcinfo.form-factor-classifier/1.0.0",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 3,
+            "maximumOutputObservations": 1, "cleanup": "NoArtifacts"
+          }
+        ],
+        "rules": [
+          {
+            "findingKind": "device-readiness", "ruleId": "rule:device.readiness/1.0.0",
+            "operationId": "op:rule.device-readiness.evaluate",
+            "source": "ReleaseEmbeddedValidatedObservationRule",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 3,
+            "maximumOutputFindings": 1, "cleanup": "NoArtifacts",
+            "minimumMemoryBytes": 8589934592, "minimumWindowsBuild": 19045,
+            "supportedArchitectures": ["X64", "Arm64"], "missingEvidenceOutcome": "Indeterminate"
+          },
+          {
+            "findingKind": "activation-context", "ruleId": "rule:windows.activation-context/1.0.0",
+            "operationId": "op:rule.windows-activation-context.evaluate",
+            "source": "ReleaseEmbeddedValidatedObservationRule",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 1,
+            "maximumOutputFindings": 1, "cleanup": "NoArtifacts",
+            "missingEvidenceOutcome": "Indeterminate"
+          },
+          {
+            "findingKind": "platform-context", "ruleId": "rule:device.platform-context/1.0.0",
+            "operationId": "op:rule.device-platform-context.evaluate",
+            "source": "ReleaseEmbeddedValidatedObservationRule",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 6,
+            "maximumOutputFindings": 1, "cleanup": "NoArtifacts",
+            "missingEvidenceOutcome": "Indeterminate"
+          },
+          {
+            "findingKind": "power-context", "ruleId": "rule:device.power-context/1.0.0",
+            "operationId": "op:rule.device-power-context.evaluate",
+            "source": "ReleaseEmbeddedValidatedObservationRule",
+            "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation",
+            "networkBehavior": "OfflineOnly", "executable": "NoneInProcess", "dependencies": [],
+            "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+            "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+            "deadlineMilliseconds": 100, "maximumInputObservations": 4,
+            "maximumOutputFindings": 1, "cleanup": "NoArtifacts",
+            "missingEvidenceOutcome": "Indeterminate"
+          }
+        ],
+        "fieldIds": [
+          "field:device.manufacturer", "field:device.model", "field:device.processor.name",
+          "field:device.memory.physical-bytes", "field:device.windows.edition",
+          "field:device.windows.build", "field:device.architecture",
+          "field:device.windows.activation-state", "field:device.system-type-code",
+          "field:device.hypervisor-present", "field:device.chassis.type-codes",
+          "field:device.virtualization.detected", "field:device.form-factor",
+          "field:device.battery.presence", "field:device.battery.status",
+          "field:device.battery.charge-percent",
+          "field:device.battery.estimated-runtime-minutes"
+        ],
+        "validationScenarios": ["Complete", "Partial", "Unavailable", "Malformed", "Oversize", "Virtual", "Unicode", "NonEnglish", "Activated", "Physical", "Desktop", "BatteryAbsent", "Unactivated", "Laptop", "BatteryPresent", "BatteryUnavailable", "Denied", "ProhibitedMaterial"]
+      }
     },
     "privilege": {
       "type": "object",

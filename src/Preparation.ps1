@@ -261,6 +261,11 @@ function New-PreparationPlan {
             capabilities = @($Definition.capabilities)
         }
         operations = @($Definition.operations)
+        # This is the exact release-owned operation contract approved before
+        # collection. It freezes the executable, structured sources, context,
+        # privilege, network behavior, bounds, and safe-failure restrictions;
+        # the collector cannot renegotiate any of them after approval.
+        deviceReadiness = $Definition.deviceReadiness
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -411,6 +416,7 @@ function Invoke-PreparationGate {
     $evidenceWorkspaceFixturePath = [string] $ValidationContext.EvidenceWorkspaceFixturePath
     $protectedPackageFixturePath = [string] $ValidationContext.ProtectedPackageFixturePath
     $recipientSharingFixturePath = [string] $ValidationContext.RecipientSharingFixturePath
+    $deviceReadinessFixturePath = [string] $ValidationContext.DeviceReadinessFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -484,7 +490,8 @@ function Invoke-PreparationGate {
     $selectedExecutionFixtures = @(
         @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath,
             $systemCollectionFixturePath, $evidenceWorkspaceFixturePath,
-            $protectedPackageFixturePath, $recipientSharingFixturePath) |
+            $protectedPackageFixturePath, $recipientSharingFixturePath,
+            $deviceReadinessFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -536,6 +543,20 @@ function Invoke-PreparationGate {
             -PlanDigest $planResult.Digest -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -ConvertToJsonCommand $ConvertToJsonCommand `
             -ApprovedRecipient $recipientSelection.approvedRecipient
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($deviceReadinessFixturePath)) {
+        return Invoke-DeviceReadinessSlice -LiteralPath $deviceReadinessFixturePath `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not $ValidationFixture) {
+        return Invoke-DeviceReadinessSlice `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
     }
     $reasonCode = if ($accepted -and $ValidationFixture) {
         # Synthetic facts can prove resolution but can never reach collectors.

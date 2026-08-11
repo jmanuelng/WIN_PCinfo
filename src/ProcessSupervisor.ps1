@@ -36,19 +36,24 @@ function Get-ApprovedCollectorCatalog {
             [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
         ) -Depth 30 -ErrorAction Stop
 
-        $collector = @($catalog.collectors)[0]
-        $operation = @($collector.operations)[0]
+        $syntheticCollector = @($catalog.collectors | Where-Object collectorId -eq 'collector:synthetic.windows.os')
+        $deviceCollector = @($catalog.collectors | Where-Object collectorId -eq 'collector:windows.device-readiness')
+        $contextCollector = @($catalog.collectors | Where-Object collectorId -eq 'collector:windows.device-context')
+        $legacyOperation = @($syntheticCollector.operations | Where-Object operationId -eq 'op:synthetic.windows.os.success')
+        $deviceOperation = @($deviceCollector.operations | Where-Object operationId -eq 'op:device.windows-readiness.collect')
+        $contextOperation = @($contextCollector.operations | Where-Object operationId -eq 'op:device.windows-context.collect')
         if ($catalog.kind -ne 'win-pcinfo.approved-collector-catalog' -or
             $catalog.contractVersion -ne '1.0.0' -or $catalog.release -ne '2.0.0-preview.1' -or
-            @($catalog.collectors).Count -ne 1 -or
-            $collector.collectorId -ne 'collector:synthetic.windows.os' -or
-            $collector.executable.resolver -ne 'ActivePowerShellHost' -or
-            $collector.workingBoundary.kind -ne 'ActivePowerShellHome' -or
-            $collector.environment.inheritParent -ne $false -or
-            $collector.treeControl.mode -ne 'WindowsJobObjectRequired' -or
-            $collector.treeControl.incompatibleDisposition -ne 'NotStarted' -or
-            @($collector.operations).Count -ne 1 -or
-            $operation.operationId -ne 'op:synthetic.windows.os.success') {
+            @($catalog.collectors).Count -ne 3 -or $syntheticCollector.Count -ne 1 -or
+            $deviceCollector.Count -ne 1 -or $contextCollector.Count -ne 1 -or
+            @($catalog.collectors | Where-Object {
+                $_.executable.resolver -ne 'ActivePowerShellHost' -or
+                $_.workingBoundary.kind -ne 'ActivePowerShellHome' -or
+                $_.environment.inheritParent -ne $false -or
+                $_.treeControl.mode -ne 'WindowsJobObjectRequired' -or
+                $_.treeControl.incompatibleDisposition -ne 'NotStarted'
+            }).Count -gt 0 -or $legacyOperation.Count -ne 1 -or $deviceOperation.Count -ne 1 -or
+            $contextOperation.Count -ne 1) {
             throw 'Collector catalog semantic closure failed.'
         }
 
@@ -57,8 +62,7 @@ function Get-ApprovedCollectorCatalog {
             ReasonCode = 'PROCESS.POLICY_READY'
             Digest = $actualDigest
             Catalog = $catalog
-            Collector = $collector
-            Operation = $operation
+            Collectors = @($catalog.collectors)
         }
     }
     catch {
@@ -663,9 +667,226 @@ $ErrorActionPreference = 'Stop'
 [System.Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 [System.Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 $Operation = [System.Environment]::GetEnvironmentVariable('WINPCINFO_OPERATION_MODE')
+function Get-BaseDeviceActualPayload {
+    param([Parameter(Mandatory)] [string[]] $ComputerSystemProperties)
+
+    # The historical readiness and expanded context operations deliberately
+    # keep separate identities and authority. This helper shares only their
+    # common bounded projections; each caller still supplies its own exact
+    # ComputerSystem property allowlist before adding operation-specific facts.
+    $computer = Get-CimInstance -ClassName Win32_ComputerSystem `
+        -Property $ComputerSystemProperties -ErrorAction Stop
+    $processor = @(Get-CimInstance -ClassName Win32_Processor -Property Name -ErrorAction Stop)[0]
+    $operatingSystem = Get-CimInstance -ClassName Win32_OperatingSystem `
+        -Property OperatingSystemSKU, BuildNumber -ErrorAction Stop
+    [pscustomobject]@{
+        computer = $computer
+        device = [ordered]@{
+            manufacturer = if ($null -eq $computer.Manufacturer) { $null } else { [string] $computer.Manufacturer }
+            model = if ($null -eq $computer.Model) { $null } else { [string] $computer.Model }
+            processorName = if ($null -eq $processor.Name) { $null } else { [string] $processor.Name }
+            memoryBytes = if ($null -eq $computer.TotalPhysicalMemory) { $null } else { [long] $computer.TotalPhysicalMemory }
+            operatingSystemSku = if ($null -eq $operatingSystem.OperatingSystemSKU) { $null } else { [int] $operatingSystem.OperatingSystemSKU }
+            build = if ($null -eq $operatingSystem.BuildNumber) { $null } else { [string] $operatingSystem.BuildNumber }
+            architecture = [string] [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+            sourceLocale = [System.Globalization.CultureInfo]::CurrentUICulture.Name
+        }
+    }
+}
+function New-SyntheticBaseDevicePayload {
+    param([Parameter(Mandatory)] [string] $Model)
+    [ordered]@{
+        manufacturer = 'Fabrikam'; model = $Model; processorName = 'Synthetic Processor'
+        memoryBytes = [long]17179869184; operatingSystemSku = 48; build = '26100'
+        architecture = 'X64'; sourceLocale = 'en-US'
+    }
+}
+function Set-SyntheticBaseDeviceScenario {
+    param([Parameter(Mandatory)] $Device, [Parameter(Mandatory)] [string] $Scenario)
+    if ($Scenario -eq 'Partial') { $Device.memoryBytes = $null }
+    if ($Scenario -eq 'Virtual') {
+        $Device.manufacturer = 'Microsoft Corporation'; $Device.model = 'Virtual Machine'
+    }
+    if ($Scenario -eq 'Unicode') {
+        $Device.manufacturer = 'Fabrikam 日本語'; $Device.model = 'Modèle Δ'
+        $Device.processorName = 'Processeur synthétique العربية'
+    }
+    if ($Scenario -eq 'NonEnglish') { $Device.sourceLocale = 'fr-FR' }
+}
 if ($Operation -eq 'Success') {
     [System.Console]::Out.Write('{"displayName":"WIN-PCInfo synthétique 日本語 العربية"}')
     [System.Console]::Error.Write('synthetic collector diagnostic')
+    exit 0
+}
+if ($Operation -like 'Context*') {
+    if ($Operation -eq 'ContextMalformed') {
+        [System.Console]::Out.Write('{not-json')
+        exit 0
+    }
+    if ($Operation -eq 'ContextOversize') {
+        [System.Console]::Out.Write(('X' * 70000))
+        exit 0
+    }
+    if ($Operation -eq 'ContextUnavailable') {
+        [System.Console]::Out.Write('{"availability":"Unavailable"}')
+        exit 0
+    }
+    if ($Operation -eq 'ContextActual') {
+        # Every Windows query below names an exact property projection. This is
+        # especially important for SoftwareLicensingProduct: that provider also
+        # exposes key-adjacent identity properties that the assessment has no
+        # authority to collect. Selecting LicenseStatus alone prevents those
+        # values from crossing the source boundary, so omission does not depend
+        # on later redaction, logging discipline, or a best-effort cleanup.
+        $base = Get-BaseDeviceActualPayload -ComputerSystemProperties @(
+            'Manufacturer','Model','TotalPhysicalMemory','PCSystemType','HypervisorPresent'
+        )
+        $computer = $base.computer
+
+        $activationAvailability = 'Available'
+        $activationStatus = $null
+        try {
+            $licenseRows = @(Get-CimInstance -ClassName SoftwareLicensingProduct `
+                -Filter "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f'" `
+                -Property LicenseStatus -ErrorAction Stop | Select-Object -First 16)
+            $statusCodes = @($licenseRows | ForEach-Object { [int] $_.LicenseStatus })
+            if (1 -in $statusCodes) { $activationStatus = 1 }
+            elseif ($statusCodes.Count -gt 0) { $activationStatus = [int] $statusCodes[0] }
+        }
+        catch { $activationAvailability = 'Unavailable' }
+
+        $chassisAvailability = 'Available'
+        $chassisTypeCodes = $null
+        try {
+            $enclosure = @(Get-CimInstance -ClassName Win32_SystemEnclosure `
+                -Property ChassisTypes -ErrorAction Stop | Select-Object -First 1)[0]
+            if ($null -ne $enclosure -and $null -ne $enclosure.ChassisTypes) {
+                $codes = @($enclosure.ChassisTypes | ForEach-Object { [int] $_ } |
+                    Where-Object { $_ -ge 0 -and $_ -le 255 } | Sort-Object -Unique |
+                    Select-Object -First 8)
+                if ($codes.Count -gt 0) { $chassisTypeCodes = $codes -join ',' }
+            }
+        }
+        catch { $chassisAvailability = 'Unavailable' }
+
+        $batteryAvailability = 'Available'
+        $batteryPresent = $null
+        $batteryStatus = $null
+        $batteryChargePercent = $null
+        $batteryRuntimeMinutes = $null
+        try {
+            # Win32_Battery is guest-visible and provider-dependent. One exact
+            # instance keeps output bounded; missing properties and documented
+            # sentinel-like runtime values remain unknown. Query denial is
+            # reduced to an availability code so native error text, paths, and
+            # identifiers cannot leak into diagnostics or trigger a retry.
+            $battery = @(Get-CimInstance -ClassName Win32_Battery `
+                -Property BatteryStatus, EstimatedChargeRemaining, EstimatedRunTime `
+                -ErrorAction Stop | Select-Object -First 1)[0]
+            $batteryPresent = $null -ne $battery
+            if ($batteryPresent) {
+                if ($null -ne $battery.BatteryStatus) { $batteryStatus = [int] $battery.BatteryStatus }
+                if ($null -ne $battery.EstimatedChargeRemaining) {
+                    $charge = [int] $battery.EstimatedChargeRemaining
+                    if ($charge -ge 0 -and $charge -le 100) { $batteryChargePercent = $charge }
+                }
+                if ($null -ne $battery.EstimatedRunTime) {
+                    $runtime = [int64] $battery.EstimatedRunTime
+                    if ($runtime -ge 0 -and $runtime -le 10080) {
+                        $batteryRuntimeMinutes = [int] $runtime
+                    }
+                }
+            }
+        }
+        catch { $batteryAvailability = 'Unavailable' }
+
+        $device = $base.device
+        $device['activationStatus'] = $activationStatus
+        $device['activationAvailability'] = $activationAvailability
+        $device['computerSystemType'] = if ($null -eq $computer.PCSystemType) { $null } else { [int] $computer.PCSystemType }
+        $device['hypervisorPresent'] = if ($null -eq $computer.HypervisorPresent) { $null } else { [bool] $computer.HypervisorPresent }
+        $device['chassisTypeCodes'] = $chassisTypeCodes
+        $device['chassisAvailability'] = $chassisAvailability
+        $device['batteryAvailability'] = $batteryAvailability
+        $device['batteryPresent'] = $batteryPresent
+        $device['batteryStatus'] = $batteryStatus
+        $device['batteryChargePercent'] = $batteryChargePercent
+        $device['batteryRuntimeMinutes'] = $batteryRuntimeMinutes
+        [System.Console]::Out.Write(($device | ConvertTo-Json -Compress))
+        exit 0
+    }
+    $device = New-SyntheticBaseDevicePayload -Model 'Model-49'
+    $device += [ordered]@{
+        activationStatus = 1
+        activationAvailability = 'Available'
+        computerSystemType = 1
+        hypervisorPresent = $false
+        chassisTypeCodes = '3'
+        chassisAvailability = 'Available'
+        batteryAvailability = 'Available'
+        batteryPresent = $false
+        batteryStatus = $null
+        batteryChargePercent = $null
+        batteryRuntimeMinutes = $null
+    }
+    $contextScenario = $Operation.Substring('Context'.Length)
+    Set-SyntheticBaseDeviceScenario -Device $device -Scenario $contextScenario
+    if ($Operation -eq 'ContextPartial') { $device.activationStatus = $null }
+    if ($Operation -eq 'ContextVirtual') {
+        $device.hypervisorPresent = $true; $device.computerSystemType = 1
+    }
+    if ($Operation -eq 'ContextUnactivated') { $device.activationStatus = 0 }
+    if ($Operation -eq 'ContextLaptop') {
+        $device.computerSystemType = 2; $device.chassisTypeCodes = '9'
+    }
+    if ($Operation -eq 'ContextBatteryPresent') {
+        $device.computerSystemType = 2; $device.chassisTypeCodes = '10'
+        $device.batteryPresent = $true; $device.batteryStatus = 6
+        $device.batteryChargePercent = 72; $device.batteryRuntimeMinutes = 180
+    }
+    if ($Operation -eq 'ContextBatteryUnavailable') {
+        $device.batteryAvailability = 'Unavailable'; $device.batteryPresent = $null
+    }
+    if ($Operation -eq 'ContextDenied') {
+        $device.activationAvailability = 'Denied'; $device.activationStatus = $null
+        $device.chassisAvailability = 'Denied'; $device.chassisTypeCodes = $null
+        $device.batteryAvailability = 'Denied'; $device.batteryPresent = $null
+    }
+    if ($Operation -eq 'ContextProhibitedMaterial') {
+        $blockedName = 'partial' + 'Product' + 'Key'
+        $device[$blockedName] = 'synthetic-prohibited-marker'
+    }
+    [System.Console]::Out.Write(($device | ConvertTo-Json -Compress))
+    exit 0
+}
+if ($Operation -like 'Device*') {
+    if ($Operation -eq 'DeviceMalformed') {
+        [System.Console]::Out.Write('{not-json')
+        exit 0
+    }
+    if ($Operation -eq 'DeviceOversize') {
+        [System.Console]::Out.Write(('X' * 70000))
+        exit 0
+    }
+    if ($Operation -eq 'DeviceUnavailable') {
+        [System.Console]::Out.Write('{"availability":"Unavailable"}')
+        exit 0
+    }
+    if ($Operation -eq 'DeviceActual') {
+        # These are projection queries, not broad object dumps. Explicit
+        # property lists prevent a future provider from silently widening the
+        # evidence set, while numeric OperatingSystemSKU avoids treating a
+        # localized marketing Caption as a stable identifier.
+        $device = (Get-BaseDeviceActualPayload -ComputerSystemProperties @(
+            'Manufacturer','Model','TotalPhysicalMemory'
+        )).device
+        [System.Console]::Out.Write(($device | ConvertTo-Json -Compress))
+        exit 0
+    }
+    $device = New-SyntheticBaseDevicePayload -Model 'Model-48'
+    Set-SyntheticBaseDeviceScenario -Device $device `
+        -Scenario $Operation.Substring('Device'.Length)
+    [System.Console]::Out.Write(($device | ConvertTo-Json -Compress))
     exit 0
 }
 if ($Operation -eq 'ExcessOutput') {
@@ -720,7 +941,18 @@ if ($Operation -eq 'ChildLeaf') {
 }
 exit 64
 '@
-    [System.Text.UTF8Encoding]::new($false).GetBytes($script.Replace("`r`n", "`n"))
+    # Windows bounds a process command line and environment block. The source
+    # above stays generously commented for reviewers, while the executed copy
+    # deterministically removes blank/comment-only lines and indentation. This
+    # is not an obfuscator or trust shortcut: the exact compact bytes are hashed
+    # into the release catalog, reverified before launch, and remain readable
+    # PowerShell. If compaction ever exceeds the fixed launch bound, collection
+    # fails before CreateProcess rather than switching to a writable script.
+    $compactLines = foreach ($line in $script.Replace("`r`n", "`n").Split("`n")) {
+        $trimmed = $line.Trim()
+        if ($trimmed.Length -gt 0 -and -not $trimmed.StartsWith('#')) { $trimmed }
+    }
+    [System.Text.UTF8Encoding]::new($false).GetBytes($compactLines -join "`n")
 }
 
 function Get-Sha256ForSupervisorBytes {
@@ -773,7 +1005,8 @@ function New-ProcessSupervisorResult {
         [Parameter(Mandatory)] [int] $StandardOutputMaximumBytes,
         [Parameter(Mandatory)] [int] $StandardErrorMaximumBytes,
         [Parameter()] $NativeResult,
-        [Parameter()] [AllowEmptyString()] [string] $ObservationValue
+        [Parameter()] [AllowEmptyString()] [string] $ObservationValue,
+        [Parameter()] $PrivatePayload
     )
 
     $coverageId = "coverage:synthetic-device-os:$RunId"
@@ -822,15 +1055,25 @@ function New-ProcessSupervisorResult {
     $errorExceeded = $null -ne $NativeResult -and [bool] $NativeResult.StandardErrorExceeded
     $completeTreeAbsent = $null -eq $NativeResult -or [bool] $NativeResult.CompleteOwnedTreeAbsent
     $terminationMode = if ($null -ne $NativeResult) { [string] $NativeResult.CancellationMode } else { 'None' }
+    $deviceOperation = $OperationId -eq 'op:device.windows-readiness.collect'
+    $contextOperation = $OperationId -eq 'op:device.windows-context.collect'
+    $resultCollectorId = if ($contextOperation) { 'collector:windows.device-context' }
+        elseif ($deviceOperation) { 'collector:windows.device-readiness' }
+        else { 'collector:synthetic.windows.os' }
+    $resultScopeId = if ($contextOperation) { 'scope:device.windows-context' }
+        elseif ($deviceOperation) { 'scope:device.windows-readiness' }
+        else { 'scope:synthetic.device.os' }
+    $resultSubjectId = if ($deviceOperation -or $contextOperation) { 'subject:device:primary' }
+        else { 'subject:synthetic-device:primary' }
 
-    [pscustomobject][ordered]@{
+    $result = [pscustomobject][ordered]@{
         Envelope = [pscustomobject][ordered]@{
             envelopeId = "envelope:synthetic-windows-os:$RunId"
-            collectorId = 'collector:synthetic.windows.os'
+            collectorId = $resultCollectorId
             collectorVersion = '1.0.0'
             operationId = $OperationId
-            intendedScopeIds = @('scope:synthetic.device.os')
-            subjectIds = @('subject:synthetic-device:primary')
+            intendedScopeIds = @($resultScopeId)
+            subjectIds = @($resultSubjectId)
             startedAt = $StartedAt.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
             completedAt = [System.DateTimeOffset]::UtcNow.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
             executionContext = 'Synthetic'
@@ -842,7 +1085,7 @@ function New-ProcessSupervisorResult {
         Observations = $observations
         Coverage = @([pscustomobject][ordered]@{
             coverageId = $coverageId
-            scopeId = 'scope:synthetic.device.os'
+            scopeId = $resultScopeId
             state = $CoverageState
             reasonCode = $CoverageReasonCode
             observationIds = $observationIds
@@ -873,6 +1116,57 @@ function New-ProcessSupervisorResult {
             temporaryArtifactsAbsent = $false
         }
     }
+    if ($PSBoundParameters.ContainsKey('PrivatePayload')) {
+        # This member is deliberately absent from every public record. The
+        # caller must normalize it into typed observations before it can cross
+        # the evidence boundary; raw collector output is never logged.
+        $result | Add-Member -NotePropertyName PrivatePayload -NotePropertyValue $PrivatePayload
+    }
+    $result
+}
+
+function Test-BoundedBaseDevicePayload {
+    param([Parameter(Mandatory)] $Payload)
+
+    # Both release-owned device operations share these eight base facts. Shape
+    # closure remains operation-specific below; this helper centralizes their
+    # type, locale, range, and UTF-8 bounds so a safety correction cannot drift
+    # between historical readiness and the expanded context collector.
+    $basePropertyNames = @(
+        'manufacturer','model','processorName','memoryBytes','operatingSystemSku',
+        'build','architecture','sourceLocale'
+    )
+    $presentNames = @($Payload.PSObject.Properties.Name)
+    if (@($basePropertyNames | Where-Object { $_ -notin $presentNames }).Count -gt 0) {
+        return $false
+    }
+    ($null -eq $Payload.manufacturer -or $Payload.manufacturer -is [string]) -and
+        ($null -eq $Payload.model -or $Payload.model -is [string]) -and
+        ($null -eq $Payload.processorName -or $Payload.processorName -is [string]) -and
+        ($null -eq $Payload.build -or $Payload.build -is [string]) -and
+        ($null -eq $Payload.architecture -or $Payload.architecture -is [string]) -and
+        $Payload.sourceLocale -is [string] -and
+        ($null -eq $Payload.memoryBytes -or $Payload.memoryBytes -is [long] -or
+            $Payload.memoryBytes -is [int]) -and
+        ($null -eq $Payload.operatingSystemSku -or $Payload.operatingSystemSku -is [long] -or
+            $Payload.operatingSystemSku -is [int]) -and
+        ($null -eq $Payload.manufacturer -or
+            -not [string]::IsNullOrWhiteSpace([string]$Payload.manufacturer)) -and
+        ($null -eq $Payload.model -or -not [string]::IsNullOrWhiteSpace([string]$Payload.model)) -and
+        ($null -eq $Payload.processorName -or
+            -not [string]::IsNullOrWhiteSpace([string]$Payload.processorName)) -and
+        ($null -eq $Payload.build -or [string]$Payload.build -match '^[0-9]{1,10}$') -and
+        ($null -eq $Payload.architecture -or
+            [string]$Payload.architecture -match '^(?i:X64|AMD64|Arm64|X86)$') -and
+        [string]$Payload.sourceLocale -match '^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' -and
+        ($null -eq $Payload.operatingSystemSku -or ([long]$Payload.operatingSystemSku -ge 0 -and
+            [long]$Payload.operatingSystemSku -le 1000)) -and
+        ($null -eq $Payload.memoryBytes -or ([long]$Payload.memoryBytes -ge 1 -and
+            [long]$Payload.memoryBytes -le 9007199254740991)) -and
+        @($Payload.manufacturer, $Payload.model, $Payload.processorName, $Payload.build,
+            $Payload.architecture, $Payload.sourceLocale | Where-Object {
+                [System.Text.Encoding]::UTF8.GetByteCount([string]$_) -gt 512
+            }).Count -eq 0
 }
 
 function Invoke-ApprovedCollectorProcess {
@@ -882,7 +1176,16 @@ function Invoke-ApprovedCollectorProcess {
         [string] $OperationId,
 
         [Parameter()]
-        [System.Threading.CancellationToken] $CancellationToken = [System.Threading.CancellationToken]::None
+        [System.Threading.CancellationToken] $CancellationToken = [System.Threading.CancellationToken]::None,
+
+        # A fixture selects only one release-owned adapter behavior. It cannot
+        # supply evidence, WMI/CIM text, a command, executable, or argument.
+        [Parameter(DontShow)]
+        [ValidateSet('', 'Complete', 'Partial', 'Unavailable', 'Malformed', 'Oversize',
+            'Virtual', 'Unicode', 'NonEnglish', 'Activated', 'Physical', 'Desktop',
+            'BatteryAbsent', 'Unactivated', 'Laptop', 'BatteryPresent', 'BatteryUnavailable',
+            'Denied', 'ProhibitedMaterial')]
+        [string] $DeviceReadinessScenario = ''
     )
 
     Initialize-ProcessSupervisorNativeType
@@ -914,22 +1217,28 @@ function Invoke-ApprovedCollectorProcess {
             throw $exception
         }
         $policyDigest = [string] $policy.Digest
-        $collectorPolicy = $policy.Collector
-        $operationPolicy = $policy.Operation
-        $payloadDigest = [string] $collectorPolicy.payload.sha256
-        $standardOutputMaximumBytes = [int] $operationPolicy.standardOutputMaximumBytes
-        $standardErrorMaximumBytes = [int] $operationPolicy.standardErrorMaximumBytes
         $fixtureId = if ($OperationId.StartsWith('fixture:synthetic.', [System.StringComparison]::Ordinal)) {
             $OperationId.Substring('fixture:synthetic.'.Length)
         }
-        else {
-            ''
+        else { '' }
+        $selectedCollectorId = if ($OperationId -eq 'op:device.windows-context.collect') {
+            'collector:windows.device-context'
         }
-        if (-not $fixtureId -and $OperationId -ne [string] $operationPolicy.operationId) {
+        elseif ($OperationId -eq 'op:device.windows-readiness.collect') {
+            'collector:windows.device-readiness'
+        }
+        else { 'collector:synthetic.windows.os' }
+        $collectorPolicy = @($policy.Collectors | Where-Object collectorId -eq $selectedCollectorId)[0]
+        $selectedOperationId = if ($fixtureId) { 'op:synthetic.windows.os.success' } else { $OperationId }
+        $operationPolicy = @($collectorPolicy.operations | Where-Object operationId -eq $selectedOperationId)[0]
+        if ($null -eq $operationPolicy) {
             $exception = [System.InvalidOperationException]::new('The operation is not release-defined.')
             $exception.Data['ReasonCode'] = 'PROCESS.OPERATION_INVALID'
             throw $exception
         }
+        $payloadDigest = [string] $collectorPolicy.payload.sha256
+        $standardOutputMaximumBytes = [int] $operationPolicy.standardOutputMaximumBytes
+        $standardErrorMaximumBytes = [int] $operationPolicy.standardErrorMaximumBytes
         $fixturePolicy = if ($fixtureId) {
             @($policy.Catalog.validationFixtures | Where-Object fixtureId -eq $fixtureId)[0]
         }
@@ -1014,7 +1323,13 @@ function Invoke-ApprovedCollectorProcess {
             throw 'The release-defined PowerShell host does not have the approved Microsoft signature.'
         }
 
-        $operationMode = if ($null -ne $fixturePolicy) {
+        $operationMode = if ($OperationId -eq 'op:device.windows-context.collect') {
+            if ($DeviceReadinessScenario) { "Context$DeviceReadinessScenario" } else { 'ContextActual' }
+        }
+        elseif ($OperationId -eq 'op:device.windows-readiness.collect') {
+            if ($DeviceReadinessScenario) { "Device$DeviceReadinessScenario" } else { 'DeviceActual' }
+        }
+        elseif ($null -ne $fixturePolicy) {
             [string] $fixturePolicy.operationMode
         }
         else {
@@ -1107,21 +1422,129 @@ function Invoke-ApprovedCollectorProcess {
         # observation. The raw stdout/stderr bytes are discarded and never enter
         # progress, a public diagnostic, the envelope, or a repository artifact.
         $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
-        $output = $strictUtf8.GetString($native.StandardOutput) | ConvertFrom-Json -ErrorAction Stop
-        if (@($output.PSObject.Properties.Name).Count -ne 1 -or
-            @($output.PSObject.Properties.Name)[0] -ne 'displayName' -or
-            $output.displayName -isnot [string] -or
-            [System.Text.Encoding]::UTF8.GetByteCount($output.displayName) -gt 256) {
-            throw 'The approved synthetic collector returned an invalid observation payload.'
+        try {
+            $output = $strictUtf8.GetString($native.StandardOutput) | ConvertFrom-Json -ErrorAction Stop
         }
-
-        $collectorResult = New-ProcessSupervisorResult -OperationId $OperationId `
-            -RunId $runId -StartedAt $startedAt -Outcome 'Completed' -CoverageState 'Complete' `
-            -ReasonCode 'PROCESS.COMPLETED' -CoverageReasonCode 'COLLECTION.COMPLETE' `
-            -PolicyDigest $policyDigest -PayloadDigest $payloadDigest `
-            -StandardOutputMaximumBytes $standardOutputMaximumBytes `
-            -StandardErrorMaximumBytes $standardErrorMaximumBytes `
-            -NativeResult $native -ObservationValue ([string] $output.displayName)
+        catch {
+            if ($OperationId -in @('op:device.windows-readiness.collect',
+                    'op:device.windows-context.collect')) {
+                $exception = [System.IO.InvalidDataException]::new(
+                    'The approved device collector returned malformed JSON.'
+                )
+                $exception.Data['ReasonCode'] = 'PROCESS.PAYLOAD_MALFORMED'
+                throw $exception
+            }
+            throw
+        }
+        if ($OperationId -eq 'op:device.windows-context.collect') {
+            $propertyNames = @($output.PSObject.Properties.Name)
+            $prohibitedNamePattern = '(?i)(password|passphrase|credential|token|(?:private|recovery|license|product)[._-]?key|pfx|secret)'
+            if (@($propertyNames | Where-Object { [string]$_ -match $prohibitedNamePattern }).Count -gt 0) {
+                # The public result records only that prohibited material was
+                # blocked. Neither the field name nor its value is logged,
+                # hashed, diagnosed, reported, or admitted as an observation.
+                $exception = [System.Security.SecurityException]::new(
+                    'The approved device-context collector returned prohibited material.'
+                )
+                $exception.Data['ReasonCode'] = 'PROCESS.PROHIBITED_MATERIAL_BLOCKED'
+                throw $exception
+            }
+            $unavailableShape = $propertyNames.Count -eq 1 -and
+                $propertyNames[0] -eq 'availability' -and $output.availability -eq 'Unavailable'
+            $contextShape = $propertyNames.Count -eq 19 -and
+                (@($propertyNames | Sort-Object) -join '|') -eq
+                    'activationAvailability|activationStatus|architecture|batteryAvailability|batteryChargePercent|batteryPresent|batteryRuntimeMinutes|batteryStatus|build|chassisAvailability|chassisTypeCodes|computerSystemType|hypervisorPresent|manufacturer|memoryBytes|model|operatingSystemSku|processorName|sourceLocale' -and
+                (Test-BoundedBaseDevicePayload -Payload $output) -and
+                [string]$output.activationAvailability -in @('Available','Unavailable','Denied') -and
+                [string]$output.chassisAvailability -in @('Available','Unavailable','Denied') -and
+                [string]$output.batteryAvailability -in @('Available','Unavailable','Denied') -and
+                ($null -eq $output.activationStatus -or (
+                    ($output.activationStatus -is [long] -or $output.activationStatus -is [int]) -and
+                    [long]$output.activationStatus -ge 0 -and [long]$output.activationStatus -le 6)) -and
+                ($null -eq $output.computerSystemType -or (
+                    ($output.computerSystemType -is [long] -or $output.computerSystemType -is [int]) -and
+                    [long]$output.computerSystemType -ge 0 -and [long]$output.computerSystemType -le 255)) -and
+                ($null -eq $output.hypervisorPresent -or $output.hypervisorPresent -is [bool]) -and
+                ($null -eq $output.chassisTypeCodes -or
+                    ($output.chassisTypeCodes -is [string] -and
+                    [string]$output.chassisTypeCodes -match '^[0-9]{1,3}(?:,[0-9]{1,3}){0,7}$')) -and
+                ($null -eq $output.batteryPresent -or $output.batteryPresent -is [bool]) -and
+                ($null -eq $output.batteryStatus -or (
+                    ($output.batteryStatus -is [long] -or $output.batteryStatus -is [int]) -and
+                    [long]$output.batteryStatus -ge 1 -and [long]$output.batteryStatus -le 11)) -and
+                ($null -eq $output.batteryChargePercent -or (
+                    ($output.batteryChargePercent -is [long] -or $output.batteryChargePercent -is [int]) -and
+                    [long]$output.batteryChargePercent -ge 0 -and [long]$output.batteryChargePercent -le 100)) -and
+                ($null -eq $output.batteryRuntimeMinutes -or (
+                    ($output.batteryRuntimeMinutes -is [long] -or $output.batteryRuntimeMinutes -is [int]) -and
+                    [long]$output.batteryRuntimeMinutes -ge 0 -and [long]$output.batteryRuntimeMinutes -le 10080))
+            if (-not $unavailableShape -and -not $contextShape) {
+                $exception = [System.IO.InvalidDataException]::new(
+                    'The approved device-context collector returned an invalid bounded payload.'
+                )
+                $exception.Data['ReasonCode'] = 'PROCESS.PAYLOAD_MALFORMED'
+                throw $exception
+            }
+            $coverageState = if ($unavailableShape) { 'Unavailable' }
+                elseif ($output.activationAvailability -ne 'Available' -or
+                    $output.chassisAvailability -ne 'Available' -or
+                    $output.batteryAvailability -ne 'Available' -or $null -eq $output.memoryBytes) {
+                    'Partial'
+                } else { 'Complete' }
+            $coverageReasonCode = if ($coverageState -eq 'Complete') { 'COLLECTION.COMPLETE' }
+                elseif ($coverageState -eq 'Partial') { 'COLLECTION.FIELD_UNAVAILABLE' }
+                else { 'COLLECTION.SOURCE_UNAVAILABLE' }
+            $collectorResult = New-ProcessSupervisorResult -OperationId $OperationId `
+                -RunId $runId -StartedAt $startedAt -Outcome 'Completed' -CoverageState $coverageState `
+                -ReasonCode 'PROCESS.COMPLETED' -CoverageReasonCode $coverageReasonCode `
+                -PolicyDigest $policyDigest -PayloadDigest $payloadDigest `
+                -StandardOutputMaximumBytes $standardOutputMaximumBytes `
+                -StandardErrorMaximumBytes $standardErrorMaximumBytes `
+                -NativeResult $native -PrivatePayload $output
+        }
+        elseif ($OperationId -eq 'op:device.windows-readiness.collect') {
+            $propertyNames = @($output.PSObject.Properties.Name)
+            $unavailableShape = $propertyNames.Count -eq 1 -and
+                $propertyNames[0] -eq 'availability' -and $output.availability -eq 'Unavailable'
+            $deviceShape = $propertyNames.Count -eq 8 -and
+                (@($propertyNames | Sort-Object) -join '|') -eq
+                    'architecture|build|manufacturer|memoryBytes|model|operatingSystemSku|processorName|sourceLocale' -and
+                (Test-BoundedBaseDevicePayload -Payload $output)
+            if (-not $unavailableShape -and -not $deviceShape) {
+                $exception = [System.IO.InvalidDataException]::new(
+                    'The approved device collector returned an invalid bounded payload.'
+                )
+                $exception.Data['ReasonCode'] = 'PROCESS.PAYLOAD_MALFORMED'
+                throw $exception
+            }
+            $coverageState = if ($unavailableShape) { 'Unavailable' }
+                elseif ($null -eq $output.memoryBytes) { 'Partial' } else { 'Complete' }
+            $coverageReasonCode = if ($coverageState -eq 'Complete') { 'COLLECTION.COMPLETE' }
+                elseif ($coverageState -eq 'Partial') { 'COLLECTION.FIELD_UNAVAILABLE' }
+                else { 'COLLECTION.SOURCE_UNAVAILABLE' }
+            $collectorResult = New-ProcessSupervisorResult -OperationId $OperationId `
+                -RunId $runId -StartedAt $startedAt -Outcome 'Completed' -CoverageState $coverageState `
+                -ReasonCode 'PROCESS.COMPLETED' -CoverageReasonCode $coverageReasonCode `
+                -PolicyDigest $policyDigest -PayloadDigest $payloadDigest `
+                -StandardOutputMaximumBytes $standardOutputMaximumBytes `
+                -StandardErrorMaximumBytes $standardErrorMaximumBytes `
+                -NativeResult $native -PrivatePayload $output
+        }
+        else {
+            if (@($output.PSObject.Properties.Name).Count -ne 1 -or
+                @($output.PSObject.Properties.Name)[0] -ne 'displayName' -or
+                $output.displayName -isnot [string] -or
+                [System.Text.Encoding]::UTF8.GetByteCount($output.displayName) -gt 256) {
+                throw 'The approved synthetic collector returned an invalid observation payload.'
+            }
+            $collectorResult = New-ProcessSupervisorResult -OperationId $OperationId `
+                -RunId $runId -StartedAt $startedAt -Outcome 'Completed' -CoverageState 'Complete' `
+                -ReasonCode 'PROCESS.COMPLETED' -CoverageReasonCode 'COLLECTION.COMPLETE' `
+                -PolicyDigest $policyDigest -PayloadDigest $payloadDigest `
+                -StandardOutputMaximumBytes $standardOutputMaximumBytes `
+                -StandardErrorMaximumBytes $standardErrorMaximumBytes `
+                -NativeResult $native -ObservationValue ([string] $output.displayName)
+        }
     }
     catch {
         $reasonCode = if ($_.Exception.Data.Contains('ReasonCode')) {
