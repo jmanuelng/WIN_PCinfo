@@ -16,17 +16,14 @@ $firmwarePolicy = Get-FirmwareReadinessPolicy -ConvertFromJsonCommand $moduleFac
 $identityPolicy = Get-IdentityEnrollmentPolicy -ConvertFromJsonCommand $moduleFacts.convertFromJsonCommand
 $systemPolicy = Get-SystemCollectionPlanPolicy
 
-$deadlineRule = $identityPolicy.rules[0] | ConvertTo-Json -Depth 10 | ConvertFrom-Json -Depth 10
-$deadlineRule.deadlineMilliseconds = 20
 $deadlineRejected=$false
 try {
-    Invoke-IdentityEnrollmentRuleEvaluation -Rule $deadlineRule -Evaluation {
-        [Threading.Thread]::Sleep(75)
-        [pscustomobject]@{outcome='Informational'}
-    }
+    Invoke-IdentityEnrollmentRuleEvaluation -Rule $identityPolicy.rules[0] `
+        -Inputs ([pscustomobject]@{verifiedState='ObservedValue';verifiedValue=$true}) `
+        -SimulateUncooperativeRule
 } catch {$deadlineRejected=$true}
 Assert-Equal $true $deadlineRejected `
-    'an identity rule that exceeds its frozen deadline is rejected'
+    'an uncooperative identity rule is terminated at its frozen deadline'
 
 function Test-CanonicalRecord {
     param($Record)

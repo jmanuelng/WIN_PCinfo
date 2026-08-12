@@ -65,6 +65,8 @@ if ($sourceText -notmatch 'NativeRunner\]::Run' -or
 }
 Assert-Equal $true (Test-IdentityNativeAccessDeniedCode -Code ([int]0x80070005)) `
     'HRESULT E_ACCESSDENIED is classified as denied rather than unavailable'
+Assert-Equal $true (Test-IdentityAadSuccessCode -Code 1) `
+    'S_FALSE is complete locale-neutral evidence that no default Entra join exists'
 
 $gateStarted=[DateTimeOffset]::UtcNow
 $administratorGate=Get-IdentityProcessContextDisposition `

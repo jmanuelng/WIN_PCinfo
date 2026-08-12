@@ -68,8 +68,12 @@ Assert-Equal ($expectedScopes -join '|') (@($policy.scopes.scopeId) -join '|') `
 Assert-Equal 3 @($policy.rules).Count `
     'each release rule produces exactly one identity or enrollment finding'
 foreach ($rule in @($policy.rules)) {
-    Assert-Equal 'InProcessValidatedAssessmentRecord' ([string]$rule.executionContext) `
-        'rules evaluate only the admitted canonical record'
+    Assert-Equal 'SupervisedValidatedAssessmentRecord' ([string]$rule.executionContext) `
+        'rules evaluate only bounded inputs projected from the admitted canonical record'
+    Assert-Equal 'ActiveMicrosoftSignedPowerShellHost' ([string]$rule.executable) `
+        'a hung release rule has an owned process termination boundary'
+    Assert-Equal 2000 ([int]$rule.deadlineMilliseconds) `
+        'each rule has enough bounded startup and termination time'
     Assert-Equal 'Indeterminate' ([string]$rule.missingEvidenceOutcome) `
         'missing identity evidence cannot become a negative conclusion'
     Assert-Equal 1 ([int]$rule.maximumOutputFindings) 'one rule produces one finding'

@@ -486,6 +486,15 @@ function Test-IdentityNativeAccessDeniedCode {
     $Code -eq 5 -or $Code -eq -2147024891
 }
 
+function Test-IdentityAadSuccessCode {
+    param([Parameter(Mandatory)] [int] $Code)
+    # NetGetAadJoinInformation returns S_FALSE (1), not a failure, when the
+    # device has no default join information. That is complete local evidence
+    # for `None`; treating it as unavailable would erase the ordinary
+    # workgroup/unenrolled case on real Windows hosts.
+    $Code -eq 0 -or $Code -eq 1
+}
+
 function New-LiveIdentityContextGap {
     param(
         [Parameter(Mandatory)] [ValidateSet('Administrator','LocalSystem')] [string] $Context,
@@ -625,7 +634,7 @@ function Get-LiveIdentityEnrollmentPayload {
             default { 'Unknown' }
         }
     } else { $null }
-    $entraType = if ($snapshot.AadError -eq 0) {
+    $entraType = if (Test-IdentityAadSuccessCode ([int]$snapshot.AadError)) {
         switch ([int]$snapshot.AadJoinType) {
             1 { 'EntraJoined' }
             2 { 'EntraRegistered' }
@@ -636,7 +645,8 @@ function Get-LiveIdentityEnrollmentPayload {
     $registrationState = if ((Test-IdentityNativeAccessDeniedCode ([int]$snapshot.DomainError)) -or
         (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.AadError))) {
         'Denied'
-    } elseif ($snapshot.DomainError -ne 0 -or $snapshot.AadError -ne 0) {
+    } elseif ($snapshot.DomainError -ne 0 -or
+        -not (Test-IdentityAadSuccessCode ([int]$snapshot.AadError))) {
         'Unavailable'
     } else { 'Complete' }
     $userState = if (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.UserError)) {
@@ -646,7 +656,7 @@ function Get-LiveIdentityEnrollmentPayload {
         'Complete'
     } else { 'Unavailable' }
     $workSchoolState = if (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.AadError)) { 'Denied' }
-        elseif ($snapshot.AadError -ne 0) { 'Unavailable' }
+        elseif (-not (Test-IdentityAadSuccessCode ([int]$snapshot.AadError))) { 'Unavailable' }
         else { 'Complete' }
     $workSchoolPresent = $entraType -eq 'EntraRegistered'
     $payload = [pscustomobject][ordered]@{
@@ -948,22 +958,96 @@ function Set-IdentityEnrollmentFindingResult {
 function Invoke-IdentityEnrollmentRuleEvaluation {
     param(
         [Parameter(Mandatory)] $Rule,
-        [Parameter(Mandatory)] [scriptblock] $Evaluation
+        [Parameter(Mandatory)] $Inputs,
+        [Parameter()] [switch] $SimulateUncooperativeRule
     )
-    # Rules are pure and deliberately tiny, but their release deadline is still
-    # executable authority rather than documentation. A single stopwatch and
-    # closed return shape makes accidental future expansion fail before a
-    # finding is admitted to the canonical record.
-    $watch=[Diagnostics.Stopwatch]::StartNew()
-    $values=@(& $Evaluation)
-    $watch.Stop()
-    if($watch.ElapsedMilliseconds -gt [int]$Rule.deadlineMilliseconds -or
-        $values.Count -ne 1 -or [string]$values[0].outcome -notin @(
-            'ExpectedCondition','NeedsAttention','Informational','Indeterminate','NotApplicable'
-        )){
-        throw "The $($Rule.operationId) Rule Evaluation violated its frozen bound."
+    Initialize-ProcessSupervisorNativeType
+    $maximumMilliseconds=[int]$Rule.deadlineMilliseconds
+    $terminationMilliseconds=[Math]::Min(500,[Math]::Max(1,
+        [Math]::Floor($maximumMilliseconds/4)))
+    $activeMilliseconds=[Math]::Max(1,$maximumMilliseconds-$terminationMilliseconds)
+    $inputBytes=[Text.UTF8Encoding]::new($false).GetBytes(
+        [Management.Automation.PSSerializer]::Serialize($Inputs,5)
+    )
+    if($inputBytes.Length -gt 4096){
+        throw "The $($Rule.operationId) Rule Evaluation exceeded its input bound."
     }
-    $values[0]
+    # Threat: even a release-owned pure rule can regress into an infinite loop.
+    # Mechanism: this fixed evaluator runs in the same suspended, kill-on-close
+    # Job boundary as collectors. Trust assumption: the parent selects the
+    # closed rule kind and inputs; no caller script enters the child. Safe
+    # failure: deadline or malformed output proves the worker absent and admits
+    # no finding.
+    $childScript=@'
+$ErrorActionPreference='Stop'
+try {
+    if($env:WINPCINFO_IDENTITY_RULE_TEST_HANG -eq '1'){
+        [Threading.Thread]::Sleep(30000)
+    }
+    $utf8=[Text.UTF8Encoding]::new($false,$true)
+    $xml=$utf8.GetString([Convert]::FromBase64String($env:WINPCINFO_IDENTITY_RULE_INPUT))
+    $input=[Management.Automation.PSSerializer]::Deserialize($xml)
+    $result=switch($env:WINPCINFO_IDENTITY_RULE_KIND){
+        'assessment-user-context' {
+            if($input.verifiedState -eq 'ObservedValue' -and [bool]$input.verifiedValue){
+                [pscustomobject]@{outcome='ExpectedCondition'}
+            }else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.ASSESSMENT_USER_CONTEXT_UNAVAILABLE'}}
+        }
+        'device-registration-context' {
+            if($input.domainState -eq 'ObservedValue' -and $input.entraState -eq 'ObservedValue'){
+                [pscustomobject]@{outcome='Informational'}
+            }else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.REGISTRATION_CONTEXT_INCOMPLETE'}}
+        }
+        'work-school-enrollment-context' {
+            if($input.workSchoolState -eq 'ObservedValue' -and $input.mdmState -eq 'ObservedValue'){
+                [pscustomobject]@{outcome='Informational'}
+            }else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.ENROLLMENT_CONTEXT_INCOMPLETE'}}
+        }
+        default { throw 'Unknown identity rule.' }
+    }
+    $output=[Management.Automation.PSSerializer]::Serialize($result,3)
+    [Console]::Out.Write([Convert]::ToBase64String($utf8.GetBytes($output)))
+}catch{[Console]::Error.Write('Identity rule failed.');exit 1}
+'@
+    $encodedChild=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript))
+    $executable=[IO.Path]::GetFullPath((Join-Path $PSHOME 'pwsh.exe'))
+    if(-not [IO.File]::Exists($executable) -or -not [string]::Equals(
+            $executable,[Environment]::ProcessPath,[StringComparison]::OrdinalIgnoreCase)){
+        throw "The $($Rule.operationId) Rule Evaluation boundary is unavailable."
+    }
+    $environment=[Collections.Generic.Dictionary[string,string]]::new(
+        [StringComparer]::OrdinalIgnoreCase
+    )
+    $environment['SystemRoot']=[Environment]::GetFolderPath('Windows')
+    $environment['WINPCINFO_IDENTITY_RULE_KIND']=[string]$Rule.findingKind
+    $environment['WINPCINFO_IDENTITY_RULE_INPUT']=[Convert]::ToBase64String($inputBytes)
+    if($SimulateUncooperativeRule){$environment['WINPCINFO_IDENTITY_RULE_TEST_HANG']='1'}
+    $eventName="Local\WINPCInfo-IdentityRule-$([Guid]::NewGuid().ToString('N'))"
+    [bool]$created=$false;$event=$null
+    try{
+        $event=[Threading.EventWaitHandle]::new($false,
+            [Threading.EventResetMode]::ManualReset,$eventName,[ref]$created)
+        if(-not $created){throw "The $($Rule.operationId) Rule Evaluation event is unavailable."}
+        $native=[WinPCInfo.ProcessSupervisor.NativeRunner]::Run(
+            $executable,@('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',$encodedChild),
+            $PSHOME,$environment,$activeMilliseconds,2048,2048,
+            [Threading.CancellationToken]::None,$event,1,$terminationMilliseconds,$false
+        )
+        if(-not $native.Started -or -not [bool]$native.CompleteOwnedTreeAbsent -or
+            $native.FailureStage -ne [WinPCInfo.ProcessSupervisor.NativeFailureStage]::None -or
+            $native.ExitCode -ne 0 -or $native.StandardOutputExceeded -or
+            $native.StandardErrorExceeded -or $native.StandardErrorBytes -ne 0){
+            throw "The $($Rule.operationId) Rule Evaluation violated its frozen deadline or boundary."
+        }
+        $base64=[Text.UTF8Encoding]::new($false,$true).GetString($native.StandardOutput)
+        $xml=[Text.UTF8Encoding]::new($false,$true).GetString([Convert]::FromBase64String($base64))
+        $value=[Management.Automation.PSSerializer]::Deserialize($xml)
+        if([string]$value.outcome -notin @(
+            'ExpectedCondition','NeedsAttention','Informational','Indeterminate','NotApplicable')){
+            throw "The $($Rule.operationId) Rule Evaluation returned an invalid result."
+        }
+        $value
+    }finally{if($null -ne $event){$event.Dispose()}}
 }
 
 function Complete-ValidatedIdentityEnrollmentAssessmentRecord {
@@ -1014,36 +1098,29 @@ function Complete-ValidatedIdentityEnrollmentAssessmentRecord {
     }
     $verified=$byField['field:identity.assessment-user.verified']
     $userResult=Invoke-IdentityEnrollmentRuleEvaluation `
-        -Rule $rules['assessment-user-context'] -Evaluation {
-            if($null -ne $verified -and $verified.valueState -eq 'ObservedValue' -and
-                [bool]$verified.value){[pscustomobject]@{outcome='ExpectedCondition'}
-            }else{[pscustomobject]@{outcome='Indeterminate'
-                reasonCode='FINDING.ASSESSMENT_USER_CONTEXT_UNAVAILABLE'}}
-        }
+        -Rule $rules['assessment-user-context'] -Inputs ([pscustomobject]@{
+            verifiedState=if($null -eq $verified){''}else{[string]$verified.valueState}
+            verifiedValue=if($null -eq $verified -or -not $verified.PSObject.Properties['value']){
+                $false}else{[bool]$verified.value}
+        })
     Set-IdentityEnrollmentFindingResult $userFinding ([string]$userResult.outcome) `
         $(if($userResult.PSObject.Properties['reasonCode']){[string]$userResult.reasonCode}else{''})
     $domain=$byField['field:device.domain-join.state']
     $entra=$byField['field:device.entra-registration.type']
     $registrationResult=Invoke-IdentityEnrollmentRuleEvaluation `
-        -Rule $rules['device-registration-context'] -Evaluation {
-            if($null -ne $domain -and $domain.valueState -eq 'ObservedValue' -and
-                $null -ne $entra -and $entra.valueState -eq 'ObservedValue'){
-                [pscustomobject]@{outcome='Informational'}
-            }else{[pscustomobject]@{outcome='Indeterminate'
-                reasonCode='FINDING.REGISTRATION_CONTEXT_INCOMPLETE'}}
-        }
+        -Rule $rules['device-registration-context'] -Inputs ([pscustomobject]@{
+            domainState=if($null -eq $domain){''}else{[string]$domain.valueState}
+            entraState=if($null -eq $entra){''}else{[string]$entra.valueState}
+        })
     Set-IdentityEnrollmentFindingResult $registrationFinding ([string]$registrationResult.outcome) `
         $(if($registrationResult.PSObject.Properties['reasonCode']){[string]$registrationResult.reasonCode}else{''})
     $workSchool=$byField['field:device.work-school-registration.present']
     $mdm=$byField['field:device.mdm-bridge.provider-available']
     $enrollmentResult=Invoke-IdentityEnrollmentRuleEvaluation `
-        -Rule $rules['work-school-enrollment-context'] -Evaluation {
-            if($null -ne $workSchool -and $workSchool.valueState -eq 'ObservedValue' -and
-                $null -ne $mdm -and $mdm.valueState -eq 'ObservedValue'){
-                [pscustomobject]@{outcome='Informational'}
-            }else{[pscustomobject]@{outcome='Indeterminate'
-                reasonCode='FINDING.ENROLLMENT_CONTEXT_INCOMPLETE'}}
-        }
+        -Rule $rules['work-school-enrollment-context'] -Inputs ([pscustomobject]@{
+            workSchoolState=if($null -eq $workSchool){''}else{[string]$workSchool.valueState}
+            mdmState=if($null -eq $mdm){''}else{[string]$mdm.valueState}
+        })
     Set-IdentityEnrollmentFindingResult $enrollmentFinding ([string]$enrollmentResult.outcome) `
         $(if($enrollmentResult.PSObject.Properties['reasonCode']){[string]$enrollmentResult.reasonCode}else{''})
     $Record.findings=@($Record.findings)+@($userFinding,$registrationFinding,$enrollmentFinding)

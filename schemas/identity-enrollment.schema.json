@@ -60,13 +60,13 @@
       "properties": {
         "findingKind": { "enum": ["assessment-user-context", "device-registration-context", "work-school-enrollment-context"] },
         "ruleId": { "type": "string", "pattern": "^rule:identity\\." }, "operationId": { "type": "string", "pattern": "^op:rule\\." },
-        "source": { "const": "ReleaseEmbeddedValidatedObservationRule" }, "executionContext": { "const": "InProcessValidatedAssessmentRecord" },
-        "privilege": { "const": "NoElevation" }, "networkBehavior": { "const": "OfflineOnly" }, "executable": { "const": "NoneInProcess" },
-        "dependencies": { "type": "array", "maxItems": 0 }, "mayPrompt": { "const": false }, "mayInstall": { "const": false },
+        "source": { "const": "ReleaseEmbeddedValidatedObservationRule" }, "executionContext": { "const": "SupervisedValidatedAssessmentRecord" },
+        "privilege": { "const": "NoElevation" }, "networkBehavior": { "const": "OfflineOnly" }, "executable": { "const": "ActiveMicrosoftSignedPowerShellHost" },
+        "dependencies": { "const": ["WIN-PCInfo Process Supervisor"] }, "mayPrompt": { "const": false }, "mayInstall": { "const": false },
         "mayDownload": { "const": false }, "maySelfElevate": { "const": false }, "writesAllowed": { "const": false },
-        "maximumAttempts": { "const": 1 }, "deadlineMilliseconds": { "const": 100 },
+        "maximumAttempts": { "const": 1 }, "deadlineMilliseconds": { "const": 2000 },
         "maximumInputObservations": { "type": "integer", "minimum": 1, "maximum": 5 }, "maximumOutputFindings": { "const": 1 },
-        "cleanup": { "const": "NoArtifacts" }, "missingEvidenceOutcome": { "const": "Indeterminate" }
+        "cleanup": { "const": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent" }, "missingEvidenceOutcome": { "const": "Indeterminate" }
       }
     },
     "task": {
