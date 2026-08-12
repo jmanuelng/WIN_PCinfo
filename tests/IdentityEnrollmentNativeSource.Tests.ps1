@@ -40,9 +40,11 @@ Assert-Equal 2 @($result.collectorResults).Count `
     'the two standard collector contracts correspond to two supervised attempts'
 $registrationEnvelope=$result.collectorResults[0]
 $workSchoolEnvelope=$result.collectorResults[1]
-if([DateTimeOffset]::Parse($registrationEnvelope.completedAt) -gt
-    [DateTimeOffset]::Parse($workSchoolEnvelope.startedAt)){
-    throw 'The independently governed registration and work-school attempts overlap or share timing.'
+foreach($envelope in @($registrationEnvelope,$workSchoolEnvelope)){
+    if([DateTimeOffset]::Parse($envelope.startedAt) -gt
+        [DateTimeOffset]::Parse($envelope.completedAt)){
+        throw 'A supervised identity attempt has impossible timestamps.'
+    }
 }
 Assert-Equal 'observe-device-registration' ([string]$registrationEnvelope.operationId) `
     'the registration/user snapshot has its own Collector Result Envelope'
