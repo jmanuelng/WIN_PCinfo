@@ -10,7 +10,7 @@ The Assessment User SID remains private execution state. It is used only to bind
 
 ## Structured sources and hard bounds
 
-The frozen operation is `observe-user-dependencies`. It runs offline in one Microsoft-signed PowerShell child for at most five seconds, with a 32 KiB output ceiling and verified whole-tree cleanup. It can make one attempt and cannot prompt, install, download, self-elevate, connect a resource, or write Windows state.
+The frozen operation is `observe-user-dependencies`. It runs offline in one Microsoft-signed PowerShell child for at most five seconds, with a 128 KiB output ceiling and verified whole-tree cleanup. It can make one attempt and cannot prompt, install, download, self-elevate, connect a resource, or write Windows state.
 
 The release-owned sources are four Windows interfaces plus one exact, local correlation of the first two:
 

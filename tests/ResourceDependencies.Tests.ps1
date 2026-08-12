@@ -29,6 +29,8 @@ $malformed.mappedDrives[0].remoteEndpoint='\\synthetic-file\' + ('x' * 600)
 $malformedResult=ConvertTo-ResourceDependencyAttemptPayload -Payload $malformed -Policy $policy
 Assert-Equal 0 @($malformedResult.mappedDrives).Count 'malformed provider output fabricates no evidence'
 Assert-Equal 'Malformed' @($malformedResult.scopeStates)[0].state 'malformed provider output becomes typed coverage rather than run-integrity failure'
+Assert-Equal $true $malformedResult.assessmentUserContextVerified 'one malformed category does not erase verified Assessment User context'
+Assert-Equal 4 @($malformedResult.scopeStates|Where-Object state -eq 'Complete').Count 'one malformed category preserves four independent source scopes'
 
 $expectations=@(
     @{scenario='MappedDrive';mapped=1;unc=0;printers=0;peripherals=0;user='Complete';peripheral='Complete'},

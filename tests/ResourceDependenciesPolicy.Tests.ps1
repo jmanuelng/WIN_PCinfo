@@ -31,6 +31,7 @@ Assert-Equal $false $policy.collector.maySelfElevate 'collection cannot self-ele
 Assert-Equal $false $policy.collector.writesAllowed 'collection cannot write device state'
 Assert-Equal $false (@($policy.sourceCatalog.approvedProperties) -contains 'UserName') 'stored account names are outside the source catalog'
 Assert-Equal $false (@($policy.sourceCatalog.approvedProperties) -contains 'PNPDeviceID') 'device identifiers and embedded serials are outside the source catalog'
+Assert-Equal 131072 $policy.collector.resultMaximumUtf8Bytes 'the finite worker-output ceiling admits the release-owned worst-case field bounds'
 Assert-Equal 5 @($policy.scopes).Count 'five Evidence Scopes remain distinct'
 Assert-Equal 3 @($policy.rules).Count 'three advisory interpretations are frozen'
 foreach($rule in $policy.rules){

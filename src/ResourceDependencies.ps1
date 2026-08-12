@@ -278,13 +278,54 @@ function ConvertTo-ResourceDependencyAttemptPayload {
     if(Test-ResourceDependenciesCollectorPayload -Payload $Payload -Policy $Policy){
         return Copy-ResourceDependenciesCollectorPayload -Payload $Payload -Policy $Policy
     }
-    # Provider strings and shapes cross an untrusted process boundary. If any
-    # value exceeds its frozen field bound, fail the attempt as malformed
-    # coverage instead of allowing a conversion exception to turn ordinary
-    # source drift into a run-integrity claim.
-    New-ResourceDependencyGapPayload -Policy $Policy -State 'Malformed' `
-        -ReasonCode 'RESOURCE.SOURCE_PAYLOAD_MALFORMED' -Relationship 'SameUser' `
-        -ObservedContext 'StandardUser'
+    # Provider strings and shapes cross an untrusted process boundary. Validate
+    # each independently queried category so one drifting provider cannot erase
+    # valid evidence from its siblings. The empty candidate first proves the
+    # shared context and scope-state envelope; if that is corrupt, no category
+    # is trustworthy and the whole attempt fails closed.
+    if(-not (Test-ResourceDependencyObjectShape $Payload @(
+        'sourceLocale','assessmentUserContextVerified','processRelationship','mappedDrives',
+        'uncConnections','printers','printerDrivers','peripherals','scopeStates','executionContext'
+    ))){
+        return New-ResourceDependencyGapPayload -Policy $Policy -State 'Malformed' `
+            -ReasonCode 'RESOURCE.SOURCE_PAYLOAD_MALFORMED' -Relationship 'SameUser' `
+            -ObservedContext 'StandardUser'
+    }
+    function New-Candidate([string]$CollectionName,$CollectionValue){
+        $candidate=[ordered]@{
+            sourceLocale=$Payload.sourceLocale
+            assessmentUserContextVerified=$Payload.assessmentUserContextVerified
+            processRelationship=$Payload.processRelationship
+            mappedDrives=@();uncConnections=@();printers=@();printerDrivers=@();peripherals=@()
+            scopeStates=$Payload.scopeStates;executionContext=$Payload.executionContext
+        }
+        if($CollectionName){$candidate[$CollectionName]=@($CollectionValue)}
+        [pscustomobject]$candidate
+    }
+    $emptyCandidate=New-Candidate '' @()
+    if(-not (Test-ResourceDependenciesCollectorPayload -Payload $emptyCandidate -Policy $Policy)){
+        return New-ResourceDependencyGapPayload -Policy $Policy -State 'Malformed' `
+            -ReasonCode 'RESOURCE.SOURCE_PAYLOAD_MALFORMED' -Relationship 'SameUser' `
+            -ObservedContext 'StandardUser'
+    }
+    $result=Copy-ResourceDependenciesCollectorPayload -Payload $emptyCandidate -Policy $Policy
+    foreach($definition in @(
+        @('mappedDrives','scope:resource.mapped-drives'),
+        @('uncConnections','scope:resource.unc-connections'),
+        @('printers','scope:resource.printers'),
+        @('printerDrivers','scope:resource.printer-drivers'),
+        @('peripherals','scope:resource.common-peripherals')
+    )){
+        $candidate=New-Candidate $definition[0] $Payload.($definition[0])
+        if(Test-ResourceDependenciesCollectorPayload -Payload $candidate -Policy $Policy){
+            $normalized=Copy-ResourceDependenciesCollectorPayload -Payload $candidate -Policy $Policy
+            $result.($definition[0])=@($normalized.($definition[0]))
+        }else{
+            $scope=@($result.scopeStates|Where-Object scopeId -eq $definition[1])[0]
+            $scope.state='Malformed';$scope.reasonCode='RESOURCE.SOURCE_PAYLOAD_MALFORMED'
+        }
+    }
+    $result
 }
 
 function Invoke-ResourceDependenciesCollection {
@@ -504,17 +545,19 @@ try{
 
 $uncSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $rows=Get-CimInstance -ClassName Win32_NetworkConnection -Property LocalName,RemoteName,ConnectionState,ProviderName -ErrorAction Stop
-    foreach($row in $rows){
-        if($row.RemoteName -isnot [string] -or [string]$row.RemoteName -notmatch '^\\\\[^\\]+\\[^\\]+'){
-            Set-Scope $scopes 'scope:resource.unc-connections' 'Partial' 'RESOURCE.UNC_CONNECTION_MALFORMED';continue
-        }
-        $state=if([string]$row.ConnectionState -eq 'Connected'){'Connected'}elseif([string]$row.ConnectionState -eq 'Disconnected'){'Disconnected'}else{'Unavailable'}
+    $null=Get-CimInstance -ClassName Win32_NetworkConnection -Property LocalName,RemoteName,ConnectionState,ProviderName -ErrorAction Stop | ForEach-Object {
+        $row=$_
         $rawLocal=[string]$row.LocalName
         $local=Get-CanonicalLocalName $rawLocal
         if(-not [string]::IsNullOrWhiteSpace($rawLocal) -and $null -eq $local){
-            Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.MAPPED_DRIVE_MALFORMED';continue
+            Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.MAPPED_DRIVE_MALFORMED';return
         }
+        $targetScope=if($null -eq $local){'scope:resource.unc-connections'}else{'scope:resource.mapped-drives'}
+        if($row.RemoteName -isnot [string] -or [string]$row.RemoteName -notmatch '^\\\\[^\\]+\\[^\\]+'){
+            $reason=if($null -eq $local){'RESOURCE.UNC_CONNECTION_MALFORMED'}else{'RESOURCE.MAPPED_DRIVE_MALFORMED'}
+            Set-Scope $scopes $targetScope 'Partial' $reason;return
+        }
+        $state=if([string]$row.ConnectionState -eq 'Connected'){'Connected'}elseif([string]$row.ConnectionState -eq 'Disconnected'){'Disconnected'}else{'Unavailable'}
         if($null -ne $local){
             # A live network row is authoritative for the same local designator. Replacing the
             # registry-only definition avoids presenting a remembered mapping as disconnected.
@@ -531,18 +574,18 @@ try{
     }
 }catch{
     $state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.unc-connections' $state (Get-FailureReason $state)
-    if($mappedSet.Count -gt 0){Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.CONNECTION_STATE_UNAVAILABLE'}
+    Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.CONNECTION_STATE_UNAVAILABLE'
 }
 $mapped=@($mappedSet.Values|Sort-Object localName,remoteEndpoint)
 $unc=@($uncSet.Values|Sort-Object remoteEndpoint)
 
 $printerSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $rows=Get-CimInstance -ClassName Win32_Printer -Property Name,PortName,DriverName,Network,Local,Default,WorkOffline -ErrorAction Stop
-    foreach($row in $rows){
+    $null=Get-CimInstance -ClassName Win32_Printer -Property Name,PortName,DriverName,Network,Local,Default,WorkOffline -ErrorAction Stop | ForEach-Object {
+        $row=$_
         if($row.Name -isnot [string] -or $row.PortName -isnot [string] -or $row.DriverName -isnot [string] -or
             $null -eq $row.Network -or $null -eq $row.Default -or $null -eq $row.WorkOffline){
-            Set-Scope $scopes 'scope:resource.printers' 'Partial' 'RESOURCE.PRINTER_MALFORMED';continue
+            Set-Scope $scopes 'scope:resource.printers' 'Partial' 'RESOURCE.PRINTER_MALFORMED';return
         }
         Add-BoundedUnique $printerSet ([string]$row.Name) ([pscustomobject][ordered]@{
             name=[string]$row.Name;portName=[string]$row.PortName;driverName=[string]$row.DriverName
@@ -554,9 +597,9 @@ $printers=@($printerSet.Values|Sort-Object name)
 
 $driverSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $rows=Get-CimInstance -ClassName Win32_PrinterDriver -Property Name,Manufacturer,DriverVersion,InfName -ErrorAction Stop
-    foreach($row in $rows){
-        if($row.Name -isnot [string]){Set-Scope $scopes 'scope:resource.printer-drivers' 'Partial' 'RESOURCE.PRINTER_DRIVER_MALFORMED';continue}
+    $null=Get-CimInstance -ClassName Win32_PrinterDriver -Property Name,Manufacturer,DriverVersion,InfName -ErrorAction Stop | ForEach-Object {
+        $row=$_
+        if($row.Name -isnot [string]){Set-Scope $scopes 'scope:resource.printer-drivers' 'Partial' 'RESOURCE.PRINTER_DRIVER_MALFORMED';return}
         Add-BoundedUnique $driverSet ([string]$row.Name) ([pscustomobject][ordered]@{
             name=[string]$row.Name;manufacturer=if($row.Manufacturer -is [string]){[string]$row.Manufacturer}else{$null}
             version=if($null -eq $row.DriverVersion){$null}else{[Convert]::ToString($row.DriverVersion,[Globalization.CultureInfo]::InvariantCulture)}
@@ -568,11 +611,11 @@ $drivers=@($driverSet.Values|Sort-Object name)
 
 $peripheralSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $rows=Get-CimInstance -ClassName Win32_PnPSignedDriver -Property DeviceClass,DeviceName,Manufacturer,DriverProviderName,DriverVersion,InfName,IsSigned -ErrorAction Stop |
-        Where-Object {[string]$_.DeviceClass -in $classCatalog}
-    foreach($row in $rows){
+    $null=Get-CimInstance -ClassName Win32_PnPSignedDriver -Property DeviceClass,DeviceName,Manufacturer,DriverProviderName,DriverVersion,InfName,IsSigned -ErrorAction Stop |
+        Where-Object {[string]$_.DeviceClass -in $classCatalog} | ForEach-Object {
+        $row=$_
         if($row.DeviceName -isnot [string] -or [string]$row.DeviceClass -notin $classCatalog -or $null -eq $row.IsSigned){
-            Set-Scope $scopes 'scope:resource.common-peripherals' 'Partial' 'RESOURCE.PERIPHERAL_MALFORMED';continue
+            Set-Scope $scopes 'scope:resource.common-peripherals' 'Partial' 'RESOURCE.PERIPHERAL_MALFORMED';return
         }
         $key="$([string]$row.DeviceClass)|$([string]$row.DeviceName)|$([string]$row.DriverVersion)"
         Add-BoundedUnique $peripheralSet $key ([pscustomobject][ordered]@{

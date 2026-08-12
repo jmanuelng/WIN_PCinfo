@@ -32,6 +32,13 @@ foreach($required in @('[Microsoft.Win32.Registry]::CurrentUser','Win32_NetworkC
 foreach($prohibited in @('Get-PrintJob','Get-Credential','cmdkey','WlanGetProfile','PNPDeviceID','SerialNumber','Win32_PrintJob','Get-ChildItem')){
     if($source -match [regex]::Escape($prohibited)){throw "The live source admits prohibited access: $prohibited"}
 }
+if($source -match '\$rows\s*='){throw 'The live source must stream CIM rows through bounded dictionaries rather than materialize provider inventories.'}
+$categoryPosition=$source.IndexOf('$targetScope=if($null -eq $local)')
+$remoteValidationPosition=$source.IndexOf('if($row.RemoteName -isnot [string]')
+Assert-Equal $true ($categoryPosition -ge 0 -and $categoryPosition -lt $remoteValidationPosition) 'network rows select mapped versus UNC scope before classifying malformed endpoint data'
+if($source -notmatch [regex]::Escape("Set-Scope `$scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.CONNECTION_STATE_UNAVAILABLE'")){
+    throw 'A failed shared network source must make mapped-drive absence incomplete even when no registry definition exists.'
+}
 
 $gap=Invoke-ResourceDependenciesCollection -Policy $policy -Live `
     -AssessmentUserSid 'S-1-5-21-1-2-3-1001' -ProcessContextOverride LocalSystem

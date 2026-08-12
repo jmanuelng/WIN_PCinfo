@@ -33,7 +33,7 @@
     "writesAllowed": false,
     "maximumAttempts": 1,
     "deadlineMilliseconds": 5000,
-    "resultMaximumUtf8Bytes": 32768,
+    "resultMaximumUtf8Bytes": 131072,
     "maximumMappedDrives": 8,
     "maximumUncConnections": 8,
     "maximumPrinters": 8,

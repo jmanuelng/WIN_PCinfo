@@ -4,7 +4,7 @@ This public projection contains release-owned contracts and identifier-free synt
 
 | Gate | Public-safe result |
 | --- | --- |
-| Frozen authority | One offline standard-user operation freezes four Windows structured sources, one exact local correlation, five Evidence Scopes, exact properties, five eight-entry ceilings, one attempt, a five-second deadline, 32 KiB output, and verified worker-tree cleanup. |
+| Frozen authority | One offline standard-user operation freezes four Windows structured sources, one exact local correlation, five Evidence Scopes, exact properties, five eight-entry ceilings, one attempt, a five-second deadline, 128 KiB output, and verified worker-tree cleanup. |
 | Assessment User Context | The child token must match the pre-UAC verified Assessment User SID and must not be elevated; alternate administrator and `SYSTEM` fixtures produce explicit denied gaps. |
 | Prohibited access | Source and application tests prove no share/document/print-job enumeration, credential or Wi-Fi-key collection, device ID or unrelated serial collection, resource connection, printing, driver installation/update, or device change. |
 | Evidence honesty | Complete empty scopes explicitly establish bounded absence. Denied and Partial scopes retain diagnostics and Indeterminate findings; a ninth entry is never silently truncated. |
