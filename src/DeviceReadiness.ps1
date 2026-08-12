@@ -719,10 +719,30 @@ function Complete-ValidatedDeviceReadinessAssessmentRecord {
     $ValidatedRecord
 }
 
+function New-BoundedDiscoveryGuidanceHtml {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Tasks,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Definitions,
+        [Parameter(Mandatory)] [string] $EmptyMessage
+    )
+    if($Tasks.Count -eq 0){return '<p>'+[Net.WebUtility]::HtmlEncode($EmptyMessage)+'</p>'}
+    $byId=@{};foreach($definition in $Definitions){$byId[[string]$definition.definitionId]=$definition}
+    $items=@($Tasks|ForEach-Object{
+        $definition=$byId[[string]$_.definitionId]
+        if($null -eq $definition){throw 'A discovery task does not resolve to its frozen definition.'}
+        '<li><strong>Purpose:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.purpose)+
+        '<br><strong>Owner:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.requiredRole)+
+        '<br><strong>Approved destination:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.approvedDestination)+
+        '<br><strong>Expected safe result:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.expectedSafeResult)+'</li>'
+    })
+    '<h3>Safe follow-up</h3><ul>'+($items -join '')+'</ul>'
+}
+
 function New-DeviceReadinessReportBytes {
     param(
         [Parameter(Mandatory)] $Record,
-        [Parameter()] $FirmwarePolicy
+        [Parameter()] $FirmwarePolicy,
+        [Parameter()] $IdentityEnrollmentPolicy
     )
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
@@ -797,8 +817,9 @@ function New-DeviceReadinessReportBytes {
         $tpmCoverage = @($Record.coverage | Where-Object {
             $_.scopeId -eq 'scope:device.tpm-readiness'
         })[0]
+        $firmwareDefinitionIds=@($FirmwarePolicy.discoveryTasks.definitionId)
         $discoveryTasks = @($Record.recommendations | Where-Object {
-            $_.kind -eq 'TenantSideDiscoveryTask'
+            $_.kind -eq 'TenantSideDiscoveryTask' -and $_.definitionId -in $firmwareDefinitionIds
         })
         $discoveryCount = $discoveryTasks.Count
         $discoveryGuidance = if ($discoveryCount -eq 0) {
@@ -808,25 +829,9 @@ function New-DeviceReadinessReportBytes {
             if ($null -eq $FirmwarePolicy) {
                 throw 'Firmware discovery guidance requires its frozen policy definitions.'
             }
-            $definitions = @{}
-            foreach ($definition in @($FirmwarePolicy.discoveryTasks)) {
-                $definitions[[string]$definition.definitionId] = $definition
-            }
-            $items = @($discoveryTasks | ForEach-Object {
-                $definition = $definitions[[string]$_.definitionId]
-                if ($null -eq $definition) {
-                    throw 'A firmware discovery task does not resolve to its frozen definition.'
-                }
-                '<li><strong>Purpose:</strong> ' +
-                    [Net.WebUtility]::HtmlEncode([string]$definition.purpose) +
-                    '<br><strong>Owner:</strong> ' +
-                    [Net.WebUtility]::HtmlEncode([string]$definition.requiredRole) +
-                    '<br><strong>Approved destination:</strong> ' +
-                    [Net.WebUtility]::HtmlEncode([string]$definition.approvedDestination) +
-                    '<br><strong>Expected safe result:</strong> ' +
-                    [Net.WebUtility]::HtmlEncode([string]$definition.expectedSafeResult) + '</li>'
-            })
-            '<h3>Safe follow-up</h3><ul>' + ($items -join '') + '</ul>'
+            New-BoundedDiscoveryGuidanceHtml -Tasks $discoveryTasks `
+                -Definitions @($FirmwarePolicy.discoveryTasks) `
+                -EmptyMessage 'No external firmware follow-up is required.'
         }
         @"
 <h2>Firmware, Secure Boot, and TPM readiness</h2>
@@ -850,6 +855,49 @@ $discoveryGuidance
 <p>No owner authorization, endorsement secret, key, recovery data, TPM provisioning action, Secure Boot variable write, or firmware change is requested or retained.</p>
 "@
     } else { '' }
+    $identityFinding=$Record.findings|Where-Object {
+        $_.findingId -like 'finding:assessment-user-context:*'
+    }|Select-Object -First 1
+    $identitySection=if($null -ne $identityFinding){
+        if($null -eq $IdentityEnrollmentPolicy){
+            throw 'Identity guidance requires its frozen policy definitions.'
+        }
+        $registrationFinding=$Record.findings|Where-Object {
+            $_.findingId -like 'finding:device-registration-context:*'
+        }|Select-Object -First 1
+        $enrollmentFinding=$Record.findings|Where-Object {
+            $_.findingId -like 'finding:work-school-enrollment-context:*'
+        }|Select-Object -First 1
+        $identityDefinitionIds=@($IdentityEnrollmentPolicy.discoveryTasks.definitionId)
+        $identityTasks=@($Record.recommendations|Where-Object {
+            $_.kind -eq 'TenantSideDiscoveryTask' -and $_.definitionId -in $identityDefinitionIds
+        })
+        $identityGuidance=New-BoundedDiscoveryGuidanceHtml -Tasks $identityTasks `
+            -Definitions @($IdentityEnrollmentPolicy.discoveryTasks) `
+            -EmptyMessage 'No tenant-side identity follow-up is required by these local rules.'
+        $userCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:identity.assessment-user-context')[0]
+        $registrationCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:device.registration-context')[0]
+        $workSchoolCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:user.work-school-context')[0]
+        $systemCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:device.mdm-policy.system')[0]
+@"
+<h2>Registration, join, and enrollment context</h2>
+<p>WIN-PCInfo verifies the Assessment User Context separately from the process, initiating operator, alternate administrator, privileged worker, and SYSTEM. Missing user context is a coverage gap and is never replaced with one of those identities.</p>
+<dl><dt>Assessment User Context coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$userCoverage.state))</dd>
+<dt>Assessment User Context finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$identityFinding.outcome))</dd>
+<dt>Verified local account</dt><dd>$($values['field:identity.assessment-user.account-name'])</dd>
+<dt>Domain join coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$registrationCoverage.state))</dd>
+<dt>Domain join state</dt><dd>$($values['field:device.domain-join.state'])</dd>
+<dt>Domain name</dt><dd>$($values['field:device.domain-join.name'])</dd>
+<dt>Microsoft Entra registration type</dt><dd>$($values['field:device.entra-registration.type'])</dd>
+<dt>Registration finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$registrationFinding.outcome))</dd>
+<dt>Work-or-school coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$workSchoolCoverage.state))</dd>
+<dt>Work-or-school account observed</dt><dd>$($values['field:user.work-school-account.present'])</dd>
+<dt>SYSTEM MDM-source coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$systemCoverage.state))</dd>
+<dt>Enrollment-context finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$enrollmentFinding.outcome))</dd></dl>
+<p>These locale-neutral local sources cannot establish tenant assignment, compliance, licensing, or organizational intent. They do not authenticate to Microsoft Entra or Intune and do not join, register, enroll, disconnect, or modify an account.</p>
+$identityGuidance
+"@
+    }else{''}
     $html = @"
 <!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
 <h1>Device, Windows, activation, and power context</h1><p>$summary</p>
@@ -871,6 +919,7 @@ $discoveryGuidance
 <p>Advisory finding: $([System.Net.WebUtility]::HtmlEncode([string]$powerFinding.outcome)).</p>
 <p>These are bounded Windows observations, not a battery-health, calibration, capacity, or performance test. WIN-PCInfo does not change the active power plan.</p>
 $firmwareSection
+$identitySection
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -1033,6 +1082,9 @@ function Get-DeviceReadinessFailureDisposition {
         'FIRMWARE.PRIVILEGE_CLEANUP_INCOMPLETE' {
             [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode}
         }
+        'IDENTITY.SYSTEM_CLEANUP_INCOMPLETE' {
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode}
+        }
         default {
             [pscustomobject]@{
                 outcome=if($CollectionStarted){'IntegrityFailed'}else{'NotStarted'}
@@ -1045,6 +1097,7 @@ function Get-DeviceReadinessFailureDisposition {
 function Invoke-DeviceReadinessSlice {
     param(
         [Parameter()] [string] $LiteralPath,
+        [Parameter()] [string] $IdentityEnrollmentLiteralPath,
         [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
         [Parameter()] $ApprovedRecipient,
@@ -1055,11 +1108,14 @@ function Invoke-DeviceReadinessSlice {
         [Parameter(Mandatory)] $TestJsonCommand
     )
 
-    $isFixture = -not [string]::IsNullOrWhiteSpace($LiteralPath)
+    $isDeviceFixture = -not [string]::IsNullOrWhiteSpace($LiteralPath)
+    $isIdentityFixture = -not [string]::IsNullOrWhiteSpace($IdentityEnrollmentLiteralPath)
+    $isFixture = $isDeviceFixture -or $isIdentityFixture
     $scenario = if ($isFixture) { '' } else { 'Actual' }
     $firmwareScenario = if ($isFixture) { 'None' } else { 'Live' }
     $privilegeScenario = if ($isFixture) { 'None' } else { 'Live' }
-    $policy = $null; $firmwarePolicy = $null; $privilegeResult = $null
+    $policy = $null; $firmwarePolicy = $null; $identityPolicy = $null
+    $privilegeResult = $null; $identityCollector = $null; $systemResult = $null
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
     $packageVerified = $false; $coverageState = 'Unavailable'; $findingOutcome = 'Indeterminate'
@@ -1073,13 +1129,19 @@ function Invoke-DeviceReadinessSlice {
     $tpmCoverageState = 'NotAttempted'; $firmwareFindingOutcome = 'Indeterminate'
     $secureBootFindingOutcome = 'Indeterminate'; $tpmFindingOutcome = 'Indeterminate'
     $tenantDiscoveryTaskCount = 0
+    $identityScenario = if($isIdentityFixture){''}else{'Live'}
+    $processRelationship='Unavailable';$assessmentUserCoverageState='NotAttempted'
+    $registrationCoverageState='NotAttempted';$workSchoolCoverageState='NotAttempted'
+    $systemEnrollmentCoverageState='NotAttempted';$assessmentUserFindingOutcome='Indeterminate'
     $collectionStarted = $false
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
     try {
         $policy = Get-DeviceReadinessPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $firmwarePolicy = Get-FirmwareReadinessPolicy `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
-        if ($isFixture) {
+        $identityPolicy = Get-IdentityEnrollmentPolicy `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand
+        if ($isDeviceFixture) {
             $fixtureSelection = Read-DeviceReadinessFixture -LiteralPath $LiteralPath `
                 -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $policy `
                 -FirmwarePolicy $firmwarePolicy
@@ -1087,6 +1149,13 @@ function Invoke-DeviceReadinessSlice {
             $firmwareScenario = [string]$fixtureSelection.FirmwareScenario
             $privilegeScenario = [string]$fixtureSelection.PrivilegeScenario
         }
+        elseif($isIdentityFixture){
+            $scenario='Complete';$firmwareScenario='Supported';$privilegeScenario='AcceptedElevation'
+            $identityScenario=Read-IdentityEnrollmentFixture `
+                -LiteralPath $IdentityEnrollmentLiteralPath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $identityPolicy
+        }
+        $identityRequested=$isIdentityFixture -or -not $isFixture
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
         if ($firmwareRequested) {
             $privilegeResult = Invoke-PrivilegedCollectionPlan `
@@ -1127,6 +1196,30 @@ function Invoke-DeviceReadinessSlice {
                     default { 'FIRMWARE.PRIVILEGE_INTEGRITY_FAILED' }
                 }
                 throw $exception
+            }
+        }
+        if($identityRequested){
+            $identityCollector=if($isIdentityFixture){
+                Invoke-IdentityEnrollmentCollection -Policy $identityPolicy `
+                    -ValidationScenario $identityScenario
+            }else{Invoke-IdentityEnrollmentCollection -Policy $identityPolicy -Live}
+            $processRelationship=[string]$identityCollector.processRelationship
+            $systemPlanResult=New-SystemCollectionPlan -PreparationPlan $PreparationPlan `
+                -PreparationPlanDigest $PlanDigest
+            $systemResult=Invoke-SystemCollectionPlan -Plan $systemPlanResult.Plan `
+                -PlanDigest $systemPlanResult.Digest `
+                -ValidationScenario $(if($isIdentityFixture){'SyntheticSuccess'}else{''})
+            if(-not [bool]$systemResult.cleanup.verified){
+                $exception=[InvalidOperationException]::new(
+                    'The predefined SYSTEM enrollment source cleanup was not verified.'
+                )
+                $exception.Data['ReasonCode']='IDENTITY.SYSTEM_CLEANUP_INCOMPLETE';throw $exception
+            }
+            if([bool]$systemResult.runIntegrityCompromised){
+                $exception=[InvalidOperationException]::new(
+                    'The predefined SYSTEM enrollment source lost run integrity.'
+                )
+                $exception.Data['ReasonCode']='IDENTITY.SYSTEM_INTEGRITY_FAILED';throw $exception
             }
         }
         $collectorScenario = if ($isFixture) { $scenario } else { '' }
@@ -1214,6 +1307,24 @@ function Invoke-DeviceReadinessSlice {
                     }
                     $sourceValidation = $firmwareSourceValidation
                 }
+                if($null -ne $identityCollector){
+                    $record=Add-IdentityEnrollmentEvidenceRecord -Record $record `
+                        -CollectorResult $identityCollector -SystemResult $systemResult `
+                        -Policy $identityPolicy
+                    [byte[]]$identitySourceBytes=[Text.UTF8Encoding]::new($false).GetBytes(
+                        (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                    )
+                    $identitySourceValidation=Test-AssessmentContract `
+                        -Utf8Bytes $identitySourceBytes `
+                        -ConvertFromJsonCommand $ConvertFromJsonCommand `
+                        -TestJsonCommand $TestJsonCommand
+                    if([bool]$identitySourceValidation.accepted){
+                        $record=Complete-ValidatedIdentityEnrollmentAssessmentRecord `
+                            -Record $record -Policy $identityPolicy `
+                            -ContractValidation $identitySourceValidation
+                    }
+                    $sourceValidation=$identitySourceValidation
+                }
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
                 )
@@ -1241,6 +1352,26 @@ function Invoke-DeviceReadinessSlice {
                         $_.findingId -like 'finding:tpm-readiness:*'
                     })[0].outcome
                     $tenantDiscoveryTaskCount = @($record.recommendations | Where-Object {
+                        $_.kind -eq 'TenantSideDiscoveryTask'
+                    }).Count
+                }
+                if($null -ne $identityCollector){
+                    $assessmentUserCoverageState=[string]@($record.coverage|Where-Object {
+                        $_.scopeId -eq 'scope:identity.assessment-user-context'
+                    })[0].state
+                    $registrationCoverageState=[string]@($record.coverage|Where-Object {
+                        $_.scopeId -eq 'scope:device.registration-context'
+                    })[0].state
+                    $workSchoolCoverageState=[string]@($record.coverage|Where-Object {
+                        $_.scopeId -eq 'scope:user.work-school-context'
+                    })[0].state
+                    $systemEnrollmentCoverageState=[string]@($record.coverage|Where-Object {
+                        $_.scopeId -eq 'scope:device.mdm-policy.system'
+                    })[0].state
+                    $assessmentUserFindingOutcome=[string]@($record.findings|Where-Object {
+                        $_.findingId -like 'finding:assessment-user-context:*'
+                    })[0].outcome
+                    $tenantDiscoveryTaskCount=@($record.recommendations|Where-Object {
                         $_.kind -eq 'TenantSideDiscoveryTask'
                     }).Count
                 }
@@ -1292,7 +1423,10 @@ function Invoke-DeviceReadinessSlice {
                     [byte[]]$reportBytes = New-DeviceReadinessReportBytes -Record $record `
                         -FirmwarePolicy $(if ($null -ne $firmwareCollector) {
                             $firmwarePolicy
-                        } else { $null })
+                        } else { $null }) `
+                        -IdentityEnrollmentPolicy $(if($null -ne $identityCollector){
+                            $identityPolicy
+                        }else{$null})
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportVerified = $reportText.StartsWith('<!doctype html>') -and
                         $reportText.Contains('Device, Windows, activation, and power context') -and
@@ -1302,6 +1436,11 @@ function Invoke-DeviceReadinessSlice {
                         $reportVerified = $reportVerified -and
                             $reportText.Contains('Firmware, Secure Boot, and TPM readiness') -and
                             $reportText.Contains('cannot establish physical TPM attestation')
+                    }
+                    if($null -ne $identityCollector){
+                        $reportVerified=$reportVerified -and
+                            $reportText.Contains('Registration, join, and enrollment context') -and
+                            $reportText.Contains('cannot establish tenant assignment, compliance, licensing, or organizational intent')
                     }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
                     if ($isFixture) {
@@ -1329,7 +1468,7 @@ function Invoke-DeviceReadinessSlice {
                     }
                     else { 'RecoverablePartial' }
                     $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
-                        -Artifacts $artifacts -AssessmentContractSetVersion '1.1.0' `
+                        -Artifacts $artifacts -AssessmentContractSetVersion $(if($null -ne $identityCollector){'1.2.0'}else{'1.1.0'}) `
                         -Completeness $packageCompleteness -ApprovedRecipient $ApprovedRecipient
                     if ($package.verified) {
                         $recipientKeyProtection = [string](
@@ -1405,6 +1544,21 @@ function Invoke-DeviceReadinessSlice {
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
             recipientKeyProtection=$recipientKeyProtection
+        }) -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if($isIdentityFixture){
+        Write-ContractRecord ([pscustomobject][ordered]@{
+            recordType='win-pcinfo.identity-enrollment-validation';contractVersion='1.0.0'
+            scenario=$identityScenario;processRelationship=$processRelationship
+            assessmentUserCoverageState=$assessmentUserCoverageState
+            registrationCoverageState=$registrationCoverageState
+            workSchoolCoverageState=$workSchoolCoverageState
+            systemEnrollmentCoverageState=$systemEnrollmentCoverageState
+            assessmentUserFindingOutcome=$assessmentUserFindingOutcome
+            tenantDiscoveryTaskCount=$tenantDiscoveryTaskCount
+            tenantAuthenticated=$false;identityStateChanged=$false
+            assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
+            protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
         }) -ConvertToJsonCommand $ConvertToJsonCommand
     }
     $recipientSelected = $null -ne $ApprovedRecipient

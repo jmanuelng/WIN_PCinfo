@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/identity-enrollment.schema.json",
+  "title": "WIN-PCInfo Identity and Enrollment release policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "policyId", "evidenceProfileId", "collectors", "scopes", "rules", "discoveryTasks", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.identity-enrollment-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.identity-enrollment/1.0.0" },
+    "evidenceProfileId": { "const": "profile:device-firmware-and-identity-readiness" },
+    "collectors": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "prefixItems": [
+        { "$ref": "#/$defs/standardRegistrationCollector" },
+        { "$ref": "#/$defs/standardEnrollmentCollector" },
+        { "$ref": "#/$defs/systemEnrollmentCollector" }
+      ],
+      "items": false
+    },
+    "scopes": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "prefixItems": [
+        { "const": { "scopeId": "scope:identity.assessment-user-context", "fieldIds": ["field:identity.assessment-user.verified", "field:identity.assessment-user.session-id", "field:identity.assessment-user.account-name"] } },
+        { "const": { "scopeId": "scope:device.registration-context", "fieldIds": ["field:device.domain-join.state", "field:device.domain-join.name", "field:device.entra-registration.type", "field:device.entra-registration.device-id", "field:device.entra-registration.tenant-id"] } },
+        { "const": { "scopeId": "scope:user.work-school-context", "fieldIds": ["field:user.work-school-account.present", "field:user.work-school-account.identifier"] } },
+        { "const": { "scopeId": "scope:device.mdm-policy.system", "fieldIds": ["field:device.mdm-bridge.provider-available"] } }
+      ],
+      "items": false
+    },
+    "rules": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/rule" } },
+    "discoveryTasks": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/task" } },
+    "validationScenarios": { "const": ["Workgroup", "DomainJoined", "EntraJoined", "Registered", "Mixed", "Unenrolled", "UserContextUnavailable", "StandardUser", "Administrator", "LocalSystem", "NonEnglish", "Malformed", "Denied"] }
+  },
+  "$defs": {
+    "collector": {
+      "type": "object", "additionalProperties": false,
+      "required": ["collectorId", "collectorVersion", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "resultMaximumUtf8Bytes", "cleanup"],
+      "properties": {
+        "collectorId": { "type": "string", "minLength": 1 }, "collectorVersion": { "const": "1.0.0" },
+        "operationId": { "type": "string", "minLength": 1 }, "source": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "executionContext": { "enum": ["StandardUser", "LocalSystem"] },
+        "privilege": { "enum": ["NoElevation", "RequiresLocalSystem"] }, "networkBehavior": { "const": "OfflineOnly" },
+        "executable": { "enum": ["NoneInProcess", "ActiveMicrosoftSignedPowerShellHost"] },
+        "dependencies": { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "mayPrompt": { "const": false }, "mayInstall": { "const": false }, "mayDownload": { "const": false },
+        "maySelfElevate": { "const": false }, "writesAllowed": { "const": false }, "maximumAttempts": { "const": 1 },
+        "deadlineMilliseconds": { "const": 5000 }, "resultMaximumUtf8Bytes": { "enum": [4096, 8192] },
+        "cleanup": { "enum": ["NoArtifacts", "CoordinatorOwnedJobObjectTaskPipeAndWorkerVerifiedAbsent"] }
+      }
+    },
+    "standardRegistrationCollector": { "allOf": [{ "$ref": "#/$defs/collector" }, { "properties": { "collectorId": { "const": "collector:windows.registration-and-user-context" }, "operationId": { "const": "observe-device-registration" }, "executionContext": { "const": "StandardUser" }, "privilege": { "const": "NoElevation" }, "executable": { "const": "NoneInProcess" }, "cleanup": { "const": "NoArtifacts" } } }] },
+    "standardEnrollmentCollector": { "allOf": [{ "$ref": "#/$defs/collector" }, { "properties": { "collectorId": { "const": "collector:windows.work-school-context" }, "operationId": { "const": "observe-enrollment-context" }, "executionContext": { "const": "StandardUser" }, "privilege": { "const": "NoElevation" }, "executable": { "const": "NoneInProcess" }, "cleanup": { "const": "NoArtifacts" } } }] },
+    "systemEnrollmentCollector": { "allOf": [{ "$ref": "#/$defs/collector" }, { "properties": { "collectorId": { "const": "collector:windows.mdm-bridge.device-manageability" }, "operationId": { "const": "observe-mdm-system-context" }, "executionContext": { "const": "LocalSystem" }, "privilege": { "const": "RequiresLocalSystem" }, "executable": { "const": "ActiveMicrosoftSignedPowerShellHost" }, "cleanup": { "const": "CoordinatorOwnedJobObjectTaskPipeAndWorkerVerifiedAbsent" } } }] },
+    "rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["findingKind", "ruleId", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "maximumInputObservations", "maximumOutputFindings", "cleanup", "missingEvidenceOutcome"],
+      "properties": {
+        "findingKind": { "enum": ["assessment-user-context", "device-registration-context", "work-school-enrollment-context"] },
+        "ruleId": { "type": "string", "pattern": "^rule:identity\\." }, "operationId": { "type": "string", "pattern": "^op:rule\\." },
+        "source": { "const": "ReleaseEmbeddedValidatedObservationRule" }, "executionContext": { "const": "InProcessValidatedAssessmentRecord" },
+        "privilege": { "const": "NoElevation" }, "networkBehavior": { "const": "OfflineOnly" }, "executable": { "const": "NoneInProcess" },
+        "dependencies": { "type": "array", "maxItems": 0 }, "mayPrompt": { "const": false }, "mayInstall": { "const": false },
+        "mayDownload": { "const": false }, "maySelfElevate": { "const": false }, "writesAllowed": { "const": false },
+        "maximumAttempts": { "const": 1 }, "deadlineMilliseconds": { "const": 100 },
+        "maximumInputObservations": { "type": "integer", "minimum": 1, "maximum": 5 }, "maximumOutputFindings": { "const": 1 },
+        "cleanup": { "const": "NoArtifacts" }, "missingEvidenceOutcome": { "const": "Indeterminate" }
+      }
+    },
+    "task": {
+      "type": "object", "additionalProperties": false,
+      "required": ["definitionId", "purpose", "requiredRole", "approvedDestination", "expectedSafeResult"],
+      "properties": {
+        "definitionId": { "type": "string", "pattern": "^task:confirm-" }, "purpose": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "requiredRole": { "type": "string", "minLength": 1, "maxLength": 128 }, "approvedDestination": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "expectedSafeResult": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    }
+  }
+}

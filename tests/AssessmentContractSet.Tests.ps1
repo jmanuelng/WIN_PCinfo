@@ -18,14 +18,14 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.1.0' $contractSet.contractVersion `
-    'the additive firmware contract has an explicit version'
+Assert-Equal '1.2.0' $contractSet.contractVersion `
+    'the additive identity and enrollment contract has an explicit version'
 Assert-Equal 65536 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 64 KiB document ceiling'
-Assert-Equal 26 @($contractSet.fieldDefinitions).Count `
-    'the historical fields remain while eight bounded firmware fields are admitted'
-Assert-Equal 6 @($contractSet.scopeDefinitions).Count `
-    'historical, device-context, firmware, Secure Boot, and TPM scopes remain distinct'
+Assert-Equal 37 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while bounded identity and enrollment fields are admitted'
+Assert-Equal 10 @($contractSet.scopeDefinitions).Count `
+    'historical, device, firmware, user, registration, work-school, and SYSTEM scopes remain distinct'
 
 $definition = @($contractSet.fieldDefinitions | Where-Object fieldId -eq 'field:device.os.display-name')[0]
 Assert-Equal 'field:device.os.display-name' $definition.fieldId 'the admitted field identity is release-bound'
@@ -92,6 +92,17 @@ foreach ($scope in @($firmwareScope, $secureBootScope, $tpmScope)) {
         throw 'Every firmware scope must belong to the combined evidence profile.'
     }
 }
+$identityScopes=@($contractSet.scopeDefinitions|Where-Object {
+    $_.scopeId -in @('scope:identity.assessment-user-context','scope:device.registration-context',
+        'scope:user.work-school-context','scope:device.mdm-policy.system')
+})
+Assert-Equal 4 $identityScopes.Count `
+    'the combined identity profile keeps four independently covered source contexts'
+foreach($scope in $identityScopes){
+    if('profile:device-firmware-and-identity-readiness' -notin @($scope.profileIds)){
+        throw 'Every identity scope must belong to the additive combined evidence profile.'
+    }
+}
 if (@($contextScope.fieldIds | Where-Object {
     [string]$_ -match '(?i)(product.?key|license.?key|private.?key|secret|token)'
 }).Count -gt 0) {
@@ -122,4 +133,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.1 binds historical, device-context, firmware, Secure Boot, and TPM scopes to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.2 binds historical, device, firmware, identity, enrollment, and SYSTEM scopes to Draft 2020-12 contracts.'

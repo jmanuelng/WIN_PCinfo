@@ -65,6 +65,15 @@ Assert-Equal 'Administrator' $automationSummary.plan.firmwareReadiness.collector
     'the summary discloses the exact privileged collection context'
 Assert-Equal $false $automationSummary.plan.firmwareReadiness.collector.writesAllowed `
     'the summary freezes the no-platform-change boundary'
+Assert-Equal 'win-pcinfo.identity-enrollment/1.0.0' `
+    $automationSummary.plan.identityEnrollment.policyId `
+    'the immutable plan freezes the identity and enrollment policy before approval'
+Assert-Equal 'observe-device-registration|observe-enrollment-context|observe-mdm-system-context' `
+    (@($automationSummary.plan.identityEnrollment.collectors.operationId) -join '|') `
+    'standard and SYSTEM identity operations cannot widen after approval'
+Assert-Equal 'StandardUser|StandardUser|LocalSystem' `
+    (@($automationSummary.plan.identityEnrollment.collectors.executionContext) -join '|') `
+    'the immutable plan keeps identity execution contexts separate'
 Assert-Equal 5 $automationSummary.plan.privilege.privilegedOperations.Count 'administrator and SYSTEM work is concrete and frozen'
 Assert-Equal 'LocalOnly' $automationSummary.plan.network.behavior 'local-only behavior is explicit'
 Assert-Equal 0 $automationSummary.plan.network.plannedRequests.Count 'local-only plans no assessment requests'

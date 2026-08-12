@@ -7,7 +7,7 @@
   "required": ["kind", "contractVersion", "release", "schemaDraft", "requiredFeatures", "limits", "schemas", "fieldDefinitions", "scopeDefinitions", "vocabularies"],
   "properties": {
     "kind": { "const": "win-pcinfo.assessment-contract-set" },
-    "contractVersion": { "const": "1.1.0" },
+    "contractVersion": { "const": "1.2.0" },
     "release": { "const": "2.0.0-preview.1" },
     "schemaDraft": { "const": "2020-12" },
     "requiredFeatures": { "const": ["closed-scope-coverage", "evidence-references", "prohibited-material-omission"] },
