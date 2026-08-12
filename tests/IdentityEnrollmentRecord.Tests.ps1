@@ -31,6 +31,17 @@ $assignmentCleanupFailure=[pscustomobject]@{
 Assert-Equal 'IDENTITY.RULE_CLEANUP_INCOMPLETE' `
     (Get-IdentityRuleNativeFailureReason -NativeResult $assignmentCleanupFailure) `
     'failed pre-resume Job assignment with unverified termination remains CleanupIncomplete'
+$collectorCleanupRejected=$false
+try {
+    Assert-IdentityCollectorCleanupVerified -Attempt ([pscustomobject]@{
+        native=$assignmentCleanupFailure
+    })
+}catch{
+    $collectorCleanupRejected=$_.Exception.Data['ReasonCode'] -eq
+        'IDENTITY.COLLECTOR_CLEANUP_INCOMPLETE'
+}
+Assert-Equal $true $collectorCleanupRejected `
+    'collector cleanup uncertainty stops before another collector can be scheduled'
 
 function Test-CanonicalRecord {
     param($Record)

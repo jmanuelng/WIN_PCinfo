@@ -513,6 +513,18 @@ function Get-IdentityAadSourceState {
     'Unavailable'
 }
 
+function Assert-IdentityCollectorCleanupVerified {
+    param([Parameter(Mandatory)] $Attempt)
+    if($null -ne $Attempt.native -and $Attempt.native.FailureStage -eq
+        [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete){
+        $exception=[InvalidOperationException]::new(
+            'An identity collector attempt could not prove its owned worker absent.'
+        )
+        $exception.Data['ReasonCode']='IDENTITY.COLLECTOR_CLEANUP_INCOMPLETE'
+        throw $exception
+    }
+}
+
 function New-LiveIdentityContextGap {
     param(
         [Parameter(Mandatory)] [ValidateSet('Administrator','LocalSystem')] [string] $Context,
@@ -651,18 +663,13 @@ function Get-LiveIdentityEnrollmentPayload {
     if($null -ne $processDisposition){return $processDisposition}
     $registrationAttempt=Invoke-BoundedIdentityNativeSnapshot -Policy $Policy `
         -CollectorIndex 0 -Mode 'RegistrationUser'
+    # Cleanup uncertainty stops new scheduling immediately. Starting the second
+    # collector while the first tree might survive would violate both attempt
+    # ownership and cleanup precedence.
+    Assert-IdentityCollectorCleanupVerified -Attempt $registrationAttempt
     $workSchoolAttempt=Invoke-BoundedIdentityNativeSnapshot -Policy $Policy `
         -CollectorIndex 1 -Mode 'WorkSchool'
-    foreach($attempt in @($registrationAttempt,$workSchoolAttempt)){
-        if($null -ne $attempt.native -and $attempt.native.FailureStage -eq
-            [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete){
-            $exception=[InvalidOperationException]::new(
-                'An identity collector attempt could not prove its owned worker absent.'
-            )
-            $exception.Data['ReasonCode']='IDENTITY.COLLECTOR_CLEANUP_INCOMPLETE'
-            throw $exception
-        }
-    }
+    Assert-IdentityCollectorCleanupVerified -Attempt $workSchoolAttempt
     $registrationSnapshot=$registrationAttempt.snapshot
     $workSchoolSnapshot=$workSchoolAttempt.snapshot
     $registrationFailureState=if([bool]$registrationAttempt.succeeded){''}
