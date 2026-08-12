@@ -190,6 +190,20 @@ function Test-ResourceDependenciesCollectorPayload {
             [string]$Payload.processRelationship -notin @('SameUser','AlternateAdministrator','ElevatedAssessmentUser','DifferentStandardUser','ProhibitedSystemContext','Unavailable') -or
             [string]$Payload.executionContext -notin @('Synthetic','StandardUser','Administrator','LocalSystem') -or
             -not (Test-ResourceDependencyString $Payload.sourceLocale 35)){return $false}
+        if([bool]$Payload.assessmentUserContextVerified){
+            if([string]$Payload.processRelationship -ne 'SameUser' -or
+                [string]$Payload.executionContext -notin @('Synthetic','StandardUser')){return $false}
+        }else{
+            $expectedContext=switch([string]$Payload.processRelationship){
+                'AlternateAdministrator'{'Administrator'}
+                'ElevatedAssessmentUser'{'Administrator'}
+                'DifferentStandardUser'{'StandardUser'}
+                'ProhibitedSystemContext'{'LocalSystem'}
+                'Unavailable'{'StandardUser'}
+                default{return $false}
+            }
+            if([string]$Payload.executionContext -ne $expectedContext){return $false}
+        }
         $collections=@(
             @{value=@($Payload.mappedDrives);maximum=[int]$Policy.collector.maximumMappedDrives},
             @{value=@($Payload.uncConnections);maximum=[int]$Policy.collector.maximumUncConnections},
@@ -246,7 +260,8 @@ function Test-ResourceDependenciesCollectorPayload {
                 ($scope.state -ne 'Complete' -and [string]::IsNullOrWhiteSpace([string]$scope.reasonCode))){return $false}
         }
         if(-not [bool]$Payload.assessmentUserContextVerified -and
-            @($Payload.mappedDrives).Count+@($Payload.uncConnections).Count+@($Payload.printers).Count+@($Payload.printerDrivers).Count+@($Payload.peripherals).Count -gt 0){return $false}
+            (@($Payload.mappedDrives).Count+@($Payload.uncConnections).Count+@($Payload.printers).Count+@($Payload.printerDrivers).Count+@($Payload.peripherals).Count -gt 0 -or
+            @($Payload.scopeStates|Where-Object state -eq 'Complete').Count -gt 0)){return $false}
         return $true
     }catch{return $false}
 }

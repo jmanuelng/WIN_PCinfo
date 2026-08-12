@@ -32,6 +32,18 @@ Assert-Equal 'Malformed' @($malformedResult.scopeStates)[0].state 'malformed pro
 Assert-Equal $true $malformedResult.assessmentUserContextVerified 'one malformed category does not erase verified Assessment User context'
 Assert-Equal 4 @($malformedResult.scopeStates|Where-Object state -eq 'Complete').Count 'one malformed category preserves four independent source scopes'
 
+foreach($contradiction in @(
+    @{verified=$false;relationship='SameUser';context='StandardUser'},
+    @{verified=$true;relationship='DifferentStandardUser';context='StandardUser'},
+    @{verified=$true;relationship='AlternateAdministrator';context='Administrator'}
+)){
+    $contextPayload=New-ResourceDependenciesSyntheticPayload -Scenario Empty -Policy $policy
+    $contextPayload.assessmentUserContextVerified=$contradiction.verified
+    $contextPayload.processRelationship=$contradiction.relationship
+    $contextPayload.executionContext=$contradiction.context
+    Assert-Equal $false (Test-ResourceDependenciesCollectorPayload -Payload $contextPayload -Policy $policy) 'contradictory user-verification tuples cannot authorize evidence or completed absence'
+}
+
 $expectations=@(
     @{scenario='MappedDrive';mapped=1;unc=0;printers=0;peripherals=0;user='Complete';peripheral='Complete'},
     @{scenario='DisconnectedDrive';mapped=1;unc=0;printers=0;peripherals=0;user='Complete';peripheral='Complete'},
