@@ -16,16 +16,17 @@ $allowed=Get-ResourceDependencyProcessDisposition -ProcessSid 'S-1-5-21-1-2-3-10
 Assert-Equal $true ($null -eq $allowed) 'the exact standard-user SID may cross the source boundary'
 $alternate=Get-ResourceDependencyProcessDisposition -ProcessSid 'S-1-5-21-1-2-3-1002' `
     -AssessmentUserSid 'S-1-5-21-1-2-3-1001' -IsAdministrator $false
-Assert-Equal 'AlternateAdministrator' $alternate.relationship 'a different process identity cannot substitute for the Assessment User'
+Assert-Equal 'DifferentStandardUser' $alternate.relationship 'a different standard user cannot substitute for the Assessment User'
+Assert-Equal 'StandardUser' $alternate.executionContext 'a different standard user is not mislabeled as Administrator'
 $admin=Get-ResourceDependencyProcessDisposition -ProcessSid 'S-1-5-21-1-2-3-1001' `
     -AssessmentUserSid 'S-1-5-21-1-2-3-1001' -IsAdministrator $true
-Assert-Equal 'AlternateAdministrator' $admin.relationship 'an elevated token is not relabeled StandardUser'
+Assert-Equal 'ElevatedAssessmentUser' $admin.relationship 'an elevated Assessment User token is identified precisely'
 $system=Get-ResourceDependencyProcessDisposition -ProcessSid 'S-1-5-18' `
     -AssessmentUserSid 'S-1-5-21-1-2-3-1001' -IsAdministrator $true
 Assert-Equal 'ProhibitedSystemContext' $system.relationship 'SYSTEM is always prohibited'
 
 $source=Get-ResourceDependenciesLiveSource
-foreach($required in @('[Microsoft.Win32.Registry]::CurrentUser','Win32_NetworkConnection','Win32_Printer','Win32_PrinterDriver','Win32_PnPSignedDriver','Select-Object -First')){
+foreach($required in @('[Microsoft.Win32.Registry]::CurrentUser','Win32_NetworkConnection','Win32_Printer','Win32_PrinterDriver','Win32_PnPSignedDriver','Add-BoundedUnique')){
     if($source -notmatch [regex]::Escape($required)){throw "The live source omitted $required."}
 }
 foreach($prohibited in @('Get-PrintJob','Get-Credential','cmdkey','WlanGetProfile','PNPDeviceID','SerialNumber','Win32_PrintJob','Get-ChildItem')){

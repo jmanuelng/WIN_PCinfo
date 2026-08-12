@@ -83,4 +83,17 @@ $partial=Add-ResourceDependenciesEvidenceRecord -Record $partial -CollectorResul
 $partialValidation=Test-CanonicalRecord $partial
 Assert-Equal $true $partialValidation.accepted "bounded Partial resource evidence remains canonical ($($partialValidation.reasonCode))"
 
+foreach($failedScopeId in @($resourcePolicy.scopes.scopeId)){
+    $isolated=New-PolicyReadyRecord
+    $isolatedCollector=Invoke-ResourceDependenciesCollection -Policy $resourcePolicy -ValidationScenario Empty
+    $failedState=@($isolatedCollector.payload.scopeStates|Where-Object scopeId -eq $failedScopeId)[0]
+    $failedState.state='Unavailable';$failedState.reasonCode='RESOURCE.SOURCE_UNAVAILABLE'
+    $isolated=Add-ResourceDependenciesEvidenceRecord -Record $isolated `
+        -CollectorResult $isolatedCollector -Policy $resourcePolicy
+    $isolatedValidation=Test-CanonicalRecord $isolated
+    Assert-Equal $true $isolatedValidation.accepted "$failedScopeId remains canonical as one isolated source gap"
+    Assert-Equal 1 @($isolated.coverage|Where-Object {$_.scopeId -eq $failedScopeId -and $_.state -eq 'Unavailable'}).Count "$failedScopeId preserves its own unavailable coverage"
+    Assert-Equal 4 @($isolated.coverage|Where-Object {$_.scopeId -in @($resourcePolicy.scopes.scopeId) -and $_.state -eq 'Complete'}).Count "$failedScopeId does not erase unrelated completed sources"
+}
+
 Write-Output 'PASS: Resource Dependencies compose canonical bounded evidence, findings, and recommendations.'

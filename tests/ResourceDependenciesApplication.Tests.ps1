@@ -62,4 +62,13 @@ foreach($case in $cases){
     }
     if($result.StandardError){throw "$($case.scenario) wrote stderr: $($result.StandardError)"}
 }
+$invalid=Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+    '-Mode','Automation','-RequestPath',$requestPath,'-AcceptPreparation',
+    '-PreparationFixturePath',$preparationPath,'-ResourceDependenciesFixturePath',(
+        Join-Path $PSScriptRoot 'fixtures/resource-does-not-exist.json'
+    )
+)
+Assert-Equal 1 @($invalid.Records|Where-Object recordType -eq 'win-pcinfo.terminal').Count 'an invalid resource fixture retains one stable terminal path'
+Assert-Equal 0 @($invalid.Records|Where-Object recordType -eq 'win-pcinfo.resource-dependencies-validation').Count 'an invalid fixture cannot fabricate a resource projection'
+if($invalid.StandardError){throw "Invalid fixture wrote stderr: $($invalid.StandardError)"}
 Write-Output 'PASS: the generated application exercises Resource Dependency evidence, guidance, privacy, packaging, and cleanup.'

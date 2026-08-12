@@ -137,7 +137,13 @@ function New-ResourceDependenciesSyntheticPayload {
             $drivers=@(0..7|ForEach-Object {[pscustomobject][ordered]@{name="Synthetic Driver $($_+1)";manufacturer='Synthetic Vendor';version="1.0.0.$_";infName="synthetic-$_.inf"}})
             $peripherals=@(0..7|ForEach-Object {[pscustomobject][ordered]@{class='USB';name="Synthetic Peripheral $($_+1)";manufacturer='Synthetic Vendor';driverProvider='Synthetic Provider';driverVersion="2.0.0.$_";driverInfName="synthetic-device-$_.inf";driverSigned=$true}})
         }
-        'Duplicates'{$mapped=@($mappedItem);$unc=@($uncItem);$printers=@($printerItem);$drivers=@($driverItem);$peripherals=@($peripheralItem)}
+        'Duplicates'{
+            # Duplicate provider rows are intentional here. The exported copy
+            # boundary must normalize them before evidence subjects are built.
+            $mapped=@($mappedItem,$mappedItem);$unc=@($uncItem,$uncItem)
+            $printers=@($printerItem,$printerItem);$drivers=@($driverItem,$driverItem)
+            $peripherals=@($peripheralItem,$peripheralItem)
+        }
         'LongUnicode'{
             $mapped=@([pscustomobject][ordered]@{localName='Ü:';remoteEndpoint='\\synthetic-file\迁移-Δοκιμή-équipe';connectionState='Connected';providerName='Réseau Windows'})
             $printers=@([pscustomobject][ordered]@{name='Imprimante-東京-Δοκιμή';portName='PORT-É:';driverName='Pilote-统一';network=$true;default=$false;offline=$false})
@@ -181,7 +187,7 @@ function Test-ResourceDependenciesCollectorPayload {
     try{
         if(-not (Test-ResourceDependencyObjectShape $Payload @('sourceLocale','assessmentUserContextVerified','processRelationship','mappedDrives','uncConnections','printers','printerDrivers','peripherals','scopeStates','executionContext'))){return $false}
         if($Payload.assessmentUserContextVerified -isnot [bool] -or
-            [string]$Payload.processRelationship -notin @('SameUser','AlternateAdministrator','ProhibitedSystemContext','Unavailable') -or
+            [string]$Payload.processRelationship -notin @('SameUser','AlternateAdministrator','ElevatedAssessmentUser','DifferentStandardUser','ProhibitedSystemContext','Unavailable') -or
             [string]$Payload.executionContext -notin @('Synthetic','StandardUser','Administrator','LocalSystem') -or
             -not (Test-ResourceDependencyString $Payload.sourceLocale 35)){return $false}
         $collections=@(
@@ -257,14 +263,28 @@ function Copy-ResourceDependenciesCollectorPayload {
         sourceLocale=[string]$Payload.sourceLocale
         assessmentUserContextVerified=[bool]$Payload.assessmentUserContextVerified
         processRelationship=[string]$Payload.processRelationship
-        mappedDrives=@($Payload.mappedDrives|ForEach-Object {[pscustomobject][ordered]@{localName=[string]$_.localName;remoteEndpoint=[string]$_.remoteEndpoint;connectionState=[string]$_.connectionState;providerName=if($null -eq $_.providerName){$null}else{[string]$_.providerName}}})
-        uncConnections=@($Payload.uncConnections|ForEach-Object {[pscustomobject][ordered]@{remoteEndpoint=[string]$_.remoteEndpoint;connectionState=[string]$_.connectionState;providerName=if($null -eq $_.providerName){$null}else{[string]$_.providerName}}})
-        printers=@($Payload.printers|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;portName=[string]$_.portName;driverName=[string]$_.driverName;network=[bool]$_.network;default=[bool]$_.default;offline=[bool]$_.offline}})
-        printerDrivers=@($Payload.printerDrivers|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};version=if($null -eq $_.version){$null}else{[string]$_.version};infName=if($null -eq $_.infName){$null}else{[string]$_.infName}}})
-        peripherals=@($Payload.peripherals|ForEach-Object {[pscustomobject][ordered]@{class=[string]$_.class;name=[string]$_.name;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};driverProvider=if($null -eq $_.driverProvider){$null}else{[string]$_.driverProvider};driverVersion=if($null -eq $_.driverVersion){$null}else{[string]$_.driverVersion};driverInfName=if($null -eq $_.driverInfName){$null}else{[string]$_.driverInfName};driverSigned=[bool]$_.driverSigned}})
+        mappedDrives=@($Payload.mappedDrives|Sort-Object localName -Unique|ForEach-Object {[pscustomobject][ordered]@{localName=[string]$_.localName;remoteEndpoint=[string]$_.remoteEndpoint;connectionState=[string]$_.connectionState;providerName=if($null -eq $_.providerName){$null}else{[string]$_.providerName}}})
+        uncConnections=@($Payload.uncConnections|Sort-Object remoteEndpoint -Unique|ForEach-Object {[pscustomobject][ordered]@{remoteEndpoint=[string]$_.remoteEndpoint;connectionState=[string]$_.connectionState;providerName=if($null -eq $_.providerName){$null}else{[string]$_.providerName}}})
+        printers=@($Payload.printers|Sort-Object name -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;portName=[string]$_.portName;driverName=[string]$_.driverName;network=[bool]$_.network;default=[bool]$_.default;offline=[bool]$_.offline}})
+        printerDrivers=@($Payload.printerDrivers|Sort-Object name -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};version=if($null -eq $_.version){$null}else{[string]$_.version};infName=if($null -eq $_.infName){$null}else{[string]$_.infName}}})
+        peripherals=@($Payload.peripherals|Sort-Object class,name,driverVersion -Unique|ForEach-Object {[pscustomobject][ordered]@{class=[string]$_.class;name=[string]$_.name;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};driverProvider=if($null -eq $_.driverProvider){$null}else{[string]$_.driverProvider};driverVersion=if($null -eq $_.driverVersion){$null}else{[string]$_.driverVersion};driverInfName=if($null -eq $_.driverInfName){$null}else{[string]$_.driverInfName};driverSigned=[bool]$_.driverSigned}})
         scopeStates=@($Payload.scopeStates|ForEach-Object {[pscustomobject][ordered]@{scopeId=[string]$_.scopeId;state=[string]$_.state;reasonCode=[string]$_.reasonCode}})
         executionContext=[string]$Payload.executionContext
     }
+}
+
+function ConvertTo-ResourceDependencyAttemptPayload {
+    param([Parameter(Mandatory)]$Payload,[Parameter(Mandatory)]$Policy)
+    if(Test-ResourceDependenciesCollectorPayload -Payload $Payload -Policy $Policy){
+        return Copy-ResourceDependenciesCollectorPayload -Payload $Payload -Policy $Policy
+    }
+    # Provider strings and shapes cross an untrusted process boundary. If any
+    # value exceeds its frozen field bound, fail the attempt as malformed
+    # coverage instead of allowing a conversion exception to turn ordinary
+    # source drift into a run-integrity claim.
+    New-ResourceDependencyGapPayload -Policy $Policy -State 'Malformed' `
+        -ReasonCode 'RESOURCE.SOURCE_PAYLOAD_MALFORMED' -Relationship 'SameUser' `
+        -ObservedContext 'StandardUser'
 }
 
 function Invoke-ResourceDependenciesCollection {
@@ -306,7 +326,7 @@ function Invoke-ResourceDependenciesCollection {
         $attempt=Invoke-BoundedResourceDependenciesSnapshot -Policy $Policy `
             -AssessmentUserSid $AssessmentUserSid
         if([bool]$attempt.succeeded){
-            $payload=Copy-ResourceDependenciesCollectorPayload -Payload $attempt.payload -Policy $Policy
+            $payload=ConvertTo-ResourceDependencyAttemptPayload -Payload $attempt.payload -Policy $Policy
             return [pscustomobject][ordered]@{state='Completed';reasonCode='RESOURCE.COLLECTION_COMPLETED';payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=([DateTimeOffset]$attempt.startedAt).ToString('o');completedAt=([DateTimeOffset]$attempt.completedAt).ToString('o');executionContext='StandardUser';attempts=1};cleanupVerified=$true}
         }
         $state=if([string]$attempt.reasonCode -match 'TIMEOUT'){'TimedOut'}
@@ -378,9 +398,14 @@ function Get-ResourceDependencyProcessDisposition {
     if($ProcessSid -eq 'S-1-5-18'){
         return [pscustomobject]@{relationship='ProhibitedSystemContext';executionContext='LocalSystem'}
     }
-    if($IsAdministrator -or -not [string]::Equals(
-        $ProcessSid,$AssessmentUserSid,[StringComparison]::OrdinalIgnoreCase)){
-        return [pscustomobject]@{relationship='AlternateAdministrator';executionContext='Administrator'}
+    if($IsAdministrator){
+        $relationship=if([string]::Equals($ProcessSid,$AssessmentUserSid,[StringComparison]::OrdinalIgnoreCase)){
+            'ElevatedAssessmentUser'
+        }else{'AlternateAdministrator'}
+        return [pscustomobject]@{relationship=$relationship;executionContext='Administrator'}
+    }
+    if(-not [string]::Equals($ProcessSid,$AssessmentUserSid,[StringComparison]::OrdinalIgnoreCase)){
+        return [pscustomobject]@{relationship='DifferentStandardUser';executionContext='StandardUser'}
     }
     $null
 }
@@ -420,12 +445,18 @@ function Get-FailureState([Exception]$exception){
     if($exception -is [UnauthorizedAccessException] -or $exception.HResult -eq -2147024891){'Denied'}else{'Failed'}
 }
 function Get-FailureReason([string]$state){if($state -eq 'Denied'){'RESOURCE.SOURCE_ACCESS_DENIED'}else{'RESOURCE.SOURCE_FAILED'}}
-function Limit-Items([object[]]$items,[int]$maximum,[object[]]$scopes,[string]$scopeId){
-    if($items.Count -gt $maximum){Set-Scope $scopes $scopeId 'Partial' 'RESOURCE.EVIDENCE_BOUND_EXCEEDED'}
-    @($items|Select-Object -First $maximum)
+function Add-BoundedUnique(
+    [Collections.Generic.Dictionary[string,object]]$set,[string]$key,[object]$value,
+    [int]$maximum,[object[]]$scopes,[string]$scopeId,[bool]$replace
+){
+    if($set.ContainsKey($key)){if($replace){$set[$key]=$value};return}
+    if($set.Count -ge $maximum){Set-Scope $scopes $scopeId 'Partial' 'RESOURCE.EVIDENCE_BOUND_EXCEEDED';return}
+    $set[$key]=$value
 }
-function Add-Unique([Collections.Generic.Dictionary[string,object]]$set,[string]$key,[object]$value){
-    if(-not $set.ContainsKey($key)){$set[$key]=$value}
+function Get-CanonicalLocalName([string]$value){
+    $trimmed=$value.Trim().TrimEnd(':')
+    if($trimmed -notmatch '^[A-Za-z]$'){return $null}
+    "$($trimmed.ToUpperInvariant()):"
 }
 $utf8=[Text.UTF8Encoding]::new($false,$true)
 $expectedSid=[string]$env:WINPCINFO_RESOURCE_ASSESSMENT_SID
@@ -451,8 +482,10 @@ $mappedSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]
 try{
     $networkKey=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Network',$false)
     try{
-        $names=if($null -eq $networkKey){@()}else{@($networkKey.GetSubKeyNames()|Sort-Object -Unique|Select-Object -First ($maximumMapped+1))}
+        $names=if($null -eq $networkKey){@()}else{@($networkKey.GetSubKeyNames()|Sort-Object -Unique)}
         foreach($name in $names){
+            $localName=Get-CanonicalLocalName ([string]$name)
+            if($null -eq $localName){Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.MAPPED_DRIVE_MALFORMED';continue}
             $driveKey=$networkKey.OpenSubKey([string]$name,$false)
             try{
                 $remote=$driveKey.GetValue('RemotePath',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
@@ -460,10 +493,10 @@ try{
                 if($remote -isnot [string] -or [string]$remote -notmatch '^\\\\[^\\]+\\[^\\]+'){
                     Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.MAPPED_DRIVE_MALFORMED';continue
                 }
-                Add-Unique $mappedSet ([string]$name) ([pscustomobject][ordered]@{
-                    localName="$([string]$name):";remoteEndpoint=[string]$remote
+                Add-BoundedUnique $mappedSet $localName ([pscustomobject][ordered]@{
+                    localName=$localName;remoteEndpoint=[string]$remote
                     connectionState='Unavailable';providerName=if($provider -is [string]){[string]$provider}else{$null}
-                })
+                }) $maximumMapped $scopes 'scope:resource.mapped-drives' $false
             }finally{if($null -ne $driveKey){$driveKey.Dispose()}}
         }
     }finally{if($null -ne $networkKey){$networkKey.Dispose()}}
@@ -471,87 +504,88 @@ try{
 
 $uncSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $rows=@(Get-CimInstance -ClassName Win32_NetworkConnection -Property LocalName,RemoteName,ConnectionState,ProviderName -ErrorAction Stop |
-        Select-Object -First ($maximumMapped+$maximumUnc+2))
+    $rows=Get-CimInstance -ClassName Win32_NetworkConnection -Property LocalName,RemoteName,ConnectionState,ProviderName -ErrorAction Stop
     foreach($row in $rows){
         if($row.RemoteName -isnot [string] -or [string]$row.RemoteName -notmatch '^\\\\[^\\]+\\[^\\]+'){
             Set-Scope $scopes 'scope:resource.unc-connections' 'Partial' 'RESOURCE.UNC_CONNECTION_MALFORMED';continue
         }
         $state=if([string]$row.ConnectionState -eq 'Connected'){'Connected'}elseif([string]$row.ConnectionState -eq 'Disconnected'){'Disconnected'}else{'Unavailable'}
-        $local=[string]$row.LocalName
-        if(-not [string]::IsNullOrWhiteSpace($local)){
+        $rawLocal=[string]$row.LocalName
+        $local=Get-CanonicalLocalName $rawLocal
+        if(-not [string]::IsNullOrWhiteSpace($rawLocal) -and $null -eq $local){
+            Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.MAPPED_DRIVE_MALFORMED';continue
+        }
+        if($null -ne $local){
             # A live network row is authoritative for the same local designator. Replacing the
             # registry-only definition avoids presenting a remembered mapping as disconnected.
-            $mappedSet[$local]=[pscustomobject][ordered]@{
+            Add-BoundedUnique $mappedSet $local ([pscustomobject][ordered]@{
                 localName=$local;remoteEndpoint=[string]$row.RemoteName;connectionState=$state
                 providerName=if($row.ProviderName -is [string]){[string]$row.ProviderName}else{$null}
-            }
+            }) $maximumMapped $scopes 'scope:resource.mapped-drives' $true
         }else{
-            Add-Unique $uncSet ([string]$row.RemoteName) ([pscustomobject][ordered]@{
+            Add-BoundedUnique $uncSet ([string]$row.RemoteName) ([pscustomobject][ordered]@{
                 remoteEndpoint=[string]$row.RemoteName;connectionState=$state
                 providerName=if($row.ProviderName -is [string]){[string]$row.ProviderName}else{$null}
-            })
+            }) $maximumUnc $scopes 'scope:resource.unc-connections' $false
         }
     }
 }catch{
     $state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.unc-connections' $state (Get-FailureReason $state)
     if($mappedSet.Count -gt 0){Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.CONNECTION_STATE_UNAVAILABLE'}
 }
-$mapped=Limit-Items @($mappedSet.Values|Sort-Object localName,remoteEndpoint) $maximumMapped $scopes 'scope:resource.mapped-drives'
-$unc=Limit-Items @($uncSet.Values|Sort-Object remoteEndpoint) $maximumUnc $scopes 'scope:resource.unc-connections'
+$mapped=@($mappedSet.Values|Sort-Object localName,remoteEndpoint)
+$unc=@($uncSet.Values|Sort-Object remoteEndpoint)
 
 $printerSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $rows=@(Get-CimInstance -ClassName Win32_Printer -Property Name,PortName,DriverName,Network,Local,Default,WorkOffline -ErrorAction Stop |
-        Select-Object -First ($maximumPrinters+1))
+    $rows=Get-CimInstance -ClassName Win32_Printer -Property Name,PortName,DriverName,Network,Local,Default,WorkOffline -ErrorAction Stop
     foreach($row in $rows){
         if($row.Name -isnot [string] -or $row.PortName -isnot [string] -or $row.DriverName -isnot [string] -or
             $null -eq $row.Network -or $null -eq $row.Default -or $null -eq $row.WorkOffline){
             Set-Scope $scopes 'scope:resource.printers' 'Partial' 'RESOURCE.PRINTER_MALFORMED';continue
         }
-        Add-Unique $printerSet ([string]$row.Name) ([pscustomobject][ordered]@{
+        Add-BoundedUnique $printerSet ([string]$row.Name) ([pscustomobject][ordered]@{
             name=[string]$row.Name;portName=[string]$row.PortName;driverName=[string]$row.DriverName
             network=[bool]$row.Network;default=[bool]$row.Default;offline=[bool]$row.WorkOffline
-        })
+        }) $maximumPrinters $scopes 'scope:resource.printers' $false
     }
 }catch{$state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.printers' $state (Get-FailureReason $state)}
-$printers=Limit-Items @($printerSet.Values|Sort-Object name) $maximumPrinters $scopes 'scope:resource.printers'
+$printers=@($printerSet.Values|Sort-Object name)
 
 $driverSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $rows=@(Get-CimInstance -ClassName Win32_PrinterDriver -Property Name,Manufacturer,DriverVersion,InfName -ErrorAction Stop |
-        Select-Object -First ($maximumDrivers+1))
+    $rows=Get-CimInstance -ClassName Win32_PrinterDriver -Property Name,Manufacturer,DriverVersion,InfName -ErrorAction Stop
     foreach($row in $rows){
         if($row.Name -isnot [string]){Set-Scope $scopes 'scope:resource.printer-drivers' 'Partial' 'RESOURCE.PRINTER_DRIVER_MALFORMED';continue}
-        Add-Unique $driverSet ([string]$row.Name) ([pscustomobject][ordered]@{
+        Add-BoundedUnique $driverSet ([string]$row.Name) ([pscustomobject][ordered]@{
             name=[string]$row.Name;manufacturer=if($row.Manufacturer -is [string]){[string]$row.Manufacturer}else{$null}
             version=if($null -eq $row.DriverVersion){$null}else{[Convert]::ToString($row.DriverVersion,[Globalization.CultureInfo]::InvariantCulture)}
             infName=if($row.InfName -is [string]){[string]$row.InfName}else{$null}
-        })
+        }) $maximumDrivers $scopes 'scope:resource.printer-drivers' $false
     }
 }catch{$state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.printer-drivers' $state (Get-FailureReason $state)}
-$drivers=Limit-Items @($driverSet.Values|Sort-Object name) $maximumDrivers $scopes 'scope:resource.printer-drivers'
+$drivers=@($driverSet.Values|Sort-Object name)
 
 $peripheralSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $rows=@(Get-CimInstance -ClassName Win32_PnPSignedDriver -Property DeviceClass,DeviceName,Manufacturer,DriverProviderName,DriverVersion,InfName,IsSigned -ErrorAction Stop |
-        Where-Object {[string]$_.DeviceClass -in $classCatalog} | Select-Object -First ($maximumPeripherals+1))
+    $rows=Get-CimInstance -ClassName Win32_PnPSignedDriver -Property DeviceClass,DeviceName,Manufacturer,DriverProviderName,DriverVersion,InfName,IsSigned -ErrorAction Stop |
+        Where-Object {[string]$_.DeviceClass -in $classCatalog}
     foreach($row in $rows){
         if($row.DeviceName -isnot [string] -or [string]$row.DeviceClass -notin $classCatalog -or $null -eq $row.IsSigned){
             Set-Scope $scopes 'scope:resource.common-peripherals' 'Partial' 'RESOURCE.PERIPHERAL_MALFORMED';continue
         }
         $key="$([string]$row.DeviceClass)|$([string]$row.DeviceName)|$([string]$row.DriverVersion)"
-        Add-Unique $peripheralSet $key ([pscustomobject][ordered]@{
+        Add-BoundedUnique $peripheralSet $key ([pscustomobject][ordered]@{
             class=[string]$row.DeviceClass;name=[string]$row.DeviceName
             manufacturer=if($row.Manufacturer -is [string]){[string]$row.Manufacturer}else{$null}
             driverProvider=if($row.DriverProviderName -is [string]){[string]$row.DriverProviderName}else{$null}
             driverVersion=if($row.DriverVersion -is [string]){[string]$row.DriverVersion}else{$null}
             driverInfName=if($row.InfName -is [string]){[string]$row.InfName}else{$null}
             driverSigned=[bool]$row.IsSigned
-        })
+        }) $maximumPeripherals $scopes 'scope:resource.common-peripherals' $false
     }
 }catch{$state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.common-peripherals' $state (Get-FailureReason $state)}
-$peripherals=Limit-Items @($peripheralSet.Values|Sort-Object class,name,driverVersion) $maximumPeripherals $scopes 'scope:resource.common-peripherals'
+$peripherals=@($peripheralSet.Values|Sort-Object class,name,driverVersion)
 $payload=[pscustomobject][ordered]@{
     sourceLocale='und';assessmentUserContextVerified=$true;processRelationship='SameUser'
     mappedDrives=@($mapped);uncConnections=@($unc);printers=@($printers);printerDrivers=@($drivers)
@@ -747,9 +781,14 @@ function Add-ResourceDependenciesEvidenceRecord {
 }
 
 function Invoke-ResourceDependencyRule {
-    param([Parameter(Mandatory)]$Rule,[Parameter(Mandatory)][scriptblock]$Evaluation)
+    param(
+        [Parameter(Mandatory)]$Rule,
+        [Parameter(Mandatory)][int]$InputObservationCount,
+        [Parameter(Mandatory)][scriptblock]$Evaluation
+    )
     $watch=[Diagnostics.Stopwatch]::StartNew();$results=@(& $Evaluation);$watch.Stop()
-    if($watch.ElapsedMilliseconds -gt [int]$Rule.deadlineMilliseconds -or $results.Count -ne 1 -or
+    if($InputObservationCount -gt [int]$Rule.maximumInputObservations -or
+        $watch.ElapsedMilliseconds -gt [int]$Rule.deadlineMilliseconds -or $results.Count -ne 1 -or
         [string]$results[0].outcome -notin @('ExpectedCondition','NeedsAttention','Informational','Indeterminate')){
         throw "The release-owned $($Rule.operationId) rule violated its finite result contract."
     }
@@ -770,24 +809,25 @@ function Complete-ValidatedResourceDependenciesAssessmentRecord {
     $peripheralCoverage=@($Record.coverage|Where-Object scopeId -in $peripheralScopeIds)
     $userObservations=@($Record.observations|Where-Object {$_.fieldId -like 'field:resource.mapped-*' -or $_.fieldId -like 'field:resource.share.*' -or $_.fieldId -eq 'field:resource.connection-state' -or $_.fieldId -eq 'field:resource.provider-name' -or $_.fieldId -like 'field:resource.printer.*'})
     $peripheralObservations=@($Record.observations|Where-Object {$_.fieldId -like 'field:resource.peripheral.*' -or $_.fieldId -like 'field:resource.printer-driver.*'})
-    $userResult=Invoke-ResourceDependencyRule -Rule $rules['user-resource-migration-dependencies'] -Evaluation {
+    $coverageObservations=@($userObservations+$peripheralObservations)
+    $userResult=Invoke-ResourceDependencyRule -Rule $rules['user-resource-migration-dependencies'] -InputObservationCount $userObservations.Count -Evaluation {
         if(@($userCoverage|Where-Object state -ne Complete).Count -gt 0){[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.USER_RESOURCE_EVIDENCE_INCOMPLETE'}}
         elseif(@($userObservations|Where-Object valueState -eq ObservedValue).Count -gt 0){[pscustomobject]@{outcome='NeedsAttention'}}
         else{[pscustomobject]@{outcome='Informational'}}
     }
-    $peripheralResult=Invoke-ResourceDependencyRule -Rule $rules['peripheral-migration-dependencies'] -Evaluation {
+    $peripheralResult=Invoke-ResourceDependencyRule -Rule $rules['peripheral-migration-dependencies'] -InputObservationCount $peripheralObservations.Count -Evaluation {
         if(@($peripheralCoverage|Where-Object state -ne Complete).Count -gt 0){[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.PERIPHERAL_EVIDENCE_INCOMPLETE'}}
         elseif(@($peripheralObservations|Where-Object valueState -eq ObservedValue).Count -gt 0){[pscustomobject]@{outcome='NeedsAttention'}}
         else{[pscustomobject]@{outcome='Informational'}}
     }
-    $coverageResult=Invoke-ResourceDependencyRule -Rule $rules['resource-dependency-coverage'] -Evaluation {
+    $coverageResult=Invoke-ResourceDependencyRule -Rule $rules['resource-dependency-coverage'] -InputObservationCount $coverageObservations.Count -Evaluation {
         if(@($Record.coverage|Where-Object {$_.scopeId -in @($Policy.scopes.scopeId) -and $_.state -ne 'Complete'}).Count -gt 0){[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.RESOURCE_DEPENDENCY_EVIDENCE_INCOMPLETE'}}
         else{[pscustomobject]@{outcome='Informational'}}
     }
     $definitions=@(
         @{kind='user-resource-migration-dependencies';result=$userResult;observations=$userObservations},
         @{kind='peripheral-migration-dependencies';result=$peripheralResult;observations=$peripheralObservations},
-        @{kind='resource-dependency-coverage';result=$coverageResult;observations=@($userObservations+$peripheralObservations)}
+        @{kind='resource-dependency-coverage';result=$coverageResult;observations=$coverageObservations}
     )
     foreach($definition in $definitions){
         $rule=$rules[$definition.kind];$findingId="finding:$($definition.kind):$($Record.run.runId)"

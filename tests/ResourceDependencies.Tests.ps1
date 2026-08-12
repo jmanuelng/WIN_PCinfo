@@ -9,6 +9,27 @@ $repositoryRoot=Split-Path -Parent $PSScriptRoot
 $json=Get-Command ConvertFrom-Json -CommandType Cmdlet
 $policy=Get-ResourceDependenciesPolicy -ConvertFromJsonCommand $json
 
+$ruleLimitRejected=$false
+try {
+    Invoke-ResourceDependencyRule -Rule $policy.rules[0] `
+        -InputObservationCount ([int]$policy.rules[0].maximumInputObservations + 1) `
+        -Evaluation { [pscustomobject]@{outcome='Informational'} } | Out-Null
+} catch { $ruleLimitRejected=$true }
+Assert-Equal $true $ruleLimitRejected 'rule evaluation rejects input beyond its release-owned evidence bound'
+
+$duplicateInput=New-ResourceDependenciesSyntheticPayload -Scenario Duplicates -Policy $policy
+Assert-Equal 2 @($duplicateInput.mappedDrives).Count 'the duplicate seam starts with repeated mapped rows'
+Assert-Equal 2 @($duplicateInput.printers).Count 'the duplicate seam starts with repeated printer rows'
+$deduplicated=Copy-ResourceDependenciesCollectorPayload -Payload $duplicateInput -Policy $policy
+Assert-Equal 1 @($deduplicated.mappedDrives).Count 'mapped rows normalize by their stable local designator'
+Assert-Equal 1 @($deduplicated.printers).Count 'printer rows normalize by their stable local name'
+
+$malformed=New-ResourceDependenciesSyntheticPayload -Scenario MappedDrive -Policy $policy
+$malformed.mappedDrives[0].remoteEndpoint='\\synthetic-file\' + ('x' * 600)
+$malformedResult=ConvertTo-ResourceDependencyAttemptPayload -Payload $malformed -Policy $policy
+Assert-Equal 0 @($malformedResult.mappedDrives).Count 'malformed provider output fabricates no evidence'
+Assert-Equal 'Malformed' @($malformedResult.scopeStates)[0].state 'malformed provider output becomes typed coverage rather than run-integrity failure'
+
 $expectations=@(
     @{scenario='MappedDrive';mapped=1;unc=0;printers=0;peripherals=0;user='Complete';peripheral='Complete'},
     @{scenario='DisconnectedDrive';mapped=1;unc=0;printers=0;peripherals=0;user='Complete';peripheral='Complete'},

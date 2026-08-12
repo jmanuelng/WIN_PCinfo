@@ -2050,7 +2050,7 @@ function Invoke-DeviceReadinessSlice {
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
         }) -ConvertToJsonCommand $ConvertToJsonCommand
     }
-    if($isResourceDependenciesFixture){
+    if($isResourceDependenciesFixture -and $null -ne $resourceCollector){
         $projection=New-ResourceDependenciesPublicProjection `
             -CollectorResult $resourceCollector -Policy $resourcePolicy
         $projection|Add-Member -NotePropertyName scenario -NotePropertyValue $resourceScenario
