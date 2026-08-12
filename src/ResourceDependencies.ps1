@@ -825,13 +825,13 @@ function Complete-ValidatedResourceDependenciesAssessmentRecord {
         else{[pscustomobject]@{outcome='Informational'}}
     }
     $definitions=@(
-        @{kind='user-resource-migration-dependencies';result=$userResult;observations=$userObservations},
-        @{kind='peripheral-migration-dependencies';result=$peripheralResult;observations=$peripheralObservations},
-        @{kind='resource-dependency-coverage';result=$coverageResult;observations=$coverageObservations}
+        @{kind='user-resource-migration-dependencies';target='subject:assessment-user:primary';result=$userResult;observations=$userObservations},
+        @{kind='peripheral-migration-dependencies';target='subject:device:primary';result=$peripheralResult;observations=$peripheralObservations},
+        @{kind='resource-dependency-coverage';target='subject:device:primary';result=$coverageResult;observations=$coverageObservations}
     )
     foreach($definition in $definitions){
         $rule=$rules[$definition.kind];$findingId="finding:$($definition.kind):$($Record.run.runId)"
-        $finding=[ordered]@{findingId=$findingId;ruleId=[string]$rule.ruleId;targetSubjectId='subject:device:primary';outcome=[string]$definition.result.outcome;evidenceReferences=@($definition.observations|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})}
+        $finding=[ordered]@{findingId=$findingId;ruleId=[string]$rule.ruleId;targetSubjectId=[string]$definition.target;outcome=[string]$definition.result.outcome;evidenceReferences=@($definition.observations|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})}
         if($definition.result.PSObject.Properties['reasonCode']){$finding.reasonCode=[string]$definition.result.reasonCode}
         $Record.findings=@($Record.findings)+[pscustomobject]$finding
         if($definition.kind -ne 'resource-dependency-coverage' -and $definition.result.outcome -in @('NeedsAttention','Indeterminate')){

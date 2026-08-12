@@ -60,6 +60,7 @@ Assert-Equal 29 @($record.coverage).Count 'all five resource scopes remain indep
 Assert-Equal 17 @($record.findings).Count 'three resource rules each produce exactly one finding'
 Assert-Equal 1 @($record.collectorResults|Where-Object collectorId -eq $resourcePolicy.collector.collectorId).Count 'one approved attempt owns the five resource scopes'
 Assert-Equal 'NeedsAttention' @($record.findings|Where-Object ruleId -eq 'rule:resource.user-migration-dependencies/1.0.0')[0].outcome 'observed printer dependencies produce advisory attention'
+Assert-Equal 'subject:assessment-user:primary' @($record.findings|Where-Object ruleId -eq 'rule:resource.user-migration-dependencies/1.0.0')[0].targetSubjectId 'user-resource interpretation stays bound to the verified Assessment User'
 Assert-Equal 1 @($record.recommendations|Where-Object definitionId -eq 'recommendation:resource.validate-user-resources/1.0.0').Count 'observed user resources receive one bounded next step'
 
 $empty=New-PolicyReadyRecord
