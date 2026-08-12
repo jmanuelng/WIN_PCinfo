@@ -1074,24 +1074,27 @@ function Get-DeviceReadinessFailureDisposition {
 
     switch ($ReasonCode) {
         'FIRMWARE.PRIVILEGE_TIMED_OUT' {
-            [pscustomobject]@{outcome='TimedOut';exitCode=40;reasonCode=$ReasonCode}
+            [pscustomobject]@{outcome='TimedOut';exitCode=40;reasonCode=$ReasonCode;cleanupVerified=$true}
         }
         'FIRMWARE.PRIVILEGE_CANCELLED' {
-            [pscustomobject]@{outcome='Cancelled';exitCode=30;reasonCode=$ReasonCode}
+            [pscustomobject]@{outcome='Cancelled';exitCode=30;reasonCode=$ReasonCode;cleanupVerified=$true}
         }
         'FIRMWARE.PRIVILEGE_CLEANUP_INCOMPLETE' {
-            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode}
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
         }
         'IDENTITY.SYSTEM_CLEANUP_INCOMPLETE' {
-            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode}
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
         }
         'IDENTITY.RULE_CLEANUP_INCOMPLETE' {
-            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode}
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
+        }
+        'IDENTITY.COLLECTOR_CLEANUP_INCOMPLETE' {
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
         }
         default {
             [pscustomobject]@{
                 outcome=if($CollectionStarted){'IntegrityFailed'}else{'NotStarted'}
-                exitCode=if($CollectionStarted){50}else{20};reasonCode=$ReasonCode
+                exitCode=if($CollectionStarted){50}else{20};reasonCode=$ReasonCode;cleanupVerified=$true
             }
         }
     }
@@ -1513,6 +1516,7 @@ function Invoke-DeviceReadinessSlice {
         $outcome=[string]$failureDisposition.outcome
         $exitCode=[int]$failureDisposition.exitCode
         $reasonCode=[string]$failureDisposition.reasonCode
+        $cleanupVerified=$cleanupVerified -and [bool]$failureDisposition.cleanupVerified
     }
     finally {
         if ($null -ne $opened -and $null -ne $opened.artifacts) {

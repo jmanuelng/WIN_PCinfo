@@ -24,6 +24,13 @@ try {
 } catch {$deadlineRejected=$true}
 Assert-Equal $true $deadlineRejected `
     'an uncooperative identity rule is terminated at its frozen deadline'
+$assignmentCleanupFailure=[pscustomobject]@{
+    Started=$false;CompleteOwnedTreeAbsent=$false
+    FailureStage=[WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete
+}
+Assert-Equal 'IDENTITY.RULE_CLEANUP_INCOMPLETE' `
+    (Get-IdentityRuleNativeFailureReason -NativeResult $assignmentCleanupFailure) `
+    'failed pre-resume Job assignment with unverified termination remains CleanupIncomplete'
 
 function Test-CanonicalRecord {
     param($Record)

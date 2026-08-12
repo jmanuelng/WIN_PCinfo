@@ -38,6 +38,14 @@ Assert-Equal 'CleanupIncomplete' $identityRuleCleanup.outcome `
     'unverified identity rule-worker absence takes precedence over integrity failure'
 Assert-Equal 60 $identityRuleCleanup.exitCode `
     'identity rule cleanup uncertainty uses the stable cleanup exit code'
+Assert-Equal $false $identityRuleCleanup.cleanupVerified `
+    'the terminal cannot claim cleanup verified after unverified rule-worker absence'
+$identityCollectorCleanup = Get-DeviceReadinessFailureDisposition `
+    -ReasonCode 'IDENTITY.COLLECTOR_CLEANUP_INCOMPLETE' -CollectionStarted $true
+Assert-Equal 'CleanupIncomplete' $identityCollectorCleanup.outcome `
+    'unverified identity collector-worker absence takes terminal precedence'
+Assert-Equal $false $identityCollectorCleanup.cleanupVerified `
+    'the terminal cannot claim cleanup verified after unverified collector-worker absence'
 $failedReopenDisposition = Get-DeviceReadinessPackageDisposition `
     -Package ([pscustomobject]@{ state='Verified'; verified=$true; packagePath='synthetic-retained' }) `
     -ValidationFixture $false -ValidationCleanupVerified $true `

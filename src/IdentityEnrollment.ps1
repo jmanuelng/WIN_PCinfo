@@ -392,18 +392,24 @@ namespace WinPCInfo.IdentityEnrollment
             return true;
         }
 
-        public static NativeSnapshot Read()
+        public static NativeSnapshot Read(string mode)
         {
+            bool registrationUser = String.Equals(mode, "RegistrationUser", StringComparison.Ordinal);
+            bool workSchool = String.Equals(mode, "WorkSchool", StringComparison.Ordinal);
+            if (!registrationUser && !workSchool) throw new ArgumentException("Unknown native source mode.");
             var result = new NativeSnapshot { UserSessionId = -1 };
-            IntPtr domain = IntPtr.Zero;
-            result.DomainError = NetGetJoinInformation(null, out domain, out int joinStatus);
-            result.DomainJoinStatus = joinStatus;
-            try
+            if (registrationUser)
             {
-                if (result.DomainError == 0 && domain != IntPtr.Zero)
-                    result.DomainName = Marshal.PtrToStringUni(domain);
+                IntPtr domain = IntPtr.Zero;
+                result.DomainError = NetGetJoinInformation(null, out domain, out int joinStatus);
+                result.DomainJoinStatus = joinStatus;
+                try
+                {
+                    if (result.DomainError == 0 && domain != IntPtr.Zero)
+                        result.DomainName = Marshal.PtrToStringUni(domain);
+                }
+                finally { if (domain != IntPtr.Zero) NetApiBufferFree(domain); }
             }
-            finally { if (domain != IntPtr.Zero) NetApiBufferFree(domain); }
 
             IntPtr aad = IntPtr.Zero;
             result.AadError = NetGetAadJoinInformation(null, out aad);
@@ -421,58 +427,57 @@ namespace WinPCInfo.IdentityEnrollment
             }
             finally { if (aad != IntPtr.Zero) NetFreeAadJoinInformation(aad); }
 
-            IntPtr sessions = IntPtr.Zero;
-            if (WTSEnumerateSessions(IntPtr.Zero, 0, 1, out sessions, out int count))
+            if (registrationUser)
             {
-                try
+                IntPtr sessions = IntPtr.Zero;
+                if (WTSEnumerateSessions(IntPtr.Zero, 0, 1, out sessions, out int count))
                 {
-                    int size = Marshal.SizeOf<WTS_SESSION_INFO>();
-                    var activeUsers = new List<Tuple<int, string, string, string>>();
-                    int activeSessionCount = 0;
-                    for (int index = 0; index < count; index++)
+                    try
                     {
-                        var item = Marshal.PtrToStructure<WTS_SESSION_INFO>(
-                            IntPtr.Add(sessions, index * size));
-                        if (item.State != 0) continue; // WTSActive
-                        activeSessionCount++;
-                        string user = QuerySessionString(item.SessionID, 5, out int userError); // WTSUserName
-                        if (userError != 0 || String.IsNullOrWhiteSpace(user))
+                        int size = Marshal.SizeOf<WTS_SESSION_INFO>();
+                        var activeUsers = new List<Tuple<int, string, string, string>>();
+                        int activeSessionCount = 0;
+                        for (int index = 0; index < count; index++)
                         {
-                            result.UserError = userError == 0 ? 13 : userError;
-                            continue;
+                            var item = Marshal.PtrToStructure<WTS_SESSION_INFO>(
+                                IntPtr.Add(sessions, index * size));
+                            if (item.State != 0) continue; // WTSActive
+                            activeSessionCount++;
+                            string user = QuerySessionString(item.SessionID, 5, out int userError);
+                            if (userError != 0 || String.IsNullOrWhiteSpace(user))
+                            {
+                                result.UserError = userError == 0 ? 13 : userError;
+                                continue;
+                            }
+                            string domainName = QuerySessionString(item.SessionID, 7, out int domainError);
+                            if (domainError != 0)
+                            {
+                                result.UserError = domainError;
+                                continue;
+                            }
+                            string account = String.IsNullOrWhiteSpace(domainName)
+                                ? user : domainName + "\\" + user;
+                            activeUsers.Add(Tuple.Create(item.SessionID, account, user,
+                                domainName ?? String.Empty));
                         }
-                        string domainName = QuerySessionString(item.SessionID, 7, out int domainError); // WTSDomainName
-                        if (domainError != 0)
+                        result.ActiveUserSessionCount = activeSessionCount;
+                        if (CanVerifyUserContext(activeSessionCount, activeUsers.Count, result.UserError))
                         {
-                            result.UserError = domainError;
-                            continue;
+                            if (TryGetLocalSessionSid(activeUsers[0].Item1, activeUsers[0].Item3,
+                                    activeUsers[0].Item4, out string sid, out int sidError))
+                            {
+                                result.UserContextAvailable = true;
+                                result.UserSessionId = activeUsers[0].Item1;
+                                result.UserAccountName = activeUsers[0].Item2;
+                                result.UserSid = sid;
+                            }
+                            else result.UserError = sidError;
                         }
-                        string account = String.IsNullOrWhiteSpace(domainName)
-                            ? user : domainName + "\\" + user;
-                        activeUsers.Add(Tuple.Create(item.SessionID, account, user,
-                            domainName ?? String.Empty));
                     }
-                    result.ActiveUserSessionCount = activeSessionCount;
-                    if (CanVerifyUserContext(activeSessionCount, activeUsers.Count, result.UserError))
-                    {
-                        // LSA supplies the SID already attached to this local
-                        // logon session. Unlike account-name lookup, it never
-                        // searches a domain controller and therefore preserves
-                        // the collector's OfflineOnly boundary.
-                        if (TryGetLocalSessionSid(activeUsers[0].Item1, activeUsers[0].Item3,
-                                activeUsers[0].Item4, out string sid, out int sidError))
-                        {
-                            result.UserContextAvailable = true;
-                            result.UserSessionId = activeUsers[0].Item1;
-                            result.UserAccountName = activeUsers[0].Item2;
-                            result.UserSid = sid;
-                        }
-                        else result.UserError = sidError;
-                    }
+                    finally { if (sessions != IntPtr.Zero) WTSFreeMemory(sessions); }
                 }
-                finally { if (sessions != IntPtr.Zero) WTSFreeMemory(sessions); }
+                else result.UserError = Marshal.GetLastWin32Error();
             }
-            else result.UserError = Marshal.GetLastWin32Error();
             return result;
         }
     }
@@ -515,10 +520,17 @@ function New-LiveIdentityContextGap {
         [Parameter(Mandatory)] [DateTimeOffset] $StartedAt
     )
     $value = New-IdentityEnrollmentSyntheticPayload -Scenario 'LocalSystem'
+    $completedAt=[DateTimeOffset]::UtcNow
     [pscustomobject][ordered]@{
         payload=$value.payload;relationship=$Relationship;executionContext=$Context
-        startedAt=$StartedAt;completedAt=[DateTimeOffset]::UtcNow
+        startedAt=$StartedAt;completedAt=$completedAt
         sourceFailureReason='COLLECTION.IDENTITY_PROCESS_CONTEXT_PROHIBITED'
+        collectorAttempts=@(
+            [pscustomobject]@{startedAt=$StartedAt;completedAt=$completedAt
+                reasonCode='COLLECTION.IDENTITY_PROCESS_CONTEXT_PROHIBITED'},
+            [pscustomobject]@{startedAt=$StartedAt;completedAt=$completedAt
+                reasonCode='COLLECTION.IDENTITY_PROCESS_CONTEXT_PROHIBITED'}
+        )
     }
 }
 
@@ -540,10 +552,14 @@ function Get-IdentityProcessContextDisposition {
 }
 
 function Invoke-BoundedIdentityNativeSnapshot {
-    param([Parameter(Mandatory)] $Policy)
+    param(
+        [Parameter(Mandatory)] $Policy,
+        [Parameter(Mandatory)] [ValidateRange(0,1)] [int] $CollectorIndex,
+        [Parameter(Mandatory)] [ValidateSet('RegistrationUser','WorkSchool')] [string] $Mode
+    )
 
     Initialize-ProcessSupervisorNativeType
-    $collector = $Policy.collectors[0]
+    $collector = $Policy.collectors[$CollectorIndex]
     $maximumMilliseconds = [int]$collector.deadlineMilliseconds
     $terminationMilliseconds = [Math]::Min(1000, [Math]::Max(1,
         [Math]::Floor($maximumMilliseconds / 4)))
@@ -562,30 +578,34 @@ try {
     $utf8=[Text.UTF8Encoding]::new($false,$true)
     $source=$utf8.GetString([Convert]::FromBase64String($env:WINPCINFO_IDENTITY_NATIVE_SOURCE))
     & ([scriptblock]::Create($source))
-    $snapshot=[WinPCInfo.IdentityEnrollment.NativeSources]::Read()
+    $snapshot=[WinPCInfo.IdentityEnrollment.NativeSources]::Read($env:WINPCINFO_IDENTITY_NATIVE_MODE)
     $xml=[Management.Automation.PSSerializer]::Serialize($snapshot,5)
     [Console]::Out.Write([Convert]::ToBase64String($utf8.GetBytes($xml)))
 } catch { [Console]::Error.Write('Identity native source failed.'); exit 1 }
 '@
     $encodedChild = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript))
+    $attemptStartedAt=[DateTimeOffset]::UtcNow
     $executable = [IO.Path]::GetFullPath((Join-Path $PSHOME 'pwsh.exe'))
     if (-not [IO.File]::Exists($executable) -or -not [string]::Equals(
             $executable, [Environment]::ProcessPath, [StringComparison]::OrdinalIgnoreCase)) {
         return [pscustomobject]@{succeeded=$false;snapshot=$null
-            reasonCode='COLLECTION.IDENTITY_BOUNDARY_UNAVAILABLE';native=$null}
+            reasonCode='COLLECTION.IDENTITY_BOUNDARY_UNAVAILABLE';native=$null
+            startedAt=$attemptStartedAt;completedAt=[DateTimeOffset]::UtcNow}
     }
     $environment = [Collections.Generic.Dictionary[string,string]]::new(
         [StringComparer]::OrdinalIgnoreCase
     )
     $environment['SystemRoot']=[Environment]::GetFolderPath('Windows')
     $environment['WINPCINFO_IDENTITY_NATIVE_SOURCE']=[Convert]::ToBase64String($initializerBytes)
+    $environment['WINPCINFO_IDENTITY_NATIVE_MODE']=$Mode
     $eventName="Local\WINPCInfo-Identity-$([Guid]::NewGuid().ToString('N'))"
     [bool]$created=$false;$event=$null
     try {
         $event=[Threading.EventWaitHandle]::new($false,
             [Threading.EventResetMode]::ManualReset,$eventName,[ref]$created)
         if(-not $created){return [pscustomobject]@{succeeded=$false;snapshot=$null
-            reasonCode='COLLECTION.IDENTITY_BOUNDARY_UNAVAILABLE';native=$null}}
+            reasonCode='COLLECTION.IDENTITY_BOUNDARY_UNAVAILABLE';native=$null
+            startedAt=$attemptStartedAt;completedAt=[DateTimeOffset]::UtcNow}}
         $native=[WinPCInfo.ProcessSupervisor.NativeRunner]::Run(
             $executable,@('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',$encodedChild),
             $PSHOME,$environment,$activeMilliseconds,[int]$collector.resultMaximumUtf8Bytes,4096,
@@ -597,16 +617,19 @@ try {
             $native.StandardErrorExceeded -or $native.StandardErrorBytes -ne 0){
             $reason=Get-NativeSupervisorReasonCode -NativeResult $native
             if([string]::IsNullOrWhiteSpace($reason)){$reason='COLLECTION.IDENTITY_SOURCE_FAILED'}
-            return [pscustomobject]@{succeeded=$false;snapshot=$null;reasonCode=$reason;native=$native}
+            return [pscustomobject]@{succeeded=$false;snapshot=$null;reasonCode=$reason;native=$native
+                startedAt=$attemptStartedAt;completedAt=[DateTimeOffset]::UtcNow}
         }
         $base64=[Text.UTF8Encoding]::new($false,$true).GetString($native.StandardOutput)
         $xml=[Text.UTF8Encoding]::new($false,$true).GetString([Convert]::FromBase64String($base64))
         [pscustomobject]@{succeeded=$true
             snapshot=[Management.Automation.PSSerializer]::Deserialize($xml)
-            reasonCode='';native=$native}
+            reasonCode='';native=$native;startedAt=$attemptStartedAt
+            completedAt=[DateTimeOffset]::UtcNow}
     } catch {
         [pscustomobject]@{succeeded=$false;snapshot=$null
-            reasonCode='COLLECTION.IDENTITY_SOURCE_FAILED';native=$null}
+            reasonCode='COLLECTION.IDENTITY_SOURCE_FAILED';native=$null
+            startedAt=$attemptStartedAt;completedAt=[DateTimeOffset]::UtcNow}
     } finally { if($null -ne $event){$event.Dispose()} }
 }
 
@@ -626,86 +649,111 @@ function Get-LiveIdentityEnrollmentPayload {
         -ProcessSid ([string]$identity.User.Value) -IsAdministrator $isAdministrator `
         -StartedAt $startedAt
     if($null -ne $processDisposition){return $processDisposition}
-    $boundary=Invoke-BoundedIdentityNativeSnapshot -Policy $Policy
-    if(-not [bool]$boundary.succeeded){
-        $value=New-IdentityEnrollmentSyntheticPayload -Scenario 'Denied'
-        $state=if($boundary.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
-        $value.payload.registrationState=$state;$value.payload.userContextState=$state
-        $value.payload.workSchoolState=$state
-        return [pscustomobject][ordered]@{
-            payload=$value.payload;relationship='Unavailable';executionContext='StandardUser'
-            startedAt=$startedAt;completedAt=[DateTimeOffset]::UtcNow
-            sourceFailureReason=[string]$boundary.reasonCode
+    $registrationAttempt=Invoke-BoundedIdentityNativeSnapshot -Policy $Policy `
+        -CollectorIndex 0 -Mode 'RegistrationUser'
+    $workSchoolAttempt=Invoke-BoundedIdentityNativeSnapshot -Policy $Policy `
+        -CollectorIndex 1 -Mode 'WorkSchool'
+    foreach($attempt in @($registrationAttempt,$workSchoolAttempt)){
+        if($null -ne $attempt.native -and $attempt.native.FailureStage -eq
+            [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete){
+            $exception=[InvalidOperationException]::new(
+                'An identity collector attempt could not prove its owned worker absent.'
+            )
+            $exception.Data['ReasonCode']='IDENTITY.COLLECTOR_CLEANUP_INCOMPLETE'
+            throw $exception
         }
     }
-    $snapshot=$boundary.snapshot
-    $domainState = if ($snapshot.DomainError -eq 0) {
-        switch ([int]$snapshot.DomainJoinStatus) {
+    $registrationSnapshot=$registrationAttempt.snapshot
+    $workSchoolSnapshot=$workSchoolAttempt.snapshot
+    $registrationFailureState=if([bool]$registrationAttempt.succeeded){''}
+        elseif($registrationAttempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
+    $workSchoolFailureState=if([bool]$workSchoolAttempt.succeeded){''}
+        elseif($workSchoolAttempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
+    $domainState = if(-not $registrationFailureState -and
+        $registrationSnapshot.DomainError -eq 0) {
+        switch ([int]$registrationSnapshot.DomainJoinStatus) {
             3 { 'DomainJoined' } # NetSetupDomainName
             1 { 'Workgroup' }    # NetSetupUnjoined
             2 { 'Workgroup' }    # NetSetupWorkgroupName
             default { 'Unknown' }
         }
     } else { $null }
-    $aadSourceState=Get-IdentityAadSourceState -Code ([int]$snapshot.AadError) `
-        -InfoPresent ([bool]$snapshot.AadInfoPresent)
-    $entraType = if ($aadSourceState -eq 'Complete') {
-        switch ([int]$snapshot.AadJoinType) {
+    $registrationAadState=if($registrationFailureState){$registrationFailureState}else{
+        Get-IdentityAadSourceState -Code ([int]$registrationSnapshot.AadError) `
+            -InfoPresent ([bool]$registrationSnapshot.AadInfoPresent)
+    }
+    $workSchoolAadState=if($workSchoolFailureState){$workSchoolFailureState}else{
+        Get-IdentityAadSourceState -Code ([int]$workSchoolSnapshot.AadError) `
+            -InfoPresent ([bool]$workSchoolSnapshot.AadInfoPresent)
+    }
+    $entraType = if ($registrationAadState -eq 'Complete') {
+        switch ([int]$registrationSnapshot.AadJoinType) {
             1 { 'EntraJoined' }
             2 { 'EntraRegistered' }
             0 { 'None' }
             default { 'Unknown' }
         }
     } else { $null }
-    $registrationState = if ((Test-IdentityNativeAccessDeniedCode ([int]$snapshot.DomainError)) -or
-        $aadSourceState -eq 'Denied') {
+    $registrationState = if($registrationFailureState){$registrationFailureState}
+    elseif ((Test-IdentityNativeAccessDeniedCode ([int]$registrationSnapshot.DomainError)) -or
+        $registrationAadState -eq 'Denied') {
         'Denied'
-    } elseif($aadSourceState -eq 'Malformed') {
+    } elseif($registrationAadState -eq 'Malformed') {
         'Malformed'
-    } elseif ($snapshot.DomainError -ne 0 -or
-        $aadSourceState -ne 'Complete') {
+    } elseif ($registrationSnapshot.DomainError -ne 0 -or
+        $registrationAadState -ne 'Complete') {
         'Unavailable'
     } else { 'Complete' }
-    $userState = if (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.UserError)) {
+    $userState = if($registrationFailureState){$registrationFailureState}
+    elseif (Test-IdentityNativeAccessDeniedCode ([int]$registrationSnapshot.UserError)) {
         'Denied'
-    } elseif ([bool]$snapshot.UserContextAvailable -and
-        [Text.Encoding]::UTF8.GetByteCount([string]$snapshot.UserAccountName) -le 256) {
+    } elseif ([bool]$registrationSnapshot.UserContextAvailable -and
+        [Text.Encoding]::UTF8.GetByteCount([string]$registrationSnapshot.UserAccountName) -le 256) {
         'Complete'
     } else { 'Unavailable' }
-    $workSchoolState = $aadSourceState
-    $workSchoolPresent = $entraType -eq 'EntraRegistered'
+    $workSchoolState = $workSchoolAadState
+    $workSchoolType=if($workSchoolState -eq 'Complete'){
+        switch([int]$workSchoolSnapshot.AadJoinType){1{'EntraJoined'}2{'EntraRegistered'}0{'None'}default{'Unknown'}}
+    }else{$null}
+    $workSchoolPresent = $workSchoolType -eq 'EntraRegistered'
     $payload = [pscustomobject][ordered]@{
         sourceLocale='und';registrationState=$registrationState;userContextState=$userState
         workSchoolState=$workSchoolState
         assessmentUserVerified=if($userState -eq 'Complete'){$true}else{$null}
-        assessmentUserSessionId=if($userState -eq 'Complete'){[int]$snapshot.UserSessionId}else{$null}
-        assessmentUserAccountName=if($userState -eq 'Complete'){[string]$snapshot.UserAccountName}else{$null}
+        assessmentUserSessionId=if($userState -eq 'Complete'){[int]$registrationSnapshot.UserSessionId}else{$null}
+        assessmentUserAccountName=if($userState -eq 'Complete'){[string]$registrationSnapshot.UserAccountName}else{$null}
         domainJoinState=if($registrationState -eq 'Complete'){$domainState}else{$null}
         domainName=if($registrationState -eq 'Complete' -and $domainState -eq 'DomainJoined'){
-            [string]$snapshot.DomainName
+            [string]$registrationSnapshot.DomainName
         }else{$null}
         entraRegistrationType=if($registrationState -eq 'Complete'){$entraType}else{$null}
         entraDeviceId=if($registrationState -eq 'Complete' -and $entraType -ne 'None'){
-            [string]$snapshot.DeviceId
+            [string]$registrationSnapshot.DeviceId
         }else{$null}
         entraTenantId=if($registrationState -eq 'Complete' -and $entraType -ne 'None'){
-            [string]$snapshot.TenantId
+            [string]$registrationSnapshot.TenantId
         }else{$null}
         workSchoolAccountPresent=if($workSchoolState -eq 'Complete'){
             [bool]$workSchoolPresent
         }else{$null}
         workSchoolAccountIdentifier=if($workSchoolState -eq 'Complete' -and $workSchoolPresent){
-            [string]$snapshot.JoinUserEmail
+            [string]$workSchoolSnapshot.JoinUserEmail
         }else{$null}
     }
     $relationship = if ($userState -ne 'Complete') { 'Unavailable' }
         elseif ([string]::Equals([string]$identity.User.Value,
-            [string]$snapshot.UserSid,[StringComparison]::OrdinalIgnoreCase)) { 'SameUser' }
+            [string]$registrationSnapshot.UserSid,[StringComparison]::OrdinalIgnoreCase)) { 'SameUser' }
         else { 'SeparateProcessIdentity' }
     [pscustomobject][ordered]@{
         payload=$payload;relationship=$relationship
         executionContext='StandardUser';startedAt=$startedAt;completedAt=[DateTimeOffset]::UtcNow
         sourceFailureReason=''
+        collectorAttempts=@(
+            [pscustomobject]@{startedAt=$registrationAttempt.startedAt;completedAt=$registrationAttempt.completedAt
+                reasonCode=[string]$registrationAttempt.reasonCode},
+            [pscustomobject]@{startedAt=$workSchoolAttempt.startedAt;completedAt=$workSchoolAttempt.completedAt
+                reasonCode=[string]$workSchoolAttempt.reasonCode}
+        )
     }
 }
 
@@ -739,6 +787,10 @@ function Invoke-IdentityEnrollmentCollection {
         $value | Add-Member -NotePropertyName startedAt -NotePropertyValue $now
         $value | Add-Member -NotePropertyName completedAt -NotePropertyValue $now
         $value | Add-Member -NotePropertyName sourceFailureReason -NotePropertyValue ''
+        $value | Add-Member -NotePropertyName collectorAttempts -NotePropertyValue @(
+            [pscustomobject]@{startedAt=$now;completedAt=$now;reasonCode=''},
+            [pscustomobject]@{startedAt=$now;completedAt=$now;reasonCode=''}
+        )
         $value
     }
     $payload = $sourceResult.payload
@@ -810,8 +862,8 @@ function Invoke-IdentityEnrollmentCollection {
         }
         if ($scope.state -ne 'Complete') {
             $diagnosticId = "diagnostic:$(([string]$scope.scope).Substring(6).Replace('.', '-')):$runId"
-            $coverageItem.reasonCode = if(-not [string]::IsNullOrWhiteSpace(
-                [string]$sourceResult.sourceFailureReason)){[string]$sourceResult.sourceFailureReason
+            $attemptReason=[string]$sourceResult.collectorAttempts[[int]$scope.collector].reasonCode
+            $coverageItem.reasonCode = if(-not [string]::IsNullOrWhiteSpace($attemptReason)){$attemptReason
             }else{Get-IdentityCoverageReason -State ([string]$scope.state)}
             $coverageItem.diagnosticIds=@($diagnosticId)
             $diagnostics.Add([pscustomobject][ordered]@{
@@ -824,6 +876,7 @@ function Invoke-IdentityEnrollmentCollection {
     }
     $envelopes = foreach ($collectorIndex in 0,1) {
         $collector = $Policy.collectors[$collectorIndex]
+        $attempt=$sourceResult.collectorAttempts[$collectorIndex]
         $collectorScopes = @($specs | Where-Object collector -eq $collectorIndex)
         $scopeIds = @($collectorScopes.scope)
         $coverageIds = @($coverage | Where-Object scopeId -in $scopeIds | ForEach-Object coverageId)
@@ -837,7 +890,8 @@ function Invoke-IdentityEnrollmentCollection {
             collectorVersion=[string]$collector.collectorVersion
             operationId=[string]$collector.operationId;intendedScopeIds=$scopeIds
             subjectIds=@($collectorScopes.subject | Sort-Object -Unique)
-            startedAt=$startedAt;completedAt=$collectedAt
+            startedAt=([DateTimeOffset]$attempt.startedAt).ToString('o')
+            completedAt=([DateTimeOffset]$attempt.completedAt).ToString('o')
             executionContext=[string]$sourceResult.executionContext
             attempts=1;observationIds=$observationIds;coverageIds=$coverageIds
             diagnosticIds=@($diagnostics | Where-Object scopeId -in $scopeIds | ForEach-Object diagnosticId)
@@ -970,6 +1024,16 @@ function Set-IdentityEnrollmentFindingResult {
     else { $Finding.PSObject.Properties.Remove('reasonCode') }
 }
 
+function Get-IdentityRuleNativeFailureReason {
+    param([Parameter(Mandatory)] $NativeResult)
+    if($NativeResult.FailureStage -eq
+        [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete -or
+        ($NativeResult.Started -and -not [bool]$NativeResult.CompleteOwnedTreeAbsent)){
+        return 'IDENTITY.RULE_CLEANUP_INCOMPLETE'
+    }
+    'IDENTITY.RULE_BOUNDARY_FAILED'
+}
+
 function Invoke-IdentityEnrollmentRuleEvaluation {
     param(
         [Parameter(Mandatory)] $Rule,
@@ -1048,11 +1112,12 @@ try {
             $PSHOME,$environment,$activeMilliseconds,2048,2048,
             [Threading.CancellationToken]::None,$event,1,$terminationMilliseconds,$false
         )
-        if($native.Started -and -not [bool]$native.CompleteOwnedTreeAbsent){
+        $nativeFailureReason=Get-IdentityRuleNativeFailureReason -NativeResult $native
+        if($nativeFailureReason -eq 'IDENTITY.RULE_CLEANUP_INCOMPLETE'){
             $exception=[InvalidOperationException]::new(
                 "The $($Rule.operationId) Rule Evaluation cleanup was not verified."
             )
-            $exception.Data['ReasonCode']='IDENTITY.RULE_CLEANUP_INCOMPLETE'
+            $exception.Data['ReasonCode']=$nativeFailureReason
             throw $exception
         }
         if(-not $native.Started -or

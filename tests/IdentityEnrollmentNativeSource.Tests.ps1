@@ -36,6 +36,18 @@ foreach ($envelope in @($result.collectorResults)) {
         throw 'An elevated coordinator cannot execute or emit standard-user observations.'
     }
 }
+Assert-Equal 2 @($result.collectorResults).Count `
+    'the two standard collector contracts correspond to two supervised attempts'
+$registrationEnvelope=$result.collectorResults[0]
+$workSchoolEnvelope=$result.collectorResults[1]
+if([DateTimeOffset]::Parse($registrationEnvelope.completedAt) -gt
+    [DateTimeOffset]::Parse($workSchoolEnvelope.startedAt)){
+    throw 'The independently governed registration and work-school attempts overlap or share timing.'
+}
+Assert-Equal 'observe-device-registration' ([string]$registrationEnvelope.operationId) `
+    'the registration/user snapshot has its own Collector Result Envelope'
+Assert-Equal 'observe-enrollment-context' ([string]$workSchoolEnvelope.operationId) `
+    'the work-school snapshot has its own Collector Result Envelope'
 
 $sourceText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src/IdentityEnrollment.ps1') -Raw
 foreach ($requiredApi in @('NetGetJoinInformation','NetGetAadJoinInformation','WTSEnumerateSessions')) {
@@ -101,7 +113,8 @@ try {
     Set-Item -LiteralPath Function:\Initialize-IdentityEnrollmentNativeSource -Value {
         [Threading.Thread]::Sleep(30000)
     }
-    $deadlineResult = Invoke-BoundedIdentityNativeSnapshot -Policy $deadlinePolicy
+    $deadlineResult = Invoke-BoundedIdentityNativeSnapshot -Policy $deadlinePolicy `
+        -CollectorIndex 0 -Mode RegistrationUser
 }
 finally {
     Set-Item -LiteralPath Function:\Initialize-IdentityEnrollmentNativeSource `
