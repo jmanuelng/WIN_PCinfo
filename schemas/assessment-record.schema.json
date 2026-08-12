@@ -37,7 +37,7 @@
         "runId": { "$ref": "#/$defs/id" },
         "outcome": { "enum": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"] },
         "validationFixture": { "type": "boolean" },
-        "evidenceProfileId": { "enum": ["profile:synthetic-contract-tracer", "profile:device-windows-readiness", "profile:device-windows-context", "profile:device-and-firmware-readiness"] }
+        "evidenceProfileId": { "enum": ["profile:synthetic-contract-tracer", "profile:device-windows-readiness", "profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"] }
       }
     },
     "subjects": {

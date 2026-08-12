@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.1.0",
+  "contractVersion": "1.2.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
@@ -299,6 +299,116 @@
       "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 },
       "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
       "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:identity.assessment-user.verified",
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Record whether one interactive Assessment User Context was independently verified without substituting the collector process identity.",
+      "source": { "sourceId": "source:windows.native.registration-user-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Windows Terminal Services active-session enumeration" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:identity.assessment-user.session-id",
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Bind the verified Assessment User Context to one local interactive Windows logon session for this run only.",
+      "source": { "sourceId": "source:windows.native.registration-user-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "WTSEnumerateSessions and WTSQuerySessionInformation session projection" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:identity.assessment-user.account-name",
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Carry the bounded local account name reported for the verified Assessment User Context as Restricted evidence.",
+      "source": { "sourceId": "source:windows.native.registration-user-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "WTSUserName and WTSDomainName typed session information" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.domain-join.state",
+      "capabilityIds": ["CAP-0005"],
+      "purpose": "Normalize the locale-neutral NetGetJoinInformation status without inferring a domain from process or user identity.",
+      "source": { "sourceId": "source:windows.native.registration-user-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Windows NetGetJoinInformation status enumeration" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.domain-join.name",
+      "capabilityIds": ["CAP-0005"],
+      "purpose": "Carry the bounded domain name only when NetGetJoinInformation reports DomainJoined.",
+      "source": { "sourceId": "source:windows.native.registration-user-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Windows NetGetJoinInformation domain-name buffer" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.entra-registration.type",
+      "capabilityIds": ["CAP-0005"],
+      "purpose": "Normalize the locale-neutral device or workplace join type returned by NetGetAadJoinInformation.",
+      "source": { "sourceId": "source:windows.native.registration-user-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Windows NetGetAadJoinInformation DSREG_JOIN_TYPE" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 24, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.entra-registration.device-id",
+      "capabilityIds": ["CAP-0005"],
+      "purpose": "Carry the bounded local Entra device identifier as Restricted evidence only when the structured API supplies it.",
+      "source": { "sourceId": "source:windows.native.registration-user-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Windows NetGetAadJoinInformation device identifier" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 64, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.entra-registration.tenant-id",
+      "capabilityIds": ["CAP-0005"],
+      "purpose": "Carry the bounded local Entra tenant identifier as Restricted evidence without authenticating to that tenant.",
+      "source": { "sourceId": "source:windows.native.registration-user-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Windows NetGetAadJoinInformation tenant identifier" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 64, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.work-school-registration.present",
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Record whether the default structured join information represents a device-default workplace registration without attributing it to the Assessment User.",
+      "source": { "sourceId": "source:windows.native.work-school-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "NetGetAadJoinInformation workplace-join projection" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.work-school-registration.identifier",
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Carry the bounded device-default workplace-registration identifier as Restricted evidence when Windows supplies it, without claiming that it identifies the Assessment User.",
+      "source": { "sourceId": "source:windows.native.work-school-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "NetGetAadJoinInformation join-user email projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.mdm-bridge.provider-available",
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Record only whether the predefined read-only LocalSystem MDM Bridge provider-presence query returned an instance.",
+      "source": { "sourceId": "source:windows.mdm-bridge.device-manageability", "kind": "StructuredWindowsSource", "authoritativeIdentity": "MDM_DeviceManageability_Provider01_01 read-only presence" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
     }
   ],
   "scopeDefinitions": [
@@ -329,7 +439,7 @@
     },
     {
       "scopeId": "scope:device.windows-context",
-      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness"],
+      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"],
       "capabilityIds": ["CAP-0001", "CAP-0002", "CAP-0004"],
       "purpose": "Close coverage for the bounded Device, Windows, activation, form, virtualization, chassis, battery, and power field set.",
       "fieldIds": [
@@ -358,7 +468,7 @@
     },
     {
       "scopeId": "scope:device.firmware-context",
-      "profileIds": ["profile:device-and-firmware-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for the bounded firmware interface and version context.",
       "fieldIds": [
@@ -370,7 +480,7 @@
     },
     {
       "scopeId": "scope:device.secure-boot",
-      "profileIds": ["profile:device-and-firmware-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for the applicable structured Secure Boot state.",
       "fieldIds": ["field:device.secure-boot.enabled"],
@@ -378,7 +488,7 @@
     },
     {
       "scopeId": "scope:device.tpm-readiness",
-      "profileIds": ["profile:device-and-firmware-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for bounded TPM presence, enabled, activated, and specification evidence.",
       "fieldIds": [
@@ -388,6 +498,38 @@
         "field:device.tpm.specification"
       ],
       "collectorIds": ["collector:windows.firmware-security"]
+    },
+    {
+      "scopeId": "scope:identity.assessment-user-context",
+      "profileIds": ["profile:device-firmware-and-identity-readiness"],
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Close coverage for the separately verified interactive Assessment User Context.",
+      "fieldIds": ["field:identity.assessment-user.verified", "field:identity.assessment-user.session-id", "field:identity.assessment-user.account-name"],
+      "collectorIds": ["collector:windows.registration-and-user-context"]
+    },
+    {
+      "scopeId": "scope:device.registration-context",
+      "profileIds": ["profile:device-firmware-and-identity-readiness"],
+      "capabilityIds": ["CAP-0005"],
+      "purpose": "Close coverage for locale-neutral domain and Entra registration context.",
+      "fieldIds": ["field:device.domain-join.state", "field:device.domain-join.name", "field:device.entra-registration.type", "field:device.entra-registration.device-id", "field:device.entra-registration.tenant-id"],
+      "collectorIds": ["collector:windows.registration-and-user-context"]
+    },
+    {
+      "scopeId": "scope:device.work-school-registration-context",
+      "profileIds": ["profile:device-firmware-and-identity-readiness"],
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Close coverage for the bounded device-default local work-or-school registration context without attributing it to a user.",
+      "fieldIds": ["field:device.work-school-registration.present", "field:device.work-school-registration.identifier"],
+      "collectorIds": ["collector:windows.work-school-context"]
+    },
+    {
+      "scopeId": "scope:device.mdm-policy.system",
+      "profileIds": ["profile:device-firmware-and-identity-readiness"],
+      "capabilityIds": ["CAP-0006"],
+      "purpose": "Close coverage for the predefined read-only LocalSystem MDM Bridge provider-presence query.",
+      "fieldIds": ["field:device.mdm-bridge.provider-available"],
+      "collectorIds": ["collector:windows.mdm-bridge.device-manageability"]
     }
   ],
   "vocabularies": {

@@ -29,7 +29,7 @@
         "queryKind": { "type": "string", "const": "DeviceManageabilityAvailability", "maximumUtf8Bytes": 64 }
       },
       "intendedScopeIds": ["scope:device.mdm-policy.system"],
-      "subjectIds": ["subject:synthetic-device:primary"],
+      "subjectIds": ["subject:device:primary"],
       "result": {
         "fieldId": "field:device.mdm-bridge.provider-available",
         "valueType": "Boolean",

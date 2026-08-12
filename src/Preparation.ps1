@@ -272,6 +272,11 @@ function New-PreparationPlan {
         # deadlines, interpretation rules, and no-write boundary before the
         # single preparation approval and before Windows may display UAC.
         firmwareReadiness = $Definition.firmwareReadiness
+        # Registration and enrollment use two standard-user native API
+        # projections and the one preapproved SYSTEM sub-plan. Freezing their
+        # complete release policy here prevents a later source, context, tenant
+        # request, or identifier field from being introduced after approval.
+        identityEnrollment = $Definition.identityEnrollment
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -423,6 +428,7 @@ function Invoke-PreparationGate {
     $protectedPackageFixturePath = [string] $ValidationContext.ProtectedPackageFixturePath
     $recipientSharingFixturePath = [string] $ValidationContext.RecipientSharingFixturePath
     $deviceReadinessFixturePath = [string] $ValidationContext.DeviceReadinessFixturePath
+    $identityEnrollmentFixturePath = [string] $ValidationContext.IdentityEnrollmentFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -497,7 +503,7 @@ function Invoke-PreparationGate {
         @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath,
             $systemCollectionFixturePath, $evidenceWorkspaceFixturePath,
             $protectedPackageFixturePath, $recipientSharingFixturePath,
-            $deviceReadinessFixturePath) |
+            $deviceReadinessFixturePath, $identityEnrollmentFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -552,6 +558,16 @@ function Invoke-PreparationGate {
     }
     if ($accepted -and -not [string]::IsNullOrWhiteSpace($deviceReadinessFixturePath)) {
         return Invoke-DeviceReadinessSlice -LiteralPath $deviceReadinessFixturePath `
+            -PreparationPlan $planResult.Plan `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($identityEnrollmentFixturePath)) {
+        return Invoke-DeviceReadinessSlice `
+            -IdentityEnrollmentLiteralPath $identityEnrollmentFixturePath `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `

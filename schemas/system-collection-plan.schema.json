@@ -95,7 +95,7 @@
           }
         },
         "intendedScopeIds": { "type": "array", "prefixItems": [{ "const": "scope:device.mdm-policy.system" }], "items": false },
-        "subjectIds": { "type": "array", "prefixItems": [{ "const": "subject:synthetic-device:primary" }], "items": false },
+        "subjectIds": { "type": "array", "prefixItems": [{ "const": "subject:device:primary" }], "items": false },
         "result": {
           "type": "object",
           "additionalProperties": false,

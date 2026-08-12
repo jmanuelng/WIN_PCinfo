@@ -19,6 +19,7 @@ $sourcePaths = @(
     'src/FirmwareReadiness.ps1'
     'src/PrivilegedCollectionPlan.ps1'
     'src/SystemCollectionPlan.ps1'
+    'src/IdentityEnrollment.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -58,6 +59,8 @@ $deviceReadinessPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0
 $deviceReadinessSchemaPath = Join-Path $repositoryRoot 'schemas/device-readiness.schema.json'
 $firmwareReadinessPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-firmware-readiness.json'
 $firmwareReadinessSchemaPath = Join-Path $repositoryRoot 'schemas/firmware-readiness.schema.json'
+$identityEnrollmentPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-identity-enrollment.json'
+$identityEnrollmentSchemaPath = Join-Path $repositoryRoot 'schemas/identity-enrollment.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
 $assessmentPackageManifestSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-package-manifest.schema.json'
 $recipientSharingPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
@@ -75,7 +78,8 @@ foreach ($requiredDefinitionPath in @(
     $protectedPackageEnvelopeSchemaPath, $assessmentPackageManifestSchemaPath,
     $recipientSharingPolicyPath, $recipientProfileSchemaPath, $recipientSharingSchemaPath,
     $deviceReadinessPolicyPath, $deviceReadinessSchemaPath,
-    $firmwareReadinessPolicyPath, $firmwareReadinessSchemaPath
+    $firmwareReadinessPolicyPath, $firmwareReadinessSchemaPath,
+    $identityEnrollmentPolicyPath, $identityEnrollmentSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -152,6 +156,12 @@ $firmwareReadinessPolicyDigest = Get-Sha256Hex -Bytes $firmwareReadinessPolicyBy
 $firmwareReadinessPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
     $firmwareReadinessPolicyBytes
 )
+$identityEnrollmentPolicyBytes = Get-Utf8LfBytes -LiteralPath $identityEnrollmentPolicyPath
+$identityEnrollmentPolicyBase64 = [System.Convert]::ToBase64String($identityEnrollmentPolicyBytes)
+$identityEnrollmentPolicyDigest = Get-Sha256Hex -Bytes $identityEnrollmentPolicyBytes
+$identityEnrollmentPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+    $identityEnrollmentPolicyBytes
+)
 if (-not (Test-Json -Json $approvedCollectorCatalogJson -SchemaFile $approvedCollectorCatalogSchemaPath)) {
     throw 'The approved collector catalog does not satisfy its release schema.'
 }
@@ -178,6 +188,9 @@ if (-not (Test-Json -Json $deviceReadinessPolicyJson -SchemaFile $deviceReadines
 }
 if (-not (Test-Json -Json $firmwareReadinessPolicyJson -SchemaFile $firmwareReadinessSchemaPath)) {
     throw 'The Firmware Readiness policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $identityEnrollmentPolicyJson -SchemaFile $identityEnrollmentSchemaPath)) {
+    throw 'The Identity and Enrollment policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -225,6 +238,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/recipient-sharing.schema.json'
     'schemas/device-readiness.schema.json'
     'schemas/firmware-readiness.schema.json'
+    'schemas/identity-enrollment.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -235,6 +249,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
     'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
     'docs/spec/releases/2.0.0-preview.1-firmware-readiness.json'
+    'docs/spec/releases/2.0.0-preview.1-identity-enrollment.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -261,6 +276,7 @@ $preparationDefinition = [pscustomobject][ordered]@{
     operations = @($preparationPlan.operations)
     deviceReadiness = ($deviceReadinessPolicyJson | ConvertFrom-Json -Depth 20)
     firmwareReadiness = ($firmwareReadinessPolicyJson | ConvertFrom-Json -Depth 20)
+    identityEnrollment = ($identityEnrollmentPolicyJson | ConvertFrom-Json -Depth 20)
     requiredFreeDiskMiB = [int] $preparationPlan.requiredFreeDiskMiB
     governingResources = @(
         foreach ($path in @(
@@ -411,6 +427,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__FIRMWARE_READINESS_POLICY_SHA256__', $firmwareReadinessPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/IdentityEnrollment.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__IDENTITY_ENROLLMENT_POLICY_BASE64__', $identityEnrollmentPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__IDENTITY_ENROLLMENT_POLICY_SHA256__', $identityEnrollmentPolicyDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"

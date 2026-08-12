@@ -58,7 +58,7 @@
           "cancellationGraceMilliseconds": 750,
           "terminationVerificationMilliseconds": 2000,
           "intendedScopeIds": ["scope:synthetic.device.os"],
-          "subjectIds": ["subject:synthetic-device:primary"]
+          "subjectIds": ["subject:device:primary"]
         }
       ]
     },

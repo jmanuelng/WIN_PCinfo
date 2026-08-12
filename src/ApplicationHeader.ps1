@@ -107,7 +107,13 @@ param(
     # A Device Readiness fixture selects one release-owned adapter scenario.
     # It cannot provide device evidence, a query, command, path, or authority.
     [Parameter(DontShow)]
-    [string] $DeviceReadinessFixturePath
+    [string] $DeviceReadinessFixturePath,
+
+    # An Identity and Enrollment fixture selects one release-owned source and
+    # process-context scenario. It cannot supply an identifier, account, tenant,
+    # domain, device, command, source path, credential, or collection authority.
+    [Parameter(DontShow)]
+    [string] $IdentityEnrollmentFixturePath
 )
 
 Set-StrictMode -Version Latest
