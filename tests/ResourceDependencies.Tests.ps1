@@ -44,6 +44,15 @@ foreach($contradiction in @(
     Assert-Equal $false (Test-ResourceDependenciesCollectorPayload -Payload $contextPayload -Policy $policy) 'contradictory user-verification tuples cannot authorize evidence or completed absence'
 }
 
+$postVerificationFailure=New-ResourceDependencyGapPayload -Policy $policy -State Failed `
+    -ReasonCode 'RESOURCE.SOURCE_FAILED' -Relationship SameUser -ObservedContext StandardUser
+Assert-Equal $true $postVerificationFailure.assessmentUserContextVerified 'post-verification source failure preserves the established Assessment User context'
+Assert-Equal $true (Test-ResourceDependenciesCollectorPayload -Payload $postVerificationFailure -Policy $policy) 'post-verification source failure remains a valid all-scope gap payload'
+$corruptEnvelope=[pscustomobject]@{unexpected='property'}
+$corruptResult=ConvertTo-ResourceDependencyAttemptPayload -Payload $corruptEnvelope -Policy $policy
+Assert-Equal $true $corruptResult.assessmentUserContextVerified 'corrupt worker envelope cannot erase the already verified process context'
+Assert-Equal $true (Test-ResourceDependenciesCollectorPayload -Payload $corruptResult -Policy $policy) 'corrupt worker envelope becomes a typed contract-valid malformed gap'
+
 $expectations=@(
     @{scenario='MappedDrive';mapped=1;unc=0;printers=0;peripherals=0;user='Complete';peripheral='Complete'},
     @{scenario='DisconnectedDrive';mapped=1;unc=0;printers=0;peripherals=0;user='Complete';peripheral='Complete'},

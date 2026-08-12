@@ -473,7 +473,7 @@ function New-ResourceDependencyGapPayload {
         [Parameter(Mandatory)][string]$ObservedContext
     )
     [pscustomobject][ordered]@{
-        sourceLocale='und';assessmentUserContextVerified=$false;processRelationship=$Relationship
+        sourceLocale='und';assessmentUserContextVerified=($Relationship -eq 'SameUser');processRelationship=$Relationship
         mappedDrives=@();uncConnections=@();printers=@();printerDrivers=@();peripherals=@()
         scopeStates=@($Policy.scopes|ForEach-Object {
             New-ResourceDependencyScopeState -ScopeId ([string]$_.scopeId) -State $State -ReasonCode $ReasonCode
