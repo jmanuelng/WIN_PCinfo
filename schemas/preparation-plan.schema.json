@@ -14,6 +14,7 @@
     "deviceReadiness",
     "firmwareReadiness",
     "identityEnrollment",
+    "administratorExposure",
     "privilege",
     "dependencies",
     "estimates",
@@ -465,6 +466,68 @@
           "Workgroup", "DomainJoined", "EntraJoined", "Registered", "Mixed", "Unenrolled",
           "UserContextUnavailable", "StandardUser", "Administrator", "LocalSystem",
           "NonEnglish", "Malformed", "Denied"
+        ]
+      }
+    },
+    "administratorExposure": {
+      "const": {
+        "kind": "win-pcinfo.administrator-exposure-policy",
+        "contractVersion": "1.0.0",
+        "release": "2.0.0-preview.1",
+        "policyId": "win-pcinfo.administrator-exposure/1.0.0",
+        "evidenceProfileId": "profile:device-firmware-identity-and-administrator-readiness",
+        "administratorsGroup": {
+          "identity": "BuiltinAdministratorsAlias",
+          "selection": "LookupBuiltinSidThenNetLocalGroupGetMembersLevel0"
+        },
+        "membershipSemantics": "DirectMembersOnly",
+        "collectors": [{
+          "collectorId": "collector:windows.local-administrators.direct-members",
+          "collectorVersion": "1.0.0",
+          "operationId": "observe-local-administrators",
+          "source": "Release-embedded NetLocalGroupGetMembers level-0 SID projection selected through the built-in Administrators SID",
+          "executionContext": "Administrator",
+          "privilege": "RequiresAdministrator",
+          "networkBehavior": "OfflineOnly",
+          "executable": "ActiveMicrosoftSignedPowerShellHost",
+          "dependencies": ["Windows NetLocalGroupGetMembers API", "Windows SID APIs"],
+          "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+          "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+          "deadlineMilliseconds": 5000, "resultMaximumUtf8Bytes": 16384,
+          "maximumDirectMembers": 8,
+          "cleanup": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent"
+        }],
+        "scopes": [{
+          "scopeId": "scope:device.local-administrators.direct-membership",
+          "fieldIds": [
+            "field:device.local-administrators.group-sid",
+            "field:device.local-administrators.enumeration-complete",
+            "field:device.local-administrators.direct-member-count",
+            "field:principal.windows.sid", "field:principal.windows.account-name",
+            "field:principal.windows.kind", "field:principal.windows.origin",
+            "field:principal.local-administrator.direct-member"
+          ]
+        }],
+        "rules": [{
+          "findingKind": "local-administrator-exposure",
+          "ruleId": "rule:identity.local-administrator-exposure/1.0.0",
+          "operationId": "op:rule.local-administrator-exposure.evaluate",
+          "source": "ReleaseEmbeddedValidatedObservationRule",
+          "executionContext": "InProcessValidatedAssessmentRecord",
+          "privilege": "NoElevation", "networkBehavior": "OfflineOnly",
+          "executable": "NoneInProcess", "dependencies": [],
+          "mayPrompt": false, "mayInstall": false, "mayDownload": false,
+          "maySelfElevate": false, "writesAllowed": false, "maximumAttempts": 1,
+          "deadlineMilliseconds": 100, "maximumInputObservations": 16,
+          "maximumOutputFindings": 1, "cleanup": "NoArtifacts",
+          "missingEvidenceOutcome": "Indeterminate",
+          "expectedAccountContext": "OrganizationDefinedNotLocallyProvable",
+          "compromiseConclusionAllowed": false, "automaticRemovalAllowed": false
+        }],
+        "validationScenarios": [
+          "LocalPrincipal", "DomainPrincipal", "NestedGroup", "UnresolvedSid",
+          "DuplicateMembership", "AlternateAdministrator", "Denied", "Partial",
+          "NonEnglish", "ElevationDenied"
         ]
       }
     },

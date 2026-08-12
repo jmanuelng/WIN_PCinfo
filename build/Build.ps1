@@ -20,6 +20,7 @@ $sourcePaths = @(
     'src/PrivilegedCollectionPlan.ps1'
     'src/SystemCollectionPlan.ps1'
     'src/IdentityEnrollment.ps1'
+    'src/AdministratorExposure.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -61,6 +62,8 @@ $firmwareReadinessPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0
 $firmwareReadinessSchemaPath = Join-Path $repositoryRoot 'schemas/firmware-readiness.schema.json'
 $identityEnrollmentPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-identity-enrollment.json'
 $identityEnrollmentSchemaPath = Join-Path $repositoryRoot 'schemas/identity-enrollment.schema.json'
+$administratorExposurePolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-administrator-exposure.json'
+$administratorExposureSchemaPath = Join-Path $repositoryRoot 'schemas/administrator-exposure.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
 $assessmentPackageManifestSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-package-manifest.schema.json'
 $recipientSharingPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
@@ -79,7 +82,8 @@ foreach ($requiredDefinitionPath in @(
     $recipientSharingPolicyPath, $recipientProfileSchemaPath, $recipientSharingSchemaPath,
     $deviceReadinessPolicyPath, $deviceReadinessSchemaPath,
     $firmwareReadinessPolicyPath, $firmwareReadinessSchemaPath,
-    $identityEnrollmentPolicyPath, $identityEnrollmentSchemaPath
+    $identityEnrollmentPolicyPath, $identityEnrollmentSchemaPath,
+    $administratorExposurePolicyPath, $administratorExposureSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -162,6 +166,12 @@ $identityEnrollmentPolicyDigest = Get-Sha256Hex -Bytes $identityEnrollmentPolicy
 $identityEnrollmentPolicyJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
     $identityEnrollmentPolicyBytes
 )
+$administratorExposurePolicyBytes = Get-Utf8LfBytes -LiteralPath $administratorExposurePolicyPath
+$administratorExposurePolicyBase64 = [Convert]::ToBase64String($administratorExposurePolicyBytes)
+$administratorExposurePolicyDigest = Get-Sha256Hex -Bytes $administratorExposurePolicyBytes
+$administratorExposurePolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $administratorExposurePolicyBytes
+)
 if (-not (Test-Json -Json $approvedCollectorCatalogJson -SchemaFile $approvedCollectorCatalogSchemaPath)) {
     throw 'The approved collector catalog does not satisfy its release schema.'
 }
@@ -191,6 +201,9 @@ if (-not (Test-Json -Json $firmwareReadinessPolicyJson -SchemaFile $firmwareRead
 }
 if (-not (Test-Json -Json $identityEnrollmentPolicyJson -SchemaFile $identityEnrollmentSchemaPath)) {
     throw 'The Identity and Enrollment policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $administratorExposurePolicyJson -SchemaFile $administratorExposureSchemaPath)) {
+    throw 'The Administrator Exposure policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -239,6 +252,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/device-readiness.schema.json'
     'schemas/firmware-readiness.schema.json'
     'schemas/identity-enrollment.schema.json'
+    'schemas/administrator-exposure.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -250,6 +264,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
     'docs/spec/releases/2.0.0-preview.1-firmware-readiness.json'
     'docs/spec/releases/2.0.0-preview.1-identity-enrollment.json'
+    'docs/spec/releases/2.0.0-preview.1-administrator-exposure.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -277,6 +292,7 @@ $preparationDefinition = [pscustomobject][ordered]@{
     deviceReadiness = ($deviceReadinessPolicyJson | ConvertFrom-Json -Depth 20)
     firmwareReadiness = ($firmwareReadinessPolicyJson | ConvertFrom-Json -Depth 20)
     identityEnrollment = ($identityEnrollmentPolicyJson | ConvertFrom-Json -Depth 20)
+    administratorExposure = ($administratorExposurePolicyJson | ConvertFrom-Json -Depth 20)
     requiredFreeDiskMiB = [int] $preparationPlan.requiredFreeDiskMiB
     governingResources = @(
         foreach ($path in @(
@@ -435,6 +451,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__IDENTITY_ENROLLMENT_POLICY_SHA256__', $identityEnrollmentPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/AdministratorExposure.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__ADMINISTRATOR_EXPOSURE_POLICY_BASE64__', $administratorExposurePolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__ADMINISTRATOR_EXPOSURE_POLICY_SHA256__', $administratorExposurePolicyDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"

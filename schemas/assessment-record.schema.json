@@ -37,7 +37,7 @@
         "runId": { "$ref": "#/$defs/id" },
         "outcome": { "enum": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"] },
         "validationFixture": { "type": "boolean" },
-        "evidenceProfileId": { "enum": ["profile:synthetic-contract-tracer", "profile:device-windows-readiness", "profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"] }
+        "evidenceProfileId": { "enum": ["profile:synthetic-contract-tracer", "profile:device-windows-readiness", "profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"] }
       }
     },
     "subjects": {
@@ -50,20 +50,20 @@
         "required": ["subjectId", "kind"],
         "properties": {
           "subjectId": { "$ref": "#/$defs/id" },
-          "kind": { "enum": ["Device", "User", "Application", "Interface", "OtherSynthetic"] }
+          "kind": { "enum": ["Device", "User", "SecurityPrincipal", "Application", "Interface", "OtherSynthetic"] }
         }
       }
     },
     "provenance": {
       "type": "array",
       "minItems": 0,
-      "maxItems": 64,
+      "maxItems": 96,
       "items": { "$ref": "#/$defs/provenance" }
     },
     "observations": {
       "type": "array",
       "minItems": 0,
-      "maxItems": 64,
+      "maxItems": 96,
       "items": { "$ref": "#/$defs/observation" }
     },
     "coverage": {

@@ -38,6 +38,7 @@ $expectedSourcePaths = @(
     'src/PrivilegedCollectionPlan.ps1'
     'src/SystemCollectionPlan.ps1'
     'src/IdentityEnrollment.ps1'
+    'src/AdministratorExposure.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -76,6 +77,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/device-readiness.schema.json'
     'schemas/firmware-readiness.schema.json'
     'schemas/identity-enrollment.schema.json'
+    'schemas/administrator-exposure.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -87,6 +89,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
     'docs/spec/releases/2.0.0-preview.1-firmware-readiness.json'
     'docs/spec/releases/2.0.0-preview.1-identity-enrollment.json'
+    'docs/spec/releases/2.0.0-preview.1-administrator-exposure.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq
     (@($expectedApplicationResourcePaths | Sort-Object) -join '|')) `

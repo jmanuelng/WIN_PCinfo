@@ -113,7 +113,13 @@ param(
     # process-context scenario. It cannot supply an identifier, account, tenant,
     # domain, device, command, source path, credential, or collection authority.
     [Parameter(DontShow)]
-    [string] $IdentityEnrollmentFixturePath
+    [string] $IdentityEnrollmentFixturePath,
+
+    # A Local Administrator Exposure fixture selects one release-owned SID and
+    # context scenario. It cannot provide a group name, SID, account, member,
+    # credential, command, path, collector, or authority.
+    [Parameter(DontShow)]
+    [string] $AdministratorExposureFixturePath
 )
 
 Set-StrictMode -Version Latest

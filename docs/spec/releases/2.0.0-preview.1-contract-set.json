@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.2.0",
+  "contractVersion": "1.3.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
@@ -9,11 +9,11 @@
     "prohibited-material-omission"
   ],
   "limits": {
-    "maximumDocumentUtf8Bytes": 65536,
+    "maximumDocumentUtf8Bytes": 131072,
     "maximumJsonDepth": 16,
     "maximumSafeInteger": 9007199254740991,
     "maximumStringUtf8Bytes": 1024,
-    "maximumArrayItems": 64
+    "maximumArrayItems": 96
   },
   "schemas": [
     {
@@ -409,6 +409,86 @@
       "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
       "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
       "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.local-administrators.group-sid",
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "Bind direct membership to the stable built-in Administrators alias without relying on its localized display name.",
+      "source": { "sourceId": "source:windows.native.local-administrators", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Well-known SID S-1-5-32-544 resolved only for NetLocalGroupGetMembers selection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.local-administrators.enumeration-complete",
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "State whether the bounded direct-membership enumeration completed so missing evidence cannot be interpreted as an empty group.",
+      "source": { "sourceId": "source:windows.native.local-administrators", "kind": "StructuredWindowsSource", "authoritativeIdentity": "NetLocalGroupGetMembers completion and resume-handle accounting" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:device.local-administrators.direct-member-count",
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "Count only the distinct direct member SIDs admitted within the release evidence bound.",
+      "source": { "sourceId": "source:windows.native.local-administrators", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Distinct level-0 NetLocalGroupGetMembers entries admitted by SID" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 2, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:principal.windows.sid",
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "Identify one directly observed Windows security principal by stable SID inside Restricted evidence.",
+      "source": { "sourceId": "source:windows.native.local-administrators", "kind": "StructuredWindowsSource", "authoritativeIdentity": "LOCALGROUP_MEMBERS_INFO_0 SID converted with Windows SID APIs" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 184, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:principal.windows.account-name",
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "Carry the bounded account name returned with a direct member when Windows resolves it, without using it as authoritative identity.",
+      "source": { "sourceId": "source:windows.native.local-administrators", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Optional release-bounded account label associated with a synthetic or locally resolved SID" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:principal.windows.kind",
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "Preserve the structured Windows SID-use classification without expanding a group member.",
+      "source": { "sourceId": "source:windows.native.local-administrators", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Bounded collector classification when the admitted source can establish it; the level-0 live source remains Unknown" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:principal.windows.origin",
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "Classify a direct principal as local, domain, built-in, or unresolved using stable SID structure and the local account-domain SID.",
+      "source": { "sourceId": "source:windows.native.local-administrators", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Explicit bounded collector origin when established; the level-0 live source remains Unresolved" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:principal.local-administrator.direct-member",
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "Record only the directly observed membership relationship to the built-in Administrators group.",
+      "source": { "sourceId": "source:windows.native.local-administrators", "kind": "StructuredWindowsSource", "authoritativeIdentity": "One admitted NetLocalGroupGetMembers level-0 SID entry" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
+      "publicEligibility": { "definition": true, "values": false }
     }
   ],
   "scopeDefinitions": [
@@ -439,7 +519,7 @@
     },
     {
       "scopeId": "scope:device.windows-context",
-      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"],
+      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
       "capabilityIds": ["CAP-0001", "CAP-0002", "CAP-0004"],
       "purpose": "Close coverage for the bounded Device, Windows, activation, form, virtualization, chassis, battery, and power field set.",
       "fieldIds": [
@@ -468,7 +548,7 @@
     },
     {
       "scopeId": "scope:device.firmware-context",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for the bounded firmware interface and version context.",
       "fieldIds": [
@@ -480,7 +560,7 @@
     },
     {
       "scopeId": "scope:device.secure-boot",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for the applicable structured Secure Boot state.",
       "fieldIds": ["field:device.secure-boot.enabled"],
@@ -488,7 +568,7 @@
     },
     {
       "scopeId": "scope:device.tpm-readiness",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for bounded TPM presence, enabled, activated, and specification evidence.",
       "fieldIds": [
@@ -501,7 +581,7 @@
     },
     {
       "scopeId": "scope:identity.assessment-user-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the separately verified interactive Assessment User Context.",
       "fieldIds": ["field:identity.assessment-user.verified", "field:identity.assessment-user.session-id", "field:identity.assessment-user.account-name"],
@@ -509,7 +589,7 @@
     },
     {
       "scopeId": "scope:device.registration-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
       "capabilityIds": ["CAP-0005"],
       "purpose": "Close coverage for locale-neutral domain and Entra registration context.",
       "fieldIds": ["field:device.domain-join.state", "field:device.domain-join.name", "field:device.entra-registration.type", "field:device.entra-registration.device-id", "field:device.entra-registration.tenant-id"],
@@ -517,7 +597,7 @@
     },
     {
       "scopeId": "scope:device.work-school-registration-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the bounded device-default local work-or-school registration context without attributing it to a user.",
       "fieldIds": ["field:device.work-school-registration.present", "field:device.work-school-registration.identifier"],
@@ -525,11 +605,28 @@
     },
     {
       "scopeId": "scope:device.mdm-policy.system",
-      "profileIds": ["profile:device-firmware-and-identity-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the predefined read-only LocalSystem MDM Bridge provider-presence query.",
       "fieldIds": ["field:device.mdm-bridge.provider-available"],
       "collectorIds": ["collector:windows.mdm-bridge.device-manageability"]
+    },
+    {
+      "scopeId": "scope:device.local-administrators.direct-membership",
+      "profileIds": ["profile:device-firmware-identity-and-administrator-readiness"],
+      "capabilityIds": ["CAP-0007"],
+      "purpose": "Close coverage for the bounded direct membership of the SID-selected built-in Administrators group without expanding nested effective access.",
+      "fieldIds": [
+        "field:device.local-administrators.group-sid",
+        "field:device.local-administrators.enumeration-complete",
+        "field:device.local-administrators.direct-member-count",
+        "field:principal.windows.sid",
+        "field:principal.windows.account-name",
+        "field:principal.windows.kind",
+        "field:principal.windows.origin",
+        "field:principal.local-administrator.direct-member"
+      ],
+      "collectorIds": ["collector:windows.local-administrators.direct-members"]
     }
   ],
   "vocabularies": {

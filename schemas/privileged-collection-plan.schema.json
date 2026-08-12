@@ -45,7 +45,7 @@
         "acl": { "const": "InitiatingUserAndAdministrators" },
         "requirePeerProcessId": { "const": true },
         "requireArtifactDigest": { "const": true },
-        "assessmentEvidenceContract": { "const": "FirmwareTpmProjectionV1Only" }
+        "assessmentEvidenceContract": { "const": "FirmwareTpmAndLocalAdministratorsProjectionV1" }
       }
     },
     "worker": {

@@ -2,7 +2,7 @@
 
 WIN-PCInfo has a narrow Privileged Collection Plan runner that executes the four Administrator operations already shown in the approved Preparation Summary as one contiguous Privileged Collection Phase. The plan is immutable and run-bound. Its original no-evidence tracer remains the default validation operation. The firmware-readiness slice may additionally return only the exact private `FirmwareTpmProjectionV1` declared by the release policy; it does not create a general assessment-evidence channel, deliver a Product Capability, or make Preview/Supported claims.
 
-The prepared LocalSystem operation is not added to this administrator worker. It is reduced again into a separate [SYSTEM Collection Sub-plan](system-collection-sub-plan.md), because Administrator and LocalSystem are different Windows trust contexts. This keeps the four-operation administrator interface unchanged and prevents a SYSTEM-only source from silently widening it.
+The prepared LocalSystem operation is not added to this administrator worker. It is reduced again into a separate [SYSTEM Collection Sub-plan](system-collection-sub-plan.md), because Administrator and LocalSystem are different Windows trust contexts. The administrator worker carries only the frozen operations, including the direct local-administrator SID projection, and cannot become a SYSTEM command channel.
 
 The generated application exposes the same contract through hidden synthetic validation fixtures and integrates the firmware projection through canonical validation, reporting, and packaging. A local development build is unsigned and therefore fails Preparation integrity before ordinary collection. These limitations prevent repository validation from becoming an accidental product-completion claim.
 

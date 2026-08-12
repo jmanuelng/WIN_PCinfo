@@ -187,6 +187,7 @@ $usingProtectedPackageFixture = -not [string]::IsNullOrWhiteSpace($ProtectedPack
 $usingRecipientSharingFixture = -not [string]::IsNullOrWhiteSpace($RecipientSharingFixturePath)
 $usingDeviceReadinessFixture = -not [string]::IsNullOrWhiteSpace($DeviceReadinessFixturePath)
 $usingIdentityEnrollmentFixture = -not [string]::IsNullOrWhiteSpace($IdentityEnrollmentFixturePath)
+$usingAdministratorExposureFixture = -not [string]::IsNullOrWhiteSpace($AdministratorExposureFixturePath)
 $validationContext = [pscustomobject][ordered]@{
     PreparationFixturePath = $PreparationFixturePath
     ContractFixturePath = $ContractFixturePath
@@ -198,11 +199,13 @@ $validationContext = [pscustomobject][ordered]@{
     RecipientSharingFixturePath = $RecipientSharingFixturePath
     DeviceReadinessFixturePath = $DeviceReadinessFixturePath
     IdentityEnrollmentFixturePath = $IdentityEnrollmentFixturePath
+    AdministratorExposureFixturePath = $AdministratorExposureFixturePath
     IsFixture = ($usingRuntimeFixture -or $usingPreparationFixture -or
         $usingContractFixture -or $usingRunFixture -or $usingPrivilegedCollectionFixture -or
         $usingSystemCollectionFixture -or $usingEvidenceWorkspaceFixture -or
         $usingProtectedPackageFixture -or $usingRecipientSharingFixture -or
-        $usingDeviceReadinessFixture -or $usingIdentityEnrollmentFixture)
+        $usingDeviceReadinessFixture -or $usingIdentityEnrollmentFixture -or
+        $usingAdministratorExposureFixture)
 }
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
     -Mode $Mode -AcceptPreparation:$AcceptPreparation -ValidationContext $validationContext `

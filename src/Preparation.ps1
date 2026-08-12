@@ -277,6 +277,10 @@ function New-PreparationPlan {
         # complete release policy here prevents a later source, context, tenant
         # request, or identifier field from being introduced after approval.
         identityEnrollment = $Definition.identityEnrollment
+        # Direct local-Administrators membership shares the one frozen
+        # Administrator boundary. Its SID-selected source, evidence ceiling,
+        # direct-only semantics, and no-remediation rule are approved here.
+        administratorExposure = $Definition.administratorExposure
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -429,6 +433,7 @@ function Invoke-PreparationGate {
     $recipientSharingFixturePath = [string] $ValidationContext.RecipientSharingFixturePath
     $deviceReadinessFixturePath = [string] $ValidationContext.DeviceReadinessFixturePath
     $identityEnrollmentFixturePath = [string] $ValidationContext.IdentityEnrollmentFixturePath
+    $administratorExposureFixturePath = [string] $ValidationContext.AdministratorExposureFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -503,7 +508,8 @@ function Invoke-PreparationGate {
         @($contractFixturePath, $runFixturePath, $privilegedCollectionFixturePath,
             $systemCollectionFixturePath, $evidenceWorkspaceFixturePath,
             $protectedPackageFixturePath, $recipientSharingFixturePath,
-            $deviceReadinessFixturePath, $identityEnrollmentFixturePath) |
+            $deviceReadinessFixturePath, $identityEnrollmentFixturePath,
+            $administratorExposureFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -568,6 +574,23 @@ function Invoke-PreparationGate {
     if ($accepted -and -not [string]::IsNullOrWhiteSpace($identityEnrollmentFixturePath)) {
         return Invoke-DeviceReadinessSlice `
             -IdentityEnrollmentLiteralPath $identityEnrollmentFixturePath `
+            -PreparationPlan $planResult.Plan `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($administratorExposureFixturePath)) {
+        # This public event describes scheduling only. Principal identifiers
+        # remain behind the Restricted collector boundary and cannot enter the
+        # message, phase, completion unit, or any other progress property.
+        Write-ContractRecord (New-ProgressRecord -Sequence 5 -Phase 'Collection' `
+            -State 'Started' -MessageId 'administrator-exposure.collection.started' `
+            -CompletedUnits 0 -TotalUnits 1 -Unit 'AdministratorExposure') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return Invoke-DeviceReadinessSlice `
+            -AdministratorExposureLiteralPath $administratorExposureFixturePath `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `
