@@ -38,7 +38,7 @@
     "manifestContract": "win-pcinfo.assessment-package-manifest/1.0.0",
     "deterministic": true,
     "artifacts": [
-      { "relativePath": "assessment-record.json", "mediaType": "application/json", "required": true, "maximumBytes": 262144 },
+      { "relativePath": "assessment-record.json", "mediaType": "application/json", "required": true, "maximumBytes": 524288 },
       { "relativePath": "assessment-report.html", "mediaType": "text/html", "required": true, "maximumBytes": 262144 }
     ],
     "maximumEntryCount": 3,

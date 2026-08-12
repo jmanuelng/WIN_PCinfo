@@ -23,7 +23,7 @@ Before schema or semantic interpretation, the validator applies I-JSON-style saf
 - no duplicate property names;
 - valid Unicode scalar pairs;
 - interoperable integers from `-9007199254740991` through `9007199254740991` and finite floating-point numbers;
-- at most 16 JSON levels, 256 KiB per Contract Set 1.4 document, 1 KiB per ordinary string, and the smaller field-specific bounds in the Contract Set.
+- at most 16 JSON levels, 512 KiB per Contract Set 1.5 document, 1 KiB per ordinary string, and the smaller field-specific bounds in the Contract Set.
 
 Failures expose stable codes such as `CONTRACT.JSON_INVALID`, `CONTRACT.DUPLICATE_PROPERTY`, `CONTRACT.REQUIRED_FEATURE_UNSUPPORTED`, `CONTRACT.REFERENCE_INVALID`, `CONTRACT.COVERAGE_INCONSISTENT`, or `CONTRACT.PRIVACY_VIOLATION`. Parser exceptions, source values, and secret-like input are not copied into the public result.
 

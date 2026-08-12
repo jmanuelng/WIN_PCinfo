@@ -1,0 +1,100 @@
+{
+  "kind": "win-pcinfo.resource-dependencies-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.resource-dependencies/1.0.0",
+  "evidenceProfileId": "profile:device-firmware-identity-administrator-policy-and-resource-dependencies",
+  "layers": [
+    {
+      "layerId": "UserResourceDependencies",
+      "purpose": "Mapped drives, UNC connections, and printers observed only in the verified Assessment User Context.",
+      "scopeIds": ["scope:resource.mapped-drives", "scope:resource.unc-connections", "scope:resource.printers"]
+    },
+    {
+      "layerId": "PeripheralDependencies",
+      "purpose": "Printer-driver and common peripheral dependencies observed without probing device contents or identifiers.",
+      "scopeIds": ["scope:resource.printer-drivers", "scope:resource.common-peripherals"]
+    }
+  ],
+  "collector": {
+    "collectorId": "collector:windows.resource-dependencies",
+    "collectorVersion": "1.0.0",
+    "operationId": "observe-user-dependencies",
+    "source": "Release-owned projection of CurrentUser mapped-resource definitions and exact CIM resource, printer, driver, and peripheral properties",
+    "executionContext": "StandardUser",
+    "privilege": "NoElevation",
+    "networkBehavior": "OfflineOnly",
+    "executable": "ActiveMicrosoftSignedPowerShellHost",
+    "dependencies": ["Microsoft.Win32.Registry", "Windows CIM provider"],
+    "mayPrompt": false,
+    "mayInstall": false,
+    "mayDownload": false,
+    "maySelfElevate": false,
+    "writesAllowed": false,
+    "maximumAttempts": 1,
+    "deadlineMilliseconds": 5000,
+    "resultMaximumUtf8Bytes": 32768,
+    "maximumMappedDrives": 8,
+    "maximumUncConnections": 8,
+    "maximumPrinters": 8,
+    "maximumPrinterDrivers": 8,
+    "maximumPeripherals": 8,
+    "cleanup": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent"
+  },
+  "sourceCatalog": [
+    {
+      "sourceId": "source:windows.current-user.mapped-resources",
+      "interface": "Microsoft.Win32.Registry.CurrentUser.NetworkReadOnly",
+      "approvedProperties": ["LocalName", "RemotePath", "ProviderName"],
+      "limitation": "DefinitionsOnlyNoConnectionNoCredentialOrContentAccess"
+    },
+    {
+      "sourceId": "source:windows.cim.network-connections",
+      "interface": "Win32_NetworkConnection",
+      "approvedProperties": ["LocalName", "RemoteName", "ConnectionState", "ProviderName"],
+      "limitation": "ConnectionMetadataOnlyNoRemoteEnumeration"
+    },
+    {
+      "sourceId": "source:windows.local.mapped-resource-correlation",
+      "interface": "ReleaseOwnedCurrentUserNetworkAndWin32NetworkConnectionCorrelation",
+      "approvedProperties": ["LocalName", "RemotePath", "RemoteName", "ConnectionState", "ProviderName"],
+      "limitation": "ExactLocalNameCorrelationOnlyNoRemoteEnumerationOrCredentialAccess"
+    },
+    {
+      "sourceId": "source:windows.cim.printers-and-drivers",
+      "interface": "Win32_PrinterAndWin32_PrinterDriver",
+      "approvedProperties": ["Name", "PortName", "DriverName", "Network", "Local", "Default", "WorkOffline", "Manufacturer", "DriverVersion", "InfName"],
+      "limitation": "ConfigurationMetadataOnlyNoPrintJobsOrPrinting"
+    },
+    {
+      "sourceId": "source:windows.cim.common-peripheral-drivers",
+      "interface": "Win32_PnPSignedDriver",
+      "approvedProperties": ["DeviceClass", "DeviceName", "Manufacturer", "DriverProviderName", "DriverVersion", "InfName", "IsSigned"],
+      "limitation": "ReleaseClassCatalogOnlyNoPnpDeviceIdOrSerialNumber"
+    }
+  ],
+  "peripheralClassCatalog": ["Bluetooth", "HIDClass", "Image", "Keyboard", "MEDIA", "Mouse", "Printer", "USB"],
+  "scopes": [
+    {"scopeId":"scope:resource.mapped-drives","fieldIds":["field:resource.mapped-drive.local-name","field:resource.mapped-drive.remote-endpoint","field:resource.mapped-drive.connection-state","field:resource.mapped-drive.provider-name"]},
+    {"scopeId":"scope:resource.unc-connections","fieldIds":["field:resource.share.endpoint","field:resource.connection-state","field:resource.provider-name"]},
+    {"scopeId":"scope:resource.printers","fieldIds":["field:resource.printer.name","field:resource.printer.port-name","field:resource.printer.driver-name","field:resource.printer.network","field:resource.printer.default","field:resource.printer.offline"]},
+    {"scopeId":"scope:resource.printer-drivers","fieldIds":["field:resource.printer-driver.name","field:resource.printer-driver.manufacturer","field:resource.printer-driver.version","field:resource.printer-driver.inf-name"]},
+    {"scopeId":"scope:resource.common-peripherals","fieldIds":["field:resource.peripheral.class","field:resource.peripheral.name","field:resource.peripheral.manufacturer","field:resource.peripheral.driver-provider","field:resource.peripheral.driver-version","field:resource.peripheral.driver-inf-name","field:resource.peripheral.driver-signed"]}
+  ],
+  "rules": [
+    {
+      "findingKind":"user-resource-migration-dependencies","ruleId":"rule:resource.user-migration-dependencies/1.0.0","operationId":"op:rule.resource.user-migration-dependencies.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":96,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"
+    },
+    {
+      "findingKind":"peripheral-migration-dependencies","ruleId":"rule:resource.peripheral-migration-dependencies/1.0.0","operationId":"op:rule.resource.peripheral-migration-dependencies.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":96,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"
+    },
+    {
+      "findingKind":"resource-dependency-coverage","ruleId":"rule:resource.dependency-coverage/1.0.0","operationId":"op:rule.resource.dependency-coverage.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":160,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"
+    }
+  ],
+  "recommendations": [
+    {"definitionId":"recommendation:resource.validate-user-resources/1.0.0","findingKind":"user-resource-migration-dependencies","purpose":"Confirm required shares and printers in the target user context before migration.","responsibleRole":"MigrationOperator","verification":"Validate authorized endpoint reachability and printer deployment after migration without exposing credentials or content.","caution":"Observed local dependencies do not prove target availability or authorization."},
+    {"definitionId":"recommendation:resource.validate-peripherals/1.0.0","findingKind":"peripheral-migration-dependencies","purpose":"Confirm required peripheral and driver support against the target Windows and management design.","responsibleRole":"EndpointEngineer","verification":"Use vendor and Microsoft support information for the exact retained dependency before change.","caution":"Local driver presence does not promise universal peripheral compatibility."}
+  ],
+  "validationScenarios": ["MappedDrive","DisconnectedDrive","UncResource","Printers","PortsAndDrivers","Peripherals","Empty","Denied","Partial","Duplicates","LongUnicode","AlternateAdministrator","LocalSystem","NonEnglish"]
+}

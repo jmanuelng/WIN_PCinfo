@@ -125,7 +125,13 @@ param(
     # scenario. It cannot provide policy identifiers, links, settings, SIDs,
     # registry values, commands, source paths, credentials, or authority.
     [Parameter(DontShow)]
-    [string] $EffectivePolicyFixturePath
+    [string] $EffectivePolicyFixturePath,
+
+    # A Resource Dependencies fixture selects one release-owned user-resource
+    # and peripheral scenario. It cannot supply a resource, endpoint, device,
+    # driver, credential, command, source path, or collection authority.
+    [Parameter(DontShow)]
+    [string] $ResourceDependenciesFixturePath
 )
 
 Set-StrictMode -Version Latest
