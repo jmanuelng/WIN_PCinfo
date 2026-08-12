@@ -755,6 +755,7 @@ function Get-LiveIdentityEnrollmentPayload {
         else { 'SeparateProcessIdentity' }
     [pscustomobject][ordered]@{
         payload=$payload;relationship=$relationship
+        assessmentUserSid=if($userState -eq 'Complete'){[string]$registrationSnapshot.UserSid}else{''}
         executionContext='StandardUser';startedAt=$startedAt;completedAt=[DateTimeOffset]::UtcNow
         sourceFailureReason=''
         collectorAttempts=@(
@@ -796,6 +797,8 @@ function Invoke-IdentityEnrollmentCollection {
         $value | Add-Member -NotePropertyName startedAt -NotePropertyValue $now
         $value | Add-Member -NotePropertyName completedAt -NotePropertyValue $now
         $value | Add-Member -NotePropertyName sourceFailureReason -NotePropertyValue ''
+        $value | Add-Member -NotePropertyName assessmentUserSid `
+            -NotePropertyValue 'S-1-5-21-1000-1000-1000-1001'
         $value | Add-Member -NotePropertyName collectorAttempts -NotePropertyValue @(
             [pscustomobject]@{startedAt=$now;completedAt=$now;reasonCode=''},
             [pscustomobject]@{startedAt=$now;completedAt=$now;reasonCode=''}
@@ -910,6 +913,9 @@ function Invoke-IdentityEnrollmentCollection {
         state='Completed';reasonCode='IDENTITY.COLLECTION_COMPLETED'
         validationScenario=if($Live){'Live'}else{$ValidationScenario}
         processRelationship=[string]$sourceResult.relationship
+        privateAssessmentUserSid=if($sourceResult.PSObject.Properties['assessmentUserSid']){
+            [string]$sourceResult.assessmentUserSid
+        }else{''}
         payload=$payload;observations=@($observations);provenance=@($provenance)
         coverage=@($coverage);diagnostics=@($diagnostics);collectorResults=@($envelopes)
     }

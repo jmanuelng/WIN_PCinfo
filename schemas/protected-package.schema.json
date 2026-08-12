@@ -59,7 +59,7 @@
         "format": { "const": "ZIP-Store" }, "manifestPath": { "const": "package-manifest.json" },
         "manifestContract": { "const": "win-pcinfo.assessment-package-manifest/1.0.0" }, "deterministic": { "const": true },
         "artifacts": { "type": "array", "prefixItems": [
-          { "type":"object", "additionalProperties":false, "required":["relativePath","mediaType","required","maximumBytes"], "properties":{"relativePath":{"const":"assessment-record.json"},"mediaType":{"const":"application/json"},"required":{"const":true},"maximumBytes":{"const":131072}} },
+          { "type":"object", "additionalProperties":false, "required":["relativePath","mediaType","required","maximumBytes"], "properties":{"relativePath":{"const":"assessment-record.json"},"mediaType":{"const":"application/json"},"required":{"const":true},"maximumBytes":{"const":262144}} },
           { "type":"object", "additionalProperties":false, "required":["relativePath","mediaType","required","maximumBytes"], "properties":{"relativePath":{"const":"assessment-report.html"},"mediaType":{"const":"text/html"},"required":{"const":true},"maximumBytes":{"const":262144}} }
         ], "items": false, "minItems": 2, "maxItems": 2 },
         "maximumEntryCount": { "const": 3 }, "maximumArchiveBytes": { "const": 1048576 }

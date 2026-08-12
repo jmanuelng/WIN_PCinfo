@@ -45,7 +45,7 @@
         "acl": { "const": "InitiatingUserAndAdministrators" },
         "requirePeerProcessId": { "const": true },
         "requireArtifactDigest": { "const": true },
-        "assessmentEvidenceContract": { "const": "FirmwareTpmAndLocalAdministratorsProjectionV1" }
+        "assessmentEvidenceContract": { "const": "FirmwareTpmLocalAdministratorsAndEffectivePolicyProjectionV1" }
       }
     },
     "worker": {
@@ -56,7 +56,7 @@
         "executableResolver": { "const": "ActivePowerShellHost" },
         "executableFileName": { "const": "pwsh.exe" },
         "signerCommonName": { "const": "Microsoft Corporation" },
-        "payloadKind": { "const": "EncodedReleaseSource" },
+        "payloadKind": { "const": "CompressedInlineReleaseSource" },
         "payloadSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
       }
     },

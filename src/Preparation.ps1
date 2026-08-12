@@ -281,6 +281,11 @@ function New-PreparationPlan {
         # Administrator boundary. Its SID-selected source, evidence ceiling,
         # direct-only semantics, and no-remediation rule are approved here.
         administratorExposure = $Definition.administratorExposure
+        # Effective Policy uses one closed, read-only Administrator operation.
+        # The cached RSoP, local SAM, Audit Policy, direct LSA rights, and exact
+        # registry-signal catalogs—including limits and failure semantics—are
+        # frozen here before consent; no source or policy refresh can be added.
+        effectivePolicy = $Definition.effectivePolicy
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -434,6 +439,7 @@ function Invoke-PreparationGate {
     $deviceReadinessFixturePath = [string] $ValidationContext.DeviceReadinessFixturePath
     $identityEnrollmentFixturePath = [string] $ValidationContext.IdentityEnrollmentFixturePath
     $administratorExposureFixturePath = [string] $ValidationContext.AdministratorExposureFixturePath
+    $effectivePolicyFixturePath = [string] $ValidationContext.EffectivePolicyFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -509,7 +515,7 @@ function Invoke-PreparationGate {
             $systemCollectionFixturePath, $evidenceWorkspaceFixturePath,
             $protectedPackageFixturePath, $recipientSharingFixturePath,
             $deviceReadinessFixturePath, $identityEnrollmentFixturePath,
-            $administratorExposureFixturePath) |
+            $administratorExposureFixturePath, $effectivePolicyFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -591,6 +597,23 @@ function Invoke-PreparationGate {
             -ConvertToJsonCommand $ConvertToJsonCommand
         return Invoke-DeviceReadinessSlice `
             -AdministratorExposureLiteralPath $administratorExposureFixturePath `
+            -PreparationPlan $planResult.Plan `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($effectivePolicyFixturePath)) {
+        # Policy identifiers and values are Restricted Diagnostic Evidence. The
+        # public event announces only the release-owned operation and never
+        # copies a GPO, link, setting, SID, or configured value into progress.
+        Write-ContractRecord (New-ProgressRecord -Sequence 6 -Phase 'Collection' `
+            -State 'Started' -MessageId 'effective-policy.collection.started' `
+            -CompletedUnits 0 -TotalUnits 1 -Unit 'EffectivePolicy') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return Invoke-DeviceReadinessSlice `
+            -EffectivePolicyLiteralPath $effectivePolicyFixturePath `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `

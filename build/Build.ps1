@@ -21,6 +21,7 @@ $sourcePaths = @(
     'src/SystemCollectionPlan.ps1'
     'src/IdentityEnrollment.ps1'
     'src/AdministratorExposure.ps1'
+    'src/EffectivePolicy.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -64,6 +65,8 @@ $identityEnrollmentPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.
 $identityEnrollmentSchemaPath = Join-Path $repositoryRoot 'schemas/identity-enrollment.schema.json'
 $administratorExposurePolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-administrator-exposure.json'
 $administratorExposureSchemaPath = Join-Path $repositoryRoot 'schemas/administrator-exposure.schema.json'
+$effectivePolicyPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-effective-policy.json'
+$effectivePolicySchemaPath = Join-Path $repositoryRoot 'schemas/effective-policy.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
 $assessmentPackageManifestSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-package-manifest.schema.json'
 $recipientSharingPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
@@ -83,7 +86,8 @@ foreach ($requiredDefinitionPath in @(
     $deviceReadinessPolicyPath, $deviceReadinessSchemaPath,
     $firmwareReadinessPolicyPath, $firmwareReadinessSchemaPath,
     $identityEnrollmentPolicyPath, $identityEnrollmentSchemaPath,
-    $administratorExposurePolicyPath, $administratorExposureSchemaPath
+    $administratorExposurePolicyPath, $administratorExposureSchemaPath,
+    $effectivePolicyPolicyPath, $effectivePolicySchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -172,6 +176,12 @@ $administratorExposurePolicyDigest = Get-Sha256Hex -Bytes $administratorExposure
 $administratorExposurePolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $administratorExposurePolicyBytes
 )
+$effectivePolicyPolicyBytes = Get-Utf8LfBytes -LiteralPath $effectivePolicyPolicyPath
+$effectivePolicyPolicyBase64 = [Convert]::ToBase64String($effectivePolicyPolicyBytes)
+$effectivePolicyPolicyDigest = Get-Sha256Hex -Bytes $effectivePolicyPolicyBytes
+$effectivePolicyPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $effectivePolicyPolicyBytes
+)
 if (-not (Test-Json -Json $approvedCollectorCatalogJson -SchemaFile $approvedCollectorCatalogSchemaPath)) {
     throw 'The approved collector catalog does not satisfy its release schema.'
 }
@@ -204,6 +214,9 @@ if (-not (Test-Json -Json $identityEnrollmentPolicyJson -SchemaFile $identityEnr
 }
 if (-not (Test-Json -Json $administratorExposurePolicyJson -SchemaFile $administratorExposureSchemaPath)) {
     throw 'The Administrator Exposure policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $effectivePolicyPolicyJson -SchemaFile $effectivePolicySchemaPath)) {
+    throw 'The Effective Policy policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -253,6 +266,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/firmware-readiness.schema.json'
     'schemas/identity-enrollment.schema.json'
     'schemas/administrator-exposure.schema.json'
+    'schemas/effective-policy.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -265,6 +279,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-firmware-readiness.json'
     'docs/spec/releases/2.0.0-preview.1-identity-enrollment.json'
     'docs/spec/releases/2.0.0-preview.1-administrator-exposure.json'
+    'docs/spec/releases/2.0.0-preview.1-effective-policy.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -293,6 +308,7 @@ $preparationDefinition = [pscustomobject][ordered]@{
     firmwareReadiness = ($firmwareReadinessPolicyJson | ConvertFrom-Json -Depth 20)
     identityEnrollment = ($identityEnrollmentPolicyJson | ConvertFrom-Json -Depth 20)
     administratorExposure = ($administratorExposurePolicyJson | ConvertFrom-Json -Depth 20)
+    effectivePolicy = ($effectivePolicyPolicyJson | ConvertFrom-Json -Depth 20)
     requiredFreeDiskMiB = [int] $preparationPlan.requiredFreeDiskMiB
     governingResources = @(
         foreach ($path in @(
@@ -459,6 +475,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__ADMINISTRATOR_EXPOSURE_POLICY_SHA256__', $administratorExposurePolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/EffectivePolicy.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__EFFECTIVE_POLICY_POLICY_BASE64__', $effectivePolicyPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__EFFECTIVE_POLICY_POLICY_SHA256__', $effectivePolicyPolicyDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"

@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.3.0",
+  "contractVersion": "1.4.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
@@ -9,11 +9,11 @@
     "prohibited-material-omission"
   ],
   "limits": {
-    "maximumDocumentUtf8Bytes": 131072,
+    "maximumDocumentUtf8Bytes": 262144,
     "maximumJsonDepth": 16,
     "maximumSafeInteger": 9007199254740991,
     "maximumStringUtf8Bytes": 1024,
-    "maximumArrayItems": 96
+    "maximumArrayItems": 192
   },
   "schemas": [
     {
@@ -489,6 +489,142 @@
       "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
       "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" },
       "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applied.object-id", "capabilityIds": ["CAP-0008"],
+      "purpose": "Identify one locally cached applied policy object by its stable RSoP LocalGPO identity or domain GPO GUID rather than a localized display name.",
+      "source": { "sourceId": "source:windows.rsop.logging-mode", "kind": "StructuredWindowsSource", "authoritativeIdentity": "RSOP_GPO.id for LocalGPO or RSOP_GPO.guidName for domain policy" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 36, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applied.target", "capabilityIds": ["CAP-0008"],
+      "purpose": "Distinguish policy Windows reports for the device from policy reported for the Assessment User Context.",
+      "source": { "sourceId": "source:windows.rsop.logging-mode", "kind": "StructuredWindowsSource", "authoritativeIdentity": "RSoP Computer or User namespace selected before collection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 8, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applied.origin", "capabilityIds": ["CAP-0008"],
+      "purpose": "Distinguish the local policy object from a domain policy object without treating a display name as identity.",
+      "source": { "sourceId": "source:windows.rsop.logging-mode", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release classification of the stable RSoP object identity" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 8, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applied.applicable", "capabilityIds": ["CAP-0008"],
+      "purpose": "Record whether the cached RSoP object passed the approved enabled, access, and filter applicability signals.",
+      "source": { "sourceId": "source:windows.rsop.logging-mode", "kind": "StructuredWindowsSource", "authoritativeIdentity": "RSOP_GPO.enabled, accessDenied, and filterAllowed" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applied.link-id", "capabilityIds": ["CAP-0008"],
+      "purpose": "Carry the bounded RSoP scope-of-management reference for the applied link without parsing localized presentation text.",
+      "source": { "sourceId": "source:windows.rsop.logging-mode", "kind": "StructuredWindowsSource", "authoritativeIdentity": "RSOP_GPLink.SOM reference" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applied.setting-id", "capabilityIds": ["CAP-0008"],
+      "purpose": "Identify a bounded RSoP policy setting used to evaluate reported precedence conflicts.",
+      "source": { "sourceId": "source:windows.rsop.logging-mode", "kind": "StructuredWindowsSource", "authoritativeIdentity": "RSOP_PolicySetting.id" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 128, "maximumOccurrencesPerSubject": 8 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applied.precedence", "capabilityIds": ["CAP-0008"],
+      "purpose": "Record the structured RSoP precedence where one is available; precedence one is the winning setting.",
+      "source": { "sourceId": "source:windows.rsop.logging-mode", "kind": "StructuredWindowsSource", "authoritativeIdentity": "RSOP_PolicySetting.precedence" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": { "maximumUtf8Bytes": 2, "maximumOccurrencesPerSubject": 8 },
+      "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.local-sam.minimum-authenticator-length", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SAM minimum password length without claiming a domain-account policy.",
+      "source": { "sourceId": "source:windows.local-sam-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "USER_MODALS_INFO_0.usrmod0_min_passwd_len" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 3, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.local-sam.maximum-authenticator-age-seconds", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SAM maximum password age in seconds.",
+      "source": { "sourceId": "source:windows.local-sam-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "USER_MODALS_INFO_0.usrmod0_max_passwd_age" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.local-sam.minimum-authenticator-age-seconds", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SAM minimum password age in seconds.",
+      "source": { "sourceId": "source:windows.local-sam-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "USER_MODALS_INFO_0.usrmod0_min_passwd_age" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.local-sam.authenticator-history-length", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SAM password-history length.",
+      "source": { "sourceId": "source:windows.local-sam-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "USER_MODALS_INFO_0.usrmod0_password_hist_len" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 3, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.local-sam.lockout-duration-seconds", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SAM lockout duration in seconds.",
+      "source": { "sourceId": "source:windows.local-sam-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "USER_MODALS_INFO_3.usrmod3_lockout_duration" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.local-sam.lockout-window-seconds", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SAM bad-password observation window in seconds.",
+      "source": { "sourceId": "source:windows.local-sam-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "USER_MODALS_INFO_3.usrmod3_lockout_observation_window" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.local-sam.lockout-threshold", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SAM bad-password threshold.",
+      "source": { "sourceId": "source:windows.local-sam-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "USER_MODALS_INFO_3.usrmod3_lockout_threshold" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.audit.subcategory-id", "capabilityIds": ["CAP-0008"], "purpose": "Identify one release-cataloged system audit subcategory without localized labels.",
+      "source": { "sourceId": "source:windows.system-audit-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release-owned audit subcategory GUID catalog" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 48, "maximumOccurrencesPerSubject": 3 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.audit.success-enabled", "capabilityIds": ["CAP-0008"], "purpose": "Record the current success-auditing flag for one release-cataloged subcategory.",
+      "source": { "sourceId": "source:windows.system-audit-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "AUDIT_POLICY_INFORMATION.AuditingInformation success bit" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 3 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.audit.failure-enabled", "capabilityIds": ["CAP-0008"], "purpose": "Record the current failure-auditing flag for one release-cataloged subcategory.",
+      "source": { "sourceId": "source:windows.system-audit-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "AUDIT_POLICY_INFORMATION.AuditingInformation failure bit" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 3 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.user-right.catalog-id", "capabilityIds": ["CAP-0008"], "purpose": "Identify one release-cataloged LSA user right by its invariant native constant.",
+      "source": { "sourceId": "source:windows.lsa-user-rights", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release-owned account-right constant catalog" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 64, "maximumOccurrencesPerSubject": 3 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.user-right.direct-principal-sid", "capabilityIds": ["CAP-0008"], "purpose": "Record one SID directly assigned the named right without expanding group membership.",
+      "source": { "sourceId": "source:windows.lsa-user-rights", "kind": "StructuredWindowsSource", "authoritativeIdentity": "LsaEnumerateAccountsWithUserRight direct SID entry" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 184, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.user-right.direct-assignment", "capabilityIds": ["CAP-0008"], "purpose": "Record only the direct LSA assignment relationship and never inferred effective group access.",
+      "source": { "sourceId": "source:windows.lsa-user-rights", "kind": "StructuredWindowsSource", "authoritativeIdentity": "One admitted direct LSA account-right assignment" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 4, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.security-option.machine-inactivity-limit-seconds", "capabilityIds": ["CAP-0008"], "purpose": "Record the exact local registry signal for the machine inactivity limit without claiming source or enforcement.",
+      "source": { "sourceId": "source:windows.local-security-option-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies System InactivityTimeoutSecs read-only value" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.security-option.disable-cad", "capabilityIds": ["CAP-0008"], "purpose": "Record the exact local registry signal for Ctrl+Alt+Del behavior without claiming source or enforcement.",
+      "source": { "sourceId": "source:windows.local-security-option-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies System DisableCAD read-only value" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.security-option.lm-compatibility-level", "capabilityIds": ["CAP-0008"], "purpose": "Record the exact local registry signal for LAN Manager authentication compatibility without claiming source or current network use.",
+      "source": { "sourceId": "source:windows.local-security-option-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Lsa LmCompatibilityLevel read-only value" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 2, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
     }
   ],
   "scopeDefinitions": [
@@ -519,7 +655,7 @@
     },
     {
       "scopeId": "scope:device.windows-context",
-      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0001", "CAP-0002", "CAP-0004"],
       "purpose": "Close coverage for the bounded Device, Windows, activation, form, virtualization, chassis, battery, and power field set.",
       "fieldIds": [
@@ -548,7 +684,7 @@
     },
     {
       "scopeId": "scope:device.firmware-context",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for the bounded firmware interface and version context.",
       "fieldIds": [
@@ -560,7 +696,7 @@
     },
     {
       "scopeId": "scope:device.secure-boot",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for the applicable structured Secure Boot state.",
       "fieldIds": ["field:device.secure-boot.enabled"],
@@ -568,7 +704,7 @@
     },
     {
       "scopeId": "scope:device.tpm-readiness",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for bounded TPM presence, enabled, activated, and specification evidence.",
       "fieldIds": [
@@ -581,7 +717,7 @@
     },
     {
       "scopeId": "scope:identity.assessment-user-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the separately verified interactive Assessment User Context.",
       "fieldIds": ["field:identity.assessment-user.verified", "field:identity.assessment-user.session-id", "field:identity.assessment-user.account-name"],
@@ -589,7 +725,7 @@
     },
     {
       "scopeId": "scope:device.registration-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0005"],
       "purpose": "Close coverage for locale-neutral domain and Entra registration context.",
       "fieldIds": ["field:device.domain-join.state", "field:device.domain-join.name", "field:device.entra-registration.type", "field:device.entra-registration.device-id", "field:device.entra-registration.tenant-id"],
@@ -597,7 +733,7 @@
     },
     {
       "scopeId": "scope:device.work-school-registration-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the bounded device-default local work-or-school registration context without attributing it to a user.",
       "fieldIds": ["field:device.work-school-registration.present", "field:device.work-school-registration.identifier"],
@@ -605,7 +741,7 @@
     },
     {
       "scopeId": "scope:device.mdm-policy.system",
-      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the predefined read-only LocalSystem MDM Bridge provider-presence query.",
       "fieldIds": ["field:device.mdm-bridge.provider-available"],
@@ -613,7 +749,7 @@
     },
     {
       "scopeId": "scope:device.local-administrators.direct-membership",
-      "profileIds": ["profile:device-firmware-identity-and-administrator-readiness"],
+      "profileIds": ["profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
       "capabilityIds": ["CAP-0007"],
       "purpose": "Close coverage for the bounded direct membership of the SID-selected built-in Administrators group without expanding nested effective access.",
       "fieldIds": [
@@ -627,6 +763,72 @@
         "field:principal.local-administrator.direct-member"
       ],
       "collectorIds": ["collector:windows.local-administrators.direct-members"]
+    },
+    {
+      "scopeId": "scope:policy.applied.user.identity", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific identity coverage for cached policy Windows reports for the Assessment User Context.",
+      "fieldIds": ["field:policy.applied.object-id", "field:policy.applied.target", "field:policy.applied.origin"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.applied.user.applicability", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific applicability coverage for cached user RSoP objects.", "fieldIds": ["field:policy.applied.applicable"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.applied.user.link", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific link coverage for cached user RSoP objects.", "fieldIds": ["field:policy.applied.link-id"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.applied.user.precedence", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific setting identity and precedence coverage for cached user RSoP.", "fieldIds": ["field:policy.applied.setting-id", "field:policy.applied.precedence"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.applied.computer.identity", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific identity coverage for cached policy Windows reports for the assessed device.",
+      "fieldIds": ["field:policy.applied.object-id", "field:policy.applied.target", "field:policy.applied.origin"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.applied.computer.applicability", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific applicability coverage for cached computer RSoP objects.", "fieldIds": ["field:policy.applied.applicable"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.applied.computer.link", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific link coverage for cached computer RSoP objects.", "fieldIds": ["field:policy.applied.link-id"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.applied.computer.precedence", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific setting identity and precedence coverage for cached computer RSoP.", "fieldIds": ["field:policy.applied.setting-id", "field:policy.applied.precedence"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.local-sam.password", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close coverage for bounded local SAM password policy without claiming domain-account policy.",
+      "fieldIds": ["field:policy.local-sam.minimum-authenticator-length", "field:policy.local-sam.maximum-authenticator-age-seconds", "field:policy.local-sam.minimum-authenticator-age-seconds", "field:policy.local-sam.authenticator-history-length"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.local-sam.lockout", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close coverage for bounded local SAM lockout policy without claiming domain-account policy.",
+      "fieldIds": ["field:policy.local-sam.lockout-duration-seconds", "field:policy.local-sam.lockout-window-seconds", "field:policy.local-sam.lockout-threshold"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.local-audit", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close coverage for the three release-cataloged system audit subcategories.",
+      "fieldIds": ["field:policy.audit.subcategory-id", "field:policy.audit.success-enabled", "field:policy.audit.failure-enabled"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.local-user-rights", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close coverage for the three release-cataloged direct LSA user-right assignments without group expansion.",
+      "fieldIds": ["field:policy.user-right.catalog-id", "field:policy.user-right.direct-principal-sid", "field:policy.user-right.direct-assignment"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.security-option.machine-inactivity-limit", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific configured-signal coverage for the machine inactivity limit.", "fieldIds": ["field:policy.security-option.machine-inactivity-limit-seconds"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.security-option.disable-cad", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific configured-signal coverage for Ctrl+Alt+Del behavior.", "fieldIds": ["field:policy.security-option.disable-cad"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.security-option.lm-compatibility-level", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific configured-signal coverage for LAN Manager authentication compatibility.", "fieldIds": ["field:policy.security-option.lm-compatibility-level"], "collectorIds": ["collector:windows.effective-policy"]
     }
   ],
   "vocabularies": {

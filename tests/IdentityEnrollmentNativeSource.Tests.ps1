@@ -38,6 +38,11 @@ foreach ($envelope in @($result.collectorResults)) {
 }
 Assert-Equal 2 @($result.collectorResults).Count `
     'the two standard collector contracts correspond to two supervised attempts'
+if([bool]$result.payload.assessmentUserVerified){
+    if([string]$result.privateAssessmentUserSid -notmatch '^S-1-(?:[0-9]+-){1,14}[0-9]+$'){
+        throw 'A verified live Assessment User must retain its private SID for downstream context binding.'
+    }
+}
 $registrationEnvelope=$result.collectorResults[0]
 $workSchoolEnvelope=$result.collectorResults[1]
 foreach($envelope in @($registrationEnvelope,$workSchoolEnvelope)){

@@ -1,0 +1,157 @@
+[CmdletBinding()]
+param()
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$repositoryRoot=Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
+foreach($source in @(
+    'Contracts','ContractValidator','RuntimeCompatibility','ProcessSupervisor','DeviceReadiness',
+    'FirmwareReadiness','SystemCollectionPlan','IdentityEnrollment','AdministratorExposure','EffectivePolicy'
+)){. (Join-Path $repositoryRoot "src/$source.ps1")}
+
+$facts=Get-BuiltInModuleCompatibilityFacts
+$devicePolicy=Get-DeviceReadinessPolicy -ConvertFromJsonCommand $facts.convertFromJsonCommand
+$firmwarePolicy=Get-FirmwareReadinessPolicy -ConvertFromJsonCommand $facts.convertFromJsonCommand
+$identityPolicy=Get-IdentityEnrollmentPolicy -ConvertFromJsonCommand $facts.convertFromJsonCommand
+$administratorPolicy=Get-AdministratorExposurePolicy -ConvertFromJsonCommand $facts.convertFromJsonCommand
+$effectivePolicy=Get-EffectivePolicyPolicy -ConvertFromJsonCommand $facts.convertFromJsonCommand
+$systemPolicy=Get-SystemCollectionPlanPolicy
+
+function Test-CanonicalRecord($Record){
+    [byte[]]$bytes=[Text.UTF8Encoding]::new($false).GetBytes(
+        ($Record|ConvertTo-Json -Compress -Depth 30)
+    )
+    Test-AssessmentContract -Utf8Bytes $bytes `
+        -ConvertFromJsonCommand $facts.convertFromJsonCommand `
+        -TestJsonCommand $facts.testJsonCommand
+}
+
+function New-AdministratorReadyRecord {
+    $deviceCollector=Invoke-ApprovedCollectorProcess -OperationId $devicePolicy.collector.operationId `
+        -DeviceReadinessScenario Complete
+    $record=New-DeviceReadinessAssessmentRecord -RunId "run:policy:$([guid]::NewGuid().ToString('N'))" `
+        -Evidence (ConvertTo-NormalizedDeviceReadinessEvidence -Payload $deviceCollector.PrivatePayload) `
+        -CollectorResult $deviceCollector -Policy $devicePolicy -ValidationFixture $true
+    $record=Complete-ValidatedDeviceReadinessAssessmentRecord -ValidatedRecord $record `
+        -Policy $devicePolicy -ContractValidation (Test-CanonicalRecord $record)
+    $now=[DateTimeOffset]::UtcNow
+    $firmware=[pscustomobject][ordered]@{
+        state='Completed';reasonCode='FIRMWARE.COLLECTION_COMPLETED';validationFixture=$true
+        envelope=[pscustomobject][ordered]@{startedAt=$now.AddMilliseconds(-5).ToString('o');completedAt=$now.ToString('o');attempts=1}
+        payload=[pscustomobject][ordered]@{sourceLocale='und';firmwareState='Complete';firmwareType='Uefi';biosVersion='SYNTHETIC-UEFI-1.0';smbiosVersion='3.4';secureBootState='Complete';secureBootEnabled=$true;tpmState='Complete';tpmPresent=$true;tpmEnabled=$true;tpmActivated=$true;tpmSpecification='2.0'}
+    }
+    $record=Add-FirmwareReadinessEvidenceRecord -Record $record -CollectorResult $firmware -Policy $firmwarePolicy
+    $record=Complete-ValidatedFirmwareReadinessAssessmentRecord -Record $record -Policy $firmwarePolicy `
+        -ContractValidation (Test-CanonicalRecord $record)
+    $identity=Invoke-IdentityEnrollmentCollection -Policy $identityPolicy -ValidationScenario Mixed
+    $system=New-SystemCollectorResult -Policy $systemPolicy -Plan ([pscustomobject]@{recordType='synthetic-system-plan'}) `
+        -PlanDigest 'synthetic-system-plan-digest' -State Completed -ReasonCode 'SYSTEM.COLLECTION_COMPLETED' `
+        -CoverageState Complete -ObservedExecutionContext Synthetic -LocalSystemIdentityVerified $false `
+        -CleanupVerified $true -TaskAbsent $true -PipeAbsent $true -WorkerTreeAbsent $true -ProviderAvailable $true
+    $record=Add-IdentityEnrollmentEvidenceRecord -Record $record -CollectorResult $identity -SystemResult $system -Policy $identityPolicy
+    $record=Complete-ValidatedIdentityEnrollmentAssessmentRecord -Record $record -Policy $identityPolicy `
+        -ContractValidation (Test-CanonicalRecord $record)
+    $administrator=Invoke-AdministratorExposureCollection -Policy $administratorPolicy -ValidationScenario NestedGroup
+    $record=Add-AdministratorExposureEvidenceRecord -Record $record -CollectorResult $administrator -Policy $administratorPolicy
+    Complete-ValidatedAdministratorExposureAssessmentRecord -Record $record -Policy $administratorPolicy `
+        -ContractValidation (Test-CanonicalRecord $record)
+}
+
+$record=New-AdministratorReadyRecord
+$collector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario UserAndComputerRsop
+$record=Add-EffectivePolicyEvidenceRecord -Record $record -CollectorResult $collector -Policy $effectivePolicy
+$sourceValidation=Test-CanonicalRecord $record
+Assert-Equal $true $sourceValidation.accepted `
+    "the three policy layers cross the canonical contract before interpretation ($($sourceValidation.reasonCode))"
+Assert-Equal 11 @($record.findings).Count 'source admission cannot fabricate policy findings'
+
+$record=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $record -Policy $effectivePolicy `
+    -ContractValidation $sourceValidation
+$validation=Test-CanonicalRecord $record
+Assert-Equal 'CONTRACT.ACCEPTED' $validation.reasonCode `
+    'the combined Device, Firmware, Identity, Administrator, and Effective Policy record is canonical'
+Assert-Equal '1.0.0' $record.contractVersion `
+    'the record shape remains backward-compatible while Contract Set 1.4 adds policy definitions'
+Assert-Equal 'profile:device-firmware-identity-administrator-and-policy-readiness' $record.run.evidenceProfileId `
+    'the record selects the exact additive policy evidence profile'
+Assert-Equal 24 @($record.coverage).Count 'all fifteen policy scopes remain independently closed'
+Assert-Equal 14 @($record.findings).Count 'three bounded rules each produce one finding'
+Assert-Equal 1 @($record.collectorResults|Where-Object collectorId -eq 'collector:windows.effective-policy').Count `
+    'one approved attempt owns all policy source coverage'
+Assert-Equal 'Informational' (@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-policy-coverage/1.0.0')[0].outcome) `
+    'complete cached RSoP produces an informational coverage finding'
+
+$workgroup=New-AdministratorReadyRecord
+$workgroupCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario Workgroup
+$workgroup=Add-EffectivePolicyEvidenceRecord -Record $workgroup -CollectorResult $workgroupCollector -Policy $effectivePolicy
+$absentLinks=@($workgroup.observations|Where-Object {
+    $_.fieldId -eq 'field:policy.applied.link-id' -and $_.valueState -eq 'ObservedAbsent' -and
+        $_.subjectId -like 'subject:policy-object:*'
+})
+Assert-Equal 1 $absentLinks.Count 'a genuinely absent enabled link is ObservedAbsent, never a sentinel string'
+
+$absentOptions=New-AdministratorReadyRecord
+$absentOptionsCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario Workgroup
+$absentOptionsCollector.payload.securityOptions[0].value=$null
+$absentOptionsCollector.payload.securityOptions[1].value=$null
+$absentOptions=Add-EffectivePolicyEvidenceRecord -Record $absentOptions `
+    -CollectorResult $absentOptionsCollector -Policy $effectivePolicy
+foreach($fieldId in @(
+    'field:policy.security-option.machine-inactivity-limit-seconds',
+    'field:policy.security-option.disable-cad'
+)){
+    $observation=@($absentOptions.observations|Where-Object fieldId -eq $fieldId)[0]
+    Assert-Equal 'ObservedAbsent' $observation.valueState `
+        "a missing optional registry signal remains canonical ObservedAbsent for $fieldId"
+    if($observation.PSObject.Properties['value']){
+        throw "ObservedAbsent must not carry a fabricated value for $fieldId."
+    }
+}
+
+$conflict=New-AdministratorReadyRecord
+$conflictCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario AppliedOrderConflict
+$conflict=Add-EffectivePolicyEvidenceRecord -Record $conflict -CollectorResult $conflictCollector -Policy $effectivePolicy
+$conflict=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $conflict -Policy $effectivePolicy `
+    -ContractValidation (Test-CanonicalRecord $conflict)
+Assert-Equal 'NeedsAttention' (@($conflict.findings|Where-Object ruleId -eq 'rule:policy.applied-order-conflict/1.0.0')[0].outcome) `
+    'observed competing precedence becomes an advisory conflict finding'
+
+$crossTarget=New-AdministratorReadyRecord
+$crossTargetCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario UserAndComputerRsop
+$sharedObject='6ac1786c-016f-11d2-945f-00c04fb984f9'
+$sharedSetting='registry:44444444-4444-4444-8444-444444444444'
+$crossTargetCollector.payload.appliedPolicies[0].objectId=$sharedObject
+$crossTargetCollector.payload.appliedPolicies[1].objectId=$sharedObject
+$crossTargetCollector.payload.policySettings[0].objectId=$sharedObject
+$crossTargetCollector.payload.policySettings[0].settingId=$sharedSetting
+$crossTargetCollector.payload.policySettings[1].objectId=$sharedObject
+$crossTargetCollector.payload.policySettings[1].settingId=$sharedSetting
+$crossTarget=Add-EffectivePolicyEvidenceRecord -Record $crossTarget `
+    -CollectorResult $crossTargetCollector -Policy $effectivePolicy
+$crossTarget=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $crossTarget `
+    -Policy $effectivePolicy -ContractValidation (Test-CanonicalRecord $crossTarget)
+$crossTargetSubjects=@($crossTarget.subjects|Where-Object kind -eq PolicyObject)
+Assert-Equal 3 $crossTargetSubjects.Count `
+    'one policy object applied to user and computer remains two target-specific subjects'
+Assert-Equal 'ExpectedCondition' (@($crossTarget.findings|Where-Object ruleId -eq 'rule:policy.applied-order-conflict/1.0.0')[0].outcome) `
+    'the same setting in user and computer policy does not fabricate a precedence conflict'
+
+$missing=New-AdministratorReadyRecord
+$missingCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario MissingRsop
+$missing=Add-EffectivePolicyEvidenceRecord -Record $missing -CollectorResult $missingCollector -Policy $effectivePolicy
+$missing=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $missing -Policy $effectivePolicy `
+    -ContractValidation (Test-CanonicalRecord $missing)
+Assert-Equal 'Indeterminate' (@($missing.findings|Where-Object ruleId -eq 'rule:policy.applied-policy-coverage/1.0.0')[0].outcome) `
+    'a missing RSoP namespace cannot become proof that no policy applied'
+Assert-Equal 0 @($missing.observations|Where-Object fieldId -like 'field:policy.applied.*').Count `
+    'source-wide RSoP failure fabricates no applied-policy observations'
+
+$partialRecord=New-AdministratorReadyRecord
+$partialCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario PartialChannel
+$partialRecord=Add-EffectivePolicyEvidenceRecord -Record $partialRecord -CollectorResult $partialCollector -Policy $effectivePolicy
+$partialValidation=Test-CanonicalRecord $partialRecord
+Assert-Equal $true $partialValidation.accepted `
+    "field-specific failures and bounded overflow remain canonical ($($partialValidation.reasonCode))"
+
+Write-Output 'PASS: Effective Policy composes canonical three-layer evidence, closed coverage, and bounded findings.'

@@ -743,7 +743,8 @@ function New-DeviceReadinessReportBytes {
         [Parameter(Mandatory)] $Record,
         [Parameter()] $FirmwarePolicy,
         [Parameter()] $IdentityEnrollmentPolicy,
-        [Parameter()] $AdministratorExposurePolicy
+        [Parameter()] $AdministratorExposurePolicy,
+        [Parameter()] $EffectivePolicyPolicy
     )
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
@@ -930,6 +931,71 @@ $identityGuidance
 <p>Membership alone does not prove compromise or that an account is unexpected. Confirm the organization's approved administrator-account context with the responsible device owner. WIN-PCInfo does not remove accounts, change group membership, collect credentials, or expose these Restricted identifiers outside the protected package.</p>
 "@
     }else{''}
+    $policyFinding=$Record.findings|Where-Object {
+        $_.ruleId -eq 'rule:policy.applied-policy-coverage/1.0.0'
+    }|Select-Object -First 1
+    $effectivePolicySection=if($null -ne $policyFinding){
+        if($null -eq $EffectivePolicyPolicy){throw 'Effective Policy guidance requires its frozen policy definition.'}
+        $localFinding=@($Record.findings|Where-Object ruleId -eq 'rule:policy.local-security-policy-coverage/1.0.0')[0]
+        $orderFinding=@($Record.findings|Where-Object ruleId -eq 'rule:policy.applied-order-conflict/1.0.0')[0]
+        $layerById=@{};foreach($layer in $EffectivePolicyPolicy.layers){$layerById[[string]$layer.layerId]=$layer}
+        $policySubjects=@($Record.subjects|Where-Object kind -eq 'PolicyObject')
+        $policyRows=@($policySubjects|ForEach-Object {
+            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $byField=@{};foreach($item in $items){if($item.valueState -eq 'ObservedValue'){$byField[[string]$item.fieldId]=[Net.WebUtility]::HtmlEncode([string]$item.value)}}
+            $settingIds=@($items|Where-Object {$_.fieldId -eq 'field:policy.applied.setting-id' -and $_.valueState -eq 'ObservedValue'}|ForEach-Object {[Net.WebUtility]::HtmlEncode([string]$_.value)})
+            $precedence=@($items|Where-Object {$_.fieldId -eq 'field:policy.applied.precedence' -and $_.valueState -eq 'ObservedValue'}|ForEach-Object {[Net.WebUtility]::HtmlEncode([string]$_.value)})
+            $settingRows=@(for($index=0;$index -lt $settingIds.Count;$index++){
+                $rank=if($index -lt $precedence.Count){$precedence[$index]}else{'Not available'}
+                '<br><strong>Setting / precedence:</strong> '+$settingIds[$index]+' / '+$rank
+            })
+            '<li><strong>Object:</strong> '+$byField['field:policy.applied.object-id']+
+                '<br><strong>Target / origin:</strong> '+$byField['field:policy.applied.target']+' / '+$byField['field:policy.applied.origin']+
+                '<br><strong>Applicable:</strong> '+$byField['field:policy.applied.applicable']+
+                '<br><strong>Link:</strong> '+$byField['field:policy.applied.link-id']+
+                ($settingRows -join '')+'</li>'
+        })
+        $devicePolicyObservations=@($Record.observations|Where-Object subjectId -eq 'subject:device:primary')
+        $auditIds=@($devicePolicyObservations|Where-Object fieldId -eq 'field:policy.audit.subcategory-id')
+        $auditSuccess=@($devicePolicyObservations|Where-Object fieldId -eq 'field:policy.audit.success-enabled')
+        $auditFailure=@($devicePolicyObservations|Where-Object fieldId -eq 'field:policy.audit.failure-enabled')
+        $auditRows=@(for($index=0;$index -lt $auditIds.Count;$index++){
+            $success=if($index -lt $auditSuccess.Count){[Net.WebUtility]::HtmlEncode([string]$auditSuccess[$index].value)}else{'Not available'}
+            $failure=if($index -lt $auditFailure.Count){[Net.WebUtility]::HtmlEncode([string]$auditFailure[$index].value)}else{'Not available'}
+            '<li>'+[Net.WebUtility]::HtmlEncode([string]$auditIds[$index].value)+': success='+$success+', failure='+$failure+'</li>'
+        })
+        $rightRows=@($Record.subjects|Where-Object {$_.subjectId -like 'subject:policy-principal:*'}|ForEach-Object {
+            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $right=@($items|Where-Object fieldId -eq 'field:policy.user-right.catalog-id')[0]
+            $sid=@($items|Where-Object fieldId -eq 'field:policy.user-right.direct-principal-sid')[0]
+            '<li>'+[Net.WebUtility]::HtmlEncode([string]$right.value)+': '+[Net.WebUtility]::HtmlEncode([string]$sid.value)+' (direct assignment)</li>'
+        })
+@"
+<h2>Applied Group Policy and local security policy</h2>
+<p>This section keeps three different questions separate: cached Applied Policy Evidence, configured registry Policy Signals, and Current Control State. A configured value does not prove which authority set it or that the related control is currently enforced.</p>
+<dl><dt>Applied Policy Evidence coverage</dt><dd>$([Net.WebUtility]::HtmlEncode((Get-EffectivePolicyLayerState -ScopeStates $Record.coverage -ScopeIds @($layerById.AppliedPolicyEvidence.scopeIds))))</dd>
+<dt>Configured Policy Signals coverage</dt><dd>$([Net.WebUtility]::HtmlEncode((Get-EffectivePolicyLayerState -ScopeStates $Record.coverage -ScopeIds @($layerById.ConfiguredPolicySignals.scopeIds))))</dd>
+<dt>Current Control State coverage</dt><dd>$([Net.WebUtility]::HtmlEncode((Get-EffectivePolicyLayerState -ScopeStates $Record.coverage -ScopeIds @($layerById.CurrentControlState.scopeIds))))</dd>
+<dt>Applied-policy finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$policyFinding.outcome))</dd>
+<dt>Local-security finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$localFinding.outcome))</dd>
+<dt>Applied-order conflict finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$orderFinding.outcome))</dd></dl>
+<h3>Cached applied policy objects</h3><ul>$($policyRows -join '')</ul>
+<h3>Current local account and lockout state</h3>
+<dl><dt>Minimum authenticator length</dt><dd>$($values['field:policy.local-sam.minimum-authenticator-length'])</dd>
+<dt>Maximum authenticator age (seconds)</dt><dd>$($values['field:policy.local-sam.maximum-authenticator-age-seconds'])</dd>
+<dt>Minimum authenticator age (seconds)</dt><dd>$($values['field:policy.local-sam.minimum-authenticator-age-seconds'])</dd>
+<dt>Authenticator history length</dt><dd>$($values['field:policy.local-sam.authenticator-history-length'])</dd>
+<dt>Lockout threshold</dt><dd>$($values['field:policy.local-sam.lockout-threshold'])</dd>
+<dt>Lockout duration / observation window (seconds)</dt><dd>$($values['field:policy.local-sam.lockout-duration-seconds']) / $($values['field:policy.local-sam.lockout-window-seconds'])</dd></dl>
+<h3>Current audit subcategories</h3><ul>$($auditRows -join '')</ul>
+<h3>Direct user-right assignments</h3><ul>$($rightRows -join '')</ul>
+<h3>Configured registry signals</h3>
+<dl><dt>Machine inactivity limit (seconds)</dt><dd>$($values['field:policy.security-option.machine-inactivity-limit-seconds'])</dd>
+<dt>Disable Ctrl+Alt+Del signal</dt><dd>$($values['field:policy.security-option.disable-cad'])</dd>
+<dt>LAN Manager compatibility signal</dt><dd>$($values['field:policy.security-option.lm-compatibility-level'])</dd></dl>
+<p>RSoP is read only and uses cached locale-neutral classes; WIN-PCInfo does not refresh policy or parse a localized report. Local SAM values apply only to local accounts. User-right entries are direct SID assignments only and do not expand nested groups. Missing, denied, stale, unsupported, malformed, or incomplete sources remain explicit gaps.</p>
+"@
+    }else{''}
     $html = @"
 <!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
 <h1>Device, Windows, activation, and power context</h1><p>$summary</p>
@@ -953,6 +1019,7 @@ $identityGuidance
 $firmwareSection
 $identitySection
 $administratorSection
+$effectivePolicySection
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -1138,6 +1205,7 @@ function Invoke-DeviceReadinessSlice {
         [Parameter()] [string] $LiteralPath,
         [Parameter()] [string] $IdentityEnrollmentLiteralPath,
         [Parameter()] [string] $AdministratorExposureLiteralPath,
+        [Parameter()] [string] $EffectivePolicyLiteralPath,
         [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
         [Parameter()] $ApprovedRecipient,
@@ -1151,12 +1219,14 @@ function Invoke-DeviceReadinessSlice {
     $isDeviceFixture = -not [string]::IsNullOrWhiteSpace($LiteralPath)
     $isIdentityFixture = -not [string]::IsNullOrWhiteSpace($IdentityEnrollmentLiteralPath)
     $isAdministratorFixture = -not [string]::IsNullOrWhiteSpace($AdministratorExposureLiteralPath)
-    $isFixture = $isDeviceFixture -or $isIdentityFixture -or $isAdministratorFixture
+    $isEffectivePolicyFixture = -not [string]::IsNullOrWhiteSpace($EffectivePolicyLiteralPath)
+    $isFixture = $isDeviceFixture -or $isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture
     $scenario = if ($isFixture) { '' } else { 'Actual' }
     $firmwareScenario = if ($isFixture) { 'None' } else { 'Live' }
     $privilegeScenario = if ($isFixture) { 'None' } else { 'Live' }
     $policy = $null; $firmwarePolicy = $null; $identityPolicy = $null
     $administratorPolicy=$null;$administratorCollector=$null
+    $effectivePolicy=$null;$effectivePolicyCollector=$null
     $privilegeResult = $null; $identityCollector = $null; $systemResult = $null
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
@@ -1180,6 +1250,11 @@ function Invoke-DeviceReadinessSlice {
     $administratorDirectMemberCount=0;$administratorDirectGroupCount=0
     $administratorUnresolvedCount=0;$administratorDuplicateCount=0
     $administratorEnumerationComplete=$false;$administratorProcessRelationship='NotStarted'
+    $effectivePolicyScenario=if($isEffectivePolicyFixture){''}else{'Live'}
+    $appliedPolicyCoverage='NotAttempted';$configuredPolicyCoverage='NotAttempted'
+    $currentControlCoverage='NotAttempted';$appliedPolicyCount=0
+    $appliedPolicyFinding='Indeterminate';$localSecurityFinding='Indeterminate'
+    $appliedOrderFinding='Indeterminate'
     $collectionStarted = $false
     $sliceStage='POLICY'
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
@@ -1190,6 +1265,8 @@ function Invoke-DeviceReadinessSlice {
         $identityPolicy = Get-IdentityEnrollmentPolicy `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $administratorPolicy=Get-AdministratorExposurePolicy `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $effectivePolicy=Get-EffectivePolicyPolicy `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $sliceStage='FIXTURE'
         if ($isDeviceFixture) {
@@ -1217,20 +1294,44 @@ function Invoke-DeviceReadinessSlice {
                 'AlternateAdministrator'
             }else{'AcceptedElevation'}
         }
-        $identityRequested=$isIdentityFixture -or $isAdministratorFixture -or -not $isFixture
-        $administratorRequested=$isAdministratorFixture -or -not $isFixture
+        elseif($isEffectivePolicyFixture){
+            $scenario='Complete';$firmwareScenario='Supported';$identityScenario='StandardUser'
+            $administratorScenario='LocalPrincipal';$privilegeScenario='AcceptedElevation'
+            $effectivePolicyScenario=Read-EffectivePolicyFixture `
+                -LiteralPath $EffectivePolicyLiteralPath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $effectivePolicy
+            if($effectivePolicyScenario -eq 'DeniedAdministrator'){
+                $privilegeScenario='ElevationDenied'
+            }
+        }
+        $identityRequested=$isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture -or -not $isFixture
+        $administratorRequested=$isAdministratorFixture -or $isEffectivePolicyFixture -or -not $isFixture
+        $effectivePolicyRequested=$isEffectivePolicyFixture -or -not $isFixture
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
+        if($identityRequested){
+            $sliceStage='IDENTITY'
+            $identityCollector=if($isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture){
+                Invoke-IdentityEnrollmentCollection -Policy $identityPolicy `
+                    -ValidationScenario $identityScenario
+            }else{Invoke-IdentityEnrollmentCollection -Policy $identityPolicy -Live}
+            $processRelationship=[string]$identityCollector.processRelationship
+            $collectionStarted=$true
+        }
         $sliceStage='PRIVILEGE'
-        if ($firmwareRequested -or $administratorRequested) {
+        if ($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) {
             $privilegeResult = Invoke-PrivilegedCollectionPlan `
                 -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
                 -AssessmentUserContext 'subject:assessment-user:primary' `
+                -AssessmentUserSid $(if($null -ne $identityCollector){
+                    [string]$identityCollector.privateAssessmentUserSid
+                }else{''}) `
                 -LocalPackageProtector 'protector:initiating-windows-user' `
                 -ValidationScenario $privilegeScenario -FirmwareScenario $firmwareScenario `
-                -AdministratorScenario $(if($administratorRequested){$administratorScenario}else{'None'})
+                -AdministratorScenario $(if($administratorRequested){$administratorScenario}else{'None'}) `
+                -EffectivePolicyScenario $(if($effectivePolicyRequested){$effectivePolicyScenario}else{'None'})
             $privilegeState = [string]$privilegeResult.state
             $privilegeUacInteractionCount = [int]$privilegeResult.elevation.uacInteractionCount
-            $collectionStarted = @($privilegeResult.operations).Count -gt 0
+            $collectionStarted = $collectionStarted -or @($privilegeResult.operations).Count -gt 0
             if ($privilegeResult.state -in @('TimedOut','Cancelled')) {
                 # These states are produced only after the bounded worker path
                 # begins. Preserve that lifecycle fact even though a failed
@@ -1279,19 +1380,30 @@ function Invoke-DeviceReadinessSlice {
                 }
                 $administratorProcessRelationship=[string]$administratorCollector.processRelationship
             }
+            if($effectivePolicyRequested){
+                if($privilegeResult.PSObject.Properties['PrivateEffectivePolicyCollectorResult']){
+                    $effectivePolicyCollector=$privilegeResult.PrivateEffectivePolicyCollectorResult
+                }elseif($privilegeResult.state -eq 'Unavailable'){
+                    $effectivePolicyCollector=New-EffectivePolicyPrivilegeGapResult `
+                        -PrivilegeResult $privilegeResult -Policy $effectivePolicy `
+                        -ValidationFixture $isFixture
+                }else{
+                    $exception=[InvalidOperationException]::new(
+                        'The privileged Effective Policy phase did not return a usable collector result.'
+                    )
+                    $exception.Data['ReasonCode']='EFFECTIVE_POLICY.PRIVILEGE_FAILED';throw $exception
+                }
+            }
         }
         if($identityRequested){
-            $sliceStage='IDENTITY'
-            $identityCollector=if($isIdentityFixture -or $isAdministratorFixture){
-                Invoke-IdentityEnrollmentCollection -Policy $identityPolicy `
-                    -ValidationScenario $identityScenario
-            }else{Invoke-IdentityEnrollmentCollection -Policy $identityPolicy -Live}
-            $processRelationship=[string]$identityCollector.processRelationship
+            $sliceStage='SYSTEM_IDENTITY'
             $systemPlanResult=New-SystemCollectionPlan -PreparationPlan $PreparationPlan `
                 -PreparationPlanDigest $PlanDigest
             $systemResult=Invoke-SystemCollectionPlan -Plan $systemPlanResult.Plan `
                 -PlanDigest $systemPlanResult.Digest `
-                -ValidationScenario $(if($isIdentityFixture -or $isAdministratorFixture){
+                -ValidationScenario $(if($isEffectivePolicyFixture -and $effectivePolicyScenario -eq 'DeniedSystem'){
+                    'Denied'
+                }elseif($isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture){
                     'SyntheticSuccess'
                 }else{''})
             if(-not [bool]$systemResult.cleanup.verified){
@@ -1432,6 +1544,25 @@ function Invoke-DeviceReadinessSlice {
                     }
                     $sourceValidation=$administratorSourceValidation
                 }
+                if($null -ne $effectivePolicyCollector){
+                    $sliceStage='EFFECTIVE_POLICY_SOURCE'
+                    $record=Add-EffectivePolicyEvidenceRecord -Record $record `
+                        -CollectorResult $effectivePolicyCollector -Policy $effectivePolicy
+                    [byte[]]$effectivePolicySourceBytes=[Text.UTF8Encoding]::new($false).GetBytes(
+                        (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                    )
+                    $effectivePolicySourceValidation=Test-AssessmentContract `
+                        -Utf8Bytes $effectivePolicySourceBytes `
+                        -ConvertFromJsonCommand $ConvertFromJsonCommand `
+                        -TestJsonCommand $TestJsonCommand
+                    if([bool]$effectivePolicySourceValidation.accepted){
+                        $sliceStage='EFFECTIVE_POLICY_RULES'
+                        $record=Complete-ValidatedEffectivePolicyAssessmentRecord `
+                            -Record $record -Policy $effectivePolicy `
+                            -ContractValidation $effectivePolicySourceValidation
+                    }
+                    $sourceValidation=$effectivePolicySourceValidation
+                }
                 $sliceStage='FINAL_SERIALIZE'
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
@@ -1526,6 +1657,17 @@ function Invoke-DeviceReadinessSlice {
                     }).Count
                     $administratorDuplicateCount=[int]$administratorCollector.payload.duplicateEntriesRemoved
                 }
+                if($null -ne $effectivePolicyCollector){
+                    $sliceStage='EFFECTIVE_POLICY_METRICS'
+                    $layerById=@{};foreach($layer in $effectivePolicy.layers){$layerById[[string]$layer.layerId]=$layer}
+                    $appliedPolicyCoverage=Get-EffectivePolicyLayerState -ScopeStates $record.coverage -ScopeIds @($layerById.AppliedPolicyEvidence.scopeIds)
+                    $configuredPolicyCoverage=Get-EffectivePolicyLayerState -ScopeStates $record.coverage -ScopeIds @($layerById.ConfiguredPolicySignals.scopeIds)
+                    $currentControlCoverage=Get-EffectivePolicyLayerState -ScopeStates $record.coverage -ScopeIds @($layerById.CurrentControlState.scopeIds)
+                    $appliedPolicyCount=@($effectivePolicyCollector.payload.appliedPolicies).Count
+                    $appliedPolicyFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-policy-coverage/1.0.0')[0].outcome
+                    $localSecurityFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.local-security-policy-coverage/1.0.0')[0].outcome
+                    $appliedOrderFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-order-conflict/1.0.0')[0].outcome
+                }
                 $findingOutcome = [string]@($record.findings | Where-Object {
                     $_.findingId -like 'finding:device-readiness:*'
                 })[0].outcome
@@ -1581,6 +1723,9 @@ function Invoke-DeviceReadinessSlice {
                         }else{$null}) `
                         -AdministratorExposurePolicy $(if($null -ne $administratorCollector){
                             $administratorPolicy
+                        }else{$null}) `
+                        -EffectivePolicyPolicy $(if($null -ne $effectivePolicyCollector){
+                            $effectivePolicy
                         }else{$null})
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportVerified = $reportText.StartsWith('<!doctype html>') -and
@@ -1602,6 +1747,13 @@ function Invoke-DeviceReadinessSlice {
                             $reportText.Contains('Local administrator exposure') -and
                             $reportText.Contains('does not recursively expand or guess') -and
                             $reportText.Contains('does not prove compromise')
+                    }
+                    if($null -ne $effectivePolicyCollector){
+                        $reportVerified=$reportVerified -and
+                            $reportText.Contains('Applied Group Policy and local security policy') -and
+                            $reportText.Contains('Configured Policy Signals') -and
+                            $reportText.Contains('does not refresh policy') -and
+                            $reportText.Contains('direct SID assignments only')
                     }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
                     $sliceStage='PACKAGE'
@@ -1630,7 +1782,9 @@ function Invoke-DeviceReadinessSlice {
                     }
                     else { 'RecoverablePartial' }
                     $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
-                        -Artifacts $artifacts -AssessmentContractSetVersion $(if($null -ne $administratorCollector){
+                        -Artifacts $artifacts -AssessmentContractSetVersion $(if($null -ne $effectivePolicyCollector){
+                            '1.4.0'
+                        }elseif($null -ne $administratorCollector){
                             '1.3.0'
                         }elseif($null -ne $identityCollector){'1.2.0'}else{'1.1.0'}) `
                         -Completeness $packageCompleteness -ApprovedRecipient $ApprovedRecipient
@@ -1744,6 +1898,30 @@ function Invoke-DeviceReadinessSlice {
                 $administratorCollector.localPackageProtector -eq 'protector:initiating-windows-user'
             identifiersPublished=$false;credentialMaterialCollected=$false
             identityStateChanged=$false;automaticRemovalAttempted=$false
+            assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
+            protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
+        }) -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if($isEffectivePolicyFixture){
+        # This is Public Security Evidence: only bounded states and counts leave
+        # the protected package. GPO identifiers, link paths, setting IDs,
+        # registry values, account-policy values, and principal SIDs do not.
+        Write-ContractRecord ([pscustomobject][ordered]@{
+            recordType='win-pcinfo.effective-policy-validation';contractVersion='1.0.0'
+            scenario=$effectivePolicyScenario
+            appliedPolicyCoverage=$appliedPolicyCoverage
+            configuredSignalCoverage=$configuredPolicyCoverage
+            currentControlCoverage=$currentControlCoverage
+            appliedPolicyCount=$appliedPolicyCount
+            appliedPolicyFinding=$appliedPolicyFinding
+            localSecurityFinding=$localSecurityFinding
+            appliedOrderFinding=$appliedOrderFinding
+            directRightsOnly=$null -ne $effectivePolicyCollector -and
+                $effectivePolicyCollector.payload.userRightSemantics -eq 'DirectAssignmentsOnly'
+            localSamOnly=$null -ne $effectivePolicyCollector -and
+                $effectivePolicyCollector.payload.localAccountPolicySemantics -eq 'LocalSamAccountsOnly'
+            policyIdentifiersPublished=$false;policyValuesPublished=$false
+            policyStateChanged=$false;policyRefreshAttempted=$false;toolInstalled=$false
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
         }) -ConvertToJsonCommand $ConvertToJsonCommand
