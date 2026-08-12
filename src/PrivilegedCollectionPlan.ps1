@@ -120,6 +120,17 @@ function Get-PrivilegedCollectionValidationScenario {
     [pscustomobject] $scenario
 }
 
+function Test-PrivilegedCollectionSid {
+    param($Value)
+
+    if($Value -isnot [string] -or [Text.Encoding]::UTF8.GetByteCount($Value) -gt 184){return $false}
+    try{
+        $sid=[System.Security.Principal.SecurityIdentifier]::new($Value)
+        $sid.Value -ceq $Value
+    }
+    catch{return $false}
+}
+
 function Get-PrivilegedCollectionWorkerSource {
     # This is reviewed product source, not caller input. It is encoded directly
     # into the fixed PowerShell launch argument so there is no writable script
@@ -141,13 +152,24 @@ try {
         $configurationRoot.EnumerateObject() | ForEach-Object Name
     )
     if ($configurationRoot.ValueKind -ne [System.Text.Json.JsonValueKind]::Object -or
-        $configurationNames.Count -ne 12 -or
-        @($configurationNames | Sort-Object -Unique).Count -ne 12) {
+        $configurationNames.Count -ne 13 -or
+        @($configurationNames | Sort-Object -Unique).Count -ne 13) {
         throw 'The privilege worker configuration is invalid.'
     }
 }
 finally { $configurationDocument.Dispose() }
 $configuration = $configurationJson | ConvertFrom-Json -Depth 5
+
+function Test-PrivilegedCollectionSid {
+    param($Value)
+
+    if($Value -isnot [string] -or [Text.Encoding]::UTF8.GetByteCount($Value) -gt 184){return $false}
+    try{
+        $sid=[System.Security.Principal.SecurityIdentifier]::new($Value)
+        $sid.Value -ceq $Value
+    }
+    catch{return $false}
+}
 
 Add-Type -TypeDefinition @"
 using System;
@@ -325,6 +347,219 @@ public static class WinPCInfoLocalAdministratorsSource
             SourceReturnedEntries=reportedTotal, DuplicateEntriesRemoved=duplicates,
             Sids=values.ToArray()
         };
+    }
+}
+"@
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+
+public sealed class WinPCInfoLocalSamPolicySnapshot
+{
+    public uint MinimumLength { get; set; }
+    public uint MaximumAgeSeconds { get; set; }
+    public uint MinimumAgeSeconds { get; set; }
+    public uint HistoryLength { get; set; }
+    public uint LockoutDurationSeconds { get; set; }
+    public uint LockoutWindowSeconds { get; set; }
+    public uint LockoutThreshold { get; set; }
+}
+
+public sealed class WinPCInfoSystemAuditingSnapshot
+{
+    public string CatalogId { get; set; }
+    public bool SuccessEnabled { get; set; }
+    public bool FailureEnabled { get; set; }
+}
+
+public sealed class WinPCInfoUserRightSnapshot
+{
+    public string CatalogId { get; set; }
+    public string[] DirectSids { get; set; }
+    public bool BoundExceeded { get; set; }
+}
+
+public static class WinPCInfoEffectivePolicyNativeSource
+{
+    private const uint POLICY_LOOKUP_NAMES = 0x00000800;
+    private const int STATUS_SUCCESS = 0;
+    private const int STATUS_NO_MORE_ENTRIES = unchecked((int)0x8000001A);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct USER_MODALS_INFO_0
+    {
+        public uint MinLength, MaxAge, MinAge, ForceLogoff, HistoryLength;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct USER_MODALS_INFO_3
+    {
+        public uint LockoutDuration, LockoutWindow, LockoutThreshold;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AUDIT_POLICY_INFORMATION
+    {
+        public Guid SubCategoryGuid;
+        public uint AuditingInformation;
+        public Guid CategoryGuid;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LSA_OBJECT_ATTRIBUTES
+    {
+        public int Length;
+        public IntPtr RootDirectory, ObjectName;
+        public uint Attributes;
+        public IntPtr SecurityDescriptor, SecurityQualityOfService;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LSA_UNICODE_STRING
+    {
+        public ushort Length, MaximumLength;
+        public IntPtr Buffer;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LSA_ENUMERATION_INFORMATION { public IntPtr Sid; }
+
+    [DllImport("Netapi32.dll", CharSet = CharSet.Unicode)]
+    private static extern int NetUserModalsGet(string serverName, int level, out IntPtr buffer);
+    [DllImport("Netapi32.dll")]
+    private static extern int NetApiBufferFree(IntPtr buffer);
+    [DllImport("Advapi32.dll", SetLastError = true)]
+    private static extern bool AuditQuerySystemPolicy(
+        [In] Guid[] subCategoryGuids, uint count, out IntPtr policy);
+    [DllImport("Advapi32.dll")]
+    private static extern void AuditFree(IntPtr buffer);
+    [DllImport("Advapi32.dll")]
+    private static extern int LsaOpenPolicy(
+        IntPtr systemName, ref LSA_OBJECT_ATTRIBUTES attributes,
+        uint desiredAccess, out IntPtr policyHandle);
+    [DllImport("Advapi32.dll")]
+    private static extern int LsaEnumerateAccountsWithUserRight(
+        IntPtr policyHandle, ref LSA_UNICODE_STRING userRight,
+        out IntPtr buffer, out ulong countReturned);
+    [DllImport("Advapi32.dll")]
+    private static extern int LsaNtStatusToWinError(int status);
+    [DllImport("Advapi32.dll")]
+    private static extern int LsaFreeMemory(IntPtr buffer);
+    [DllImport("Advapi32.dll")]
+    private static extern int LsaClose(IntPtr handle);
+
+    private static void ThrowStatus(int status, string source)
+    {
+        if (status != STATUS_SUCCESS)
+            throw new Win32Exception(LsaNtStatusToWinError(status), source + " failed.");
+    }
+
+    public static WinPCInfoLocalSamPolicySnapshot ReadLocalSamPassword()
+    {
+        IntPtr level0 = IntPtr.Zero;
+        try
+        {
+            int status = NetUserModalsGet(null, 0, out level0);
+            if (status != 0) throw new Win32Exception(status, "NetUserModalsGet(0) failed.");
+            var password = Marshal.PtrToStructure<USER_MODALS_INFO_0>(level0);
+            return new WinPCInfoLocalSamPolicySnapshot {
+                MinimumLength=password.MinLength, MaximumAgeSeconds=password.MaxAge,
+                MinimumAgeSeconds=password.MinAge, HistoryLength=password.HistoryLength
+            };
+        }
+        finally { if (level0 != IntPtr.Zero) NetApiBufferFree(level0); }
+    }
+
+    public static WinPCInfoLocalSamPolicySnapshot ReadLocalSamLockout()
+    {
+        IntPtr level3 = IntPtr.Zero;
+        try
+        {
+            int status = NetUserModalsGet(null, 3, out level3);
+            if (status != 0) throw new Win32Exception(status, "NetUserModalsGet(3) failed.");
+            var lockout = Marshal.PtrToStructure<USER_MODALS_INFO_3>(level3);
+            return new WinPCInfoLocalSamPolicySnapshot {
+                LockoutDurationSeconds=lockout.LockoutDuration,
+                LockoutWindowSeconds=lockout.LockoutWindow,
+                LockoutThreshold=lockout.LockoutThreshold
+            };
+        }
+        finally { if (level3 != IntPtr.Zero) NetApiBufferFree(level3); }
+    }
+
+    public static WinPCInfoSystemAuditingSnapshot[] ReadSystemAuditing()
+    {
+        string[] ids = { "audit:logon", "audit:process-creation", "audit:user-account-management" };
+        Guid[] guids = {
+            new Guid("0cce9215-69ae-11d9-bed3-505054503030"),
+            new Guid("0cce922b-69ae-11d9-bed3-505054503030"),
+            new Guid("0cce9235-69ae-11d9-bed3-505054503030")
+        };
+        IntPtr buffer;
+        if (!AuditQuerySystemPolicy(guids, (uint)guids.Length, out buffer))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "AuditQuerySystemPolicy failed.");
+        try
+        {
+        var values = new WinPCInfoSystemAuditingSnapshot[guids.Length];
+            int size = Marshal.SizeOf<AUDIT_POLICY_INFORMATION>();
+            for (int index = 0; index < values.Length; index++)
+            {
+                var item = Marshal.PtrToStructure<AUDIT_POLICY_INFORMATION>(IntPtr.Add(buffer, index * size));
+                if (item.SubCategoryGuid != guids[index])
+                    throw new InvalidOperationException("Audit policy returned an unexpected subcategory.");
+                values[index] = new WinPCInfoSystemAuditingSnapshot {
+                    CatalogId=ids[index], SuccessEnabled=(item.AuditingInformation & 1) != 0,
+                    FailureEnabled=(item.AuditingInformation & 2) != 0
+                };
+            }
+            return values;
+        }
+        finally { if (buffer != IntPtr.Zero) AuditFree(buffer); }
+    }
+
+    public static WinPCInfoUserRightSnapshot ReadUserRight(string catalogId, int maximumPrincipals)
+    {
+        string[] ids = { "right:remote-interactive-logon", "right:deny-remote-interactive-logon", "right:service-logon" };
+        string[] names = { "SeRemoteInteractiveLogonRight", "SeDenyRemoteInteractiveLogonRight", "SeServiceLogonRight" };
+        int rightIndex = Array.IndexOf(ids, catalogId);
+        if (rightIndex < 0) throw new InvalidOperationException("The user right is not release-cataloged.");
+        var attributes = new LSA_OBJECT_ATTRIBUTES { Length = Marshal.SizeOf<LSA_OBJECT_ATTRIBUTES>() };
+        IntPtr policy;
+        ThrowStatus(LsaOpenPolicy(IntPtr.Zero, ref attributes, POLICY_LOOKUP_NAMES, out policy), "LsaOpenPolicy");
+        try
+        {
+            IntPtr text = Marshal.StringToHGlobalUni(names[rightIndex]);
+            IntPtr buffer = IntPtr.Zero;
+            try
+            {
+                var right = new LSA_UNICODE_STRING {
+                    Buffer=text, Length=checked((ushort)(names[rightIndex].Length * 2)),
+                    MaximumLength=checked((ushort)((names[rightIndex].Length + 1) * 2))
+                };
+                ulong count;
+                int status = LsaEnumerateAccountsWithUserRight(policy, ref right, out buffer, out count);
+                if (status == STATUS_NO_MORE_ENTRIES)
+                    return new WinPCInfoUserRightSnapshot { CatalogId=ids[rightIndex], DirectSids=Array.Empty<string>(), BoundExceeded=false };
+                ThrowStatus(status, "LsaEnumerateAccountsWithUserRight");
+                bool boundExceeded = count > (ulong)maximumPrincipals;
+                ulong admittedCount = Math.Min(count, (ulong)maximumPrincipals);
+                var sids = new List<string>();
+                int size = Marshal.SizeOf<LSA_ENUMERATION_INFORMATION>();
+                for (ulong index = 0; index < admittedCount; index++)
+                {
+                    var item = Marshal.PtrToStructure<LSA_ENUMERATION_INFORMATION>(IntPtr.Add(buffer, checked((int)index * size)));
+                    if (item.Sid == IntPtr.Zero) throw new InvalidOperationException("A user-right SID is missing.");
+                    sids.Add(new SecurityIdentifier(item.Sid).Value);
+                }
+                sids.Sort(StringComparer.Ordinal);
+                return new WinPCInfoUserRightSnapshot { CatalogId=ids[rightIndex], DirectSids=sids.ToArray(), BoundExceeded=boundExceeded };
+            }
+            finally
+            {
+                if (buffer != IntPtr.Zero) LsaFreeMemory(buffer);
+                Marshal.FreeHGlobal(text);
+            }
+        }
+        finally { LsaClose(policy); }
     }
 }
 "@
@@ -611,10 +846,255 @@ function Get-LiveFirmwareResult {
     $result
 }
 
+function New-EffectivePolicyScopeState {
+    param([string]$ScopeId,[string]$State='Complete',[string]$ReasonCode='')
+    [ordered]@{scopeId=$ScopeId;state=$State;reasonCode=$ReasonCode}
+}
+
+function Get-EffectivePolicyScopeIds {
+    @(
+        'scope:policy.applied.user.identity','scope:policy.applied.user.applicability',
+        'scope:policy.applied.user.link','scope:policy.applied.user.precedence',
+        'scope:policy.applied.computer.identity','scope:policy.applied.computer.applicability',
+        'scope:policy.applied.computer.link','scope:policy.applied.computer.precedence',
+        'scope:policy.local-sam.password','scope:policy.local-sam.lockout',
+        'scope:policy.local-audit','scope:policy.local-user-rights',
+        'scope:policy.security-option.machine-inactivity-limit',
+        'scope:policy.security-option.disable-cad',
+        'scope:policy.security-option.lm-compatibility-level'
+    )
+}
+
+function Complete-EffectivePolicyLayerStates {
+    param([Parameter(Mandatory)]$Result)
+    function Get-LayerState([int[]]$Indexes){
+        $values=@($Indexes|ForEach-Object {[string]$Result.scopeStates[$_].state})
+        if(@($values|Where-Object {$_ -ne 'Complete'}).Count -eq 0){return 'Complete'}
+        if(@($values|Select-Object -Unique).Count -eq 1){return [string]$values[0]}
+        'Partial'
+    }
+    $Result.layerStates=[ordered]@{
+        AppliedPolicyEvidence=Get-LayerState (0..7)
+        ConfiguredPolicySignals=Get-LayerState (12..14)
+        CurrentControlState=Get-LayerState (8..11)
+    }
+    $Result
+}
+
+function New-EffectivePolicyBaseResult {
+    param([string]$State='Complete')
+    $reason=if($State -eq 'Complete'){''}else{'POLICY.SOURCE_UNAVAILABLE'}
+    [ordered]@{
+        sourceLocale='und'
+        layerStates=[ordered]@{AppliedPolicyEvidence=$State;ConfiguredPolicySignals=$State;CurrentControlState=$State}
+        scopeStates=@(Get-EffectivePolicyScopeIds|ForEach-Object {New-EffectivePolicyScopeState $_ $State $reason})
+        appliedPolicies=@();policySettings=@()
+        localSam=[ordered]@{
+            minimumPasswordLength=$null;maximumPasswordAgeSeconds=$null;minimumPasswordAgeSeconds=$null
+            passwordHistoryLength=$null;lockoutDurationSeconds=$null;lockoutWindowSeconds=$null;lockoutThreshold=$null
+        }
+        auditSubcategories=@(
+            [ordered]@{catalogId='audit:logon';state=$State;successEnabled=$null;failureEnabled=$null},
+            [ordered]@{catalogId='audit:process-creation';state=$State;successEnabled=$null;failureEnabled=$null},
+            [ordered]@{catalogId='audit:user-account-management';state=$State;successEnabled=$null;failureEnabled=$null}
+        )
+        userRights=@(
+            [ordered]@{catalogId='right:remote-interactive-logon';state=$State;directSids=@()},
+            [ordered]@{catalogId='right:deny-remote-interactive-logon';state=$State;directSids=@()},
+            [ordered]@{catalogId='right:service-logon';state=$State;directSids=@()}
+        )
+        securityOptions=@(
+            [ordered]@{catalogId='security-option:machine-inactivity-limit-seconds';state=$State;value=$null;sourceAttribution='Unproven'},
+            [ordered]@{catalogId='security-option:disable-cad';state=$State;value=$null;sourceAttribution='Unproven'},
+            [ordered]@{catalogId='security-option:lm-compatibility-level';state=$State;value=$null;sourceAttribution='Unproven'}
+        )
+        appliedOrderConflict=$false
+        localAccountPolicySemantics='LocalSamAccountsOnly'
+        userRightSemantics='DirectAssignmentsOnly'
+    }
+}
+
+function Set-EffectivePolicyScopeState {
+    param($Result,[int[]]$Indexes,[string]$State,[string]$ReasonCode)
+    foreach($index in $Indexes){
+        $Result.scopeStates[$index].state=$State
+        $Result.scopeStates[$index].reasonCode=if($State -eq 'Complete'){''}else{$ReasonCode}
+    }
+}
+
+function New-SyntheticEffectivePolicyResult {
+    param([string]$Scenario)
+    # Synthetic evidence is produced and validated by the standard-user
+    # coordinator from the same release policy used by unit tests. The elevated
+    # worker returns only this closed scenario marker, so the launch payload
+    # stays below Windows' immutable command-line ceiling without weakening the
+    # real collector or accepting caller-provided scripts.
+    [ordered]@{validationScenario=$Scenario}
+}
+
+function Get-LiveEffectivePolicyResult {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$AssessmentUserSid)
+    # Threat: human-facing policy reports are localized and can merge intended,
+    # configured, and effective state. Mechanism: this operation reads only
+    # structured Windows interfaces and projects a fixed catalog. It never
+    # refreshes policy, invokes a policy tool, resolves groups recursively, or
+    # contacts a domain controller. Trust assumption: the local cached RSoP,
+    # NetAPI, Audit, LSA, and registry providers truthfully report their own
+    # layer. Safe failure: each independent source becomes a field-specific gap;
+    # an empty or denied source never becomes affirmative compliance evidence.
+    $result=New-EffectivePolicyBaseResult Failed
+    $rsopSources=[Collections.Generic.List[object]]::new()
+    if([string]::IsNullOrWhiteSpace($AssessmentUserSid)){
+        Set-EffectivePolicyScopeState $result (0..3) Unavailable 'POLICY.ASSESSMENT_USER_CONTEXT_UNAVAILABLE'
+    }else{
+        $rsopSources.Add([ordered]@{target='User';namespace="root/RSOP/User/$AssessmentUserSid";offset=0})
+    }
+    $rsopSources.Add([ordered]@{target='Computer';namespace='root/RSOP/Computer';offset=4})
+    foreach($source in $rsopSources){
+        $target=[string]$source.target;$offset=[int]$source.offset
+        try {
+            $namespace=[string]$source.namespace
+            $gpos=@(Get-CimInstance -Namespace $namespace -ClassName RSOP_GPO -Property @('id','guidName','enabled','accessDenied','filterAllowed') -ErrorAction Stop)
+        } catch {
+            $state=Get-WorkerAccessState $_;Set-EffectivePolicyScopeState $result ($offset..($offset+3)) $state "POLICY.RSOP_GPO_$($state.ToUpperInvariant())"
+            continue
+        }
+        $gpoOverflow=$gpos.Count -gt 8
+        $links=@();$linkState='Complete';$linkReason=''
+        try {
+            $links=@(Get-CimInstance -Namespace $namespace -ClassName RSOP_GPLink -Property @('GPO','SOM','appliedOrder','enabled') -ErrorAction Stop)
+        } catch {
+            $linkState=Get-WorkerAccessState $_;$linkReason="POLICY.RSOP_LINK_$($linkState.ToUpperInvariant())"
+        }
+        $settings=@();$settingState='Complete';$settingReason=''
+        try {
+            $settings=@(Get-CimInstance -Namespace $namespace -Query 'SELECT __CLASS,id,GPOID,SOMID,precedence FROM RSOP_PolicySetting' -ErrorAction Stop)
+        } catch {
+            $settingState=Get-WorkerAccessState $_;$settingReason="POLICY.RSOP_SETTING_$($settingState.ToUpperInvariant())"
+        }
+        try {
+            $objectIdByRsopId=@{}
+            foreach($gpo in $gpos|Select-Object -First 8){
+                $isLocal=[string]$gpo.id -eq 'LocalGPO'
+                $id=if($isLocal){'LocalGPO'}else{([string]$gpo.guidName).Trim('{}').ToLowerInvariant()}
+                if($id -notmatch '^(?:LocalGPO|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$' -or
+                    $gpo.enabled -isnot [bool] -or $gpo.accessDenied -isnot [bool] -or $gpo.filterAllowed -isnot [bool]){throw 'Malformed RSoP GPO identity or applicability.'}
+                $objectIdByRsopId[[string]$gpo.id]=$id
+                $linkId=$null;$order=$null;$applicable=$null
+                if($linkState -eq 'Complete'){
+                    $rsopId=[string]$gpo.id
+                    $link=@($links|Where-Object {
+                        $reference=[string]$_.GPO
+                        $reference -eq $rsopId -or $reference -eq $id -or
+                            $reference -match [regex]::Escape($rsopId) -or
+                            $reference -match [regex]::Escape($id)
+                    })
+                    if(@($link|Where-Object {$_.enabled -isnot [bool]}).Count -gt 0){
+                        $linkState='Malformed';$linkReason='POLICY.RSOP_LINK_MALFORMED'
+                    }
+                    $enabledLinks=@($link|Where-Object {$_.enabled -is [bool] -and [bool]$_.enabled})
+                    if($enabledLinks.Count -gt 1){
+                        $linkState='Partial';$linkReason='POLICY.RSOP_LINK_AMBIGUOUS'
+                    }elseif($enabledLinks.Count -eq 1 -and $linkState -eq 'Complete'){
+                        if([string]::IsNullOrWhiteSpace([string]$enabledLinks[0].SOM) -or
+                            $null -eq $enabledLinks[0].appliedOrder -or [int]$enabledLinks[0].appliedOrder -lt 0 -or
+                            [int]$enabledLinks[0].appliedOrder -gt 64){
+                            $linkState='Malformed';$linkReason='POLICY.RSOP_LINK_MALFORMED'
+                        }else{
+                            $linkId=[string]$enabledLinks[0].SOM;$order=[int]$enabledLinks[0].appliedOrder
+                            $applicable=([bool]$gpo.enabled -and -not [bool]$gpo.accessDenied -and [bool]$gpo.filterAllowed)
+                        }
+                    }elseif($enabledLinks.Count -eq 0 -and $linkState -eq 'Complete'){
+                        $applicable=if($isLocal){([bool]$gpo.enabled -and -not [bool]$gpo.accessDenied -and [bool]$gpo.filterAllowed)}else{$false}
+                    }
+                }
+                $result.appliedPolicies+=,[ordered]@{target=$target;origin=if($isLocal){'Local'}else{'Domain'};objectId=$id;applicable=$applicable;linkId=$linkId;appliedOrder=$order}
+            }
+            $settingOverflow=$settings.Count -gt 8
+            foreach($setting in $settings|Select-Object -First 8){
+                $settingClass=[string]$setting.CimClass.CimClassName
+                if($settingClass -ne 'RSOP_RegistryPolicySetting'){
+                    $settingState='Unsupported';$settingReason='POLICY.RSOP_EXTENSION_UNSUPPORTED';continue
+                }
+                $gpoReference=[string]$setting.GPOID
+                $matchingRsopIds=@($objectIdByRsopId.Keys|Where-Object {
+                    $gpoReference -eq $_ -or $gpoReference -match [regex]::Escape([string]$_)
+                })
+                if($matchingRsopIds.Count -ne 1){
+                    if($gpoOverflow){$settingOverflow=$true;continue}
+                    $settingState='Malformed';$settingReason='POLICY.RSOP_SETTING_MALFORMED';continue
+                }
+                $gpoId=[string]$objectIdByRsopId[[string]$matchingRsopIds[0]]
+                $settingId="registry:$([string]$setting.id)"
+                if($gpoId -notmatch '^(?:LocalGPO|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$' -or $settingId -notmatch '^[A-Za-z0-9._:/{}-]{1,128}$' -or
+                    $null -eq $setting.precedence -or [int]$setting.precedence -lt 1 -or [int]$setting.precedence -gt 64){
+                    $settingState='Malformed';$settingReason='POLICY.RSOP_SETTING_MALFORMED';continue
+                }
+                $result.policySettings+=,[ordered]@{target=$target;settingId=$settingId;objectId=$gpoId;precedence=[int]$setting.precedence}
+            }
+            $boundState=if($gpoOverflow){'Partial'}else{'Complete'}
+            $boundReason=if($gpoOverflow){'POLICY.RSOP_EVIDENCE_BOUND_EXCEEDED'}else{''}
+            Set-EffectivePolicyScopeState $result @($offset) $boundState $boundReason
+            $finalLinkState=if($linkState -ne 'Complete'){$linkState}elseif($gpoOverflow){'Partial'}else{'Complete'}
+            $finalLinkReason=if($linkState -ne 'Complete'){$linkReason}elseif($gpoOverflow){'POLICY.RSOP_EVIDENCE_BOUND_EXCEEDED'}else{''}
+            Set-EffectivePolicyScopeState $result @($offset+1) $finalLinkState $finalLinkReason
+            $finalSettingState=if($settingState -ne 'Complete'){$settingState}elseif($gpoOverflow -or $settingOverflow){'Partial'}else{'Complete'}
+            $finalSettingReason=if($settingState -ne 'Complete'){$settingReason}elseif($gpoOverflow -or $settingOverflow){'POLICY.RSOP_EVIDENCE_BOUND_EXCEEDED'}else{''}
+            Set-EffectivePolicyScopeState $result @($offset+2) $finalLinkState $finalLinkReason
+            Set-EffectivePolicyScopeState $result @($offset+3) $finalSettingState $finalSettingReason
+        } catch {
+            $state=Get-WorkerAccessState $_;Set-EffectivePolicyScopeState $result ($offset..($offset+3)) $state "POLICY.RSOP_$($state.ToUpperInvariant())"
+        }
+    }
+    try {
+        $sam=[WinPCInfoEffectivePolicyNativeSource]::ReadLocalSamPassword()
+        $result.localSam.minimumPasswordLength=[int]$sam.MinimumLength;$result.localSam.maximumPasswordAgeSeconds=[long]$sam.MaximumAgeSeconds;$result.localSam.minimumPasswordAgeSeconds=[long]$sam.MinimumAgeSeconds;$result.localSam.passwordHistoryLength=[int]$sam.HistoryLength
+        Set-EffectivePolicyScopeState $result @(8) Complete ''
+    } catch {$state=Get-WorkerAccessState $_;Set-EffectivePolicyScopeState $result @(8) $state "POLICY.LOCAL_SAM_PASSWORD_$($state.ToUpperInvariant())"}
+    try {
+        $sam=[WinPCInfoEffectivePolicyNativeSource]::ReadLocalSamLockout()
+        $result.localSam.lockoutDurationSeconds=[long]$sam.LockoutDurationSeconds;$result.localSam.lockoutWindowSeconds=[long]$sam.LockoutWindowSeconds;$result.localSam.lockoutThreshold=[int]$sam.LockoutThreshold
+        Set-EffectivePolicyScopeState $result @(9) Complete ''
+    } catch {$state=Get-WorkerAccessState $_;Set-EffectivePolicyScopeState $result @(9) $state "POLICY.LOCAL_SAM_LOCKOUT_$($state.ToUpperInvariant())"}
+    try {
+        $result.auditSubcategories=@([WinPCInfoEffectivePolicyNativeSource]::ReadSystemAuditing()|ForEach-Object {[ordered]@{catalogId=$_.CatalogId;state='Complete';successEnabled=$_.SuccessEnabled;failureEnabled=$_.FailureEnabled}})
+        Set-EffectivePolicyScopeState $result @(10) Complete ''
+    } catch {$state=Get-WorkerAccessState $_;foreach($item in $result.auditSubcategories){$item.state=$state};Set-EffectivePolicyScopeState $result @(10) $state "POLICY.AUDIT_$($state.ToUpperInvariant())"}
+    $rightGap=$false;$rightBoundExceeded=$false
+    for($index=0;$index -lt $result.userRights.Count;$index++){
+        try {
+            $snapshot=[WinPCInfoEffectivePolicyNativeSource]::ReadUserRight([string]$result.userRights[$index].catalogId,8)
+            $result.userRights[$index]=[ordered]@{catalogId=$snapshot.CatalogId;state=if($snapshot.BoundExceeded){'Partial'}else{'Complete'};directSids=@($snapshot.DirectSids)}
+            if($snapshot.BoundExceeded){$rightBoundExceeded=$true}
+        } catch {$state=Get-WorkerAccessState $_;$result.userRights[$index].state=$state;$rightGap=$true}
+    }
+    if($rightGap){Set-EffectivePolicyScopeState $result @(11) Partial 'POLICY.USER_RIGHTS_INCOMPLETE'}
+    elseif($rightBoundExceeded){Set-EffectivePolicyScopeState $result @(11) Partial 'POLICY.USER_RIGHTS_EVIDENCE_BOUND_EXCEEDED'}
+    else{Set-EffectivePolicyScopeState $result @(11) Complete ''}
+    $optionDefinitions=@(
+        @('security-option:machine-inactivity-limit-seconds','SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System','InactivityTimeoutSecs','Integer'),
+        @('security-option:disable-cad','SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System','DisableCAD','Boolean'),
+        @('security-option:lm-compatibility-level','SYSTEM\CurrentControlSet\Control\Lsa','LmCompatibilityLevel','Integer')
+    )
+    for($index=0;$index -lt $optionDefinitions.Count;$index++){
+        try {
+            $definition=$optionDefinitions[$index];$key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($definition[1],$false)
+            try {$value=if($null -eq $key){$null}else{$key.GetValue($definition[2],$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
+            if($null -ne $value){$value=if($definition[3] -eq 'Boolean'){[bool]([int]$value)}else{[int]$value}}
+            $result.securityOptions[$index].state='Complete';$result.securityOptions[$index].value=$value
+            Set-EffectivePolicyScopeState $result @(12+$index) Complete ''
+        } catch {$state=Get-WorkerAccessState $_;$result.securityOptions[$index].state=$state;Set-EffectivePolicyScopeState $result @(12+$index) $state "POLICY.SECURITY_OPTION_$($state.ToUpperInvariant())"}
+    }
+    $groups=$result.policySettings|Group-Object target,settingId
+    $result.appliedOrderConflict=@($groups|Where-Object {@($_.Group.objectId|Select-Object -Unique).Count -gt 1}).Count -gt 0
+    Complete-EffectivePolicyLayerStates $result
+}
+
 $maximumBytes = [int] $configuration.maximumBytes
 $deadline = [int] $configuration.deadlineMilliseconds
 $tokenSource = [System.Threading.CancellationTokenSource]::new($deadline)
 $pipe = $null
+$assessmentUserSid = ''
 $workerStage = 'Connect'
 try {
     if ($configuration.workerFault -eq 'DelayConnect') {
@@ -673,13 +1153,17 @@ try {
         $root = $requestDocument.RootElement
         $names = @($root.EnumerateObject() | ForEach-Object Name)
         if ($root.ValueKind -ne [System.Text.Json.JsonValueKind]::Object -or
-            $names.Count -ne 5 -or @($names | Sort-Object -Unique).Count -ne 5 -or
+            $names.Count -ne 6 -or @($names | Sort-Object -Unique).Count -ne 6 -or
             $root.GetProperty('kind').GetString() -ne 'ExecutePlan' -or
             $root.GetProperty('contractVersion').GetString() -ne '1.0.0' -or
             $root.GetProperty('nonce').GetString() -ne $configuration.nonce -or
-            $root.GetProperty('planDigest').GetString() -ne $configuration.planDigest) {
+            $root.GetProperty('planDigest').GetString() -ne $configuration.planDigest -or
+            $null -eq $root.GetProperty('assessmentUserSid').GetString() -or
+            ($root.GetProperty('assessmentUserSid').GetString().Length -gt 0 -and
+                -not (Test-PrivilegedCollectionSid $root.GetProperty('assessmentUserSid').GetString()))) {
             throw 'The privilege request envelope is invalid.'
         }
+        $assessmentUserSid=$root.GetProperty('assessmentUserSid').GetString()
         $allowed = @(
             'observe-firmware-tpm', 'observe-local-administrators',
             'observe-effective-policy', 'observe-certificate-trust'
@@ -745,6 +1229,11 @@ try {
         $resultBody.administratorExposure = if ([string]$configuration.administratorScenario -eq 'Live') {
             Get-LiveAdministratorResult
         } else { New-SyntheticAdministratorResult -Scenario ([string]$configuration.administratorScenario) }
+    }
+    if ([string]$configuration.effectivePolicyScenario -ne 'None') {
+        $resultBody.effectivePolicy = if ([string]$configuration.effectivePolicyScenario -eq 'Live') {
+            Get-LiveEffectivePolicyResult -AssessmentUserSid $assessmentUserSid
+        } else { New-SyntheticEffectivePolicyResult -Scenario ([string]$configuration.effectivePolicyScenario) }
     }
     $result = $resultBody | ConvertTo-Json -Compress -Depth 5
     Write-Frame -Stream $pipe -Json $result -MaximumBytes $maximumBytes -Token $tokenSource.Token
@@ -932,11 +1421,20 @@ namespace WinPCInfo.PrivilegedCollectionPlan
 function ConvertTo-PrivilegedCollectionEncodedCommand {
     param([Parameter(Mandatory)] [string] $Source)
 
-    $sourceBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($Source)
+    # The reviewed template keeps explanatory comments and indentation for
+    # humans. The launched representation removes only whole comment lines,
+    # blank lines, and surrounding indentation before compression. It never
+    # rewrites tokens or strings. This preserves the reviewed behavior while
+    # keeping the fixed in-memory payload under Windows' command-line ceiling.
+    $launchLines = @($Source -split "`r?`n" | Where-Object {
+        $_ -notmatch '^\s*(?:#|//)' -and -not [string]::IsNullOrWhiteSpace($_)
+    } | ForEach-Object { $_.Trim() })
+    $launchSource = $launchLines -join "`n"
+    $sourceBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($launchSource)
     $compressedStream = [System.IO.MemoryStream]::new()
     try {
-        $compressor = [System.IO.Compression.GZipStream]::new(
-            $compressedStream, [System.IO.Compression.CompressionMode]::Compress, $true
+        $compressor = [System.IO.Compression.BrotliStream]::new(
+            $compressedStream, [System.IO.Compression.CompressionLevel]::SmallestSize, $true
         )
         try { $compressor.Write($sourceBytes, 0, $sourceBytes.Length) }
         finally { $compressor.Dispose() }
@@ -953,7 +1451,7 @@ function ConvertTo-PrivilegedCollectionEncodedCommand {
     # has no parser or caller input: it only inflates the exact in-memory bytes
     # constructed from the digest-verified template and runs them in this worker.
     $bootstrap = @"
-`$b=[Convert]::FromBase64String('$compressedBase64');`$m=[IO.MemoryStream]::new([byte[]]`$b);`$g=[IO.Compression.GZipStream]::new(`$m,[IO.Compression.CompressionMode]::Decompress);`$r=[IO.StreamReader]::new(`$g,[Text.UTF8Encoding]::new(`$false,`$true));try{&([scriptblock]::Create(`$r.ReadToEnd()))}finally{`$r.Dispose();`$g.Dispose();`$m.Dispose()}
+`$b=[Convert]::FromBase64String('$compressedBase64');`$m=[IO.MemoryStream]::new([byte[]]`$b);`$g=[IO.Compression.BrotliStream]::new(`$m,[IO.Compression.CompressionMode]::Decompress);`$r=[IO.StreamReader]::new(`$g,[Text.UTF8Encoding]::new(`$false,`$true));try{&([scriptblock]::Create(`$r.ReadToEnd()))}finally{`$r.Dispose();`$g.Dispose();`$m.Dispose()}
 "@.Trim()
     $encoded = [System.Convert]::ToBase64String(
         [System.Text.Encoding]::Unicode.GetBytes($bootstrap)
@@ -964,6 +1462,34 @@ function ConvertTo-PrivilegedCollectionEncodedCommand {
         throw 'The reviewed privilege bootstrap exceeds the Windows launch bound.'
     }
     $encoded
+}
+
+function ConvertTo-PrivilegedCollectionInlineCommand {
+    param([Parameter(Mandatory)] [string] $Source)
+
+    $launchLines = @($Source -split "`r?`n" | Where-Object {
+        $_ -notmatch '^\s*(?:#|//)' -and -not [string]::IsNullOrWhiteSpace($_)
+    } | ForEach-Object { $_.Trim() })
+    $sourceBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
+        ($launchLines -join "`n")
+    )
+    $compressedStream = [System.IO.MemoryStream]::new()
+    try {
+        $compressor = [System.IO.Compression.BrotliStream]::new(
+            $compressedStream, [System.IO.Compression.CompressionLevel]::SmallestSize, $true
+        )
+        try { $compressor.Write($sourceBytes, 0, $sourceBytes.Length) }
+        finally { $compressor.Dispose() }
+        $compressedBase64 = [System.Convert]::ToBase64String($compressedStream.ToArray())
+    }
+    finally { $compressedStream.Dispose() }
+    if ($compressedBase64.Length -gt 16384) {
+        throw 'The reviewed privilege worker exceeds its compressed launch bound.'
+    }
+    # ArgumentList passes this fixed command directly to pwsh; no command shell
+    # interprets it. Avoiding a second UTF-16/base64 expansion preserves the
+    # in-memory boundary and remains well below Windows' command-line ceiling.
+    "`$b=[Convert]::FromBase64String('$compressedBase64');`$m=[IO.MemoryStream]::new([byte[]]`$b);`$g=[IO.Compression.BrotliStream]::new(`$m,[IO.Compression.CompressionMode]::Decompress);`$r=[IO.StreamReader]::new(`$g,[Text.UTF8Encoding]::new(`$false,`$true));try{&([scriptblock]::Create(`$r.ReadToEnd()))}finally{`$r.Dispose();`$g.Dispose();`$m.Dispose()}"
 }
 
 function Wait-PrivilegedCollectionOwnedTreeAbsent {
@@ -1111,7 +1637,8 @@ function New-PrivilegedCollectionResult {
         [Parameter(Mandatory)] [bool] $CleanupVerified,
         [Parameter(Mandatory)] [string] $ValidationScenario,
         [Parameter()] $PrivateFirmwareCollectorResult,
-        [Parameter()] $PrivateAdministratorCollectorResult
+        [Parameter()] $PrivateAdministratorCollectorResult,
+        [Parameter()] $PrivateEffectivePolicyCollectorResult
     )
 
     $coverageState = switch ($State) {
@@ -1153,7 +1680,8 @@ function New-PrivilegedCollectionResult {
             peerProcessVerified = $ChannelVerified
             peerArtifactVerified = $ChannelVerified
             assessmentEvidenceCrossed = $null -ne $PrivateFirmwareCollectorResult -or
-                $null -ne $PrivateAdministratorCollectorResult
+                $null -ne $PrivateAdministratorCollectorResult -or
+                $null -ne $PrivateEffectivePolicyCollectorResult
         }
         standardUserWorkMayContinue = $State -in @('Completed', 'Unavailable')
         cleanup = [pscustomobject][ordered]@{
@@ -1187,6 +1715,12 @@ function New-PrivilegedCollectionResult {
         # Principal identities and direct relationships remain an in-memory
         # Restricted handoff. The public phase result never serializes them.
         $result.PrivateAdministratorCollectorResult = $PrivateAdministratorCollectorResult
+    }
+    if ($null -ne $PrivateEffectivePolicyCollectorResult) {
+        # Policy-object, registry, and rights details are Restricted evidence.
+        # Only the orchestrator receives this closed private handoff; the public
+        # phase record above contains no identity, link, SID, or setting value.
+        $result.PrivateEffectivePolicyCollectorResult = $PrivateEffectivePolicyCollectorResult
     }
     [pscustomobject]$result
 }
@@ -1235,6 +1769,9 @@ function Invoke-PrivilegedCollectionPlan {
         [Parameter(Mandatory)] [ValidatePattern('^[0-9a-f]{64}$')] [string] $PlanDigest,
         [Parameter(Mandatory)] [ValidatePattern('^[A-Za-z][A-Za-z0-9._:/-]{0,127}$')]
         [string] $AssessmentUserContext,
+        [AllowEmptyString()] [ValidateScript({
+            [string]::IsNullOrEmpty($_) -or (Test-PrivilegedCollectionSid $_)
+        })] [string] $AssessmentUserSid = '',
         [Parameter(Mandatory)] [ValidatePattern('^[A-Za-z][A-Za-z0-9._:/-]{0,127}$')]
         [string] $LocalPackageProtector,
         [Parameter()]
@@ -1257,6 +1794,14 @@ function Invoke-PrivilegedCollectionPlan {
             'ElevationDenied'
         )]
         [string] $AdministratorScenario = 'None',
+        [Parameter()]
+        [ValidateSet(
+            'None','Live','Workgroup','Domain','UserAndComputerRsop','MissingRsop',
+            'StaleRegistry','DeniedAdministrator','DeniedSystem','NonEnglish',
+            'AppliedOrderConflict','AccountLockout','AuditPolicy','UserRights',
+            'SecurityOptions','PartialChannel'
+        )]
+        [string] $EffectivePolicyScenario = 'None',
         [Parameter()] [System.Threading.CancellationToken] $CancellationToken =
             [System.Threading.CancellationToken]::None
     )
@@ -1265,9 +1810,11 @@ function Invoke-PrivilegedCollectionPlan {
     $scenario = Get-PrivilegedCollectionValidationScenario -Name $ValidationScenario
     if (($ValidationScenario -eq 'Live' -and (
             $FirmwareScenario -notin @('None','Live') -or
-            $AdministratorScenario -notin @('None','Live'))) -or
+            $AdministratorScenario -notin @('None','Live') -or
+            $EffectivePolicyScenario -notin @('None','Live'))) -or
         ($ValidationScenario -ne 'Live' -and (
-            $FirmwareScenario -eq 'Live' -or $AdministratorScenario -eq 'Live'))) {
+            $FirmwareScenario -eq 'Live' -or $AdministratorScenario -eq 'Live' -or
+            $EffectivePolicyScenario -eq 'Live'))) {
         throw 'Live and synthetic privileged collection boundaries cannot be mixed.'
     }
     $resultContext = @{
@@ -1380,8 +1927,10 @@ function Invoke-PrivilegedCollectionPlan {
     $failureStage = 'CREATE_CHANNEL'
     $firmwareOperationStartedAt = [DateTimeOffset]::UtcNow
     $administratorOperationStartedAt = [DateTimeOffset]::UtcNow
+    $effectivePolicyOperationStartedAt = [DateTimeOffset]::UtcNow
     $privateFirmwareCollectorResult = $null
     $privateAdministratorCollectorResult = $null
+    $privateEffectivePolicyCollectorResult = $null
     try {
         $failureStage = 'CREATE_JOB'
         $ownedJob = [WinPCInfo.PrivilegedCollectionPlan.OwnedJob]::Create(
@@ -1414,6 +1963,7 @@ function Invoke-PrivilegedCollectionPlan {
             workerFault = [string] $scenario.workerFault
             firmwareScenario = $FirmwareScenario
             administratorScenario = $AdministratorScenario
+            effectivePolicyScenario = $EffectivePolicyScenario
             jobName = $jobName
         }
         $encodedConfiguration = [System.Convert]::ToBase64String(
@@ -1424,7 +1974,7 @@ function Invoke-PrivilegedCollectionPlan {
         # The policy digest binds the reviewed template. Replacing its one fixed
         # configuration marker happens only in memory after the configuration's
         # closed shape is constructed. The resulting source goes straight to
-        # EncodedCommand, so neither a path nor a writable script can be swapped
+        # the fixed inline command, so neither a path nor a writable script can be swapped
         # between identity validation and process creation.
         if ($workerSource.IndexOf('__PRIVILEGED_WORKER_CONFIGURATION__') -ne
             $workerSource.LastIndexOf('__PRIVILEGED_WORKER_CONFIGURATION__')) {
@@ -1434,7 +1984,7 @@ function Invoke-PrivilegedCollectionPlan {
             '__PRIVILEGED_WORKER_CONFIGURATION__', $encodedConfiguration
         )
         $failureStage = 'ENCODE_WORKER'
-        $encodedWorker = ConvertTo-PrivilegedCollectionEncodedCommand -Source $launchWorkerSource
+        $inlineWorker = ConvertTo-PrivilegedCollectionInlineCommand -Source $launchWorkerSource
         $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
         $startInfo.FileName = $approvedExecutable
         # ShellExecute's runas verb is the Windows UAC boundary. It is selected
@@ -1449,7 +1999,7 @@ function Invoke-PrivilegedCollectionPlan {
         }
         $startInfo.WorkingDirectory = $PSHOME
         foreach ($argument in @(
-            '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $encodedWorker
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', $inlineWorker
         )) {
             $null = $startInfo.ArgumentList.Add($argument)
         }
@@ -1547,6 +2097,7 @@ finally { $pipe.Dispose() }
             contractVersion = '1.0.0'
             nonce = $nonce
             planDigest = $PlanDigest
+            assessmentUserSid = $AssessmentUserSid
             operations = @($PreparationPlan.privilege.privilegedOperations |
                 Where-Object context -eq 'Administrator' | ForEach-Object {
                     [pscustomobject][ordered]@{
@@ -1569,6 +2120,7 @@ finally { $pipe.Dispose() }
         $expectedResultNames = @('kind','contractVersion','nonce','planDigest','phaseId','operations')
         if ($FirmwareScenario -ne 'None') { $expectedResultNames += 'firmwareTpm' }
         if ($AdministratorScenario -ne 'None') { $expectedResultNames += 'administratorExposure' }
+        if ($EffectivePolicyScenario -ne 'None') { $expectedResultNames += 'effectivePolicy' }
         if ($resultNames.Count -ne $expectedResultNames.Count -or
             (@($resultNames | Sort-Object) -join '|') -ne
                 (@($expectedResultNames | Sort-Object) -join '|') -or
@@ -1671,6 +2223,40 @@ finally { $pipe.Dispose() }
                 }
             }
         }
+        if ($EffectivePolicyScenario -ne 'None') {
+            $effectivePolicyDefinition=Get-EffectivePolicyPolicy `
+                -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
+            $effectivePolicyPayload=if($validationFixture){
+                if([string]$workerResult.effectivePolicy.validationScenario -ne $EffectivePolicyScenario){
+                    throw 'The privilege worker returned the wrong Effective Policy validation marker.'
+                }
+                New-EffectivePolicySyntheticPayload -Policy $effectivePolicyDefinition `
+                    -Scenario $EffectivePolicyScenario
+            } else {$workerResult.effectivePolicy}
+            $effectivePolicyBytes=[Text.Encoding]::UTF8.GetByteCount(
+                ($effectivePolicyPayload|ConvertTo-Json -Compress -Depth 12)
+            )
+            if($effectivePolicyBytes -gt [int]$effectivePolicyDefinition.collectors[0].resultMaximumUtf8Bytes -or
+                -not (Test-EffectivePolicyCollectorPayload -Payload $effectivePolicyPayload `
+                    -Policy $effectivePolicyDefinition)){
+                throw 'The privileged Effective Policy projection failed its closed evidence contract.'
+            }
+            # Re-project every nested collection. A future JSON parser or worker
+            # change therefore cannot smuggle an undeclared property across the
+            # privilege boundary even when the outer frame remains well-formed.
+            $payloadCopy=Copy-EffectivePolicyCollectorPayload -Payload $effectivePolicyPayload `
+                -Policy $effectivePolicyDefinition
+            $privateEffectivePolicyCollectorResult=[pscustomobject][ordered]@{
+                state='Completed';reasonCode='EFFECTIVE_POLICY.COLLECTION_COMPLETED'
+                validationScenario=$EffectivePolicyScenario;validationFixture=[bool]$validationFixture
+                envelope=[pscustomobject][ordered]@{
+                    startedAt=$effectivePolicyOperationStartedAt.ToString('o')
+                    completedAt=[DateTimeOffset]::UtcNow.ToString('o');attempts=1
+                    executionContext=if($validationFixture){'Synthetic'}else{'Administrator'}
+                }
+                payload=$payloadCopy
+            }
+        }
         $channelVerified = $true
         $state = 'Completed'
         $reasonCode = 'PRIVILEGE.COMPLETED'
@@ -1749,7 +2335,8 @@ finally { $pipe.Dispose() }
         -ChannelVerified $channelVerified -CleanupVerified $cleanupVerified `
         -ValidationScenario $ValidationScenario `
         -PrivateFirmwareCollectorResult $privateFirmwareCollectorResult `
-        -PrivateAdministratorCollectorResult $privateAdministratorCollectorResult
+        -PrivateAdministratorCollectorResult $privateAdministratorCollectorResult `
+        -PrivateEffectivePolicyCollectorResult $privateEffectivePolicyCollectorResult
 }
 
 function Read-PrivilegedCollectionPlanFixture {

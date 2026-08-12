@@ -119,7 +119,13 @@ param(
     # context scenario. It cannot provide a group name, SID, account, member,
     # credential, command, path, collector, or authority.
     [Parameter(DontShow)]
-    [string] $AdministratorExposureFixturePath
+    [string] $AdministratorExposureFixturePath,
+
+    # An Effective Policy fixture selects one release-owned policy-source
+    # scenario. It cannot provide policy identifiers, links, settings, SIDs,
+    # registry values, commands, source paths, credentials, or authority.
+    [Parameter(DontShow)]
+    [string] $EffectivePolicyFixturePath
 )
 
 Set-StrictMode -Version Latest

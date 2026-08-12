@@ -18,14 +18,16 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.3.0' $contractSet.contractVersion `
-    'the additive administrator-exposure contract has an explicit version'
-Assert-Equal 131072 $contractSet.limits.maximumDocumentUtf8Bytes `
-    'the combined profile has a finite release-owned 128 KiB document ceiling'
-Assert-Equal 45 @($contractSet.fieldDefinitions).Count `
-    'historical fields remain while bounded administrator fields are admitted'
-Assert-Equal 11 @($contractSet.scopeDefinitions).Count `
-    'historical, device, identity, SYSTEM, and administrator scopes remain distinct'
+Assert-Equal '1.4.0' $contractSet.contractVersion `
+    'the additive Effective Policy contract has an explicit version'
+Assert-Equal 262144 $contractSet.limits.maximumDocumentUtf8Bytes `
+    'the combined profile has a finite release-owned 256 KiB document ceiling'
+Assert-Equal 192 $contractSet.limits.maximumArrayItems `
+    'the combined record has a deliberate finite array ceiling'
+Assert-Equal 68 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while bounded policy fields are admitted'
+Assert-Equal 26 @($contractSet.scopeDefinitions).Count `
+    'historical, device, identity, administrator, and policy scopes remain distinct'
 
 $definition = @($contractSet.fieldDefinitions | Where-Object fieldId -eq 'field:device.os.display-name')[0]
 Assert-Equal 'field:device.os.display-name' $definition.fieldId 'the admitted field identity is release-bound'
@@ -140,4 +142,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.3 binds historical, device, firmware, identity, SYSTEM, and administrator scopes to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.4 binds historical, device, firmware, identity, administrator, and Effective Policy scopes to Draft 2020-12 contracts.'

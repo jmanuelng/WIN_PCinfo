@@ -1,6 +1,6 @@
 # Assessment Contract validation
 
-The Assessment Contract began with one safe synthetic observation. Contract Set 1.2 keeps the four historical profiles unchanged and adds `profile:device-firmware-and-identity-readiness`. The additive profile combines the existing 25 Device/Firmware fields with eleven bounded identity and enrollment fields across a separate User subject and four new Evidence Scopes. The current slice can collect after approval and produce a Protected Evidence Package, but it does not by itself mark a Product Capability delivered.
+The Assessment Contract began with one safe synthetic observation. Contract Set 1.4 keeps every historical profile unchanged and adds `profile:device-firmware-identity-administrator-and-policy-readiness`. The additive profile carries forward Device, firmware, identity, and direct-administrator evidence, then adds fifteen Effective Policy scopes and a finite policy-field catalog without redefining an older `Complete` claim. The current slice can collect after approval and produce a Protected Evidence Package, but it does not by itself mark a Product Capability delivered.
 
 The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contract-set.json) is the dictionary and rulebook for this slice. Its [schema](../schemas/assessment-contract-set.schema.json) requires every admitted Evidence Field Definition to state:
 
@@ -11,7 +11,7 @@ The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contra
 - how prohibited material is omitted; and
 - whether the definition or a value may appear in a public projection.
 
-Only `field:device.os.display-name` is admitted in the original lifecycle profile, `profile:synthetic-contract-tracer`. Its source remains `SyntheticContractFixture`. `profile:device-windows-readiness` retains the original eight-field scope; `profile:device-windows-context` retains its 17-field scope; and `profile:device-and-firmware-readiness` retains the existing Device, firmware, Secure Boot, and TPM scopes. Contract Set 1.2 adds distinct Assessment User Context, registration, work-or-school, and LocalSystem MDM-provider scopes without redefining any historical `Complete` claim. A successful source may explicitly report an unknown or absent field; inaccessible or partial collection retains a reason and diagnostic. A source-wide, malformed, denied, or prohibited-material failure fabricates no field observation and is carried by coverage, diagnostics, and the collector envelope. The schema admits honest `Synthetic`, `StandardUser`, `Administrator`, and verified `LocalSystem` provenance.
+Only `field:device.os.display-name` is admitted in the original lifecycle profile, `profile:synthetic-contract-tracer`. Its source remains `SyntheticContractFixture`. Later profiles retain their original Device, firmware, identity, and administrator scopes. Contract Set 1.4 adds cached RSoP, local SAM, Audit Policy, direct LSA user-right, and configured registry-signal scopes. A successful source may explicitly report an unknown or absent field; inaccessible or partial collection retains a reason and diagnostic. A source-wide, malformed, denied, or prohibited-material failure fabricates no field observation and is carried by coverage, diagnostics, and the collector envelope. The schema admits honest `Synthetic`, `StandardUser`, `Administrator`, and verified `LocalSystem` provenance.
 
 ## What validation does
 
@@ -23,7 +23,7 @@ Before schema or semantic interpretation, the validator applies I-JSON-style saf
 - no duplicate property names;
 - valid Unicode scalar pairs;
 - interoperable integers from `-9007199254740991` through `9007199254740991` and finite floating-point numbers;
-- at most 16 JSON levels, 64 KiB per Contract Set 1.2 document, 1 KiB per ordinary string, and the smaller field-specific bounds in the Contract Set.
+- at most 16 JSON levels, 256 KiB per Contract Set 1.4 document, 1 KiB per ordinary string, and the smaller field-specific bounds in the Contract Set.
 
 Failures expose stable codes such as `CONTRACT.JSON_INVALID`, `CONTRACT.DUPLICATE_PROPERTY`, `CONTRACT.REQUIRED_FEATURE_UNSUPPORTED`, `CONTRACT.REFERENCE_INVALID`, `CONTRACT.COVERAGE_INCONSISTENT`, or `CONTRACT.PRIVACY_VIOLATION`. Parser exceptions, source values, and secret-like input are not copied into the public result.
 
@@ -55,7 +55,7 @@ Use stable PowerShell Core 7.6 or later 7.x:
 pwsh -NoLogo -NoProfile -File ./tests/ContractValidator.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/ContractSemanticMatrix.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/AssessmentContractSet.Tests.ps1
-pwsh -NoLogo -NoProfile -File ./tests/IdentityEnrollmentRecord.Tests.ps1
+pwsh -NoLogo -NoProfile -File ./tests/EffectivePolicyContract.Tests.ps1
 ```
 
-The original `-ContractFixturePath` conformance seam still ends `NotStarted` and cannot enable collection. Device context, firmware, the thirteen identity/enrollment states, and the ten direct-administrator states use separate closed scenario seams through the generated application and immutable plan. These produce typed synthetic samples and remove their protected packages before returning. No fixture can provide an account, member SID, tenant, domain, device identifier, arbitrary elevation, network access, device mutation, authentication, or Azure activity.
+The original `-ContractFixturePath` conformance seam still ends `NotStarted` and cannot enable collection. Device, firmware, identity/enrollment, direct-administrator, and fourteen Effective Policy states use separate closed scenario seams through the generated application and immutable plan. These produce typed synthetic samples and remove their protected packages before returning. No fixture can provide an account, member SID, policy identifier/value, tenant, domain, device identifier, arbitrary elevation, network access, device mutation, authentication, or Azure activity.
