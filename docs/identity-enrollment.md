@@ -6,7 +6,7 @@ WIN-PCInfo now carries a narrow, read-only identity tracer bullet through the ge
 
 The Preparation Summary freezes three collector contracts before the operator approves:
 
-- `observe-device-registration` runs from the assessment coordinator's standard-user context and calls `NetGetJoinInformation`, `NetGetAadJoinInformation`, Terminal Services session APIs, and Windows account-to-SID translation inside a supervised child;
+- `observe-device-registration` runs from the assessment coordinator's standard-user context and calls `NetGetJoinInformation`, `NetGetAadJoinInformation`, Terminal Services session APIs, and local LSA logon-session APIs inside a supervised child;
 - `observe-enrollment-context` uses only the device-default `NetGetAadJoinInformation` workplace-registration projection; and
 - `observe-mdm-system-context` reuses the predefined SYSTEM Collection sub-plan for one read-only `MDM_DeviceManageability_Provider01_01` presence query.
 
@@ -14,7 +14,7 @@ All three are offline and bounded to one five-second attempt. The two standard-u
 
 ## Why Assessment User Context is separate
 
-The account running WIN-PCInfo may be the initiating operator, an alternate administrator used for elevation, or another trusted process identity. None of those automatically identifies the interactive user whose user-scoped state the assessment intends to observe. WIN-PCInfo enumerates active Terminal Services sessions and accepts a user only when exactly one active session supplies a bounded account name and session identifier and Windows resolves that account to an immutable SID. The SID is compared with the process token only to describe their relationship; it is never published or stored as evidence. The privileged worker and SYSTEM source remain different collector contexts. Ambiguous, missing, denied, malformed, administrator, worker, or SYSTEM state never substitutes a different user.
+The account running WIN-PCInfo may be the initiating operator, an alternate administrator used for elevation, or another trusted process identity. None of those automatically identifies the interactive user whose user-scoped state the assessment intends to observe. WIN-PCInfo accepts a user only when Terminal Services can inspect every active session, exactly one is active, and local LSA logon-session data supplies one matching immutable SID. It does not translate an account name through a domain controller. The SID is compared with the process token only to describe their relationship; it is never published or stored as evidence. The privileged worker and SYSTEM source remain different collector contexts. A denied session query, ambiguity, missing data, malformed data, administrator, worker, or SYSTEM state never substitutes a different user.
 
 ## Structured, locale-neutral sources
 

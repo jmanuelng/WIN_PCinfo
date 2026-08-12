@@ -297,7 +297,7 @@
               "Windows NetGetJoinInformation API",
               "Windows NetGetAadJoinInformation API",
               "Windows Terminal Services session APIs",
-              "Windows account-to-SID translation"
+              "Windows LSA logon session APIs"
             ],
             "mayPrompt": false,
             "mayInstall": false,

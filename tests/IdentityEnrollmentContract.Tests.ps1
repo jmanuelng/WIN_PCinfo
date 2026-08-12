@@ -31,7 +31,7 @@ $expected = @{
     Unenrolled = @{domain='Workgroup';entra='None';user=$true;relation='SameUser'}
     UserContextUnavailable = @{domain='Workgroup';entra='None';user=$null;relation='Unavailable'}
     StandardUser = @{domain='Workgroup';entra='None';user=$true;relation='SameUser'}
-    Administrator = @{domain='Workgroup';entra='None';user=$true;relation='AlternateAdministrator'}
+    Administrator = @{domain=$null;entra=$null;user=$null;relation='AlternateAdministrator'}
     LocalSystem = @{domain=$null;entra=$null;user=$null;relation='ProhibitedProcessContext'}
     NonEnglish = @{domain='DomainJoined';entra='EntraRegistered';user=$true;relation='SameUser'}
     Malformed = @{domain=$null;entra=$null;user=$null;relation='Unavailable'}
@@ -55,14 +55,11 @@ foreach ($scenario in @($policy.validationScenarios)) {
         'every admitted fixture satisfies the same closed source contract'
 }
 
-$standard = Invoke-IdentityEnrollmentCollection -Policy $policy -ValidationScenario 'StandardUser'
 $administrator = Invoke-IdentityEnrollmentCollection -Policy $policy -ValidationScenario 'Administrator'
-Assert-Equal $standard.payload.assessmentUserAccountName `
-    $administrator.payload.assessmentUserAccountName `
-    'alternate administration cannot replace the Assessment User Context'
-Assert-Equal $standard.payload.assessmentUserSessionId `
-    $administrator.payload.assessmentUserSessionId `
-    'the verified interactive logon session is stable across process identities'
+Assert-Equal 0 @($administrator.observations).Count `
+    'alternate administration cannot execute or replace the Assessment User Context'
+Assert-Equal 0 @($administrator.coverage | Where-Object state -eq 'Complete').Count `
+    'an elevated process receives explicit gaps from the StandardUser sources'
 
 $nonEnglish = Invoke-IdentityEnrollmentCollection -Policy $policy -ValidationScenario 'NonEnglish'
 Assert-Equal 'fr-FR' $nonEnglish.payload.sourceLocale `
@@ -72,7 +69,7 @@ Assert-Equal 'DOMAINE-ÉQUIPE' $nonEnglish.payload.domainName `
 Assert-Equal 'équipe\utilisateur' $nonEnglish.payload.assessmentUserAccountName `
     'localized account text is carried, never interpreted as a label'
 
-foreach ($scenario in @('Malformed','Denied','LocalSystem')) {
+foreach ($scenario in @('Malformed','Denied','Administrator','LocalSystem')) {
     $failed = Invoke-IdentityEnrollmentCollection -Policy $policy -ValidationScenario $scenario
     Assert-Equal 0 @($failed.observations).Count `
         'source-wide failure creates no fabricated observations'

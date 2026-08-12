@@ -8,7 +8,7 @@ This public projection contains release-owned contracts and identifier-free synt
 | --- | --- |
 | Frozen authority | Three collectors, four Evidence Scopes, three Rule Evaluations, and four Tenant-side Discovery Task definitions validate against the release schema and immutable Preparation Plan. |
 | Structured sources | The read-only native boundary uses `NetGetJoinInformation`, `NetGetAadJoinInformation`, and Terminal Services APIs; no localized command output or tenant authentication is used. |
-| Context separation | The live source requires one active WTS session plus account-to-SID resolution, compares that SID to the process token only for a relationship, rejects elevated/SYSTEM source execution, and keeps the privileged and SYSTEM collectors separate. Synthetic boundary cases prove explicit gaps. |
+| Context separation | The live source requires complete WTS active-session enumeration plus a matching SID from local LSA logon-session data, compares that SID to the process token only for a relationship, rejects elevated/SYSTEM source execution, and keeps the privileged and SYSTEM collectors separate. Synthetic boundary cases prove explicit gaps. |
 | Privacy | All eleven new values are Restricted; generated public output is checked for synthetic account, domain, tenant, and device markers. |
 | Canonical evidence | The additive Contract Set 1.2 profile validates two subjects, eight scopes, 36 observations for the complete case, ten findings, and bounded discovery references. |
 | Generated application | Thirteen closed cases exercise Preparation, device/firmware prerequisites, identity/SYSTEM sources, record, report, package reopen, terminal result, and verified cleanup. |

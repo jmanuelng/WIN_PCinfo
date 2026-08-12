@@ -164,7 +164,16 @@ function New-IdentityEnrollmentSyntheticPayload {
             $payload.assessmentUserSessionId=$null;$payload.assessmentUserAccountName=$null
             $relationship='Unavailable'
         }
-        'Administrator' { $relationship='AlternateAdministrator' }
+        'Administrator' {
+            $payload.registrationState='Denied';$payload.userContextState='Denied'
+            $payload.workSchoolState='Denied';$payload.assessmentUserVerified=$null
+            $payload.assessmentUserSessionId=$null;$payload.assessmentUserAccountName=$null
+            $payload.domainJoinState=$null;$payload.domainName=$null
+            $payload.entraRegistrationType=$null;$payload.entraDeviceId=$null
+            $payload.entraTenantId=$null;$payload.workSchoolAccountPresent=$null
+            $payload.workSchoolAccountIdentifier=$null
+            $relationship='AlternateAdministrator'
+        }
         'LocalSystem' {
             $payload.registrationState='Denied';$payload.userContextState='Denied'
             $payload.workSchoolState='Denied';$payload.assessmentUserVerified=$null
@@ -240,10 +249,16 @@ namespace WinPCInfo.IdentityEnrollment
         public int UserSessionId { get; set; }
         public string UserAccountName { get; set; }
         public string UserSid { get; set; }
+        public int UserError { get; set; }
     }
 
     public static class NativeSources
     {
+        public static bool CanVerifyUserContext(
+            int activeSessionCount, int usableSessionCount, int userError)
+        {
+            return userError == 0 && activeSessionCount == 1 && usableSessionCount == 1;
+        }
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private struct DSREG_JOIN_INFO
         {
@@ -269,6 +284,23 @@ namespace WinPCInfo.IdentityEnrollment
             public int State;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LUID { public uint LowPart; public int HighPart; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LSA_UNICODE_STRING
+        {
+            public ushort Length; public ushort MaximumLength; public IntPtr Buffer;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SECURITY_LOGON_SESSION_DATA
+        {
+            public uint Size; public LUID LogonId; public LSA_UNICODE_STRING UserName;
+            public LSA_UNICODE_STRING LogonDomain; public LSA_UNICODE_STRING AuthenticationPackage;
+            public uint LogonType; public uint Session; public IntPtr Sid; public long LogonTime;
+            public LSA_UNICODE_STRING LogonServer; public LSA_UNICODE_STRING DnsDomainName;
+            public LSA_UNICODE_STRING Upn;
+        }
+
         [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
         private static extern int NetGetJoinInformation(
             string server, out IntPtr nameBuffer, out int bufferType);
@@ -287,15 +319,76 @@ namespace WinPCInfo.IdentityEnrollment
             IntPtr server, int sessionId, int infoClass, out IntPtr buffer, out int bytes);
         [DllImport("wtsapi32.dll")]
         private static extern void WTSFreeMemory(IntPtr memory);
+        [DllImport("secur32.dll")]
+        private static extern uint LsaEnumerateLogonSessions(out ulong count, out IntPtr list);
+        [DllImport("secur32.dll")]
+        private static extern uint LsaGetLogonSessionData(ref LUID logonId, out IntPtr data);
+        [DllImport("secur32.dll")]
+        private static extern uint LsaFreeReturnBuffer(IntPtr buffer);
+        [DllImport("advapi32.dll")]
+        private static extern uint LsaNtStatusToWinError(uint status);
 
-        private static string QuerySessionString(int sessionId, int infoClass)
+        private static string QuerySessionString(int sessionId, int infoClass, out int error)
         {
+            error = 0;
             IntPtr value = IntPtr.Zero;
             int bytes;
             if (!WTSQuerySessionInformation(IntPtr.Zero, sessionId, infoClass, out value, out bytes))
+            {
+                error = Marshal.GetLastWin32Error();
                 return null;
+            }
             try { return value == IntPtr.Zero ? null : Marshal.PtrToStringUni(value); }
             finally { if (value != IntPtr.Zero) WTSFreeMemory(value); }
+        }
+
+        private static string ReadLsaString(LSA_UNICODE_STRING value)
+        {
+            return value.Buffer == IntPtr.Zero || value.Length == 0
+                ? String.Empty : Marshal.PtrToStringUni(value.Buffer, value.Length / 2);
+        }
+
+        private static bool TryGetLocalSessionSid(
+            int sessionId, string user, string domain, out string sid, out int error)
+        {
+            sid = null; error = 0;
+            uint status = LsaEnumerateLogonSessions(out ulong count, out IntPtr list);
+            if (status != 0)
+            {
+                error = (int)LsaNtStatusToWinError(status);
+                return false;
+            }
+            var matchingSids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                for (ulong index = 0; index < count; index++)
+                {
+                    var luid = Marshal.PtrToStructure<LUID>(IntPtr.Add(list, checked((int)index * 8)));
+                    IntPtr data = IntPtr.Zero;
+                    status = LsaGetLogonSessionData(ref luid, out data);
+                    if (status != 0)
+                    {
+                        error = (int)LsaNtStatusToWinError(status);
+                        return false;
+                    }
+                    try
+                    {
+                        if (data == IntPtr.Zero) continue;
+                        var item = Marshal.PtrToStructure<SECURITY_LOGON_SESSION_DATA>(data);
+                        if (item.Session != (uint)sessionId || item.Sid == IntPtr.Zero) continue;
+                        if (!String.Equals(ReadLsaString(item.UserName), user,
+                                StringComparison.OrdinalIgnoreCase) ||
+                            !String.Equals(ReadLsaString(item.LogonDomain), domain,
+                                StringComparison.OrdinalIgnoreCase)) continue;
+                        matchingSids.Add(new SecurityIdentifier(item.Sid).Value);
+                    }
+                    finally { if (data != IntPtr.Zero) LsaFreeReturnBuffer(data); }
+                }
+            }
+            finally { if (list != IntPtr.Zero) LsaFreeReturnBuffer(list); }
+            if (matchingSids.Count != 1) { error = 1168; return false; }
+            foreach (string value in matchingSids) { sid = value; }
+            return true;
         }
 
         public static NativeSnapshot Read()
@@ -332,40 +425,52 @@ namespace WinPCInfo.IdentityEnrollment
                 try
                 {
                     int size = Marshal.SizeOf<WTS_SESSION_INFO>();
-                    var activeUsers = new List<Tuple<int, string>>();
+                    var activeUsers = new List<Tuple<int, string, string, string>>();
+                    int activeSessionCount = 0;
                     for (int index = 0; index < count; index++)
                     {
                         var item = Marshal.PtrToStructure<WTS_SESSION_INFO>(
                             IntPtr.Add(sessions, index * size));
                         if (item.State != 0) continue; // WTSActive
-                        string user = QuerySessionString(item.SessionID, 5); // WTSUserName
-                        if (String.IsNullOrWhiteSpace(user)) continue;
-                        string domainName = QuerySessionString(item.SessionID, 7); // WTSDomainName
+                        activeSessionCount++;
+                        string user = QuerySessionString(item.SessionID, 5, out int userError); // WTSUserName
+                        if (userError != 0 || String.IsNullOrWhiteSpace(user))
+                        {
+                            result.UserError = userError == 0 ? 13 : userError;
+                            continue;
+                        }
+                        string domainName = QuerySessionString(item.SessionID, 7, out int domainError); // WTSDomainName
+                        if (domainError != 0)
+                        {
+                            result.UserError = domainError;
+                            continue;
+                        }
                         string account = String.IsNullOrWhiteSpace(domainName)
                             ? user : domainName + "\\" + user;
-                        activeUsers.Add(Tuple.Create(item.SessionID, account));
+                        activeUsers.Add(Tuple.Create(item.SessionID, account, user,
+                            domainName ?? String.Empty));
                     }
-                    result.ActiveUserSessionCount = activeUsers.Count;
-                    if (activeUsers.Count == 1)
+                    result.ActiveUserSessionCount = activeSessionCount;
+                    if (CanVerifyUserContext(activeSessionCount, activeUsers.Count, result.UserError))
                     {
-                        // A display name and WTS session number are not enough
-                        // to establish an identity. Resolve the session account
-                        // through Windows' SID authority and accept it only when
-                        // that immutable security principal is available.
-                        try
+                        // LSA supplies the SID already attached to this local
+                        // logon session. Unlike account-name lookup, it never
+                        // searches a domain controller and therefore preserves
+                        // the collector's OfflineOnly boundary.
+                        if (TryGetLocalSessionSid(activeUsers[0].Item1, activeUsers[0].Item3,
+                                activeUsers[0].Item4, out string sid, out int sidError))
                         {
-                            var sid = (SecurityIdentifier)new NTAccount(
-                                activeUsers[0].Item2).Translate(typeof(SecurityIdentifier));
                             result.UserContextAvailable = true;
                             result.UserSessionId = activeUsers[0].Item1;
                             result.UserAccountName = activeUsers[0].Item2;
-                            result.UserSid = sid.Value;
+                            result.UserSid = sid;
                         }
-                        catch (IdentityNotMappedException) { }
+                        else result.UserError = sidError;
                     }
                 }
                 finally { if (sessions != IntPtr.Zero) WTSFreeMemory(sessions); }
             }
+            else result.UserError = Marshal.GetLastWin32Error();
             return result;
         }
     }
@@ -393,6 +498,23 @@ function New-LiveIdentityContextGap {
         startedAt=$StartedAt;completedAt=[DateTimeOffset]::UtcNow
         sourceFailureReason='COLLECTION.IDENTITY_PROCESS_CONTEXT_PROHIBITED'
     }
+}
+
+function Get-IdentityProcessContextDisposition {
+    param(
+        [Parameter(Mandatory)] [string] $ProcessSid,
+        [Parameter(Mandatory)] [bool] $IsAdministrator,
+        [Parameter(Mandatory)] [DateTimeOffset] $StartedAt
+    )
+    if($ProcessSid -eq 'S-1-5-18'){
+        return New-LiveIdentityContextGap -Context 'LocalSystem' `
+            -Relationship 'ProhibitedProcessContext' -StartedAt $StartedAt
+    }
+    if($IsAdministrator){
+        return New-LiveIdentityContextGap -Context 'Administrator' `
+            -Relationship 'AlternateAdministrator' -StartedAt $StartedAt
+    }
+    $null
 }
 
 function Invoke-BoundedIdentityNativeSnapshot {
@@ -470,24 +592,18 @@ function Get-LiveIdentityEnrollmentPayload {
     param([Parameter(Mandatory)] $Policy)
     $startedAt=[DateTimeOffset]::UtcNow
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    if ($identity.User.Value -eq 'S-1-5-18') {
-        # Only the separately frozen MDM Bridge operation may execute as
-        # LocalSystem. These user/registration sources fail closed before
-        # access so SYSTEM never becomes an alternate Assessment User Context.
-        return New-LiveIdentityContextGap -Context 'LocalSystem' `
-            -Relationship 'ProhibitedProcessContext' -StartedAt $startedAt
-    }
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     $isAdministrator = $principal.IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator
     )
-    if($isAdministrator){
-        # An already-elevated coordinator is not silently treated as the
-        # approved StandardUser source. This produces explicit gaps and leaves
-        # the separate privileged worker and Assessment User roles untouched.
-        return New-LiveIdentityContextGap -Context 'Administrator' `
-            -Relationship 'AlternateAdministrator' -StartedAt $startedAt
-    }
+    # Only the separately frozen MDM Bridge operation may execute as SYSTEM.
+    # An elevated coordinator is likewise not silently relabeled StandardUser.
+    # Both cases stop before native access and keep the privileged worker and
+    # Assessment User roles separate.
+    $processDisposition=Get-IdentityProcessContextDisposition `
+        -ProcessSid ([string]$identity.User.Value) -IsAdministrator $isAdministrator `
+        -StartedAt $startedAt
+    if($null -ne $processDisposition){return $processDisposition}
     $boundary=Invoke-BoundedIdentityNativeSnapshot -Policy $Policy
     if(-not [bool]$boundary.succeeded){
         $value=New-IdentityEnrollmentSyntheticPayload -Scenario 'Denied'
@@ -523,7 +639,9 @@ function Get-LiveIdentityEnrollmentPayload {
     } elseif ($snapshot.DomainError -ne 0 -or $snapshot.AadError -ne 0) {
         'Unavailable'
     } else { 'Complete' }
-    $userState = if ([bool]$snapshot.UserContextAvailable -and
+    $userState = if (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.UserError)) {
+        'Denied'
+    } elseif ([bool]$snapshot.UserContextAvailable -and
         [Text.Encoding]::UTF8.GetByteCount([string]$snapshot.UserAccountName) -le 256) {
         'Complete'
     } else { 'Unavailable' }
@@ -827,6 +945,27 @@ function Set-IdentityEnrollmentFindingResult {
     else { $Finding.PSObject.Properties.Remove('reasonCode') }
 }
 
+function Invoke-IdentityEnrollmentRuleEvaluation {
+    param(
+        [Parameter(Mandatory)] $Rule,
+        [Parameter(Mandatory)] [scriptblock] $Evaluation
+    )
+    # Rules are pure and deliberately tiny, but their release deadline is still
+    # executable authority rather than documentation. A single stopwatch and
+    # closed return shape makes accidental future expansion fail before a
+    # finding is admitted to the canonical record.
+    $watch=[Diagnostics.Stopwatch]::StartNew()
+    $values=@(& $Evaluation)
+    $watch.Stop()
+    if($watch.ElapsedMilliseconds -gt [int]$Rule.deadlineMilliseconds -or
+        $values.Count -ne 1 -or [string]$values[0].outcome -notin @(
+            'ExpectedCondition','NeedsAttention','Informational','Indeterminate','NotApplicable'
+        )){
+        throw "The $($Rule.operationId) Rule Evaluation violated its frozen bound."
+    }
+    $values[0]
+}
+
 function Complete-ValidatedIdentityEnrollmentAssessmentRecord {
     param(
         [Parameter(Mandatory)] $Record,
@@ -874,21 +1013,39 @@ function Complete-ValidatedIdentityEnrollmentAssessmentRecord {
         $byField[[string]$observation.fieldId]=$observation
     }
     $verified=$byField['field:identity.assessment-user.verified']
-    if($null -ne $verified -and $verified.valueState -eq 'ObservedValue' -and [bool]$verified.value){
-        Set-IdentityEnrollmentFindingResult $userFinding 'ExpectedCondition'
-    }else{Set-IdentityEnrollmentFindingResult $userFinding 'Indeterminate' 'FINDING.ASSESSMENT_USER_CONTEXT_UNAVAILABLE'}
+    $userResult=Invoke-IdentityEnrollmentRuleEvaluation `
+        -Rule $rules['assessment-user-context'] -Evaluation {
+            if($null -ne $verified -and $verified.valueState -eq 'ObservedValue' -and
+                [bool]$verified.value){[pscustomobject]@{outcome='ExpectedCondition'}
+            }else{[pscustomobject]@{outcome='Indeterminate'
+                reasonCode='FINDING.ASSESSMENT_USER_CONTEXT_UNAVAILABLE'}}
+        }
+    Set-IdentityEnrollmentFindingResult $userFinding ([string]$userResult.outcome) `
+        $(if($userResult.PSObject.Properties['reasonCode']){[string]$userResult.reasonCode}else{''})
     $domain=$byField['field:device.domain-join.state']
     $entra=$byField['field:device.entra-registration.type']
-    if($null -ne $domain -and $domain.valueState -eq 'ObservedValue' -and
-        $null -ne $entra -and $entra.valueState -eq 'ObservedValue'){
-        Set-IdentityEnrollmentFindingResult $registrationFinding 'Informational'
-    }else{Set-IdentityEnrollmentFindingResult $registrationFinding 'Indeterminate' 'FINDING.REGISTRATION_CONTEXT_INCOMPLETE'}
+    $registrationResult=Invoke-IdentityEnrollmentRuleEvaluation `
+        -Rule $rules['device-registration-context'] -Evaluation {
+            if($null -ne $domain -and $domain.valueState -eq 'ObservedValue' -and
+                $null -ne $entra -and $entra.valueState -eq 'ObservedValue'){
+                [pscustomobject]@{outcome='Informational'}
+            }else{[pscustomobject]@{outcome='Indeterminate'
+                reasonCode='FINDING.REGISTRATION_CONTEXT_INCOMPLETE'}}
+        }
+    Set-IdentityEnrollmentFindingResult $registrationFinding ([string]$registrationResult.outcome) `
+        $(if($registrationResult.PSObject.Properties['reasonCode']){[string]$registrationResult.reasonCode}else{''})
     $workSchool=$byField['field:device.work-school-registration.present']
     $mdm=$byField['field:device.mdm-bridge.provider-available']
-    if($null -ne $workSchool -and $workSchool.valueState -eq 'ObservedValue' -and
-        $null -ne $mdm -and $mdm.valueState -eq 'ObservedValue'){
-        Set-IdentityEnrollmentFindingResult $enrollmentFinding 'Informational'
-    }else{Set-IdentityEnrollmentFindingResult $enrollmentFinding 'Indeterminate' 'FINDING.ENROLLMENT_CONTEXT_INCOMPLETE'}
+    $enrollmentResult=Invoke-IdentityEnrollmentRuleEvaluation `
+        -Rule $rules['work-school-enrollment-context'] -Evaluation {
+            if($null -ne $workSchool -and $workSchool.valueState -eq 'ObservedValue' -and
+                $null -ne $mdm -and $mdm.valueState -eq 'ObservedValue'){
+                [pscustomobject]@{outcome='Informational'}
+            }else{[pscustomobject]@{outcome='Indeterminate'
+                reasonCode='FINDING.ENROLLMENT_CONTEXT_INCOMPLETE'}}
+        }
+    Set-IdentityEnrollmentFindingResult $enrollmentFinding ([string]$enrollmentResult.outcome) `
+        $(if($enrollmentResult.PSObject.Properties['reasonCode']){[string]$enrollmentResult.reasonCode}else{''})
     $Record.findings=@($Record.findings)+@($userFinding,$registrationFinding,$enrollmentFinding)
 
     # A local registration or provider signal never proves tenant assignment,

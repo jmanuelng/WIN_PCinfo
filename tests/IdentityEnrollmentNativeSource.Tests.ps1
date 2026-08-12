@@ -43,6 +43,19 @@ foreach ($requiredApi in @('NetGetJoinInformation','NetGetAadJoinInformation','W
         throw "The native collector does not bind the required structured API $requiredApi."
     }
 }
+foreach ($requiredOfflineApi in @('LsaEnumerateLogonSessions','LsaGetLogonSessionData')) {
+    if ($sourceText -notmatch [regex]::Escape($requiredOfflineApi)) {
+        throw "Assessment User SID binding is missing local structured source $requiredOfflineApi."
+    }
+}
+if ($sourceText -match 'NTAccount.*Translate|LookupAccountName') {
+    throw 'Offline identity collection cannot translate an account through a domain-capable lookup.'
+}
+Initialize-IdentityEnrollmentNativeSource
+Assert-Equal $false ([WinPCInfo.IdentityEnrollment.NativeSources]::CanVerifyUserContext(2,1,5)) `
+    'one denied active-session query prevents substitution of the remaining session'
+Assert-Equal $true ([WinPCInfo.IdentityEnrollment.NativeSources]::CanVerifyUserContext(1,1,0)) `
+    'only one fully inspected active session can reach SID verification'
 if ($sourceText -match '(?i)dsregcmd|cmd\.exe|powershell\.exe\s+-Command') {
     throw 'The native identity collector must not parse localized commands or launch a shell.'
 }
@@ -52,6 +65,25 @@ if ($sourceText -notmatch 'NativeRunner\]::Run' -or
 }
 Assert-Equal $true (Test-IdentityNativeAccessDeniedCode -Code ([int]0x80070005)) `
     'HRESULT E_ACCESSDENIED is classified as denied rather than unavailable'
+
+$gateStarted=[DateTimeOffset]::UtcNow
+$administratorGate=Get-IdentityProcessContextDisposition `
+    -ProcessSid 'S-1-5-21-1-2-3-1001' -IsAdministrator $true -StartedAt $gateStarted
+Assert-Equal 'Administrator' ([string]$administratorGate.executionContext) `
+    'an elevated coordinator is rejected before the StandardUser source'
+Assert-Equal 'Denied' ([string]$administratorGate.payload.userContextState) `
+    'administrator context creates an explicit user-context gap'
+$systemGate=Get-IdentityProcessContextDisposition `
+    -ProcessSid 'S-1-5-18' -IsAdministrator $true -StartedAt $gateStarted
+Assert-Equal 'LocalSystem' ([string]$systemGate.executionContext) `
+    'SYSTEM is preserved as its actual prohibited source context'
+Assert-Equal 'ProhibitedProcessContext' ([string]$systemGate.relationship) `
+    'SYSTEM cannot substitute the Assessment User Context'
+$standardGate=Get-IdentityProcessContextDisposition `
+    -ProcessSid 'S-1-5-21-1-2-3-1001' -IsAdministrator $false -StartedAt $gateStarted
+if($null -ne $standardGate){
+    throw 'A standard-user token alone must proceed to the independently verified session source.'
+}
 
 $deadlinePolicy = $policy | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
 $deadlinePolicy.collectors[0].deadlineMilliseconds = 800

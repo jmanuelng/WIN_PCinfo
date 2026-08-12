@@ -53,7 +53,7 @@ Assert-Equal 'Windows NetGetAadJoinInformation API' $policy.collectors[0].depend
     'Entra registration uses a structured Windows API'
 Assert-Equal 'Windows Terminal Services session APIs' $policy.collectors[0].dependencies[2] `
     'Assessment User Context is verified independently from process identity'
-Assert-Equal 'Windows account-to-SID translation' $policy.collectors[0].dependencies[3] `
+Assert-Equal 'Windows LSA logon session APIs' $policy.collectors[0].dependencies[3] `
     'the active session is bound to a Windows security principal, not a display name'
 
 $expectedScopes = @(

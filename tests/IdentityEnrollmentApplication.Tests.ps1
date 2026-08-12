@@ -20,7 +20,7 @@ $cases = @(
     @{name='identity-unenrolled';scenario='Unenrolled';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
     @{name='identity-userunavailable';scenario='UserContextUnavailable';exit=10;outcome='CompletedWithGaps';user='Unavailable';registration='Complete';workSchool='Complete';userFinding='Indeterminate';tasks=4;relation='Unavailable'},
     @{name='identity-standarduser';scenario='StandardUser';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
-    @{name='identity-administrator';scenario='Administrator';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='AlternateAdministrator'},
+    @{name='identity-administrator';scenario='Administrator';exit=10;outcome='CompletedWithGaps';user='Denied';registration='Denied';workSchool='Denied';userFinding='Indeterminate';tasks=4;relation='AlternateAdministrator'},
     @{name='identity-localsystem';scenario='LocalSystem';exit=10;outcome='CompletedWithGaps';user='Denied';registration='Denied';workSchool='Denied';userFinding='Indeterminate';tasks=4;relation='ProhibitedProcessContext'},
     @{name='identity-nonenglish';scenario='NonEnglish';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
     @{name='identity-malformed';scenario='Malformed';exit=10;outcome='CompletedWithGaps';user='Malformed';registration='Malformed';workSchool='Malformed';userFinding='Indeterminate';tasks=4;relation='Unavailable'},
