@@ -1085,6 +1085,9 @@ function Get-DeviceReadinessFailureDisposition {
         'IDENTITY.SYSTEM_CLEANUP_INCOMPLETE' {
             [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode}
         }
+        'IDENTITY.RULE_CLEANUP_INCOMPLETE' {
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode}
+        }
         default {
             [pscustomobject]@{
                 outcome=if($CollectionStarted){'IntegrityFailed'}else{'NotStarted'}

@@ -240,6 +240,7 @@ namespace WinPCInfo.IdentityEnrollment
         public int DomainJoinStatus { get; set; }
         public string DomainName { get; set; }
         public int AadError { get; set; }
+        public bool AadInfoPresent { get; set; }
         public int AadJoinType { get; set; }
         public string DeviceId { get; set; }
         public string TenantId { get; set; }
@@ -410,6 +411,7 @@ namespace WinPCInfo.IdentityEnrollment
             {
                 if (result.AadError == 0 && aad != IntPtr.Zero)
                 {
+                    result.AadInfoPresent = true;
                     var info = Marshal.PtrToStructure<DSREG_JOIN_INFO>(aad);
                     result.AadJoinType = info.joinType;
                     result.DeviceId = info.pszDeviceId;
@@ -493,6 +495,17 @@ function Test-IdentityAadSuccessCode {
     # for `None`; treating it as unavailable would erase the ordinary
     # workgroup/unenrolled case on real Windows hosts.
     $Code -eq 0 -or $Code -eq 1
+}
+
+function Get-IdentityAadSourceState {
+    param(
+        [Parameter(Mandatory)] [int] $Code,
+        [Parameter(Mandatory)] [bool] $InfoPresent
+    )
+    if(Test-IdentityNativeAccessDeniedCode $Code){return 'Denied'}
+    if($Code -eq 0 -and -not $InfoPresent){return 'Malformed'}
+    if(Test-IdentityAadSuccessCode $Code){return 'Complete'}
+    'Unavailable'
 }
 
 function New-LiveIdentityContextGap {
@@ -634,7 +647,9 @@ function Get-LiveIdentityEnrollmentPayload {
             default { 'Unknown' }
         }
     } else { $null }
-    $entraType = if (Test-IdentityAadSuccessCode ([int]$snapshot.AadError)) {
+    $aadSourceState=Get-IdentityAadSourceState -Code ([int]$snapshot.AadError) `
+        -InfoPresent ([bool]$snapshot.AadInfoPresent)
+    $entraType = if ($aadSourceState -eq 'Complete') {
         switch ([int]$snapshot.AadJoinType) {
             1 { 'EntraJoined' }
             2 { 'EntraRegistered' }
@@ -643,10 +658,12 @@ function Get-LiveIdentityEnrollmentPayload {
         }
     } else { $null }
     $registrationState = if ((Test-IdentityNativeAccessDeniedCode ([int]$snapshot.DomainError)) -or
-        (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.AadError))) {
+        $aadSourceState -eq 'Denied') {
         'Denied'
+    } elseif($aadSourceState -eq 'Malformed') {
+        'Malformed'
     } elseif ($snapshot.DomainError -ne 0 -or
-        -not (Test-IdentityAadSuccessCode ([int]$snapshot.AadError))) {
+        $aadSourceState -ne 'Complete') {
         'Unavailable'
     } else { 'Complete' }
     $userState = if (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.UserError)) {
@@ -655,9 +672,7 @@ function Get-LiveIdentityEnrollmentPayload {
         [Text.Encoding]::UTF8.GetByteCount([string]$snapshot.UserAccountName) -le 256) {
         'Complete'
     } else { 'Unavailable' }
-    $workSchoolState = if (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.AadError)) { 'Denied' }
-        elseif (-not (Test-IdentityAadSuccessCode ([int]$snapshot.AadError))) { 'Unavailable' }
-        else { 'Complete' }
+    $workSchoolState = $aadSourceState
     $workSchoolPresent = $entraType -eq 'EntraRegistered'
     $payload = [pscustomobject][ordered]@{
         sourceLocale='und';registrationState=$registrationState;userContextState=$userState
@@ -1033,7 +1048,14 @@ try {
             $PSHOME,$environment,$activeMilliseconds,2048,2048,
             [Threading.CancellationToken]::None,$event,1,$terminationMilliseconds,$false
         )
-        if(-not $native.Started -or -not [bool]$native.CompleteOwnedTreeAbsent -or
+        if($native.Started -and -not [bool]$native.CompleteOwnedTreeAbsent){
+            $exception=[InvalidOperationException]::new(
+                "The $($Rule.operationId) Rule Evaluation cleanup was not verified."
+            )
+            $exception.Data['ReasonCode']='IDENTITY.RULE_CLEANUP_INCOMPLETE'
+            throw $exception
+        }
+        if(-not $native.Started -or
             $native.FailureStage -ne [WinPCInfo.ProcessSupervisor.NativeFailureStage]::None -or
             $native.ExitCode -ne 0 -or $native.StandardOutputExceeded -or
             $native.StandardErrorExceeded -or $native.StandardErrorBytes -ne 0){

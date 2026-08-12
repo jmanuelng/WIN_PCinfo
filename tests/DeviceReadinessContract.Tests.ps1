@@ -32,6 +32,12 @@ Assert-Equal 'Uncertain' $failedBoundaryDisposition.packageAvailability `
     'failed fixture cleanup remains uncertain even when package verification also failed'
 Assert-Equal 'CleanupIncomplete' $failedBoundaryDisposition.outcome `
     'failed fixture cleanup takes terminal precedence over package integrity failure'
+$identityRuleCleanup = Get-DeviceReadinessFailureDisposition `
+    -ReasonCode 'IDENTITY.RULE_CLEANUP_INCOMPLETE' -CollectionStarted $true
+Assert-Equal 'CleanupIncomplete' $identityRuleCleanup.outcome `
+    'unverified identity rule-worker absence takes precedence over integrity failure'
+Assert-Equal 60 $identityRuleCleanup.exitCode `
+    'identity rule cleanup uncertainty uses the stable cleanup exit code'
 $failedReopenDisposition = Get-DeviceReadinessPackageDisposition `
     -Package ([pscustomobject]@{ state='Verified'; verified=$true; packagePath='synthetic-retained' }) `
     -ValidationFixture $false -ValidationCleanupVerified $true `

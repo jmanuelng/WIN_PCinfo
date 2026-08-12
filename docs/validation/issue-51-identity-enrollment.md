@@ -7,7 +7,7 @@ This public projection contains release-owned contracts and identifier-free synt
 | Gate | Public-safe result |
 | --- | --- |
 | Frozen authority | Three collectors, four Evidence Scopes, three Rule Evaluations, and four Tenant-side Discovery Task definitions validate against the release schema and immutable Preparation Plan. |
-| Structured sources | The read-only native boundary uses `NetGetJoinInformation`, `NetGetAadJoinInformation` (including `S_FALSE` as absent), Terminal Services, and local LSA logon-session APIs; no localized command output, domain-capable name lookup, or tenant authentication is used. |
+| Structured sources | The read-only native boundary uses `NetGetJoinInformation`, `NetGetAadJoinInformation` (`S_FALSE` means absent; `S_OK` requires a non-null structure), Terminal Services, and local LSA logon-session APIs; no localized command output, domain-capable name lookup, or tenant authentication is used. |
 | Hard rule bounds | Three fixed rule evaluators run in supervisor-owned Microsoft-signed children; a forced 30-second stall is terminated at the frozen two-second deadline with complete tree absence. |
 | Context separation | The live source requires complete WTS active-session enumeration plus a matching SID from local LSA logon-session data, compares that SID to the process token only for a relationship, rejects elevated/SYSTEM source execution, and keeps the privileged and SYSTEM collectors separate. Synthetic boundary cases prove explicit gaps. |
 | Privacy | All eleven new values are Restricted; generated public output is checked for synthetic account, domain, tenant, and device markers. |
