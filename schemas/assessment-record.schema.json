@@ -37,13 +37,13 @@
         "runId": { "$ref": "#/$defs/id" },
         "outcome": { "enum": ["Completed", "CompletedWithGaps", "NotStarted", "Cancelled", "TimedOut", "IntegrityFailed", "CleanupIncomplete"] },
         "validationFixture": { "type": "boolean" },
-        "evidenceProfileId": { "enum": ["profile:synthetic-contract-tracer", "profile:device-windows-readiness", "profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"] }
+        "evidenceProfileId": { "enum": ["profile:synthetic-contract-tracer", "profile:device-windows-readiness", "profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"] }
       }
     },
     "subjects": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 48,
+      "maxItems": 96,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -57,13 +57,13 @@
     "provenance": {
       "type": "array",
       "minItems": 0,
-      "maxItems": 192,
+      "maxItems": 384,
       "items": { "$ref": "#/$defs/provenance" }
     },
     "observations": {
       "type": "array",
       "minItems": 0,
-      "maxItems": 192,
+      "maxItems": 384,
       "items": { "$ref": "#/$defs/observation" }
     },
     "coverage": {
@@ -106,7 +106,7 @@
     "timestamp": { "type": "string", "format": "date-time" },
     "idArray": {
       "type": "array",
-      "maxItems": 192,
+      "maxItems": 384,
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/id" }
     },

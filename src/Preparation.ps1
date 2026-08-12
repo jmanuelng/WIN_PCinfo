@@ -286,6 +286,10 @@ function New-PreparationPlan {
         # registry-signal catalogs—including limits and failure semantics—are
         # frozen here before consent; no source or policy refresh can be added.
         effectivePolicy = $Definition.effectivePolicy
+        # User resources and peripherals stay in the verified Assessment User
+        # Context. Exact sources, property allowlists, limits, offline behavior,
+        # and the prohibition on credentials/content/device IDs are frozen here.
+        resourceDependencies = $Definition.resourceDependencies
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -440,6 +444,7 @@ function Invoke-PreparationGate {
     $identityEnrollmentFixturePath = [string] $ValidationContext.IdentityEnrollmentFixturePath
     $administratorExposureFixturePath = [string] $ValidationContext.AdministratorExposureFixturePath
     $effectivePolicyFixturePath = [string] $ValidationContext.EffectivePolicyFixturePath
+    $resourceDependenciesFixturePath = [string] $ValidationContext.ResourceDependenciesFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -515,7 +520,8 @@ function Invoke-PreparationGate {
             $systemCollectionFixturePath, $evidenceWorkspaceFixturePath,
             $protectedPackageFixturePath, $recipientSharingFixturePath,
             $deviceReadinessFixturePath, $identityEnrollmentFixturePath,
-            $administratorExposureFixturePath, $effectivePolicyFixturePath) |
+            $administratorExposureFixturePath, $effectivePolicyFixturePath,
+            $resourceDependenciesFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -614,6 +620,22 @@ function Invoke-PreparationGate {
             -ConvertToJsonCommand $ConvertToJsonCommand
         return Invoke-DeviceReadinessSlice `
             -EffectivePolicyLiteralPath $effectivePolicyFixturePath `
+            -PreparationPlan $planResult.Plan `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($resourceDependenciesFixturePath)) {
+        # Exact resource and peripheral values are Restricted Diagnostic
+        # Evidence. Public progress announces only the release-owned slice.
+        Write-ContractRecord (New-ProgressRecord -Sequence 7 -Phase 'Collection' `
+            -State 'Started' -MessageId 'resource-dependencies.collection.started' `
+            -CompletedUnits 0 -TotalUnits 1 -Unit 'ResourceDependencies') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return Invoke-DeviceReadinessSlice `
+            -ResourceDependenciesLiteralPath $resourceDependenciesFixturePath `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `

@@ -744,7 +744,8 @@ function New-DeviceReadinessReportBytes {
         [Parameter()] $FirmwarePolicy,
         [Parameter()] $IdentityEnrollmentPolicy,
         [Parameter()] $AdministratorExposurePolicy,
-        [Parameter()] $EffectivePolicyPolicy
+        [Parameter()] $EffectivePolicyPolicy,
+        [Parameter()] $ResourceDependenciesPolicy
     )
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
@@ -996,6 +997,41 @@ $identityGuidance
 <p>RSoP is read only and uses cached locale-neutral classes; WIN-PCInfo does not refresh policy or parse a localized report. Local SAM values apply only to local accounts. User-right entries are direct SID assignments only and do not expand nested groups. Missing, denied, stale, unsupported, malformed, or incomplete sources remain explicit gaps.</p>
 "@
     }else{''}
+    $resourceFinding=$Record.findings|Where-Object {
+        $_.ruleId -eq 'rule:resource.user-migration-dependencies/1.0.0'
+    }|Select-Object -First 1
+    $resourceSection=if($null -ne $resourceFinding){
+        if($null -eq $ResourceDependenciesPolicy){
+            throw 'Resource Dependency guidance requires its frozen policy definition.'
+        }
+        $peripheralRuleFinding=@($Record.findings|Where-Object ruleId -eq 'rule:resource.peripheral-migration-dependencies/1.0.0')[0]
+        $userCoverage=Get-ResourceDependencyLayerState -ScopeStates $Record.coverage -ScopeIds @($ResourceDependenciesPolicy.layers[0].scopeIds)
+        $deviceCoverage=Get-ResourceDependencyLayerState -ScopeStates $Record.coverage -ScopeIds @($ResourceDependenciesPolicy.layers[1].scopeIds)
+        $resourceSubjects=@($Record.subjects|Where-Object {$_.subjectId -like 'subject:mapped-drive:*' -or $_.subjectId -like 'subject:unc-resource:*' -or $_.subjectId -like 'subject:printer:*' -or $_.subjectId -like 'subject:printer-driver:*' -or $_.subjectId -like 'subject:peripheral:*'})
+        $rows=@($resourceSubjects|ForEach-Object {
+            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $lines=@($items|Where-Object valueState -eq ObservedValue|ForEach-Object {
+                '<strong>'+[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+':</strong> '+
+                    [Net.WebUtility]::HtmlEncode([string]$_.value)
+            })
+            '<li>'+($lines -join '<br>')+'</li>'
+        })
+        $guidance=@($Record.recommendations|Where-Object {
+            $_.definitionId -in @($ResourceDependenciesPolicy.recommendations.definitionId)
+        }|ForEach-Object {
+            $definitionId=[string]$_.definitionId
+            $definition=@($ResourceDependenciesPolicy.recommendations|Where-Object definitionId -eq $definitionId)[0]
+            '<li><strong>'+[Net.WebUtility]::HtmlEncode([string]$definition.purpose)+'</strong><br>'+[Net.WebUtility]::HtmlEncode([string]$definition.verification)+'<br><strong>Caution:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.caution)+'</li>'
+        })
+@"
+<h2>User resources and peripheral migration dependencies</h2>
+<p>User-resource coverage: $([Net.WebUtility]::HtmlEncode($userCoverage)). Peripheral coverage: $([Net.WebUtility]::HtmlEncode($deviceCoverage)). User finding: $([Net.WebUtility]::HtmlEncode([string]$resourceFinding.outcome)). Peripheral finding: $([Net.WebUtility]::HtmlEncode([string]$peripheralRuleFinding.outcome)).</p>
+<p>These are bounded advisory dependencies from the verified Assessment User Context. WIN-PCInfo does not connect a resource, enumerate share contents, documents, print jobs, credentials, or Wi-Fi keys, print, install or update a driver, or collect PnP identifiers and unrelated serial numbers.</p>
+<ul>$($rows -join '')</ul>
+<h3>Migration next steps</h3><ul>$($guidance -join '')</ul>
+<p>Observed local drivers and devices do not promise universal peripheral compatibility. Confirm each retained dependency against the target Windows, management, network, and vendor-support design before migration.</p>
+"@
+    }else{''}
     $html = @"
 <!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
 <h1>Device, Windows, activation, and power context</h1><p>$summary</p>
@@ -1020,6 +1056,7 @@ $firmwareSection
 $identitySection
 $administratorSection
 $effectivePolicySection
+$resourceSection
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -1191,6 +1228,9 @@ function Get-DeviceReadinessFailureDisposition {
         'IDENTITY.COLLECTOR_CLEANUP_INCOMPLETE' {
             [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
         }
+        'RESOURCE.COLLECTOR_CLEANUP_INCOMPLETE' {
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
+        }
         default {
             [pscustomobject]@{
                 outcome=if($CollectionStarted){'IntegrityFailed'}else{'NotStarted'}
@@ -1206,6 +1246,7 @@ function Invoke-DeviceReadinessSlice {
         [Parameter()] [string] $IdentityEnrollmentLiteralPath,
         [Parameter()] [string] $AdministratorExposureLiteralPath,
         [Parameter()] [string] $EffectivePolicyLiteralPath,
+        [Parameter()] [string] $ResourceDependenciesLiteralPath,
         [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
         [Parameter()] $ApprovedRecipient,
@@ -1220,13 +1261,16 @@ function Invoke-DeviceReadinessSlice {
     $isIdentityFixture = -not [string]::IsNullOrWhiteSpace($IdentityEnrollmentLiteralPath)
     $isAdministratorFixture = -not [string]::IsNullOrWhiteSpace($AdministratorExposureLiteralPath)
     $isEffectivePolicyFixture = -not [string]::IsNullOrWhiteSpace($EffectivePolicyLiteralPath)
-    $isFixture = $isDeviceFixture -or $isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture
+    $isResourceDependenciesFixture = -not [string]::IsNullOrWhiteSpace($ResourceDependenciesLiteralPath)
+    $isFixture = $isDeviceFixture -or $isIdentityFixture -or $isAdministratorFixture -or
+        $isEffectivePolicyFixture -or $isResourceDependenciesFixture
     $scenario = if ($isFixture) { '' } else { 'Actual' }
     $firmwareScenario = if ($isFixture) { 'None' } else { 'Live' }
     $privilegeScenario = if ($isFixture) { 'None' } else { 'Live' }
     $policy = $null; $firmwarePolicy = $null; $identityPolicy = $null
     $administratorPolicy=$null;$administratorCollector=$null
     $effectivePolicy=$null;$effectivePolicyCollector=$null
+    $resourcePolicy=$null;$resourceCollector=$null
     $privilegeResult = $null; $identityCollector = $null; $systemResult = $null
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
@@ -1255,6 +1299,11 @@ function Invoke-DeviceReadinessSlice {
     $currentControlCoverage='NotAttempted';$appliedPolicyCount=0
     $appliedPolicyFinding='Indeterminate';$localSecurityFinding='Indeterminate'
     $appliedOrderFinding='Indeterminate'
+    $resourceScenario=if($isResourceDependenciesFixture){''}else{'Live'}
+    $userResourceCoverage='NotAttempted';$peripheralCoverage='NotAttempted'
+    $mappedDriveCount=0;$uncConnectionCount=0;$printerCount=0
+    $printerDriverCount=0;$peripheralCount=0
+    $userResourceFinding='Indeterminate';$peripheralFinding='Indeterminate'
     $collectionStarted = $false
     $sliceStage='POLICY'
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
@@ -1267,6 +1316,8 @@ function Invoke-DeviceReadinessSlice {
         $administratorPolicy=Get-AdministratorExposurePolicy `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $effectivePolicy=Get-EffectivePolicyPolicy `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $resourcePolicy=Get-ResourceDependenciesPolicy `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $sliceStage='FIXTURE'
         if ($isDeviceFixture) {
@@ -1304,18 +1355,45 @@ function Invoke-DeviceReadinessSlice {
                 $privilegeScenario='ElevationDenied'
             }
         }
-        $identityRequested=$isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture -or -not $isFixture
-        $administratorRequested=$isAdministratorFixture -or $isEffectivePolicyFixture -or -not $isFixture
-        $effectivePolicyRequested=$isEffectivePolicyFixture -or -not $isFixture
+        elseif($isResourceDependenciesFixture){
+            $scenario='Complete';$firmwareScenario='Supported';$identityScenario='StandardUser'
+            $administratorScenario='LocalPrincipal';$effectivePolicyScenario='Workgroup'
+            $privilegeScenario='AcceptedElevation'
+            $resourceScenario=Read-ResourceDependenciesFixture `
+                -LiteralPath $ResourceDependenciesLiteralPath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $resourcePolicy
+        }
+        $identityRequested=$isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture -or $isResourceDependenciesFixture -or -not $isFixture
+        $administratorRequested=$isAdministratorFixture -or $isEffectivePolicyFixture -or $isResourceDependenciesFixture -or -not $isFixture
+        $effectivePolicyRequested=$isEffectivePolicyFixture -or $isResourceDependenciesFixture -or -not $isFixture
+        $resourceRequested=$isResourceDependenciesFixture -or -not $isFixture
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
         if($identityRequested){
             $sliceStage='IDENTITY'
-            $identityCollector=if($isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture){
+            $identityCollector=if($isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture -or $isResourceDependenciesFixture){
                 Invoke-IdentityEnrollmentCollection -Policy $identityPolicy `
                     -ValidationScenario $identityScenario
             }else{Invoke-IdentityEnrollmentCollection -Policy $identityPolicy -Live}
             $processRelationship=[string]$identityCollector.processRelationship
             $collectionStarted=$true
+        }
+        if($resourceRequested){
+            $sliceStage='RESOURCE_DEPENDENCIES'
+            $resourceCollector=if($isResourceDependenciesFixture){
+                Invoke-ResourceDependenciesCollection -Policy $resourcePolicy `
+                    -ValidationScenario $resourceScenario
+            }else{
+                Invoke-ResourceDependenciesCollection -Policy $resourcePolicy -Live `
+                    -AssessmentUserSid $(if($null -ne $identityCollector){
+                        [string]$identityCollector.privateAssessmentUserSid
+                    }else{''})
+            }
+            $collectionStarted=$true
+            if(-not [bool]$resourceCollector.cleanupVerified){
+                $exception=[InvalidOperationException]::new(
+                    'The Resource Dependencies worker cleanup was not verified.'
+                );$exception.Data['ReasonCode']='RESOURCE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception
+            }
         }
         $sliceStage='PRIVILEGE'
         if ($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) {
@@ -1403,7 +1481,7 @@ function Invoke-DeviceReadinessSlice {
                 -PlanDigest $systemPlanResult.Digest `
                 -ValidationScenario $(if($isEffectivePolicyFixture -and $effectivePolicyScenario -eq 'DeniedSystem'){
                     'Denied'
-                }elseif($isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture){
+                }elseif($isIdentityFixture -or $isAdministratorFixture -or $isEffectivePolicyFixture -or $isResourceDependenciesFixture){
                     'SyntheticSuccess'
                 }else{''})
             if(-not [bool]$systemResult.cleanup.verified){
@@ -1563,6 +1641,25 @@ function Invoke-DeviceReadinessSlice {
                     }
                     $sourceValidation=$effectivePolicySourceValidation
                 }
+                if($null -ne $resourceCollector){
+                    $sliceStage='RESOURCE_DEPENDENCIES_SOURCE'
+                    $record=Add-ResourceDependenciesEvidenceRecord -Record $record `
+                        -CollectorResult $resourceCollector -Policy $resourcePolicy
+                    [byte[]]$resourceSourceBytes=[Text.UTF8Encoding]::new($false).GetBytes(
+                        (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                    )
+                    $resourceSourceValidation=Test-AssessmentContract `
+                        -Utf8Bytes $resourceSourceBytes `
+                        -ConvertFromJsonCommand $ConvertFromJsonCommand `
+                        -TestJsonCommand $TestJsonCommand
+                    if([bool]$resourceSourceValidation.accepted){
+                        $sliceStage='RESOURCE_DEPENDENCIES_RULES'
+                        $record=Complete-ValidatedResourceDependenciesAssessmentRecord `
+                            -Record $record -Policy $resourcePolicy `
+                            -ContractValidation $resourceSourceValidation
+                    }
+                    $sourceValidation=$resourceSourceValidation
+                }
                 $sliceStage='FINAL_SERIALIZE'
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
@@ -1668,6 +1765,22 @@ function Invoke-DeviceReadinessSlice {
                     $localSecurityFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.local-security-policy-coverage/1.0.0')[0].outcome
                     $appliedOrderFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-order-conflict/1.0.0')[0].outcome
                 }
+                if($null -ne $resourceCollector){
+                    $sliceStage='RESOURCE_DEPENDENCIES_METRICS'
+                    $userResourceCoverage=Get-ResourceDependencyLayerState `
+                        -ScopeStates $resourceCollector.payload.scopeStates `
+                        -ScopeIds @($resourcePolicy.layers[0].scopeIds)
+                    $peripheralCoverage=Get-ResourceDependencyLayerState `
+                        -ScopeStates $resourceCollector.payload.scopeStates `
+                        -ScopeIds @($resourcePolicy.layers[1].scopeIds)
+                    $mappedDriveCount=@($resourceCollector.payload.mappedDrives).Count
+                    $uncConnectionCount=@($resourceCollector.payload.uncConnections).Count
+                    $printerCount=@($resourceCollector.payload.printers).Count
+                    $printerDriverCount=@($resourceCollector.payload.printerDrivers).Count
+                    $peripheralCount=@($resourceCollector.payload.peripherals).Count
+                    $userResourceFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:resource.user-migration-dependencies/1.0.0')[0].outcome
+                    $peripheralFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:resource.peripheral-migration-dependencies/1.0.0')[0].outcome
+                }
                 $findingOutcome = [string]@($record.findings | Where-Object {
                     $_.findingId -like 'finding:device-readiness:*'
                 })[0].outcome
@@ -1726,6 +1839,9 @@ function Invoke-DeviceReadinessSlice {
                         }else{$null}) `
                         -EffectivePolicyPolicy $(if($null -ne $effectivePolicyCollector){
                             $effectivePolicy
+                        }else{$null}) `
+                        -ResourceDependenciesPolicy $(if($null -ne $resourceCollector){
+                            $resourcePolicy
                         }else{$null})
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportVerified = $reportText.StartsWith('<!doctype html>') -and
@@ -1755,6 +1871,12 @@ function Invoke-DeviceReadinessSlice {
                             $reportText.Contains('does not refresh policy') -and
                             $reportText.Contains('direct SID assignments only')
                     }
+                    if($null -ne $resourceCollector){
+                        $reportVerified=$reportVerified -and
+                            $reportText.Contains('User resources and peripheral migration dependencies') -and
+                            $reportText.Contains('does not connect a resource') -and
+                            $reportText.Contains('do not promise universal peripheral compatibility')
+                    }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
                     $sliceStage='PACKAGE'
                     if ($isFixture) {
@@ -1782,7 +1904,9 @@ function Invoke-DeviceReadinessSlice {
                     }
                     else { 'RecoverablePartial' }
                     $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
-                        -Artifacts $artifacts -AssessmentContractSetVersion $(if($null -ne $effectivePolicyCollector){
+                        -Artifacts $artifacts -AssessmentContractSetVersion $(if($null -ne $resourceCollector){
+                            '1.5.0'
+                        }elseif($null -ne $effectivePolicyCollector){
                             '1.4.0'
                         }elseif($null -ne $administratorCollector){
                             '1.3.0'
@@ -1925,6 +2049,18 @@ function Invoke-DeviceReadinessSlice {
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
         }) -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if($isResourceDependenciesFixture -and $null -ne $resourceCollector){
+        $projection=New-ResourceDependenciesPublicProjection `
+            -CollectorResult $resourceCollector -Policy $resourcePolicy
+        $projection|Add-Member -NotePropertyName scenario -NotePropertyValue $resourceScenario
+        $projection|Add-Member -NotePropertyName userResourceFinding -NotePropertyValue $userResourceFinding
+        $projection|Add-Member -NotePropertyName peripheralFinding -NotePropertyValue $peripheralFinding
+        $projection|Add-Member -NotePropertyName assessmentRecordValidated -NotePropertyValue $recordAccepted
+        $projection|Add-Member -NotePropertyName beginnerReportVerified -NotePropertyValue $reportVerified
+        $projection|Add-Member -NotePropertyName protectedPackageVerified -NotePropertyValue $packageVerified
+        $projection|Add-Member -NotePropertyName validationCleanupVerified -NotePropertyValue $cleanupVerified
+        Write-ContractRecord $projection -ConvertToJsonCommand $ConvertToJsonCommand
     }
     $recipientSelected = $null -ne $ApprovedRecipient
     $recipientProtectionLevel = if ($recipientSelected) {

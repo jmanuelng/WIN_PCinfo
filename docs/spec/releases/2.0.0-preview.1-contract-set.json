@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
@@ -9,11 +9,11 @@
     "prohibited-material-omission"
   ],
   "limits": {
-    "maximumDocumentUtf8Bytes": 262144,
+    "maximumDocumentUtf8Bytes": 524288,
     "maximumJsonDepth": 16,
     "maximumSafeInteger": 9007199254740991,
     "maximumStringUtf8Bytes": 1024,
-    "maximumArrayItems": 192
+    "maximumArrayItems": 384
   },
   "schemas": [
     {
@@ -625,6 +625,78 @@
       "fieldId": "field:policy.security-option.lm-compatibility-level", "capabilityIds": ["CAP-0008"], "purpose": "Record the exact local registry signal for LAN Manager authentication compatibility without claiming source or current network use.",
       "source": { "sourceId": "source:windows.local-security-option-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Lsa LmCompatibilityLevel read-only value" },
       "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 2, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId":"field:resource.mapped-drive.local-name","capabilityIds":["CAP-0010"],"purpose":"Record the bounded local drive designator for one mapped resource.","source":{"sourceId":"source:windows.local.mapped-resource-correlation","kind":"StructuredWindowsSource","authoritativeIdentity":"Release-owned exact LocalName correlation of CurrentUser Network and Win32_NetworkConnection"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":8,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.mapped-drive.remote-endpoint","capabilityIds":["CAP-0010"],"purpose":"Record one mapped share endpoint without enumerating its contents.","source":{"sourceId":"source:windows.local.mapped-resource-correlation","kind":"StructuredWindowsSource","authoritativeIdentity":"Release-owned exact LocalName correlation of CurrentUser RemotePath and Win32_NetworkConnection.RemoteName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.mapped-drive.connection-state","capabilityIds":["CAP-0010"],"purpose":"Record the local mapped-resource state without contacting the remote resource.","source":{"sourceId":"source:windows.local.mapped-resource-correlation","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_NetworkConnection.ConnectionState correlated by exact LocalName, otherwise Unavailable"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":32,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.mapped-drive.provider-name","capabilityIds":["CAP-0010"],"purpose":"Record the bounded local provider name for one mapped resource.","source":{"sourceId":"source:windows.local.mapped-resource-correlation","kind":"StructuredWindowsSource","authoritativeIdentity":"Release-owned exact LocalName correlation of CurrentUser or Win32_NetworkConnection ProviderName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":128,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.share.endpoint","capabilityIds":["CAP-0010"],"purpose":"Record one connected UNC share endpoint without enumerating its contents.","source":{"sourceId":"source:windows.cim.network-connections","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_NetworkConnection.RemoteName without LocalName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.connection-state","capabilityIds":["CAP-0010"],"purpose":"Record the local structured UNC connection state without contacting the remote resource.","source":{"sourceId":"source:windows.cim.network-connections","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_NetworkConnection.ConnectionState without LocalName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":32,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.provider-name","capabilityIds":["CAP-0010"],"purpose":"Record the bounded local provider name for one UNC connection.","source":{"sourceId":"source:windows.cim.network-connections","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_NetworkConnection.ProviderName without LocalName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":128,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer.name","capabilityIds":["CAP-0010"],"purpose":"Identify one locally observable printer dependency.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_Printer.Name"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer.port-name","capabilityIds":["CAP-0010"],"purpose":"Record the configured port identity for one printer without opening it.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_Printer.PortName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer.driver-name","capabilityIds":["CAP-0010"],"purpose":"Bind one printer to its configured driver name for migration review.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_Printer.DriverName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer.network","capabilityIds":["CAP-0010"],"purpose":"Record whether Windows classifies the printer as a network printer.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_Printer.Network"},"valueType":"Boolean","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":5,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer.default","capabilityIds":["CAP-0010"],"purpose":"Record whether the printer is the current user default.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_Printer.Default"},"valueType":"Boolean","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":5,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer.offline","capabilityIds":["CAP-0010"],"purpose":"Record the locally reported printer offline flag without sending a print job.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_Printer.WorkOffline"},"valueType":"Boolean","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":5,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer-driver.name","capabilityIds":["CAP-0010"],"purpose":"Identify one locally installed printer-driver dependency.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PrinterDriver.Name"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer-driver.manufacturer","capabilityIds":["CAP-0010"],"purpose":"Record the printer-driver manufacturer reported by Windows.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PrinterDriver.Manufacturer"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer-driver.version","capabilityIds":["CAP-0010"],"purpose":"Record the bounded printer-driver version for migration comparison.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PrinterDriver.DriverVersion"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":128,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.printer-driver.inf-name","capabilityIds":["CAP-0010"],"purpose":"Record the bounded printer-driver INF dependency name.","source":{"sourceId":"source:windows.cim.printers-and-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PrinterDriver.InfName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":260,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.peripheral.class","capabilityIds":["CAP-0010"],"purpose":"Record one release-cataloged common peripheral class.","source":{"sourceId":"source:windows.cim.common-peripheral-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PnPSignedDriver.DeviceClass filtered by release catalog"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":64,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.peripheral.name","capabilityIds":["CAP-0010"],"purpose":"Record the bounded common peripheral name without requesting its device identifier.","source":{"sourceId":"source:windows.cim.common-peripheral-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PnPSignedDriver.DeviceName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.peripheral.manufacturer","capabilityIds":["CAP-0010"],"purpose":"Record the peripheral manufacturer reported by Windows.","source":{"sourceId":"source:windows.cim.common-peripheral-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PnPSignedDriver.Manufacturer"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.peripheral.driver-provider","capabilityIds":["CAP-0010"],"purpose":"Record the provider of the driver associated with one common peripheral.","source":{"sourceId":"source:windows.cim.common-peripheral-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PnPSignedDriver.DriverProviderName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":512,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.peripheral.driver-version","capabilityIds":["CAP-0010"],"purpose":"Record the bounded driver version associated with one common peripheral.","source":{"sourceId":"source:windows.cim.common-peripheral-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PnPSignedDriver.DriverVersion"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":128,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.peripheral.driver-inf-name","capabilityIds":["CAP-0010"],"purpose":"Record the bounded INF dependency associated with one common peripheral.","source":{"sourceId":"source:windows.cim.common-peripheral-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PnPSignedDriver.InfName"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":260,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
+    },
+    {
+      "fieldId":"field:resource.peripheral.driver-signed","capabilityIds":["CAP-0010"],"purpose":"Record the local signed-driver flag without making publisher or compatibility claims.","source":{"sourceId":"source:windows.cim.common-peripheral-drivers","kind":"StructuredWindowsSource","authoritativeIdentity":"Win32_PnPSignedDriver.IsSigned"},"valueType":"Boolean","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":5,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
     }
   ],
   "scopeDefinitions": [
@@ -655,7 +727,7 @@
     },
     {
       "scopeId": "scope:device.windows-context",
-      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-windows-context", "profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0001", "CAP-0002", "CAP-0004"],
       "purpose": "Close coverage for the bounded Device, Windows, activation, form, virtualization, chassis, battery, and power field set.",
       "fieldIds": [
@@ -684,7 +756,7 @@
     },
     {
       "scopeId": "scope:device.firmware-context",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for the bounded firmware interface and version context.",
       "fieldIds": [
@@ -696,7 +768,7 @@
     },
     {
       "scopeId": "scope:device.secure-boot",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for the applicable structured Secure Boot state.",
       "fieldIds": ["field:device.secure-boot.enabled"],
@@ -704,7 +776,7 @@
     },
     {
       "scopeId": "scope:device.tpm-readiness",
-      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-and-firmware-readiness", "profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0003"],
       "purpose": "Close coverage for bounded TPM presence, enabled, activated, and specification evidence.",
       "fieldIds": [
@@ -717,7 +789,7 @@
     },
     {
       "scopeId": "scope:identity.assessment-user-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the separately verified interactive Assessment User Context.",
       "fieldIds": ["field:identity.assessment-user.verified", "field:identity.assessment-user.session-id", "field:identity.assessment-user.account-name"],
@@ -725,7 +797,7 @@
     },
     {
       "scopeId": "scope:device.registration-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0005"],
       "purpose": "Close coverage for locale-neutral domain and Entra registration context.",
       "fieldIds": ["field:device.domain-join.state", "field:device.domain-join.name", "field:device.entra-registration.type", "field:device.entra-registration.device-id", "field:device.entra-registration.tenant-id"],
@@ -733,7 +805,7 @@
     },
     {
       "scopeId": "scope:device.work-school-registration-context",
-      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the bounded device-default local work-or-school registration context without attributing it to a user.",
       "fieldIds": ["field:device.work-school-registration.present", "field:device.work-school-registration.identifier"],
@@ -741,7 +813,7 @@
     },
     {
       "scopeId": "scope:device.mdm-policy.system",
-      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-firmware-and-identity-readiness", "profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0006"],
       "purpose": "Close coverage for the predefined read-only LocalSystem MDM Bridge provider-presence query.",
       "fieldIds": ["field:device.mdm-bridge.provider-available"],
@@ -749,7 +821,7 @@
     },
     {
       "scopeId": "scope:device.local-administrators.direct-membership",
-      "profileIds": ["profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness"],
+      "profileIds": ["profile:device-firmware-identity-and-administrator-readiness", "profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],
       "capabilityIds": ["CAP-0007"],
       "purpose": "Close coverage for the bounded direct membership of the SID-selected built-in Administrators group without expanding nested effective access.",
       "fieldIds": [
@@ -765,70 +837,85 @@
       "collectorIds": ["collector:windows.local-administrators.direct-members"]
     },
     {
-      "scopeId": "scope:policy.applied.user.identity", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.applied.user.identity", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific identity coverage for cached policy Windows reports for the Assessment User Context.",
       "fieldIds": ["field:policy.applied.object-id", "field:policy.applied.target", "field:policy.applied.origin"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.applied.user.applicability", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.applied.user.applicability", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific applicability coverage for cached user RSoP objects.", "fieldIds": ["field:policy.applied.applicable"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.applied.user.link", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.applied.user.link", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific link coverage for cached user RSoP objects.", "fieldIds": ["field:policy.applied.link-id"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.applied.user.precedence", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.applied.user.precedence", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific setting identity and precedence coverage for cached user RSoP.", "fieldIds": ["field:policy.applied.setting-id", "field:policy.applied.precedence"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.applied.computer.identity", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.applied.computer.identity", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific identity coverage for cached policy Windows reports for the assessed device.",
       "fieldIds": ["field:policy.applied.object-id", "field:policy.applied.target", "field:policy.applied.origin"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.applied.computer.applicability", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.applied.computer.applicability", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific applicability coverage for cached computer RSoP objects.", "fieldIds": ["field:policy.applied.applicable"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.applied.computer.link", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.applied.computer.link", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific link coverage for cached computer RSoP objects.", "fieldIds": ["field:policy.applied.link-id"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.applied.computer.precedence", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.applied.computer.precedence", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific setting identity and precedence coverage for cached computer RSoP.", "fieldIds": ["field:policy.applied.setting-id", "field:policy.applied.precedence"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.local-sam.password", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.local-sam.password", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close coverage for bounded local SAM password policy without claiming domain-account policy.",
       "fieldIds": ["field:policy.local-sam.minimum-authenticator-length", "field:policy.local-sam.maximum-authenticator-age-seconds", "field:policy.local-sam.minimum-authenticator-age-seconds", "field:policy.local-sam.authenticator-history-length"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.local-sam.lockout", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.local-sam.lockout", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close coverage for bounded local SAM lockout policy without claiming domain-account policy.",
       "fieldIds": ["field:policy.local-sam.lockout-duration-seconds", "field:policy.local-sam.lockout-window-seconds", "field:policy.local-sam.lockout-threshold"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.local-audit", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.local-audit", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close coverage for the three release-cataloged system audit subcategories.",
       "fieldIds": ["field:policy.audit.subcategory-id", "field:policy.audit.success-enabled", "field:policy.audit.failure-enabled"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.local-user-rights", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.local-user-rights", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close coverage for the three release-cataloged direct LSA user-right assignments without group expansion.",
       "fieldIds": ["field:policy.user-right.catalog-id", "field:policy.user-right.direct-principal-sid", "field:policy.user-right.direct-assignment"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.security-option.machine-inactivity-limit", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.security-option.machine-inactivity-limit", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific configured-signal coverage for the machine inactivity limit.", "fieldIds": ["field:policy.security-option.machine-inactivity-limit-seconds"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.security-option.disable-cad", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.security-option.disable-cad", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific configured-signal coverage for Ctrl+Alt+Del behavior.", "fieldIds": ["field:policy.security-option.disable-cad"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
-      "scopeId": "scope:policy.security-option.lm-compatibility-level", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness"], "capabilityIds": ["CAP-0008"],
+      "scopeId": "scope:policy.security-option.lm-compatibility-level", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific configured-signal coverage for LAN Manager authentication compatibility.", "fieldIds": ["field:policy.security-option.lm-compatibility-level"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId":"scope:resource.mapped-drives","profileIds":["profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],"capabilityIds":["CAP-0010"],"purpose":"Close bounded mapped-drive evidence in the verified Assessment User Context.","fieldIds":["field:resource.mapped-drive.local-name","field:resource.mapped-drive.remote-endpoint","field:resource.mapped-drive.connection-state","field:resource.mapped-drive.provider-name"],"collectorIds":["collector:windows.resource-dependencies"]
+    },
+    {
+      "scopeId":"scope:resource.unc-connections","profileIds":["profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],"capabilityIds":["CAP-0010"],"purpose":"Close bounded UNC connection evidence without enumerating remote contents.","fieldIds":["field:resource.share.endpoint","field:resource.connection-state","field:resource.provider-name"],"collectorIds":["collector:windows.resource-dependencies"]
+    },
+    {
+      "scopeId":"scope:resource.printers","profileIds":["profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],"capabilityIds":["CAP-0010"],"purpose":"Close bounded printer and port evidence in the verified Assessment User Context.","fieldIds":["field:resource.printer.name","field:resource.printer.port-name","field:resource.printer.driver-name","field:resource.printer.network","field:resource.printer.default","field:resource.printer.offline"],"collectorIds":["collector:windows.resource-dependencies"]
+    },
+    {
+      "scopeId":"scope:resource.printer-drivers","profileIds":["profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],"capabilityIds":["CAP-0010"],"purpose":"Close bounded printer-driver dependency evidence.","fieldIds":["field:resource.printer-driver.name","field:resource.printer-driver.manufacturer","field:resource.printer-driver.version","field:resource.printer-driver.inf-name"],"collectorIds":["collector:windows.resource-dependencies"]
+    },
+    {
+      "scopeId":"scope:resource.common-peripherals","profileIds":["profile:device-firmware-identity-administrator-policy-and-resource-dependencies"],"capabilityIds":["CAP-0010"],"purpose":"Close bounded common peripheral and associated driver evidence without device IDs or serials.","fieldIds":["field:resource.peripheral.class","field:resource.peripheral.name","field:resource.peripheral.manufacturer","field:resource.peripheral.driver-provider","field:resource.peripheral.driver-version","field:resource.peripheral.driver-inf-name","field:resource.peripheral.driver-signed"],"collectorIds":["collector:windows.resource-dependencies"]
     }
   ],
   "vocabularies": {
