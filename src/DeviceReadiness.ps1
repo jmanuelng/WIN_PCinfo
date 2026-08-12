@@ -742,7 +742,8 @@ function New-DeviceReadinessReportBytes {
     param(
         [Parameter(Mandatory)] $Record,
         [Parameter()] $FirmwarePolicy,
-        [Parameter()] $IdentityEnrollmentPolicy
+        [Parameter()] $IdentityEnrollmentPolicy,
+        [Parameter()] $AdministratorExposurePolicy
     )
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
@@ -898,6 +899,37 @@ $discoveryGuidance
 $identityGuidance
 "@
     }else{''}
+    $administratorFinding=$Record.findings|Where-Object {
+        $_.findingId -like 'finding:local-administrator-exposure:*'
+    }|Select-Object -First 1
+    $administratorSection=if($null -ne $administratorFinding){
+        if($null -eq $AdministratorExposurePolicy){
+            throw 'Administrator guidance requires its frozen policy definition.'
+        }
+        $administratorCoverage=@($Record.coverage|Where-Object {
+            $_.scopeId -eq 'scope:device.local-administrators.direct-membership'
+        })[0]
+        $principalSubjects=@($Record.subjects|Where-Object kind -eq 'SecurityPrincipal')
+        $principalRows=@($principalSubjects|ForEach-Object {
+            $memberSubjectId=[string]$_.subjectId;$memberValues=@{}
+            foreach($item in @($Record.observations|Where-Object subjectId -eq $memberSubjectId)){
+                $memberValues[[string]$item.fieldId]=if($item.valueState -eq 'ObservedValue'){
+                    [Net.WebUtility]::HtmlEncode([string]$item.value)
+                }else{'Not resolved'}
+            }
+            '<li><strong>SID:</strong> '+$memberValues['field:principal.windows.sid']+
+                '<br><strong>Account label:</strong> '+$memberValues['field:principal.windows.account-name']+
+                '<br><strong>Kind:</strong> '+$memberValues['field:principal.windows.kind']+
+                '<br><strong>Origin:</strong> '+$memberValues['field:principal.windows.origin']+'</li>'
+        })
+@"
+<h2>Local administrator exposure</h2>
+<p>Coverage: $([Net.WebUtility]::HtmlEncode([string]$administratorCoverage.state)). Finding: $([Net.WebUtility]::HtmlEncode([string]$administratorFinding.outcome)). Direct members observed: $($principalSubjects.Count).</p>
+<p>The built-in Administrators group is selected by its stable SID, not an English display name. Only direct members are reported. A group listed below may contain additional effective administrators, but WIN-PCInfo does not recursively expand or guess those identities.</p>
+<ul>$($principalRows -join '')</ul>
+<p>Membership alone does not prove compromise or that an account is unexpected. Confirm the organization's approved administrator-account context with the responsible device owner. WIN-PCInfo does not remove accounts, change group membership, collect credentials, or expose these Restricted identifiers outside the protected package.</p>
+"@
+    }else{''}
     $html = @"
 <!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
 <h1>Device, Windows, activation, and power context</h1><p>$summary</p>
@@ -920,6 +952,7 @@ $identityGuidance
 <p>These are bounded Windows observations, not a battery-health, calibration, capacity, or performance test. WIN-PCInfo does not change the active power plan.</p>
 $firmwareSection
 $identitySection
+$administratorSection
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -1104,6 +1137,7 @@ function Invoke-DeviceReadinessSlice {
     param(
         [Parameter()] [string] $LiteralPath,
         [Parameter()] [string] $IdentityEnrollmentLiteralPath,
+        [Parameter()] [string] $AdministratorExposureLiteralPath,
         [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
         [Parameter()] $ApprovedRecipient,
@@ -1116,11 +1150,13 @@ function Invoke-DeviceReadinessSlice {
 
     $isDeviceFixture = -not [string]::IsNullOrWhiteSpace($LiteralPath)
     $isIdentityFixture = -not [string]::IsNullOrWhiteSpace($IdentityEnrollmentLiteralPath)
-    $isFixture = $isDeviceFixture -or $isIdentityFixture
+    $isAdministratorFixture = -not [string]::IsNullOrWhiteSpace($AdministratorExposureLiteralPath)
+    $isFixture = $isDeviceFixture -or $isIdentityFixture -or $isAdministratorFixture
     $scenario = if ($isFixture) { '' } else { 'Actual' }
     $firmwareScenario = if ($isFixture) { 'None' } else { 'Live' }
     $privilegeScenario = if ($isFixture) { 'None' } else { 'Live' }
     $policy = $null; $firmwarePolicy = $null; $identityPolicy = $null
+    $administratorPolicy=$null;$administratorCollector=$null
     $privilegeResult = $null; $identityCollector = $null; $systemResult = $null
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
@@ -1139,7 +1175,13 @@ function Invoke-DeviceReadinessSlice {
     $processRelationship='Unavailable';$assessmentUserCoverageState='NotAttempted'
     $registrationCoverageState='NotAttempted';$workSchoolCoverageState='NotAttempted'
     $systemEnrollmentCoverageState='NotAttempted';$assessmentUserFindingOutcome='Indeterminate'
+    $administratorScenario=if($isAdministratorFixture){''}else{'Live'}
+    $administratorCoverageState='NotAttempted';$administratorFindingOutcome='Indeterminate'
+    $administratorDirectMemberCount=0;$administratorDirectGroupCount=0
+    $administratorUnresolvedCount=0;$administratorDuplicateCount=0
+    $administratorEnumerationComplete=$false;$administratorProcessRelationship='NotStarted'
     $collectionStarted = $false
+    $sliceStage='POLICY'
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
     try {
         $policy = Get-DeviceReadinessPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
@@ -1147,6 +1189,9 @@ function Invoke-DeviceReadinessSlice {
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $identityPolicy = Get-IdentityEnrollmentPolicy `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $administratorPolicy=Get-AdministratorExposurePolicy `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $sliceStage='FIXTURE'
         if ($isDeviceFixture) {
             $fixtureSelection = Read-DeviceReadinessFixture -LiteralPath $LiteralPath `
                 -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $policy `
@@ -1161,14 +1206,28 @@ function Invoke-DeviceReadinessSlice {
                 -LiteralPath $IdentityEnrollmentLiteralPath `
                 -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $identityPolicy
         }
-        $identityRequested=$isIdentityFixture -or -not $isFixture
+        elseif($isAdministratorFixture){
+            $scenario='Complete';$firmwareScenario='Supported';$identityScenario='StandardUser'
+            $administratorScenario=Read-AdministratorExposureFixture `
+                -LiteralPath $AdministratorExposureLiteralPath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $administratorPolicy
+            $privilegeScenario=if($administratorScenario -eq 'ElevationDenied'){
+                'ElevationDenied'
+            }elseif($administratorScenario -eq 'AlternateAdministrator'){
+                'AlternateAdministrator'
+            }else{'AcceptedElevation'}
+        }
+        $identityRequested=$isIdentityFixture -or $isAdministratorFixture -or -not $isFixture
+        $administratorRequested=$isAdministratorFixture -or -not $isFixture
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
-        if ($firmwareRequested) {
+        $sliceStage='PRIVILEGE'
+        if ($firmwareRequested -or $administratorRequested) {
             $privilegeResult = Invoke-PrivilegedCollectionPlan `
                 -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
                 -AssessmentUserContext 'subject:assessment-user:primary' `
                 -LocalPackageProtector 'protector:initiating-windows-user' `
-                -ValidationScenario $privilegeScenario -FirmwareScenario $firmwareScenario
+                -ValidationScenario $privilegeScenario -FirmwareScenario $firmwareScenario `
+                -AdministratorScenario $(if($administratorRequested){$administratorScenario}else{'None'})
             $privilegeState = [string]$privilegeResult.state
             $privilegeUacInteractionCount = [int]$privilegeResult.elevation.uacInteractionCount
             $collectionStarted = @($privilegeResult.operations).Count -gt 0
@@ -1180,32 +1239,50 @@ function Invoke-DeviceReadinessSlice {
             }
             if (-not [bool]$privilegeResult.cleanup.verified) {
                 $exception = [InvalidOperationException]::new(
-                    'The privileged firmware worker cleanup was not verified.'
+                    'The privileged worker cleanup was not verified.'
                 )
                 $exception.Data['ReasonCode'] = 'FIRMWARE.PRIVILEGE_CLEANUP_INCOMPLETE'
                 throw $exception
             }
-            if ($privilegeResult.PSObject.Properties['PrivateFirmwareCollectorResult']) {
-                $firmwareCollector = $privilegeResult.PrivateFirmwareCollectorResult
-            }
-            elseif ($privilegeResult.state -eq 'Unavailable') {
-                $firmwareCollector = New-FirmwareReadinessPrivilegeGapResult `
-                    -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
-            }
-            else {
-                $exception = [InvalidOperationException]::new(
-                    'The privileged firmware phase did not return a usable collector result.'
-                )
-                $exception.Data['ReasonCode'] = switch ([string]$privilegeResult.state) {
-                    'TimedOut' { 'FIRMWARE.PRIVILEGE_TIMED_OUT' }
-                    'Cancelled' { 'FIRMWARE.PRIVILEGE_CANCELLED' }
-                    default { 'FIRMWARE.PRIVILEGE_INTEGRITY_FAILED' }
+            if($firmwareRequested){
+                if ($privilegeResult.PSObject.Properties['PrivateFirmwareCollectorResult']) {
+                    $firmwareCollector = $privilegeResult.PrivateFirmwareCollectorResult
                 }
-                throw $exception
+                elseif ($privilegeResult.state -eq 'Unavailable') {
+                    $firmwareCollector = New-FirmwareReadinessPrivilegeGapResult `
+                        -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
+                }
+                else {
+                    $exception = [InvalidOperationException]::new(
+                        'The privileged firmware phase did not return a usable collector result.'
+                    )
+                    $exception.Data['ReasonCode'] = switch ([string]$privilegeResult.state) {
+                        'TimedOut' { 'FIRMWARE.PRIVILEGE_TIMED_OUT' }
+                        'Cancelled' { 'FIRMWARE.PRIVILEGE_CANCELLED' }
+                        default { 'FIRMWARE.PRIVILEGE_INTEGRITY_FAILED' }
+                    }
+                    throw $exception
+                }
+            }
+            if($administratorRequested){
+                if($privilegeResult.PSObject.Properties['PrivateAdministratorCollectorResult']){
+                    $administratorCollector=$privilegeResult.PrivateAdministratorCollectorResult
+                }elseif($privilegeResult.state -eq 'Unavailable'){
+                    $administratorCollector=New-AdministratorExposurePrivilegeGapResult `
+                        -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
+                }else{
+                    $exception=[InvalidOperationException]::new(
+                        'The privileged administrator phase did not return a usable collector result.'
+                    )
+                    $exception.Data['ReasonCode']='ADMINISTRATOR_EXPOSURE.PRIVILEGE_FAILED'
+                    throw $exception
+                }
+                $administratorProcessRelationship=[string]$administratorCollector.processRelationship
             }
         }
         if($identityRequested){
-            $identityCollector=if($isIdentityFixture){
+            $sliceStage='IDENTITY'
+            $identityCollector=if($isIdentityFixture -or $isAdministratorFixture){
                 Invoke-IdentityEnrollmentCollection -Policy $identityPolicy `
                     -ValidationScenario $identityScenario
             }else{Invoke-IdentityEnrollmentCollection -Policy $identityPolicy -Live}
@@ -1214,7 +1291,9 @@ function Invoke-DeviceReadinessSlice {
                 -PreparationPlanDigest $PlanDigest
             $systemResult=Invoke-SystemCollectionPlan -Plan $systemPlanResult.Plan `
                 -PlanDigest $systemPlanResult.Digest `
-                -ValidationScenario $(if($isIdentityFixture){'SyntheticSuccess'}else{''})
+                -ValidationScenario $(if($isIdentityFixture -or $isAdministratorFixture){
+                    'SyntheticSuccess'
+                }else{''})
             if(-not [bool]$systemResult.cleanup.verified){
                 $exception=[InvalidOperationException]::new(
                     'The predefined SYSTEM enrollment source cleanup was not verified.'
@@ -1229,6 +1308,7 @@ function Invoke-DeviceReadinessSlice {
             }
         }
         $collectorScenario = if ($isFixture) { $scenario } else { '' }
+        $sliceStage='DEVICE_COLLECTOR'
         $collector = Invoke-ApprovedCollectorProcess -OperationId ([string]$policy.collector.operationId) `
             -DeviceReadinessScenario $collectorScenario
         $collectionStarted = $collectionStarted -or [bool]$collector.Supervision.processStarted
@@ -1278,6 +1358,7 @@ function Invoke-DeviceReadinessSlice {
                 $evidence = ConvertTo-NormalizedDeviceReadinessEvidence -Payload $collector.PrivatePayload
             }
             if ($buildCanonicalRecord) {
+                $sliceStage='RECORD'
                 $runId = "run:device:$([guid]::NewGuid().ToString('N'))"
                 $record = New-DeviceReadinessAssessmentRecord -RunId $runId -Evidence $evidence `
                     -CollectorResult $collector -Policy $policy -ValidationFixture $isFixture `
@@ -1331,14 +1412,38 @@ function Invoke-DeviceReadinessSlice {
                     }
                     $sourceValidation=$identitySourceValidation
                 }
+                if($null -ne $administratorCollector){
+                    $sliceStage='ADMIN_SOURCE'
+                    $record=Add-AdministratorExposureEvidenceRecord -Record $record `
+                        -CollectorResult $administratorCollector -Policy $administratorPolicy
+                    $sliceStage='ADMIN_VALIDATE'
+                    [byte[]]$administratorSourceBytes=[Text.UTF8Encoding]::new($false).GetBytes(
+                        (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                    )
+                    $administratorSourceValidation=Test-AssessmentContract `
+                        -Utf8Bytes $administratorSourceBytes `
+                        -ConvertFromJsonCommand $ConvertFromJsonCommand `
+                        -TestJsonCommand $TestJsonCommand
+                    if([bool]$administratorSourceValidation.accepted){
+                        $sliceStage='ADMIN_RULE'
+                        $record=Complete-ValidatedAdministratorExposureAssessmentRecord `
+                            -Record $record -Policy $administratorPolicy `
+                            -ContractValidation $administratorSourceValidation
+                    }
+                    $sourceValidation=$administratorSourceValidation
+                }
+                $sliceStage='FINAL_SERIALIZE'
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
                 )
+                $sliceStage='FINAL_CONTRACT'
                 $finalValidation = Test-AssessmentContract -Utf8Bytes $recordBytes `
                     -ConvertFromJsonCommand $ConvertFromJsonCommand -TestJsonCommand $TestJsonCommand
+                $sliceStage='FINAL_ACCEPTANCE'
                 $recordAccepted = [bool]$sourceValidation.accepted -and [bool]$finalValidation.accepted
                 $coverageState = [string]@($record.coverage)[0].state
                 if ($null -ne $firmwareCollector) {
+                    $sliceStage='FIRMWARE_METRICS'
                     $firmwareCoverageState = [string]@($record.coverage | Where-Object {
                         $_.scopeId -eq 'scope:device.firmware-context'
                     })[0].state
@@ -1362,24 +1467,64 @@ function Invoke-DeviceReadinessSlice {
                     }).Count
                 }
                 if($null -ne $identityCollector){
-                    $assessmentUserCoverageState=[string]@($record.coverage|Where-Object {
+                    $sliceStage='IDENTITY_METRICS'
+                    $assessmentUserCoverage=@($record.coverage|Where-Object {
                         $_.scopeId -eq 'scope:identity.assessment-user-context'
-                    })[0].state
-                    $registrationCoverageState=[string]@($record.coverage|Where-Object {
+                    })
+                    $registrationCoverage=@($record.coverage|Where-Object {
                         $_.scopeId -eq 'scope:device.registration-context'
-                    })[0].state
-                    $workSchoolCoverageState=[string]@($record.coverage|Where-Object {
+                    })
+                    $workSchoolCoverage=@($record.coverage|Where-Object {
                         $_.scopeId -eq 'scope:device.work-school-registration-context'
-                    })[0].state
-                    $systemEnrollmentCoverageState=[string]@($record.coverage|Where-Object {
+                    })
+                    $systemEnrollmentCoverage=@($record.coverage|Where-Object {
                         $_.scopeId -eq 'scope:device.mdm-policy.system'
-                    })[0].state
-                    $assessmentUserFindingOutcome=[string]@($record.findings|Where-Object {
+                    })
+                    $assessmentUserFindings=@($record.findings|Where-Object {
                         $_.findingId -like 'finding:assessment-user-context:*'
-                    })[0].outcome
+                    })
+                    if($assessmentUserCoverage.Count -eq 1){
+                        $assessmentUserCoverageState=[string]$assessmentUserCoverage[0].state
+                    }
+                    if($registrationCoverage.Count -eq 1){
+                        $registrationCoverageState=[string]$registrationCoverage[0].state
+                    }
+                    if($workSchoolCoverage.Count -eq 1){
+                        $workSchoolCoverageState=[string]$workSchoolCoverage[0].state
+                    }
+                    if($systemEnrollmentCoverage.Count -eq 1){
+                        $systemEnrollmentCoverageState=[string]$systemEnrollmentCoverage[0].state
+                    }
+                    if($assessmentUserFindings.Count -eq 1){
+                        $assessmentUserFindingOutcome=[string]$assessmentUserFindings[0].outcome
+                    }
                     $tenantDiscoveryTaskCount=@($record.recommendations|Where-Object {
                         $_.kind -eq 'TenantSideDiscoveryTask'
                     }).Count
+                }
+                if($null -ne $administratorCollector){
+                    $sliceStage='ADMIN_METRICS'
+                    $administratorCoverage=@($record.coverage|Where-Object {
+                        $_.scopeId -eq 'scope:device.local-administrators.direct-membership'
+                    })
+                    $administratorFindings=@($record.findings|Where-Object {
+                        $_.findingId -like 'finding:local-administrator-exposure:*'
+                    })
+                    if($administratorCoverage.Count -eq 1){
+                        $administratorCoverageState=[string]$administratorCoverage[0].state
+                    }
+                    if($administratorFindings.Count -eq 1){
+                        $administratorFindingOutcome=[string]$administratorFindings[0].outcome
+                    }
+                    $administratorEnumerationComplete=[bool]$administratorCollector.payload.enumerationComplete
+                    $administratorDirectMemberCount=@($administratorCollector.payload.directMembers).Count
+                    $administratorDirectGroupCount=@($administratorCollector.payload.directMembers|Where-Object {
+                        $_.principalKind -eq 'Group'
+                    }).Count
+                    $administratorUnresolvedCount=@($administratorCollector.payload.directMembers|Where-Object {
+                        $_.origin -eq 'Unresolved'
+                    }).Count
+                    $administratorDuplicateCount=[int]$administratorCollector.payload.duplicateEntriesRemoved
                 }
                 $findingOutcome = [string]@($record.findings | Where-Object {
                     $_.findingId -like 'finding:device-readiness:*'
@@ -1426,12 +1571,16 @@ function Invoke-DeviceReadinessSlice {
                     $outcome='IntegrityFailed';$exitCode=50;$reasonCode='DEVICE_READINESS.CONTRACT_INVALID'
                 }
                 else {
+                    $sliceStage='REPORT'
                     [byte[]]$reportBytes = New-DeviceReadinessReportBytes -Record $record `
                         -FirmwarePolicy $(if ($null -ne $firmwareCollector) {
                             $firmwarePolicy
                         } else { $null }) `
                         -IdentityEnrollmentPolicy $(if($null -ne $identityCollector){
                             $identityPolicy
+                        }else{$null}) `
+                        -AdministratorExposurePolicy $(if($null -ne $administratorCollector){
+                            $administratorPolicy
                         }else{$null})
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportVerified = $reportText.StartsWith('<!doctype html>') -and
@@ -1448,7 +1597,14 @@ function Invoke-DeviceReadinessSlice {
                             $reportText.Contains('Registration, join, and enrollment context') -and
                             $reportText.Contains('cannot establish tenant assignment, compliance, licensing, or organizational intent')
                     }
+                    if($null -ne $administratorCollector){
+                        $reportVerified=$reportVerified -and
+                            $reportText.Contains('Local administrator exposure') -and
+                            $reportText.Contains('does not recursively expand or guess') -and
+                            $reportText.Contains('does not prove compromise')
+                    }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
+                    $sliceStage='PACKAGE'
                     if ($isFixture) {
                         $boundary = New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (
                             Join-Path (Split-Path -Parent $PSCommandPath) '.device-readiness-validation'
@@ -1474,7 +1630,9 @@ function Invoke-DeviceReadinessSlice {
                     }
                     else { 'RecoverablePartial' }
                     $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
-                        -Artifacts $artifacts -AssessmentContractSetVersion $(if($null -ne $identityCollector){'1.2.0'}else{'1.1.0'}) `
+                        -Artifacts $artifacts -AssessmentContractSetVersion $(if($null -ne $administratorCollector){
+                            '1.3.0'
+                        }elseif($null -ne $identityCollector){'1.2.0'}else{'1.1.0'}) `
                         -Completeness $packageCompleteness -ApprovedRecipient $ApprovedRecipient
                     if ($package.verified) {
                         $recipientKeyProtection = [string](
@@ -1510,7 +1668,7 @@ function Invoke-DeviceReadinessSlice {
         if ($scenario -eq '') { $scenario = 'InvalidFixture' }
         $failureReasonCode = if ($_.Exception.Data['ReasonCode']) {
             [string]$_.Exception.Data['ReasonCode']
-        } else { 'DEVICE_READINESS.INTEGRITY_FAILED' }
+        } else { "DEVICE_READINESS.$sliceStage`_FAILED" }
         $failureDisposition = Get-DeviceReadinessFailureDisposition `
             -ReasonCode $failureReasonCode -CollectionStarted $collectionStarted
         $outcome=[string]$failureDisposition.outcome
@@ -1564,6 +1722,28 @@ function Invoke-DeviceReadinessSlice {
             assessmentUserFindingOutcome=$assessmentUserFindingOutcome
             tenantDiscoveryTaskCount=$tenantDiscoveryTaskCount
             tenantAuthenticated=$false;identityStateChanged=$false
+            assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
+            protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
+        }) -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if($isAdministratorFixture){
+        Write-ContractRecord ([pscustomobject][ordered]@{
+            recordType='win-pcinfo.local-privilege-validation';contractVersion='1.0.0'
+            scenario=$administratorScenario;coverageState=$administratorCoverageState
+            enumerationComplete=$administratorEnumerationComplete
+            directMemberCount=$administratorDirectMemberCount
+            directGroupCount=$administratorDirectGroupCount
+            unresolvedPrincipalCount=$administratorUnresolvedCount
+            duplicateEntriesRemoved=$administratorDuplicateCount
+            findingOutcome=$administratorFindingOutcome
+            processRelationship=$administratorProcessRelationship
+            nestedExpansionAttempted=$false
+            assessmentUserContextPreserved=$null -ne $administratorCollector -and
+                $administratorCollector.assessmentUserContext -eq 'subject:assessment-user:primary'
+            localPackageProtectorPreserved=$null -ne $administratorCollector -and
+                $administratorCollector.localPackageProtector -eq 'protector:initiating-windows-user'
+            identifiersPublished=$false;credentialMaterialCollected=$false
+            identityStateChanged=$false;automaticRemovalAttempted=$false
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
         }) -ConvertToJsonCommand $ConvertToJsonCommand

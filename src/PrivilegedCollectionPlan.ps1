@@ -141,8 +141,8 @@ try {
         $configurationRoot.EnumerateObject() | ForEach-Object Name
     )
     if ($configurationRoot.ValueKind -ne [System.Text.Json.JsonValueKind]::Object -or
-        $configurationNames.Count -ne 11 -or
-        @($configurationNames | Sort-Object -Unique).Count -ne 11) {
+        $configurationNames.Count -ne 12 -or
+        @($configurationNames | Sort-Object -Unique).Count -ne 12) {
         throw 'The privilege worker configuration is invalid.'
     }
 }
@@ -194,6 +194,137 @@ public static class WinPCInfoPrivilegedWorkerPipe
         if (!GetFirmwareType(out value))
             throw new InvalidOperationException("Unable to read the Windows firmware type.");
         return value;
+    }
+}
+"@
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+
+public sealed class WinPCInfoLocalAdministratorsSnapshot
+{
+    public string State { get; set; }
+    public bool Complete { get; set; }
+    public int SourceReturnedEntries { get; set; }
+    public int DuplicateEntriesRemoved { get; set; }
+    public string[] Sids { get; set; }
+}
+
+public static class WinPCInfoLocalAdministratorsSource
+{
+    private const int ERROR_SUCCESS = 0;
+    private const int ERROR_ACCESS_DENIED = 5;
+    private const int ERROR_MORE_DATA = 234;
+    private const int MAX_PREFERRED_LENGTH = -1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LOCALGROUP_MEMBERS_INFO_0 { public IntPtr Sid; }
+
+    [DllImport("Netapi32.dll", CharSet = CharSet.Unicode)]
+    private static extern int NetLocalGroupGetMembers(
+        string serverName, string localGroupName, int level, out IntPtr buffer,
+        int preferredMaximumLength, out int entriesRead, out int totalEntries,
+        ref IntPtr resumeHandle);
+
+    [DllImport("Netapi32.dll")]
+    private static extern int NetApiBufferFree(IntPtr buffer);
+
+    [DllImport("Advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool LookupAccountSid(
+        string systemName, byte[] sid, System.Text.StringBuilder name, ref int nameLength,
+        System.Text.StringBuilder domain, ref int domainLength, out int use);
+
+    private static string GetBuiltinAdministratorsName()
+    {
+        var sid = new SecurityIdentifier("S-1-5-32-544");
+        var bytes = new byte[sid.BinaryLength];
+        sid.GetBinaryForm(bytes, 0);
+        int nameLength = 0, domainLength = 0, use;
+        LookupAccountSid(null, bytes, null, ref nameLength, null, ref domainLength, out use);
+        if (nameLength <= 0) throw new InvalidOperationException("Unable to resolve the built-in alias.");
+        var name = new System.Text.StringBuilder(nameLength);
+        var domain = new System.Text.StringBuilder(Math.Max(1, domainLength));
+        if (!LookupAccountSid(null, bytes, name, ref nameLength, domain, ref domainLength, out use))
+            throw new InvalidOperationException("Unable to resolve the built-in alias.");
+        return name.ToString();
+    }
+
+    public static WinPCInfoLocalAdministratorsSnapshot Read(int maximumMembers)
+    {
+        string groupName = GetBuiltinAdministratorsName();
+        var distinct = new HashSet<string>(StringComparer.Ordinal);
+        IntPtr resume = IntPtr.Zero;
+        int reportedTotal = 0;
+        int duplicates = 0;
+        bool complete = false;
+        while (true)
+        {
+            IntPtr buffer;
+            int read, total;
+            int status = NetLocalGroupGetMembers(
+                null, groupName, 0, out buffer, MAX_PREFERRED_LENGTH,
+                out read, out total, ref resume);
+            if (status == ERROR_ACCESS_DENIED)
+            {
+                if (buffer != IntPtr.Zero) NetApiBufferFree(buffer);
+                return new WinPCInfoLocalAdministratorsSnapshot {
+                    State="Denied", Complete=false, SourceReturnedEntries=0,
+                    DuplicateEntriesRemoved=0, Sids=Array.Empty<string>()
+                };
+            }
+            if (status != ERROR_SUCCESS && status != ERROR_MORE_DATA)
+            {
+                if (buffer != IntPtr.Zero) NetApiBufferFree(buffer);
+                return new WinPCInfoLocalAdministratorsSnapshot {
+                    State="Failed", Complete=false, SourceReturnedEntries=0,
+                    DuplicateEntriesRemoved=0, Sids=Array.Empty<string>()
+                };
+            }
+            reportedTotal = Math.Max(reportedTotal, total);
+            bool malformed = false;
+            try
+            {
+                int size = Marshal.SizeOf<LOCALGROUP_MEMBERS_INFO_0>();
+                for (int index = 0; index < read && distinct.Count < maximumMembers; index++)
+                {
+                    var item = Marshal.PtrToStructure<LOCALGROUP_MEMBERS_INFO_0>(
+                        IntPtr.Add(buffer, index * size));
+                    if (item.Sid == IntPtr.Zero)
+                    {
+                        malformed = true;
+                        break;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            if (!distinct.Add(new SecurityIdentifier(item.Sid).Value))
+                                duplicates++;
+                        }
+                        catch { malformed = true; break; }
+                    }
+                }
+            }
+            finally { if (buffer != IntPtr.Zero) NetApiBufferFree(buffer); }
+            if (malformed)
+                return new WinPCInfoLocalAdministratorsSnapshot {
+                    State="Malformed", Complete=false, SourceReturnedEntries=0,
+                    DuplicateEntriesRemoved=0, Sids=Array.Empty<string>()
+                };
+            if (reportedTotal > maximumMembers || distinct.Count >= maximumMembers && status == ERROR_MORE_DATA)
+                break;
+            if (status == ERROR_SUCCESS) { complete = true; break; }
+        }
+        var values = new List<string>(distinct);
+        values.Sort(StringComparer.Ordinal);
+        return new WinPCInfoLocalAdministratorsSnapshot {
+            State = complete ? "Complete" : "Partial", Complete=complete,
+            SourceReturnedEntries=reportedTotal, DuplicateEntriesRemoved=duplicates,
+            Sids=values.ToArray()
+        };
     }
 }
 "@
@@ -287,6 +418,62 @@ function New-SyntheticFirmwareResult {
         default { throw 'The firmware validation scenario is not release-defined.' }
     }
     $base
+}
+
+function New-SyntheticAdministratorResult {
+    param([string] $Scenario)
+    function New-Member([string]$Sid,$AccountName,[string]$Kind,[string]$Origin){
+        [ordered]@{sid=$Sid;accountName=$AccountName;principalKind=$Kind;origin=$Origin}
+    }
+    $local=New-Member 'S-1-5-21-111111111-222222222-333333333-1001' 'SYNTHETIC\local-admin' User Local
+    $builtin=New-Member 'S-1-5-21-111111111-222222222-333333333-500' 'SYNTHETIC\built-in-admin' User Local
+    $domainUser=New-Member 'S-1-5-21-444444444-555555555-666666666-1101' 'SYNTHETIC-DOMAIN\domain-admin' User Domain
+    $domainGroup=New-Member 'S-1-5-21-444444444-555555555-666666666-2101' 'SYNTHETIC-DOMAIN\endpoint-admins' Group Domain
+    $members=@($builtin,$local);$state='Complete';$complete=$true;$locale='en-US';$sourceCount=2
+    switch($Scenario){
+        'LocalPrincipal' {}
+        'DomainPrincipal' {$members=@($domainGroup,$domainUser)}
+        'NestedGroup' {$members=@($domainGroup,$local)}
+        'UnresolvedSid' {$members=@((New-Member 'S-1-5-21-777777777-888888888-999999999-4040' $null Unknown Unresolved),$local)}
+        'DuplicateMembership' {$members=@($domainUser,$local);$sourceCount=3}
+        'AlternateAdministrator' {}
+        'Denied' {$state='Denied';$complete=$false;$members=@();$sourceCount=0}
+        'Partial' {$state='Partial';$complete=$false;$members=@($domainGroup,$local)}
+        'NonEnglish' {
+            $locale='fr-FR';$members=@(
+                (New-Member $domainGroup.sid 'DOMAINE-ÉQUIPE\administrateurs-poste' Group Domain),
+                (New-Member $local.sid 'ÉQUIPE\administrateur-local' User Local)
+            )
+        }
+        default {throw 'The administrator validation scenario is not release-defined.'}
+    }
+    [ordered]@{
+        sourceLocale=$locale;groupSid='S-1-5-32-544';enumerationState=$state
+        enumerationComplete=$complete;directMembers=@($members);sourceReturnedEntries=$sourceCount
+        duplicateEntriesRemoved=[int]($sourceCount-@($members).Count);limitation='DirectMembersOnly'
+    }
+}
+
+function Get-LiveAdministratorResult {
+    # Threat: localized group names and command output can identify the wrong
+    # group or misparse a principal. Mechanism: Windows first resolves the
+    # well-known built-in alias SID, then NetLocalGroupGetMembers level 0
+    # returns only structured SIDs. Trust assumption: local NetAPI/SID services
+    # faithfully describe direct local-group membership without a network or
+    # credential request. Safe failure: access denial, API failure, or the
+    # eight-member evidence ceiling becomes a gap; it never becomes an empty
+    # group and nested groups are never recursively expanded.
+    $snapshot=[WinPCInfoLocalAdministratorsSource]::Read(8)
+    $members=@($snapshot.Sids|ForEach-Object {
+        [ordered]@{sid=[string]$_;accountName=$null;principalKind='Unknown';origin='Unresolved'}
+    })
+    [ordered]@{
+        sourceLocale='und';groupSid='S-1-5-32-544';enumerationState=[string]$snapshot.State
+        enumerationComplete=[bool]$snapshot.Complete;directMembers=$members
+        sourceReturnedEntries=[int]$snapshot.SourceReturnedEntries
+        duplicateEntriesRemoved=[int]$snapshot.DuplicateEntriesRemoved
+        limitation='DirectMembersOnly'
+    }
 }
 
 function Get-WorkerAccessState {
@@ -554,6 +741,11 @@ try {
             Get-LiveFirmwareResult
         } else { New-SyntheticFirmwareResult -Scenario ([string]$configuration.firmwareScenario) }
     }
+    if ([string]$configuration.administratorScenario -ne 'None') {
+        $resultBody.administratorExposure = if ([string]$configuration.administratorScenario -eq 'Live') {
+            Get-LiveAdministratorResult
+        } else { New-SyntheticAdministratorResult -Scenario ([string]$configuration.administratorScenario) }
+    }
     $result = $resultBody | ConvertTo-Json -Compress -Depth 5
     Write-Frame -Stream $pipe -Json $result -MaximumBytes $maximumBytes -Token $tokenSource.Token
 }
@@ -766,7 +958,9 @@ function ConvertTo-PrivilegedCollectionEncodedCommand {
     $encoded = [System.Convert]::ToBase64String(
         [System.Text.Encoding]::Unicode.GetBytes($bootstrap)
     )
-    if ($encoded.Length -gt 30000) {
+    # Leave more than 250 characters for the executable and fixed switches
+    # under Windows' 32,767-character process-command-line ceiling.
+    if ($encoded.Length -gt 32500) {
         throw 'The reviewed privilege bootstrap exceeds the Windows launch bound.'
     }
     $encoded
@@ -916,7 +1110,8 @@ function New-PrivilegedCollectionResult {
         [Parameter(Mandatory)] [bool] $ChannelVerified,
         [Parameter(Mandatory)] [bool] $CleanupVerified,
         [Parameter(Mandatory)] [string] $ValidationScenario,
-        [Parameter()] $PrivateFirmwareCollectorResult
+        [Parameter()] $PrivateFirmwareCollectorResult,
+        [Parameter()] $PrivateAdministratorCollectorResult
     )
 
     $coverageState = switch ($State) {
@@ -957,7 +1152,8 @@ function New-PrivilegedCollectionResult {
             schemaValidated = $ChannelVerified
             peerProcessVerified = $ChannelVerified
             peerArtifactVerified = $ChannelVerified
-            assessmentEvidenceCrossed = $null -ne $PrivateFirmwareCollectorResult
+            assessmentEvidenceCrossed = $null -ne $PrivateFirmwareCollectorResult -or
+                $null -ne $PrivateAdministratorCollectorResult
         }
         standardUserWorkMayContinue = $State -in @('Completed', 'Unavailable')
         cleanup = [pscustomobject][ordered]@{
@@ -986,6 +1182,11 @@ function New-PrivilegedCollectionResult {
         # to the assessment orchestrator. Callers that emit the public privilege
         # record must re-project the closed public properties and omit it.
         $result.PrivateFirmwareCollectorResult = $PrivateFirmwareCollectorResult
+    }
+    if ($null -ne $PrivateAdministratorCollectorResult) {
+        # Principal identities and direct relationships remain an in-memory
+        # Restricted handoff. The public phase result never serializes them.
+        $result.PrivateAdministratorCollectorResult = $PrivateAdministratorCollectorResult
     }
     [pscustomobject]$result
 }
@@ -1049,16 +1250,25 @@ function Invoke-PrivilegedCollectionPlan {
             'AccessDenied','Unsupported','Malformed','Timeout','CollectorFailure'
         )]
         [string] $FirmwareScenario = 'None',
+        [Parameter()]
+        [ValidateSet(
+            'None','Live','LocalPrincipal','DomainPrincipal','NestedGroup','UnresolvedSid',
+            'DuplicateMembership','AlternateAdministrator','Denied','Partial','NonEnglish',
+            'ElevationDenied'
+        )]
+        [string] $AdministratorScenario = 'None',
         [Parameter()] [System.Threading.CancellationToken] $CancellationToken =
             [System.Threading.CancellationToken]::None
     )
 
     $policy = Get-PrivilegedCollectionPlanPolicy
     $scenario = Get-PrivilegedCollectionValidationScenario -Name $ValidationScenario
-    if (($ValidationScenario -eq 'Live' -and
-            $FirmwareScenario -notin @('None','Live')) -or
-        ($ValidationScenario -ne 'Live' -and $FirmwareScenario -eq 'Live')) {
-        throw 'Live and synthetic firmware collection boundaries cannot be mixed.'
+    if (($ValidationScenario -eq 'Live' -and (
+            $FirmwareScenario -notin @('None','Live') -or
+            $AdministratorScenario -notin @('None','Live'))) -or
+        ($ValidationScenario -ne 'Live' -and (
+            $FirmwareScenario -eq 'Live' -or $AdministratorScenario -eq 'Live'))) {
+        throw 'Live and synthetic privileged collection boundaries cannot be mixed.'
     }
     $resultContext = @{
         PlanDigest = $PlanDigest
@@ -1169,11 +1379,15 @@ function Invoke-PrivilegedCollectionPlan {
     $reasonCode = 'PRIVILEGE.CHANNEL_FAILED'
     $failureStage = 'CREATE_CHANNEL'
     $firmwareOperationStartedAt = [DateTimeOffset]::UtcNow
+    $administratorOperationStartedAt = [DateTimeOffset]::UtcNow
     $privateFirmwareCollectorResult = $null
+    $privateAdministratorCollectorResult = $null
     try {
+        $failureStage = 'CREATE_JOB'
         $ownedJob = [WinPCInfo.PrivilegedCollectionPlan.OwnedJob]::Create(
             $jobName, "D:P(A;;GA;;;$initiatingSid)(A;;GA;;;BA)"
         )
+        $failureStage = 'CREATE_PIPE'
         $server = [System.IO.Pipes.NamedPipeServerStreamAcl]::Create(
             $pipeName, [System.IO.Pipes.PipeDirection]::InOut,
             [int] $policy.channel.maximumServerInstances,
@@ -1199,6 +1413,7 @@ function Invoke-PrivilegedCollectionPlan {
             planDigest = $PlanDigest
             workerFault = [string] $scenario.workerFault
             firmwareScenario = $FirmwareScenario
+            administratorScenario = $AdministratorScenario
             jobName = $jobName
         }
         $encodedConfiguration = [System.Convert]::ToBase64String(
@@ -1218,6 +1433,7 @@ function Invoke-PrivilegedCollectionPlan {
         $launchWorkerSource = $workerSource.Replace(
             '__PRIVILEGED_WORKER_CONFIGURATION__', $encodedConfiguration
         )
+        $failureStage = 'ENCODE_WORKER'
         $encodedWorker = ConvertTo-PrivilegedCollectionEncodedCommand -Source $launchWorkerSource
         $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
         $startInfo.FileName = $approvedExecutable
@@ -1350,11 +1566,9 @@ finally { $pipe.Dispose() }
             -CancellationToken $deadline.Token
         $workerResult = $resultJson | ConvertFrom-Json -Depth 10
         $resultNames = @($workerResult.PSObject.Properties.Name)
-        $expectedResultNames = if ($FirmwareScenario -eq 'None') {
-            @('kind','contractVersion','nonce','planDigest','phaseId','operations')
-        } else {
-            @('kind','contractVersion','nonce','planDigest','phaseId','operations','firmwareTpm')
-        }
+        $expectedResultNames = @('kind','contractVersion','nonce','planDigest','phaseId','operations')
+        if ($FirmwareScenario -ne 'None') { $expectedResultNames += 'firmwareTpm' }
+        if ($AdministratorScenario -ne 'None') { $expectedResultNames += 'administratorExposure' }
         if ($resultNames.Count -ne $expectedResultNames.Count -or
             (@($resultNames | Sort-Object) -join '|') -ne
                 (@($expectedResultNames | Sort-Object) -join '|') -or
@@ -1414,6 +1628,46 @@ finally { $pipe.Dispose() }
                     tpmEnabled=$workerResult.firmwareTpm.tpmEnabled
                     tpmActivated=$workerResult.firmwareTpm.tpmActivated
                     tpmSpecification=$workerResult.firmwareTpm.tpmSpecification
+                }
+            }
+        }
+        if ($AdministratorScenario -ne 'None') {
+            $administratorBytes=[Text.Encoding]::UTF8.GetByteCount(
+                ($workerResult.administratorExposure|ConvertTo-Json -Compress -Depth 8)
+            )
+            $administratorPolicy=Get-AdministratorExposurePolicy `
+                -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
+            if($administratorBytes -gt [int]$administratorPolicy.collectors[0].resultMaximumUtf8Bytes -or
+                -not (Test-AdministratorExposureCollectorPayload `
+                    -Payload $workerResult.administratorExposure -Policy $administratorPolicy)){
+                throw 'The privileged administrator projection failed its closed evidence contract.'
+            }
+            $memberCopies=@($workerResult.administratorExposure.directMembers|ForEach-Object {
+                [pscustomobject][ordered]@{
+                    sid=[string]$_.sid;accountName=$_.accountName
+                    principalKind=[string]$_.principalKind;origin=[string]$_.origin
+                }
+            })
+            $privateAdministratorCollectorResult=[pscustomobject][ordered]@{
+                state='Completed';reasonCode='ADMINISTRATOR_EXPOSURE.COLLECTION_COMPLETED'
+                validationScenario=$AdministratorScenario;validationFixture=[bool]$validationFixture
+                processRelationship=[string]$workerRelationship
+                assessmentUserContext=$AssessmentUserContext
+                localPackageProtector=$LocalPackageProtector;membershipSemantics='DirectMembersOnly'
+                envelope=[pscustomobject][ordered]@{
+                    startedAt=$administratorOperationStartedAt.ToString('o')
+                    completedAt=[DateTimeOffset]::UtcNow.ToString('o');attempts=1
+                    executionContext=if($validationFixture){'Synthetic'}else{'Administrator'}
+                }
+                payload=[pscustomobject][ordered]@{
+                    sourceLocale=[string]$workerResult.administratorExposure.sourceLocale
+                    groupSid=[string]$workerResult.administratorExposure.groupSid
+                    enumerationState=[string]$workerResult.administratorExposure.enumerationState
+                    enumerationComplete=[bool]$workerResult.administratorExposure.enumerationComplete
+                    directMembers=$memberCopies
+                    sourceReturnedEntries=[int]$workerResult.administratorExposure.sourceReturnedEntries
+                    duplicateEntriesRemoved=[int]$workerResult.administratorExposure.duplicateEntriesRemoved
+                    limitation=[string]$workerResult.administratorExposure.limitation
                 }
             }
         }
@@ -1494,7 +1748,8 @@ finally { $pipe.Dispose() }
         -WorkerPrincipalRelationship $workerRelationship -Operations $operations `
         -ChannelVerified $channelVerified -CleanupVerified $cleanupVerified `
         -ValidationScenario $ValidationScenario `
-        -PrivateFirmwareCollectorResult $privateFirmwareCollectorResult
+        -PrivateFirmwareCollectorResult $privateFirmwareCollectorResult `
+        -PrivateAdministratorCollectorResult $privateAdministratorCollectorResult
 }
 
 function Read-PrivilegedCollectionPlanFixture {

@@ -108,7 +108,8 @@ function New-ProgressRecord {
         [Parameter(Mandatory)] [string] $State,
         [Parameter(Mandatory)] [string] $MessageId,
         [Parameter(Mandatory)] [int] $CompletedUnits,
-        [Parameter(Mandatory)] [int] $TotalUnits
+        [Parameter(Mandatory)] [int] $TotalUnits,
+        [Parameter()] [string] $Unit = 'LaunchGate'
     )
 
     [pscustomobject][ordered]@{
@@ -121,7 +122,7 @@ function New-ProgressRecord {
         completion = [pscustomobject][ordered]@{
             completedUnits = $CompletedUnits
             totalUnits = $TotalUnits
-            unit = 'LaunchGate'
+            unit = $Unit
         }
         messageId = $MessageId
     }
