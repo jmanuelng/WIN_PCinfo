@@ -97,6 +97,9 @@ Assert-Equal 'ExpectedCondition' $userFinding.outcome `
 Assert-Equal 4 @($record.recommendations | Where-Object {
     $_.kind -eq 'TenantSideDiscoveryTask'
 }).Count 'local Entra and MDM evidence creates bounded tenant questions, not tenant claims'
+Assert-Equal 1 @($record.coverage | Where-Object {
+    $_.scopeId -eq 'scope:device.work-school-registration-context'
+}).Count 'the default Entra join result remains device context, not Assessment User evidence'
 
 $systemEnvelope = @($record.collectorResults | Where-Object {
     $_.collectorId -eq 'collector:windows.mdm-bridge.device-manageability'
@@ -108,7 +111,7 @@ Assert-Equal 1 @($systemEnvelope.observationIds).Count `
 foreach ($item in @($record.provenance | Where-Object {
     $_.fieldId -ne 'field:device.mdm-bridge.provider-available' -and
     $_.fieldId -like 'field:*assessment-user*' -or $_.fieldId -like 'field:*registration*' -or
-    $_.fieldId -like 'field:user.work-school*' -or $_.fieldId -like 'field:device.domain-join*'
+    $_.fieldId -like 'field:device.work-school*' -or $_.fieldId -like 'field:device.domain-join*'
 })) {
     if ($item.executionContext -eq 'LocalSystem') {
         throw 'SYSTEM provenance leaked onto a standard-user identity field.'

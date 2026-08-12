@@ -94,7 +94,7 @@ foreach ($scope in @($firmwareScope, $secureBootScope, $tpmScope)) {
 }
 $identityScopes=@($contractSet.scopeDefinitions|Where-Object {
     $_.scopeId -in @('scope:identity.assessment-user-context','scope:device.registration-context',
-        'scope:user.work-school-context','scope:device.mdm-policy.system')
+        'scope:device.work-school-registration-context','scope:device.mdm-policy.system')
 })
 Assert-Equal 4 $identityScopes.Count `
     'the combined identity profile keeps four independently covered source contexts'

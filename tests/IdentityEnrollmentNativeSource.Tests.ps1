@@ -20,16 +20,21 @@ Assert-Equal 'Live' ([string]$result.validationScenario) `
 Assert-Equal $true (Test-IdentityEnrollmentCollectorPayload -Payload $result.payload) `
     'the native APIs must produce the same closed payload contract as fixtures'
 if ([string]$result.processRelationship -notin @(
-        'SameUser','AlternateAdministrator','Unavailable','ProhibitedProcessContext'
+        'SameUser','SeparateProcessIdentity','AlternateAdministrator','Unavailable','ProhibitedProcessContext'
     )) {
     throw 'The live process-to-user relationship is outside the closed vocabulary.'
 }
 foreach ($provenance in @($result.provenance)) {
-    if ([string]$provenance.executionContext -notin @('StandardUser','Administrator')) {
-        throw 'Standard identity evidence cannot be relabeled as SYSTEM or Synthetic.'
-    }
+    Assert-Equal 'StandardUser' ([string]$provenance.executionContext) `
+        'only the frozen standard-user boundary may emit identity observations'
     Assert-Equal 'und' ([string]$provenance.sourceLocale) `
         'native typed APIs have no display-text locale dependency'
+}
+foreach ($envelope in @($result.collectorResults)) {
+    if ([string]$envelope.executionContext -eq 'Administrator' -and
+        @($envelope.observationIds).Count -ne 0) {
+        throw 'An elevated coordinator cannot execute or emit standard-user observations.'
+    }
 }
 
 $sourceText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src/IdentityEnrollment.ps1') -Raw
@@ -40,6 +45,37 @@ foreach ($requiredApi in @('NetGetJoinInformation','NetGetAadJoinInformation','W
 }
 if ($sourceText -match '(?i)dsregcmd|cmd\.exe|powershell\.exe\s+-Command') {
     throw 'The native identity collector must not parse localized commands or launch a shell.'
+}
+if ($sourceText -notmatch 'NativeRunner\]::Run' -or
+    $sourceText -notmatch 'deadlineMilliseconds') {
+    throw 'Live native identity APIs must execute in the bounded owned-process boundary.'
+}
+Assert-Equal $true (Test-IdentityNativeAccessDeniedCode -Code ([int]0x80070005)) `
+    'HRESULT E_ACCESSDENIED is classified as denied rather than unavailable'
+
+$deadlinePolicy = $policy | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
+$deadlinePolicy.collectors[0].deadlineMilliseconds = 800
+$originalInitializer = ${function:Initialize-IdentityEnrollmentNativeSource}
+$deadlineWatch = [Diagnostics.Stopwatch]::StartNew()
+try {
+    Set-Item -LiteralPath Function:\Initialize-IdentityEnrollmentNativeSource -Value {
+        [Threading.Thread]::Sleep(30000)
+    }
+    $deadlineResult = Invoke-BoundedIdentityNativeSnapshot -Policy $deadlinePolicy
+}
+finally {
+    Set-Item -LiteralPath Function:\Initialize-IdentityEnrollmentNativeSource `
+        -Value $originalInitializer
+    $deadlineWatch.Stop()
+}
+Assert-Equal $false ([bool]$deadlineResult.succeeded) `
+    'an uncooperative native source cannot outlive its collector deadline'
+Assert-Equal 'PROCESS.DEADLINE_EXCEEDED' ([string]$deadlineResult.reasonCode) `
+    'deadline exhaustion remains a stable typed source failure'
+Assert-Equal $true ([bool]$deadlineResult.native.CompleteOwnedTreeAbsent) `
+    'the supervisor proves the uncooperative native source tree absent'
+if ($deadlineWatch.ElapsedMilliseconds -ge 3000) {
+    throw 'The bounded native source did not return within its termination allowance.'
 }
 
 $sanitized = [pscustomobject][ordered]@{

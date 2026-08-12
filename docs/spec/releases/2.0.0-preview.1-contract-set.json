@@ -381,9 +381,9 @@
       "publicEligibility": { "definition": true, "values": false }
     },
     {
-      "fieldId": "field:user.work-school-account.present",
+      "fieldId": "field:device.work-school-registration.present",
       "capabilityIds": ["CAP-0006"],
-      "purpose": "Record whether the default structured join information represents a user-scoped workplace registration.",
+      "purpose": "Record whether the default structured join information represents a device-default workplace registration without attributing it to the Assessment User.",
       "source": { "sourceId": "source:windows.native.work-school-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "NetGetAadJoinInformation workplace-join projection" },
       "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence",
       "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 },
@@ -391,9 +391,9 @@
       "publicEligibility": { "definition": true, "values": false }
     },
     {
-      "fieldId": "field:user.work-school-account.identifier",
+      "fieldId": "field:device.work-school-registration.identifier",
       "capabilityIds": ["CAP-0006"],
-      "purpose": "Carry the bounded default workplace-registration user identifier as Restricted evidence when Windows supplies it.",
+      "purpose": "Carry the bounded device-default workplace-registration identifier as Restricted evidence when Windows supplies it, without claiming that it identifies the Assessment User.",
       "source": { "sourceId": "source:windows.native.work-school-context", "kind": "StructuredWindowsSource", "authoritativeIdentity": "NetGetAadJoinInformation join-user email projection" },
       "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence",
       "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 },
@@ -516,11 +516,11 @@
       "collectorIds": ["collector:windows.registration-and-user-context"]
     },
     {
-      "scopeId": "scope:user.work-school-context",
+      "scopeId": "scope:device.work-school-registration-context",
       "profileIds": ["profile:device-firmware-and-identity-readiness"],
       "capabilityIds": ["CAP-0006"],
-      "purpose": "Close coverage for the bounded default local work-or-school registration context.",
-      "fieldIds": ["field:user.work-school-account.present", "field:user.work-school-account.identifier"],
+      "purpose": "Close coverage for the bounded device-default local work-or-school registration context without attributing it to a user.",
+      "fieldIds": ["field:device.work-school-registration.present", "field:device.work-school-registration.identifier"],
       "collectorIds": ["collector:windows.work-school-context"]
     },
     {

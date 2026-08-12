@@ -12,19 +12,19 @@ $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
 $cases = @(
-    @{name='identity-workgroup';scenario='Workgroup';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=0;relation='SameUser'},
-    @{name='identity-domainjoined';scenario='DomainJoined';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=0;relation='SameUser'},
+    @{name='identity-workgroup';scenario='Workgroup';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
+    @{name='identity-domainjoined';scenario='DomainJoined';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
     @{name='identity-entrajoined';scenario='EntraJoined';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
     @{name='identity-registered';scenario='Registered';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
     @{name='identity-mixed';scenario='Mixed';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
-    @{name='identity-unenrolled';scenario='Unenrolled';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=0;relation='SameUser'},
-    @{name='identity-userunavailable';scenario='UserContextUnavailable';exit=10;outcome='CompletedWithGaps';user='Unavailable';registration='Complete';workSchool='Complete';userFinding='Indeterminate';tasks=0;relation='Unavailable'},
-    @{name='identity-standarduser';scenario='StandardUser';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=0;relation='SameUser'},
-    @{name='identity-administrator';scenario='Administrator';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=0;relation='AlternateAdministrator'},
-    @{name='identity-localsystem';scenario='LocalSystem';exit=10;outcome='CompletedWithGaps';user='Denied';registration='Denied';workSchool='Denied';userFinding='Indeterminate';tasks=0;relation='ProhibitedProcessContext'},
+    @{name='identity-unenrolled';scenario='Unenrolled';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
+    @{name='identity-userunavailable';scenario='UserContextUnavailable';exit=10;outcome='CompletedWithGaps';user='Unavailable';registration='Complete';workSchool='Complete';userFinding='Indeterminate';tasks=4;relation='Unavailable'},
+    @{name='identity-standarduser';scenario='StandardUser';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
+    @{name='identity-administrator';scenario='Administrator';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='AlternateAdministrator'},
+    @{name='identity-localsystem';scenario='LocalSystem';exit=10;outcome='CompletedWithGaps';user='Denied';registration='Denied';workSchool='Denied';userFinding='Indeterminate';tasks=4;relation='ProhibitedProcessContext'},
     @{name='identity-nonenglish';scenario='NonEnglish';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=4;relation='SameUser'},
-    @{name='identity-malformed';scenario='Malformed';exit=10;outcome='CompletedWithGaps';user='Malformed';registration='Malformed';workSchool='Malformed';userFinding='Indeterminate';tasks=0;relation='Unavailable'},
-    @{name='identity-denied';scenario='Denied';exit=10;outcome='CompletedWithGaps';user='Denied';registration='Denied';workSchool='Denied';userFinding='Indeterminate';tasks=0;relation='Unavailable'}
+    @{name='identity-malformed';scenario='Malformed';exit=10;outcome='CompletedWithGaps';user='Malformed';registration='Malformed';workSchool='Malformed';userFinding='Indeterminate';tasks=4;relation='Unavailable'},
+    @{name='identity-denied';scenario='Denied';exit=10;outcome='CompletedWithGaps';user='Denied';registration='Denied';workSchool='Denied';userFinding='Indeterminate';tasks=4;relation='Unavailable'}
 )
 
 foreach($case in $cases){

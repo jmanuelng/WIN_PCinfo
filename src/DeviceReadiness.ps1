@@ -877,7 +877,7 @@ $discoveryGuidance
             -EmptyMessage 'No tenant-side identity follow-up is required by these local rules.'
         $userCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:identity.assessment-user-context')[0]
         $registrationCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:device.registration-context')[0]
-        $workSchoolCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:user.work-school-context')[0]
+        $workSchoolCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:device.work-school-registration-context')[0]
         $systemCoverage=@($Record.coverage|Where-Object scopeId -eq 'scope:device.mdm-policy.system')[0]
 @"
 <h2>Registration, join, and enrollment context</h2>
@@ -891,7 +891,7 @@ $discoveryGuidance
 <dt>Microsoft Entra registration type</dt><dd>$($values['field:device.entra-registration.type'])</dd>
 <dt>Registration finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$registrationFinding.outcome))</dd>
 <dt>Work-or-school coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$workSchoolCoverage.state))</dd>
-<dt>Work-or-school account observed</dt><dd>$($values['field:user.work-school-account.present'])</dd>
+<dt>Device-default work-or-school registration observed</dt><dd>$($values['field:device.work-school-registration.present'])</dd>
 <dt>SYSTEM MDM-source coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$systemCoverage.state))</dd>
 <dt>Enrollment-context finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$enrollmentFinding.outcome))</dd></dl>
 <p>These locale-neutral local sources cannot establish tenant assignment, compliance, licensing, or organizational intent. They do not authenticate to Microsoft Entra or Intune and do not join, register, enroll, disconnect, or modify an account.</p>
@@ -1363,7 +1363,7 @@ function Invoke-DeviceReadinessSlice {
                         $_.scopeId -eq 'scope:device.registration-context'
                     })[0].state
                     $workSchoolCoverageState=[string]@($record.coverage|Where-Object {
-                        $_.scopeId -eq 'scope:user.work-school-context'
+                        $_.scopeId -eq 'scope:device.work-school-registration-context'
                     })[0].state
                     $systemEnrollmentCoverageState=[string]@($record.coverage|Where-Object {
                         $_.scopeId -eq 'scope:device.mdm-policy.system'

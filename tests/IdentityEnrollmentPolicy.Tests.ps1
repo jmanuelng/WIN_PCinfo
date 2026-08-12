@@ -40,6 +40,12 @@ foreach ($collector in @($policy.collectors)) {
     Assert-Equal 1 ([int]$collector.maximumAttempts) 'collection does not retry identity sources'
     Assert-Equal 5000 ([int]$collector.deadlineMilliseconds) 'every source attempt has a finite deadline'
 }
+foreach ($collector in @($policy.collectors | Select-Object -First 2)) {
+    Assert-Equal 'ActiveMicrosoftSignedPowerShellHost' ([string]$collector.executable) `
+        'standard identity APIs run in a supervisor-owned deadline boundary'
+    Assert-Equal 'CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent' ([string]$collector.cleanup) `
+        'timeout proves the complete native-source worker absent'
+}
 
 Assert-Equal 'Windows NetGetJoinInformation API' $policy.collectors[0].dependencies[0] `
     'domain join never depends on localized command output'
@@ -47,11 +53,13 @@ Assert-Equal 'Windows NetGetAadJoinInformation API' $policy.collectors[0].depend
     'Entra registration uses a structured Windows API'
 Assert-Equal 'Windows Terminal Services session APIs' $policy.collectors[0].dependencies[2] `
     'Assessment User Context is verified independently from process identity'
+Assert-Equal 'Windows account-to-SID translation' $policy.collectors[0].dependencies[3] `
+    'the active session is bound to a Windows security principal, not a display name'
 
 $expectedScopes = @(
     'scope:identity.assessment-user-context',
     'scope:device.registration-context',
-    'scope:user.work-school-context',
+    'scope:device.work-school-registration-context',
     'scope:device.mdm-policy.system'
 )
 Assert-Equal ($expectedScopes -join '|') (@($policy.scopes.scopeId) -join '|') `

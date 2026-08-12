@@ -221,6 +221,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 
 namespace WinPCInfo.IdentityEnrollment
 {
@@ -238,6 +239,7 @@ namespace WinPCInfo.IdentityEnrollment
         public int ActiveUserSessionCount { get; set; }
         public int UserSessionId { get; set; }
         public string UserAccountName { get; set; }
+        public string UserSid { get; set; }
     }
 
     public static class NativeSources
@@ -346,9 +348,20 @@ namespace WinPCInfo.IdentityEnrollment
                     result.ActiveUserSessionCount = activeUsers.Count;
                     if (activeUsers.Count == 1)
                     {
-                        result.UserContextAvailable = true;
-                        result.UserSessionId = activeUsers[0].Item1;
-                        result.UserAccountName = activeUsers[0].Item2;
+                        // A display name and WTS session number are not enough
+                        // to establish an identity. Resolve the session account
+                        // through Windows' SID authority and accept it only when
+                        // that immutable security principal is available.
+                        try
+                        {
+                            var sid = (SecurityIdentifier)new NTAccount(
+                                activeUsers[0].Item2).Translate(typeof(SecurityIdentifier));
+                            result.UserContextAvailable = true;
+                            result.UserSessionId = activeUsers[0].Item1;
+                            result.UserAccountName = activeUsers[0].Item2;
+                            result.UserSid = sid.Value;
+                        }
+                        catch (IdentityNotMappedException) { }
                     }
                 }
                 finally { if (sessions != IntPtr.Zero) WTSFreeMemory(sessions); }
@@ -360,17 +373,134 @@ namespace WinPCInfo.IdentityEnrollment
 '@
 }
 
+function Test-IdentityNativeAccessDeniedCode {
+    param([Parameter(Mandatory)] [int] $Code)
+    # NetGetJoinInformation returns Win32 status while NetGetAadJoinInformation
+    # returns HRESULT. Preserve both representations of access denied so a
+    # rejected provider cannot be softened into a generic unavailable state.
+    $Code -eq 5 -or $Code -eq -2147024891
+}
+
+function New-LiveIdentityContextGap {
+    param(
+        [Parameter(Mandatory)] [ValidateSet('Administrator','LocalSystem')] [string] $Context,
+        [Parameter(Mandatory)] [string] $Relationship,
+        [Parameter(Mandatory)] [DateTimeOffset] $StartedAt
+    )
+    $value = New-IdentityEnrollmentSyntheticPayload -Scenario 'LocalSystem'
+    [pscustomobject][ordered]@{
+        payload=$value.payload;relationship=$Relationship;executionContext=$Context
+        startedAt=$StartedAt;completedAt=[DateTimeOffset]::UtcNow
+        sourceFailureReason='COLLECTION.IDENTITY_PROCESS_CONTEXT_PROHIBITED'
+    }
+}
+
+function Invoke-BoundedIdentityNativeSnapshot {
+    param([Parameter(Mandatory)] $Policy)
+
+    Initialize-ProcessSupervisorNativeType
+    $collector = $Policy.collectors[0]
+    $maximumMilliseconds = [int]$collector.deadlineMilliseconds
+    $terminationMilliseconds = [Math]::Min(1000, [Math]::Max(1,
+        [Math]::Floor($maximumMilliseconds / 4)))
+    $activeMilliseconds = [Math]::Max(1, $maximumMilliseconds - $terminationMilliseconds)
+    $initializerBytes = [Text.UTF8Encoding]::new($false).GetBytes(
+        ${function:Initialize-IdentityEnrollmentNativeSource}.ToString()
+    )
+    # The child receives only release-embedded source selected here. There is
+    # no caller script, path, command, or writable staging file to replace.
+    # A suspended Microsoft-signed pwsh child is placed in the supervisor's
+    # kill-on-close Job before the native APIs run, making even a blocked API a
+    # bounded attempt whose complete owned tree can be proved absent.
+    $childScript = @'
+$ErrorActionPreference='Stop'
+try {
+    $utf8=[Text.UTF8Encoding]::new($false,$true)
+    $source=$utf8.GetString([Convert]::FromBase64String($env:WINPCINFO_IDENTITY_NATIVE_SOURCE))
+    & ([scriptblock]::Create($source))
+    $snapshot=[WinPCInfo.IdentityEnrollment.NativeSources]::Read()
+    $xml=[Management.Automation.PSSerializer]::Serialize($snapshot,5)
+    [Console]::Out.Write([Convert]::ToBase64String($utf8.GetBytes($xml)))
+} catch { [Console]::Error.Write('Identity native source failed.'); exit 1 }
+'@
+    $encodedChild = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript))
+    $executable = [IO.Path]::GetFullPath((Join-Path $PSHOME 'pwsh.exe'))
+    if (-not [IO.File]::Exists($executable) -or -not [string]::Equals(
+            $executable, [Environment]::ProcessPath, [StringComparison]::OrdinalIgnoreCase)) {
+        return [pscustomobject]@{succeeded=$false;snapshot=$null
+            reasonCode='COLLECTION.IDENTITY_BOUNDARY_UNAVAILABLE';native=$null}
+    }
+    $environment = [Collections.Generic.Dictionary[string,string]]::new(
+        [StringComparer]::OrdinalIgnoreCase
+    )
+    $environment['SystemRoot']=[Environment]::GetFolderPath('Windows')
+    $environment['WINPCINFO_IDENTITY_NATIVE_SOURCE']=[Convert]::ToBase64String($initializerBytes)
+    $eventName="Local\WINPCInfo-Identity-$([Guid]::NewGuid().ToString('N'))"
+    [bool]$created=$false;$event=$null
+    try {
+        $event=[Threading.EventWaitHandle]::new($false,
+            [Threading.EventResetMode]::ManualReset,$eventName,[ref]$created)
+        if(-not $created){return [pscustomobject]@{succeeded=$false;snapshot=$null
+            reasonCode='COLLECTION.IDENTITY_BOUNDARY_UNAVAILABLE';native=$null}}
+        $native=[WinPCInfo.ProcessSupervisor.NativeRunner]::Run(
+            $executable,@('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',$encodedChild),
+            $PSHOME,$environment,$activeMilliseconds,[int]$collector.resultMaximumUtf8Bytes,4096,
+            [Threading.CancellationToken]::None,$event,1,$terminationMilliseconds,$false
+        )
+        if(-not $native.Started -or -not [bool]$native.CompleteOwnedTreeAbsent -or
+            $native.FailureStage -ne [WinPCInfo.ProcessSupervisor.NativeFailureStage]::None -or
+            $native.ExitCode -ne 0 -or $native.StandardOutputExceeded -or
+            $native.StandardErrorExceeded -or $native.StandardErrorBytes -ne 0){
+            $reason=Get-NativeSupervisorReasonCode -NativeResult $native
+            if([string]::IsNullOrWhiteSpace($reason)){$reason='COLLECTION.IDENTITY_SOURCE_FAILED'}
+            return [pscustomobject]@{succeeded=$false;snapshot=$null;reasonCode=$reason;native=$native}
+        }
+        $base64=[Text.UTF8Encoding]::new($false,$true).GetString($native.StandardOutput)
+        $xml=[Text.UTF8Encoding]::new($false,$true).GetString([Convert]::FromBase64String($base64))
+        [pscustomobject]@{succeeded=$true
+            snapshot=[Management.Automation.PSSerializer]::Deserialize($xml)
+            reasonCode='';native=$native}
+    } catch {
+        [pscustomobject]@{succeeded=$false;snapshot=$null
+            reasonCode='COLLECTION.IDENTITY_SOURCE_FAILED';native=$null}
+    } finally { if($null -ne $event){$event.Dispose()} }
+}
+
 function Get-LiveIdentityEnrollmentPayload {
+    param([Parameter(Mandatory)] $Policy)
+    $startedAt=[DateTimeOffset]::UtcNow
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     if ($identity.User.Value -eq 'S-1-5-18') {
         # Only the separately frozen MDM Bridge operation may execute as
         # LocalSystem. These user/registration sources fail closed before
         # access so SYSTEM never becomes an alternate Assessment User Context.
-        return New-IdentityEnrollmentSyntheticPayload -Scenario 'LocalSystem'
+        return New-LiveIdentityContextGap -Context 'LocalSystem' `
+            -Relationship 'ProhibitedProcessContext' -StartedAt $startedAt
     }
-
-    Initialize-IdentityEnrollmentNativeSource
-    $snapshot = [WinPCInfo.IdentityEnrollment.NativeSources]::Read()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    $isAdministrator = $principal.IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+    if($isAdministrator){
+        # An already-elevated coordinator is not silently treated as the
+        # approved StandardUser source. This produces explicit gaps and leaves
+        # the separate privileged worker and Assessment User roles untouched.
+        return New-LiveIdentityContextGap -Context 'Administrator' `
+            -Relationship 'AlternateAdministrator' -StartedAt $startedAt
+    }
+    $boundary=Invoke-BoundedIdentityNativeSnapshot -Policy $Policy
+    if(-not [bool]$boundary.succeeded){
+        $value=New-IdentityEnrollmentSyntheticPayload -Scenario 'Denied'
+        $state=if($boundary.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
+        $value.payload.registrationState=$state;$value.payload.userContextState=$state
+        $value.payload.workSchoolState=$state
+        return [pscustomobject][ordered]@{
+            payload=$value.payload;relationship='Unavailable';executionContext='StandardUser'
+            startedAt=$startedAt;completedAt=[DateTimeOffset]::UtcNow
+            sourceFailureReason=[string]$boundary.reasonCode
+        }
+    }
+    $snapshot=$boundary.snapshot
     $domainState = if ($snapshot.DomainError -eq 0) {
         switch ([int]$snapshot.DomainJoinStatus) {
             3 { 'DomainJoined' } # NetSetupDomainName
@@ -387,7 +517,8 @@ function Get-LiveIdentityEnrollmentPayload {
             default { 'Unknown' }
         }
     } else { $null }
-    $registrationState = if ($snapshot.DomainError -eq 5 -or $snapshot.AadError -eq 5) {
+    $registrationState = if ((Test-IdentityNativeAccessDeniedCode ([int]$snapshot.DomainError)) -or
+        (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.AadError))) {
         'Denied'
     } elseif ($snapshot.DomainError -ne 0 -or $snapshot.AadError -ne 0) {
         'Unavailable'
@@ -396,7 +527,7 @@ function Get-LiveIdentityEnrollmentPayload {
         [Text.Encoding]::UTF8.GetByteCount([string]$snapshot.UserAccountName) -le 256) {
         'Complete'
     } else { 'Unavailable' }
-    $workSchoolState = if ($snapshot.AadError -eq 5) { 'Denied' }
+    $workSchoolState = if (Test-IdentityNativeAccessDeniedCode ([int]$snapshot.AadError)) { 'Denied' }
         elseif ($snapshot.AadError -ne 0) { 'Unavailable' }
         else { 'Complete' }
     $workSchoolPresent = $entraType -eq 'EntraRegistered'
@@ -424,18 +555,14 @@ function Get-LiveIdentityEnrollmentPayload {
             [string]$snapshot.JoinUserEmail
         }else{$null}
     }
-    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-    $isAdministrator = $principal.IsInRole(
-        [Security.Principal.WindowsBuiltInRole]::Administrator
-    )
     $relationship = if ($userState -ne 'Complete') { 'Unavailable' }
-        elseif ([string]::Equals([string]$identity.Name,
-            [string]$snapshot.UserAccountName,[StringComparison]::OrdinalIgnoreCase)) { 'SameUser' }
-        elseif ($isAdministrator) { 'AlternateAdministrator' }
-        else { 'Unavailable' }
+        elseif ([string]::Equals([string]$identity.User.Value,
+            [string]$snapshot.UserSid,[StringComparison]::OrdinalIgnoreCase)) { 'SameUser' }
+        else { 'SeparateProcessIdentity' }
     [pscustomobject][ordered]@{
         payload=$payload;relationship=$relationship
-        executionContext=if($isAdministrator){'Administrator'}else{'StandardUser'}
+        executionContext='StandardUser';startedAt=$startedAt;completedAt=[DateTimeOffset]::UtcNow
+        sourceFailureReason=''
     }
 }
 
@@ -461,10 +588,14 @@ function Invoke-IdentityEnrollmentCollection {
     )
 
     $sourceResult = if ($Live) {
-        Get-LiveIdentityEnrollmentPayload
+        Get-LiveIdentityEnrollmentPayload -Policy $Policy
     } else {
         $value = New-IdentityEnrollmentSyntheticPayload -Scenario $ValidationScenario
+        $now=[DateTimeOffset]::UtcNow
         $value | Add-Member -NotePropertyName executionContext -NotePropertyValue 'Synthetic'
+        $value | Add-Member -NotePropertyName startedAt -NotePropertyValue $now
+        $value | Add-Member -NotePropertyName completedAt -NotePropertyValue $now
+        $value | Add-Member -NotePropertyName sourceFailureReason -NotePropertyValue ''
         $value
     }
     $payload = $sourceResult.payload
@@ -472,7 +603,8 @@ function Invoke-IdentityEnrollmentCollection {
         throw 'The Identity and Enrollment collector payload is not release-shaped.'
     }
     $runId = [Guid]::NewGuid().ToString('N')
-    $collectedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    $startedAt = ([DateTimeOffset]$sourceResult.startedAt).ToString('o')
+    $collectedAt = ([DateTimeOffset]$sourceResult.completedAt).ToString('o')
     $deviceSubject = 'subject:device:primary'
     $userSubject = 'subject:assessment-user:primary'
     $specs = @(
@@ -488,9 +620,9 @@ function Invoke-IdentityEnrollmentCollection {
             @{id='field:device.entra-registration.device-id';property='entraDeviceId';absent=$true},
             @{id='field:device.entra-registration.tenant-id';property='entraTenantId';absent=$true}
         )},
-        @{scope='scope:user.work-school-context';state=[string]$payload.workSchoolState;collector=1;subject=$userSubject;fields=@(
-            @{id='field:user.work-school-account.present';property='workSchoolAccountPresent'},
-            @{id='field:user.work-school-account.identifier';property='workSchoolAccountIdentifier';absent=$true}
+        @{scope='scope:device.work-school-registration-context';state=[string]$payload.workSchoolState;collector=1;subject=$deviceSubject;fields=@(
+            @{id='field:device.work-school-registration.present';property='workSchoolAccountPresent'},
+            @{id='field:device.work-school-registration.identifier';property='workSchoolAccountIdentifier';absent=$true}
         )}
     )
     $observations = [Collections.Generic.List[object]]::new()
@@ -535,7 +667,9 @@ function Invoke-IdentityEnrollmentCollection {
         }
         if ($scope.state -ne 'Complete') {
             $diagnosticId = "diagnostic:$(([string]$scope.scope).Substring(6).Replace('.', '-')):$runId"
-            $coverageItem.reasonCode = Get-IdentityCoverageReason -State ([string]$scope.state)
+            $coverageItem.reasonCode = if(-not [string]::IsNullOrWhiteSpace(
+                [string]$sourceResult.sourceFailureReason)){[string]$sourceResult.sourceFailureReason
+            }else{Get-IdentityCoverageReason -State ([string]$scope.state)}
             $coverageItem.diagnosticIds=@($diagnosticId)
             $diagnostics.Add([pscustomobject][ordered]@{
                 diagnosticId=$diagnosticId;scopeId=[string]$scope.scope;phase='Collection'
@@ -560,7 +694,7 @@ function Invoke-IdentityEnrollmentCollection {
             collectorVersion=[string]$collector.collectorVersion
             operationId=[string]$collector.operationId;intendedScopeIds=$scopeIds
             subjectIds=@($collectorScopes.subject | Sort-Object -Unique)
-            startedAt=$collectedAt;completedAt=$collectedAt
+            startedAt=$startedAt;completedAt=$collectedAt
             executionContext=[string]$sourceResult.executionContext
             attempts=1;observationIds=$observationIds;coverageIds=$coverageIds
             diagnosticIds=@($diagnostics | Where-Object scopeId -in $scopeIds | ForEach-Object diagnosticId)
@@ -723,8 +857,8 @@ function Complete-ValidatedIdentityEnrollmentAssessmentRecord {
         )
     $enrollmentFinding=New-IdentityEnrollmentFinding -Kind 'work-school-enrollment-context' `
         -RuleId $rules['work-school-enrollment-context'].ruleId -Record $Record `
-        -SubjectId $userSubjectId -FieldIds @(
-            'field:user.work-school-account.present','field:user.work-school-account.identifier',
+        -SubjectId $deviceSubjectId -FieldIds @(
+            'field:device.work-school-registration.present','field:device.work-school-registration.identifier',
             'field:device.mdm-bridge.provider-available'
         )
     foreach($pair in @(
@@ -749,7 +883,7 @@ function Complete-ValidatedIdentityEnrollmentAssessmentRecord {
         $null -ne $entra -and $entra.valueState -eq 'ObservedValue'){
         Set-IdentityEnrollmentFindingResult $registrationFinding 'Informational'
     }else{Set-IdentityEnrollmentFindingResult $registrationFinding 'Indeterminate' 'FINDING.REGISTRATION_CONTEXT_INCOMPLETE'}
-    $workSchool=$byField['field:user.work-school-account.present']
+    $workSchool=$byField['field:device.work-school-registration.present']
     $mdm=$byField['field:device.mdm-bridge.provider-available']
     if($null -ne $workSchool -and $workSchool.valueState -eq 'ObservedValue' -and
         $null -ne $mdm -and $mdm.valueState -eq 'ObservedValue'){
@@ -761,18 +895,14 @@ function Complete-ValidatedIdentityEnrollmentAssessmentRecord {
     # compliance, licensing, or organizational intent. The product creates
     # bounded questions for an authorized tenant-side role and performs no
     # authentication or network request itself.
-    $requiresTenantDiscovery = $null -ne $entra -and
-        $entra.valueState -eq 'ObservedValue' -and [string]$entra.value -ne 'None'
-    if($requiresTenantDiscovery){
-        $findingIds=@([string]$registrationFinding.findingId,[string]$enrollmentFinding.findingId)
-        $Record.recommendations=@($Record.recommendations)+@($Policy.discoveryTasks | ForEach-Object {
-            [pscustomobject][ordered]@{
-                recommendationId="recommendation:$(([string]$_.definitionId).Substring(5).Replace('/','-')):$($Record.run.runId)"
-                definitionId=[string]$_.definitionId;kind='TenantSideDiscoveryTask'
-                findingIds=$findingIds
-            }
-        })
-    }
+    $findingIds=@([string]$registrationFinding.findingId,[string]$enrollmentFinding.findingId)
+    $Record.recommendations=@($Record.recommendations)+@($Policy.discoveryTasks | ForEach-Object {
+        [pscustomobject][ordered]@{
+            recommendationId="recommendation:$(([string]$_.definitionId).Substring(5).Replace('/','-')):$($Record.run.runId)"
+            definitionId=[string]$_.definitionId;kind='TenantSideDiscoveryTask'
+            findingIds=$findingIds
+        }
+    })
     $Record.run.outcome=if(@($Record.coverage|Where-Object state -ne 'Complete').Count -eq 0){
         'Completed'
     }else{'CompletedWithGaps'}

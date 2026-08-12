@@ -288,15 +288,16 @@
             "collectorId": "collector:windows.registration-and-user-context",
             "collectorVersion": "1.0.0",
             "operationId": "observe-device-registration",
-            "source": "Release-embedded native Windows API projection for domain join, Entra registration, and the interactive Assessment User Context",
+            "source": "Release-embedded native Windows API projection for domain join, Entra registration, and the SID-bound interactive Assessment User Context",
             "executionContext": "StandardUser",
             "privilege": "NoElevation",
             "networkBehavior": "OfflineOnly",
-            "executable": "NoneInProcess",
+            "executable": "ActiveMicrosoftSignedPowerShellHost",
             "dependencies": [
               "Windows NetGetJoinInformation API",
               "Windows NetGetAadJoinInformation API",
-              "Windows Terminal Services session APIs"
+              "Windows Terminal Services session APIs",
+              "Windows account-to-SID translation"
             ],
             "mayPrompt": false,
             "mayInstall": false,
@@ -306,17 +307,17 @@
             "maximumAttempts": 1,
             "deadlineMilliseconds": 5000,
             "resultMaximumUtf8Bytes": 8192,
-            "cleanup": "NoArtifacts"
+            "cleanup": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent"
           },
           {
             "collectorId": "collector:windows.work-school-context",
             "collectorVersion": "1.0.0",
             "operationId": "observe-enrollment-context",
-            "source": "Release-embedded NetGetAadJoinInformation projection limited to the default local work-or-school registration",
+            "source": "Release-embedded NetGetAadJoinInformation projection limited to the device-default local work-or-school registration",
             "executionContext": "StandardUser",
             "privilege": "NoElevation",
             "networkBehavior": "OfflineOnly",
-            "executable": "NoneInProcess",
+            "executable": "ActiveMicrosoftSignedPowerShellHost",
             "dependencies": ["Windows NetGetAadJoinInformation API"],
             "mayPrompt": false,
             "mayInstall": false,
@@ -326,7 +327,7 @@
             "maximumAttempts": 1,
             "deadlineMilliseconds": 5000,
             "resultMaximumUtf8Bytes": 4096,
-            "cleanup": "NoArtifacts"
+            "cleanup": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent"
           },
           {
             "collectorId": "collector:windows.mdm-bridge.device-manageability",
@@ -369,10 +370,10 @@
             ]
           },
           {
-            "scopeId": "scope:user.work-school-context",
+            "scopeId": "scope:device.work-school-registration-context",
             "fieldIds": [
-              "field:user.work-school-account.present",
-              "field:user.work-school-account.identifier"
+              "field:device.work-school-registration.present",
+              "field:device.work-school-registration.identifier"
             ]
           },
           {

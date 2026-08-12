@@ -83,6 +83,12 @@ foreach ($scenario in @('Malformed','Denied','LocalSystem')) {
     }
 }
 
+$localSystem = Invoke-IdentityEnrollmentCollection -Policy $policy -ValidationScenario 'LocalSystem'
+foreach ($envelope in @($localSystem.collectorResults)) {
+    Assert-Equal 'Synthetic' ([string]$envelope.executionContext) `
+        'the fixture is honest about its synthetic context while proving SYSTEM rejection'
+}
+
 $publicProjection = Invoke-IdentityEnrollmentCollection -Policy $policy `
     -ValidationScenario 'Mixed' | Select-Object validationScenario, processRelationship,
         @{n='coverageStates';e={@($_.coverage.state)}}
