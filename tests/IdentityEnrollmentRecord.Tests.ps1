@@ -42,6 +42,18 @@ try {
 }
 Assert-Equal $true $collectorCleanupRejected `
     'collector cleanup uncertainty stops before another collector can be scheduled'
+$accountingCleanupRejected=$false
+try {
+    Assert-IdentityCollectorCleanupVerified -Attempt ([pscustomobject]@{
+        native=[pscustomobject]@{Started=$true;CompleteOwnedTreeAbsent=$false
+            FailureStage=[WinPCInfo.ProcessSupervisor.NativeFailureStage]::None}
+    })
+}catch{
+    $accountingCleanupRejected=$_.Exception.Data['ReasonCode'] -eq
+        'IDENTITY.COLLECTOR_CLEANUP_INCOMPLETE'
+}
+Assert-Equal $true $accountingCleanupRejected `
+    'failed final Job accounting stops scheduling even without a rewritten failure stage'
 
 function Test-CanonicalRecord {
     param($Record)

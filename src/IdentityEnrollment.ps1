@@ -515,8 +515,10 @@ function Get-IdentityAadSourceState {
 
 function Assert-IdentityCollectorCleanupVerified {
     param([Parameter(Mandatory)] $Attempt)
-    if($null -ne $Attempt.native -and $Attempt.native.FailureStage -eq
-        [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete){
+    if($null -ne $Attempt.native -and (
+        $Attempt.native.FailureStage -eq
+            [WinPCInfo.ProcessSupervisor.NativeFailureStage]::TerminationIncomplete -or
+        ($Attempt.native.Started -and -not [bool]$Attempt.native.CompleteOwnedTreeAbsent))){
         $exception=[InvalidOperationException]::new(
             'An identity collector attempt could not prove its owned worker absent.'
         )
