@@ -1,6 +1,6 @@
 # Assessment Contract validation
 
-The Assessment Contract began with one safe synthetic observation. Contract Set 1.5 keeps every historical profile unchanged and adds `profile:device-firmware-identity-administrator-policy-and-resource-dependencies`. The additive profile carries forward Device, firmware, identity, direct-administrator, and Effective Policy evidence, then adds five bounded resource/peripheral scopes and their finite field catalog without redefining an older `Complete` claim. The current slice can collect after approval and produce a Protected Evidence Package, but it does not by itself mark a Product Capability delivered.
+The Assessment Contract began with one safe synthetic observation. Contract Set 1.6 keeps every historical profile unchanged and adds `profile:device-firmware-identity-administrator-policy-resource-and-network-readiness`. The additive profile carries forward Device, firmware, identity, direct-administrator, Effective Policy, and resource evidence, then adds nine local topology scopes and three explicitly network-dependent scopes without redefining an older `Complete` claim. The current slice can collect after approval and produce a Protected Evidence Package, but it does not by itself mark a Product Capability delivered.
 
 The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contract-set.json) is the dictionary and rulebook for this slice. Its [schema](../schemas/assessment-contract-set.schema.json) requires every admitted Evidence Field Definition to state:
 
@@ -11,7 +11,7 @@ The release-owned [Assessment Contract Set](spec/releases/2.0.0-preview.1-contra
 - how prohibited material is omitted; and
 - whether the definition or a value may appear in a public projection.
 
-Only `field:device.os.display-name` is admitted in the original lifecycle profile, `profile:synthetic-contract-tracer`. Its source remains `SyntheticContractFixture`. Later profiles retain their original Device, firmware, identity, administrator, and policy scopes. Contract Set 1.5 adds verified-user mapped-resource, UNC, printer, printer-driver, and common-peripheral scopes. A successful source may explicitly report an unknown or absent field; inaccessible or partial collection retains a reason and diagnostic. A source-wide, malformed, denied, or prohibited-material failure fabricates no field observation and is carried by coverage, diagnostics, and the collector envelope. The schema admits honest `Synthetic`, `StandardUser`, `Administrator`, and verified `LocalSystem` provenance.
+Only `field:device.os.display-name` is admitted in the original lifecycle profile, `profile:synthetic-contract-tracer`. Its source remains `SyntheticContractFixture`. Later profiles retain their original Device, firmware, identity, administrator, and policy scopes. Contract Set 1.5 added verified-user resource scopes. Contract Set 1.6 adds local topology and explicitly `NotAttempted` Local Only network-dependent scopes; no envelope is fabricated for an attempt that did not occur. A successful source may explicitly report an unknown or absent field; inaccessible or partial collection retains a reason and diagnostic. A source-wide, malformed, denied, or prohibited-material failure fabricates no field observation and is carried by coverage, diagnostics, and the collector envelope. The schema admits honest `Synthetic`, `StandardUser`, `Administrator`, and verified `LocalSystem` provenance.
 
 ## What validation does
 
@@ -23,7 +23,7 @@ Before schema or semantic interpretation, the validator applies I-JSON-style saf
 - no duplicate property names;
 - valid Unicode scalar pairs;
 - interoperable integers from `-9007199254740991` through `9007199254740991` and finite floating-point numbers;
-- at most 16 JSON levels, 512 KiB per Contract Set 1.5 document, 1 KiB per ordinary string, and the smaller field-specific bounds in the Contract Set.
+- at most 16 JSON levels, 512 KiB per Contract Set 1.6 document, 1 KiB per ordinary string, and the smaller field-specific bounds in the Contract Set.
 
 Failures expose stable codes such as `CONTRACT.JSON_INVALID`, `CONTRACT.DUPLICATE_PROPERTY`, `CONTRACT.REQUIRED_FEATURE_UNSUPPORTED`, `CONTRACT.REFERENCE_INVALID`, `CONTRACT.COVERAGE_INCONSISTENT`, or `CONTRACT.PRIVACY_VIOLATION`. Parser exceptions, source values, and secret-like input are not copied into the public result.
 
@@ -57,6 +57,7 @@ pwsh -NoLogo -NoProfile -File ./tests/ContractSemanticMatrix.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/AssessmentContractSet.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/EffectivePolicyContract.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/ResourceDependenciesContract.Tests.ps1
+pwsh -NoLogo -NoProfile -File ./tests/NetworkTopologyContract.Tests.ps1
 ```
 
-The original `-ContractFixturePath` conformance seam still ends `NotStarted` and cannot enable collection. Device, firmware, identity/enrollment, direct-administrator, fourteen Effective Policy states, and fourteen Resource Dependency states use separate closed scenario seams through the generated application and immutable plan. These produce typed synthetic samples and remove their protected packages before returning. No fixture can provide an account, member SID, policy identifier/value, resource endpoint, printer/device identifier, tenant, domain, arbitrary elevation, network access, device mutation, authentication, or Azure activity.
+The original `-ContractFixturePath` conformance seam still ends `NotStarted` and cannot enable collection. Device, firmware, identity/enrollment, direct-administrator, fourteen Effective Policy states, fourteen Resource Dependency states, and fourteen Network Topology states use separate closed scenario seams through the generated application and immutable plan. These produce typed synthetic samples and remove their protected packages before returning. No fixture can provide an account, member SID, policy identifier/value, resource endpoint, printer/device identifier, network address, tenant, domain, arbitrary elevation, network access, device mutation, authentication, or Azure activity.

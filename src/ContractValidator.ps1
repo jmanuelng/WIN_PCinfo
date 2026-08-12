@@ -411,7 +411,15 @@ function Get-AssessmentStateReason {
     # contribute disjoint observations to the same scope and therefore bind the
     # same final coverage identity; every coverage item still has to be bound at
     # least once, while observation ownership below remains exactly once.
-    if (@($envelopedCoverage | Sort-Object -Unique).Count -ne @($Record.coverage).Count) {
+    # A NotAttempted scope has no collector attempt and therefore no Collector
+    # Result Envelope. Requiring an envelope would falsify both its attempts and
+    # timing. Every scope for which work did start remains envelope-bound.
+    $attemptedCoverage = @($Record.coverage | Where-Object state -ne 'NotAttempted')
+    $attemptedCoverageIds = @($attemptedCoverage.coverageId | Sort-Object -Unique)
+    $uniqueEnvelopedCoverage = @($envelopedCoverage | Sort-Object -Unique)
+    if ($uniqueEnvelopedCoverage.Count -ne $attemptedCoverage.Count -or
+        @(Compare-Object -ReferenceObject $attemptedCoverageIds `
+            -DifferenceObject $uniqueEnvelopedCoverage).Count -gt 0) {
         return 'CONTRACT.COVERAGE_INCONSISTENT'
     }
     $coveredObservations = @(
@@ -427,10 +435,16 @@ function Get-AssessmentStateReason {
     $envelopedDiagnostics = @(
         $Record.collectorResults | ForEach-Object { @($_.diagnosticIds) }
     )
+    $attemptedDiagnosticIds = @(
+        $attemptedCoverage | ForEach-Object { @($_.diagnosticIds) }
+    )
+    $uniqueEnvelopedDiagnostics = @($envelopedDiagnostics | Sort-Object -Unique)
     if ($coveredDiagnostics.Count -ne @($Record.diagnostics).Count -or
         @($coveredDiagnostics | Sort-Object -Unique).Count -ne @($Record.diagnostics).Count -or
-        $envelopedDiagnostics.Count -ne @($Record.diagnostics).Count -or
-        @($envelopedDiagnostics | Sort-Object -Unique).Count -ne @($Record.diagnostics).Count) {
+        $envelopedDiagnostics.Count -ne $attemptedDiagnosticIds.Count -or
+        $uniqueEnvelopedDiagnostics.Count -ne $attemptedDiagnosticIds.Count -or
+        @(Compare-Object -ReferenceObject @($attemptedDiagnosticIds | Sort-Object -Unique) `
+            -DifferenceObject $uniqueEnvelopedDiagnostics).Count -gt 0) {
         return 'CONTRACT.COVERAGE_INCONSISTENT'
     }
 

@@ -1,0 +1,66 @@
+{
+  "kind": "win-pcinfo.network-topology-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.network-topology/1.0.0",
+  "evidenceProfileId": "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness",
+  "collector": {
+    "collectorId": "collector:windows.local-network-topology",
+    "collectorVersion": "1.0.0",
+    "operationId": "observe-network-context",
+    "source": "Release-owned bounded projection of structured Windows local network configuration and existing connection state",
+    "executionContext": "StandardUser",
+    "privilege": "NoElevation",
+    "networkBehavior": "OfflineOnly",
+    "executable": "ActiveMicrosoftSignedPowerShellHost",
+    "dependencies": ["NetAdapter", "NetConnection", "NetTCPIP", "DnsClient", "VpnClient", "Microsoft.Win32.Registry", "Windows CIM provider"],
+    "mayPrompt": false,
+    "mayInstall": false,
+    "mayDownload": false,
+    "maySelfElevate": false,
+    "writesAllowed": false,
+    "maximumAttempts": 1,
+    "deadlineMilliseconds": 5000,
+    "resultMaximumUtf8Bytes": 131072,
+    "maximumItemsPerScope": 8,
+    "cleanup": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent"
+  },
+  "localScopes": [
+    {"scopeId":"scope:network.adapters","sourceId":"source:windows.netadapter","fieldIds":["field:network.adapter.name","field:network.adapter.status","field:network.adapter.interface-index","field:network.adapter.hardware-interface"]},
+    {"scopeId":"scope:network.connection-profiles","sourceId":"source:windows.netconnectionprofile","fieldIds":["field:network.profile.name","field:network.profile.category","field:network.profile.connectivity"]},
+    {"scopeId":"scope:network.ip-configuration","sourceId":"source:windows.netipconfiguration","fieldIds":["field:network.ip.interface-index","field:network.ip.address-family","field:network.ip.address","field:network.ip.prefix-length"]},
+    {"scopeId":"scope:network.routes","sourceId":"source:windows.netroute","fieldIds":["field:network.route.address-family","field:network.route.destination-prefix","field:network.route.next-hop","field:network.route.metric"]},
+    {"scopeId":"scope:network.resolvers","sourceId":"source:windows.dnsclientserveraddress","fieldIds":["field:network.resolver.address-family","field:network.resolver.addresses"]},
+    {"scopeId":"scope:network.proxy","sourceId":"source:windows.current-user.internet-settings","fieldIds":["field:network.proxy.enabled","field:network.proxy.server","field:network.proxy.auto-config-url"]},
+    {"scopeId":"scope:network.vpn-components","sourceId":"source:windows.vpnconnection","fieldIds":["field:network.vpn.name","field:network.vpn.server-address","field:network.vpn.tunnel-type","field:network.vpn.connection-status"]},
+    {"scopeId":"scope:network.security-components","sourceId":"source:windows.securitycenter2","fieldIds":["field:network.security-component.kind","field:network.security-component.name","field:network.security-component.state-code"]},
+    {"scopeId":"scope:network.local-connections","sourceId":"source:windows.nettcpconnection","fieldIds":["field:network.connection.state","field:network.connection.local-endpoint","field:network.connection.remote-endpoint"]}
+  ],
+  "networkDependentScopes": [
+    {"scopeId":"scope:network.microsoft-connectivity","collectorId":"collector:windows.microsoft-connectivity","collectorVersion":"1.0.0","operationId":"test-microsoft-connectivity","source":"Release-owned bounded Microsoft service connectivity catalog","executionContext":"StandardUser","privilege":"NoElevation","networkBehavior":"MicrosoftConnectivityEnabledOnly","executable":"ActiveMicrosoftSignedPowerShellHost","dependencies":["DnsClient","System.Net.Sockets","System.Net.Security","System.Net.Http"],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":5000,"resultMaximumUtf8Bytes":4096,"cleanup":"CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent","localOnlyState":"NotAttempted","reasonCode":"NETWORK.LOCAL_ONLY_NOT_ATTEMPTED"},
+    {"scopeId":"scope:network.enrollment-dns","collectorId":"collector:windows.enrollment-dns","collectorVersion":"1.0.0","operationId":"test-enrollment-dns","source":"Release-owned bounded Microsoft enrollment DNS catalog","executionContext":"StandardUser","privilege":"NoElevation","networkBehavior":"MicrosoftConnectivityEnabledOnly","executable":"ActiveMicrosoftSignedPowerShellHost","dependencies":["DnsClient"],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":5000,"resultMaximumUtf8Bytes":4096,"cleanup":"CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent","localOnlyState":"NotAttempted","reasonCode":"NETWORK.LOCAL_ONLY_NOT_ATTEMPTED"},
+    {"scopeId":"scope:network.tls-trust","collectorId":"collector:windows.microsoft-tls-trust","collectorVersion":"1.0.0","operationId":"test-microsoft-tls-trust","source":"Release-owned bounded Microsoft TLS trust catalog","executionContext":"StandardUser","privilege":"NoElevation","networkBehavior":"MicrosoftConnectivityEnabledOnly","executable":"ActiveMicrosoftSignedPowerShellHost","dependencies":["System.Net.Sockets","System.Net.Security"],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":5000,"resultMaximumUtf8Bytes":4096,"cleanup":"CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent","localOnlyState":"NotAttempted","reasonCode":"NETWORK.LOCAL_ONLY_NOT_ATTEMPTED"}
+  ],
+  "sourceCatalog": [
+    {"sourceId":"source:windows.netadapter","interface":"Get-NetAdapter","approvedProperties":["Name","InterfaceDescription","Status","InterfaceIndex","LinkSpeed","HardwareInterface"],"limitation":"LocalConfigurationOnlyNoTrafficOrPacketCapture"},
+    {"sourceId":"source:windows.netconnectionprofile","interface":"Get-NetConnectionProfile","approvedProperties":["Name","NetworkCategory","IPv4Connectivity","IPv6Connectivity","InterfaceIndex"],"limitation":"WindowsReportedProfileOnlyNoConnectivityProbe"},
+    {"sourceId":"source:windows.netipconfiguration","interface":"Get-NetIPAddressAndDefaultNetRoute","approvedProperties":["InterfaceIndex","AddressFamily","IPAddress","PrefixLength","NextHop"],"limitation":"LocalConfigurationOnlyNoNeighborOrLeaseInventory"},
+    {"sourceId":"source:windows.netroute","interface":"Get-NetRoute","approvedProperties":["AddressFamily","DestinationPrefix","NextHop","InterfaceIndex","RouteMetric"],"limitation":"BoundedActiveStoreMetadataOnly"},
+    {"sourceId":"source:windows.dnsclientserveraddress","interface":"Get-DnsClientServerAddress","approvedProperties":["InterfaceIndex","AddressFamily","ServerAddresses"],"limitation":"ConfiguredResolversOnlyNoDnsRequest"},
+    {"sourceId":"source:windows.current-user.internet-settings","interface":"Microsoft.Win32.Registry.CurrentUser.InternetSettingsReadOnly","approvedProperties":["ProxyEnable","ProxyServer","AutoConfigURL"],"limitation":"CurrentUserConfigurationOnlyNoProxyRequestOrCredentialAccess"},
+    {"sourceId":"source:windows.vpnconnection","interface":"Get-VpnConnection","approvedProperties":["Name","ServerAddress","TunnelType","ConnectionStatus"],"limitation":"CurrentUserConnectionMetadataOnlyNoCredentialOrConnectionAttempt"},
+    {"sourceId":"source:windows.securitycenter2","interface":"SecurityCenter2AntiVirusAndFirewallProduct","approvedProperties":["displayName","productState"],"limitation":"RegistrationMetadataOnlyNoHealthApprovalOrProtectionInference"},
+    {"sourceId":"source:windows.nettcpconnection","interface":"Get-NetTCPConnection","approvedProperties":["State","LocalAddress","LocalPort","RemoteAddress","RemotePort"],"limitation":"ExistingBoundedConnectionMetadataOnlyNoProcessIdentityOrPayload"}
+  ],
+  "rules": [
+    {"findingKind":"local-network-configuration","ruleId":"rule:network.local-configuration/1.0.0","operationId":"op:rule.network.local-configuration.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":384,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"},
+    {"findingKind":"network-component-inventory","ruleId":"rule:network.component-inventory/1.0.0","operationId":"op:rule.network.component-inventory.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":64,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"},
+    {"findingKind":"local-only-network-coverage","ruleId":"rule:network.local-only-coverage/1.0.0","operationId":"op:rule.network.local-only-coverage.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":0,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"}
+  ],
+  "recommendations": [
+    {"definitionId":"recommendation:network.review-local-context/1.0.0","findingKind":"local-network-configuration","purpose":"Review the observed local network configuration before designing management-service reachability.","responsibleRole":"NetworkEngineer","verification":"Compare the encrypted local evidence with the approved target network design.","caution":"Local configuration does not prove external reachability, authorization, or service health."},
+    {"definitionId":"recommendation:network.review-components/1.0.0","findingKind":"network-component-inventory","purpose":"Review observed VPN and security-component dependencies before changing network access.","responsibleRole":"SecurityEngineer","verification":"Confirm product purpose and current state through approved vendor or organizational sources.","caution":"A registered product name or state code does not prove health, approval, or active protection."},
+    {"definitionId":"recommendation:network.enable-approved-connectivity-tests/1.0.0","findingKind":"local-only-network-coverage","purpose":"Run a later assessment with Microsoft Connectivity Enabled when approved reachability evidence is required.","responsibleRole":"AssessmentOperator","verification":"Approve the named bounded DNS, TCP, TLS, and HTTP operations in a new Preparation Summary.","caution":"Local Only intentionally makes no assessment network request and cannot establish external reachability."}
+  ],
+  "validationScenarios": ["MultipleAdapters","IPv4IPv6","Disconnected","Routes","Resolvers","Proxy","VpnAndSecurity","ExistingConnections","Empty","Malformed","Denied","Partial","LocalOnly","Unicode"]
+}

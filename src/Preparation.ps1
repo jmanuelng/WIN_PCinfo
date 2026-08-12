@@ -290,6 +290,11 @@ function New-PreparationPlan {
         # Context. Exact sources, property allowlists, limits, offline behavior,
         # and the prohibition on credentials/content/device IDs are frozen here.
         resourceDependencies = $Definition.resourceDependencies
+        # Local network topology remains an offline observation contract. The
+        # plan freezes every local source plus the network-dependent probes
+        # that Local Only must leave NotAttempted; approval cannot later widen
+        # those probes into DNS, TCP, TLS, HTTP, catalog, update, or telemetry.
+        networkTopology = $Definition.networkTopology
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -445,6 +450,7 @@ function Invoke-PreparationGate {
     $administratorExposureFixturePath = [string] $ValidationContext.AdministratorExposureFixturePath
     $effectivePolicyFixturePath = [string] $ValidationContext.EffectivePolicyFixturePath
     $resourceDependenciesFixturePath = [string] $ValidationContext.ResourceDependenciesFixturePath
+    $networkTopologyFixturePath = [string] $ValidationContext.NetworkTopologyFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -521,7 +527,7 @@ function Invoke-PreparationGate {
             $protectedPackageFixturePath, $recipientSharingFixturePath,
             $deviceReadinessFixturePath, $identityEnrollmentFixturePath,
             $administratorExposureFixturePath, $effectivePolicyFixturePath,
-            $resourceDependenciesFixturePath) |
+            $resourceDependenciesFixturePath, $networkTopologyFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -636,6 +642,22 @@ function Invoke-PreparationGate {
             -ConvertToJsonCommand $ConvertToJsonCommand
         return Invoke-DeviceReadinessSlice `
             -ResourceDependenciesLiteralPath $resourceDependenciesFixturePath `
+            -PreparationPlan $planResult.Plan `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($networkTopologyFixturePath)) {
+        # Exact addresses, routes, proxy values, adapter names, and connection
+        # tuples are Restricted. Progress exposes only the approved operation.
+        Write-ContractRecord (New-ProgressRecord -Sequence 8 -Phase 'Collection' `
+            -State 'Started' -MessageId 'network-topology.collection.started' `
+            -CompletedUnits 0 -TotalUnits 1 -Unit 'NetworkTopology') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return Invoke-DeviceReadinessSlice `
+            -NetworkTopologyLiteralPath $networkTopologyFixturePath `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `
