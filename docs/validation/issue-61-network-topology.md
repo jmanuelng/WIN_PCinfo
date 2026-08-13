@@ -20,11 +20,13 @@ The independent observer found zero directly collector-correlated DNS, name-reso
 
 The raw ETL, decoded CSV, provider list, process-correlation markers, and synchronization markers were deleted immediately after sanitization. A post-run boundary check found zero transient trace artifacts. The retained evidence contains only provider/event classifications and aggregate counts; it contains no process ID, endpoint, packet, address, name, or local topology value.
 
-## Open closure evidence blocker
+## System-wide trace and open closure blocker
 
-The remaining closure assertion must cover delegated Windows-service activity as well as the collector process. The proposed stronger validation uses two separate, bounded 16 MiB system-wide ETW sessions: an immediately preceding loopback-only calibration and a collector-only measurement window. The measurement accepts only zero total DNS, Winsock name-resolution/socket, and Kernel Network send/connect events across every process before, during, and after the collector attempt. Raw ETL/CSV material would be deleted immediately and only sanitized aggregate event classifications retained.
+The maintainer subsequently authorized a system-wide trace that could cover delegated Windows-service activity. Two separate bounded 16 MiB sessions were used. The loopback-only calibration detected 670 outbound-operation events, including Kernel Network connect/send and Winsock operation classes, so the observer was sensitive. The collector-only measurement then ran the exact release source successfully in 3,046 ms, validated its closed payload, reported zero requests, and proved its owned tree absent.
 
-That trace can transiently contain unrelated applications' private network metadata. It is materially broader than the approved collector-PID trace and therefore requires explicit authorization before execution. Windows Sandbox is not currently available on this host, and enabling or installing it is not authorized. Until the maintainer explicitly approves this bounded system-wide trace (or supplies an already-approved disposable isolated Windows environment), issue #61 and PR #94 remain open and unmerged.
+The collector-only system window nevertheless contained 1,025 outbound-operation events from background applications and Windows services. Because the system-wide trace deliberately removed PID filtering to include delegated work, those unrelated events cannot be causally separated from a hypothetical collector-delegated request. Baseline subtraction would be probabilistic rather than a zero-request proof and was rejected. Both raw ETL/CSV files and all synchronization/provider artifacts were deleted; no issue-owned trace session remains.
+
+The remaining closure assertion therefore requires an isolated disposable Windows environment with no unrelated network activity, while retaining the calibrated system-wide observer. Windows Sandbox is not installed on this host, and enabling the optional feature may require an installation, virtualization support, and a restart that are not authorized by this ticket. Until such an environment is supplied or that authority is explicitly granted, issue #61 and PR #94 remain open and unmerged.
 
 ## Threat model and security review
 
