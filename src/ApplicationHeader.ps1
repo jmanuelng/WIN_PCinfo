@@ -131,7 +131,13 @@ param(
     # and peripheral scenario. It cannot supply a resource, endpoint, device,
     # driver, credential, command, source path, or collection authority.
     [Parameter(DontShow)]
-    [string] $ResourceDependenciesFixturePath
+    [string] $ResourceDependenciesFixturePath,
+
+    # A Network Topology fixture selects one release-owned local source shape.
+    # It cannot provide an address, adapter, route, resolver, proxy, component,
+    # connection, command, network permission, or collection authority.
+    [Parameter(DontShow)]
+    [string] $NetworkTopologyFixturePath
 )
 
 Set-StrictMode -Version Latest

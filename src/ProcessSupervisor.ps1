@@ -469,7 +469,6 @@ namespace WinPCInfo.ProcessSupervisor
                 if (!CreateProcess(executable, commandLine, IntPtr.Zero, IntPtr.Zero, true, flags,
                     environmentBlock, workingDirectory, ref startup, out process))
                 { result.FailureStage = NativeFailureStage.CreateProcess; result.NativeError = Marshal.GetLastWin32Error(); return result; }
-
                 if (simulateJobIncompatible)
                 {
                     // The conformance fixture models the documented Windows

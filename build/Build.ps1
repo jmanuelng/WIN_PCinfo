@@ -23,6 +23,7 @@ $sourcePaths = @(
     'src/AdministratorExposure.ps1'
     'src/EffectivePolicy.ps1'
     'src/ResourceDependencies.ps1'
+    'src/NetworkTopology.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -70,6 +71,8 @@ $effectivePolicyPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0
 $effectivePolicySchemaPath = Join-Path $repositoryRoot 'schemas/effective-policy.schema.json'
 $resourceDependenciesPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-resource-dependencies.json'
 $resourceDependenciesSchemaPath = Join-Path $repositoryRoot 'schemas/resource-dependencies.schema.json'
+$networkTopologyPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-network-topology.json'
+$networkTopologySchemaPath = Join-Path $repositoryRoot 'schemas/network-topology.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
 $assessmentPackageManifestSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-package-manifest.schema.json'
 $recipientSharingPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
@@ -91,7 +94,8 @@ foreach ($requiredDefinitionPath in @(
     $identityEnrollmentPolicyPath, $identityEnrollmentSchemaPath,
     $administratorExposurePolicyPath, $administratorExposureSchemaPath,
     $effectivePolicyPolicyPath, $effectivePolicySchemaPath,
-    $resourceDependenciesPolicyPath, $resourceDependenciesSchemaPath
+    $resourceDependenciesPolicyPath, $resourceDependenciesSchemaPath,
+    $networkTopologyPolicyPath, $networkTopologySchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -189,6 +193,12 @@ $resourceDependenciesPolicyDigest = Get-Sha256Hex -Bytes $resourceDependenciesPo
 $resourceDependenciesPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $resourceDependenciesPolicyBytes
 )
+$networkTopologyPolicyBytes = Get-Utf8LfBytes -LiteralPath $networkTopologyPolicyPath
+$networkTopologyPolicyBase64 = [Convert]::ToBase64String($networkTopologyPolicyBytes)
+$networkTopologyPolicyDigest = Get-Sha256Hex -Bytes $networkTopologyPolicyBytes
+$networkTopologyPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $networkTopologyPolicyBytes
+)
 $effectivePolicyPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $effectivePolicyPolicyBytes
 )
@@ -230,6 +240,9 @@ if (-not (Test-Json -Json $effectivePolicyPolicyJson -SchemaFile $effectivePolic
 }
 if (-not (Test-Json -Json $resourceDependenciesPolicyJson -SchemaFile $resourceDependenciesSchemaPath)) {
     throw 'The Resource Dependencies policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $networkTopologyPolicyJson -SchemaFile $networkTopologySchemaPath)) {
+    throw 'The Network Topology policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -281,6 +294,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/administrator-exposure.schema.json'
     'schemas/effective-policy.schema.json'
     'schemas/resource-dependencies.schema.json'
+    'schemas/network-topology.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -295,6 +309,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-administrator-exposure.json'
     'docs/spec/releases/2.0.0-preview.1-effective-policy.json'
     'docs/spec/releases/2.0.0-preview.1-resource-dependencies.json'
+    'docs/spec/releases/2.0.0-preview.1-network-topology.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -325,6 +340,7 @@ $preparationDefinition = [pscustomobject][ordered]@{
     administratorExposure = ($administratorExposurePolicyJson | ConvertFrom-Json -Depth 20)
     effectivePolicy = ($effectivePolicyPolicyJson | ConvertFrom-Json -Depth 20)
     resourceDependencies = ($resourceDependenciesPolicyJson | ConvertFrom-Json -Depth 20)
+    networkTopology = ($networkTopologyPolicyJson | ConvertFrom-Json -Depth 20)
     requiredFreeDiskMiB = [int] $preparationPlan.requiredFreeDiskMiB
     governingResources = @(
         foreach ($path in @(
@@ -507,6 +523,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__RESOURCE_DEPENDENCIES_POLICY_SHA256__', $resourceDependenciesPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/NetworkTopology.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__NETWORK_TOPOLOGY_POLICY_BASE64__', $networkTopologyPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__NETWORK_TOPOLOGY_POLICY_SHA256__', $networkTopologyPolicyDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"
