@@ -18,6 +18,14 @@ foreach($prohibited in @('Get-Net','Get-CimInstance','Import-Module','Resolve-Dn
 }
 if($source -match '\$rows\s*='){throw 'Provider inventories must stream through bounded reducers.'}
 
+$workerEnvironment=Get-NetworkTopologyWorkerEnvironment -AssessmentUserSid 'S-1-5-21-1-2-3-1001' -MaximumItems 8
+Assert-Equal '1' $workerEnvironment['POWERSHELL_TELEMETRY_OPTOUT'] `
+    'the supervised PowerShell host cannot activate PowerShell telemetry'
+Assert-Equal '1' $workerEnvironment['DOTNET_CLI_TELEMETRY_OPTOUT'] `
+    'the supervised .NET host cannot activate .NET CLI telemetry'
+Assert-Equal 'Off' $workerEnvironment['POWERSHELL_UPDATECHECK'] `
+    'the supervised PowerShell host cannot activate update checks'
+
 $maximum=[int]$policy.collector.resultMaximumUtf8Bytes
 $minimal=New-NetworkTopologySyntheticPayload -Scenario Empty -Policy $policy
 $minimalBytes=[Text.UTF8Encoding]::new($false).GetBytes(($minimal|ConvertTo-Json -Compress -Depth 10))

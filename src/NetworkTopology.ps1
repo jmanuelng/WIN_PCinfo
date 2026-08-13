@@ -502,6 +502,22 @@ function ConvertTo-NetworkTopologyEncodedCommand {
     [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
 }
 
+function Get-NetworkTopologyWorkerEnvironment {
+    param([string]$AssessmentUserSid,[int]$MaximumItems)
+    $environment=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $environment['SystemRoot']=[Environment]::GetFolderPath('Windows')
+    $environment['WINPCINFO_NETWORK_ASSESSMENT_SID']=$AssessmentUserSid
+    $environment['WINPCINFO_NETWORK_MAXIMUM']=[string]$MaximumItems
+    # PowerShell documents that telemetry and update preferences must be set
+    # before pwsh starts. The supervised worker receives a closed environment
+    # projection so host activation cannot violate the OfflineOnly operation.
+    $environment['POWERSHELL_TELEMETRY_OPTOUT']='1'
+    $environment['POWERSHELL_UPDATECHECK']='Off'
+    $environment['POWERSHELL_DIAGNOSTICS_OPTOUT']='1'
+    $environment['DOTNET_CLI_TELEMETRY_OPTOUT']='1'
+    $environment
+}
+
 function Invoke-BoundedNetworkTopologySnapshot {
     param($Policy,[string]$AssessmentUserSid)
     # Threat boundary: only this release-owned source string becomes an encoded
@@ -521,7 +537,7 @@ function Invoke-BoundedNetworkTopologySnapshot {
     $source=Get-NetworkTopologyLiveSource;$encoded=ConvertTo-NetworkTopologyEncodedCommand -Source $source
     $started=[DateTimeOffset]::UtcNow;$executable=[IO.Path]::GetFullPath((Join-Path $PSHOME 'pwsh.exe'))
     if(-not [IO.File]::Exists($executable) -or -not [string]::Equals($executable,[Environment]::ProcessPath,[StringComparison]::OrdinalIgnoreCase)){return [pscustomobject]@{succeeded=$false;payload=$null;reasonCode='NETWORK.BOUNDARY_UNAVAILABLE';startedAt=$started;completedAt=[DateTimeOffset]::UtcNow}}
-    $environment=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase);$environment['SystemRoot']=[Environment]::GetFolderPath('Windows');$environment['WINPCINFO_NETWORK_ASSESSMENT_SID']=$AssessmentUserSid;$environment['WINPCINFO_NETWORK_MAXIMUM']=[string]$collector.maximumItemsPerScope
+    $environment=Get-NetworkTopologyWorkerEnvironment -AssessmentUserSid $AssessmentUserSid -MaximumItems ([int]$collector.maximumItemsPerScope)
     $eventName="Local\WINPCInfo-NetworkTopology-$([Guid]::NewGuid().ToString('N'))";$created=$false;$event=$null
     try{
         $event=[Threading.EventWaitHandle]::new($false,[Threading.EventResetMode]::ManualReset,$eventName,[ref]$created);if(-not $created){throw 'Event ownership failed.'}
