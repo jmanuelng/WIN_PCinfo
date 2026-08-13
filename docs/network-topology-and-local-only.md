@@ -1,6 +1,6 @@
 # Local network topology and Local Only
 
-This preview slice records a bounded view of local Windows network configuration after the operator approves the Preparation Summary. It reads adapters, connection profiles, configured IP addresses, active routes, configured DNS resolver addresses, Current User proxy settings, Current User VPN registrations, Windows Security Center product registrations, and existing local TCP connection metadata. Each source has a fixed property list, an eight-item ceiling per evidence scope, one five-second attempt, a 128 KiB output ceiling, and verified Job Object cleanup.
+This preview slice records a bounded view of local Windows network configuration after the operator approves the Preparation Summary. It reads adapters, connection profiles, configured IP addresses, active routes, configured DNS resolver addresses, Current User proxy settings, Current User VPN registrations, Windows Security Center product registrations, and existing local TCP connection metadata. Each source has a fixed property list, an eight-item ceiling per evidence scope, one 30-second attempt, a 128 KiB output ceiling, and verified Job Object cleanup. The 30-second total bound includes a reserved final second for hard termination and whole-tree absence proof; it reflects measured cold initialization of the approved inbox Windows modules and providers rather than assuming they are already cached.
 
 ## What Local Only proves
 
