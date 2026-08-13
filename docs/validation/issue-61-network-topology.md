@@ -10,15 +10,21 @@ This public-safe projection records release-owned contracts, synthetic validatio
 - Every generated case reports `outboundRequestCount = 0`; all three network-dependent scopes remain `NotAttempted`; the canonical Assessment Record and beginner report validate; the Protected Evidence Package is created and reopened; and every validation-owned package/workspace is verified absent before the terminal record.
 - Public-output assertions reject every seeded address/name family and publish only counts and typed states. Product names never become health or approval findings.
 
-## Sanitized live outbound-trace validation
+## Preliminary PID-correlated live trace
 
 The issue owner explicitly authorized the previously blocked read-only elevated trace boundary. A bounded 16 MiB circular ETW session enabled only `Microsoft-Windows-Kernel-Network`, `Microsoft-Windows-TCPIP`, `Microsoft-Windows-Winsock-Sockets`, `Microsoft-Windows-Winsock-NameResolution`, and `Microsoft-Windows-DNS-Client`. The session was armed before either validation process began.
 
 A dedicated standard-user loopback socket process ran first as a positive control. The observer correlated 243 events to that process, including Kernel Network send/connect activity, proving that process correlation and the relevant network providers were active. The exact release-owned Local Only collector then completed in 3,123 ms under its 5,000 ms deadline, passed the closed payload validator, reported zero outbound requests, and returned only after its Job-owned process tree was proved absent. The observer remained active for a final 250 ms after that proof.
 
-The independent observer found zero collector-correlated DNS, name-resolution, Winsock, Kernel Network send/connect, or packet activity. Thirteen collector-correlated TCP/IP records were limited to event IDs 1066, 1319, and 1320; the installed Microsoft provider manifest identifies those as timer expiry, timer reschedule, and timer-fired bookkeeping rather than network requests. Therefore the independently observed collector outbound-operation count was zero before, during, and after the real local-source attempt.
+The independent observer found zero directly collector-correlated DNS, name-resolution, Winsock, Kernel Network send/connect, or packet activity. Thirteen collector-correlated TCP/IP records were limited to event IDs 1066, 1319, and 1320; the installed Microsoft provider manifest identifies those as timer expiry, timer reschedule, and timer-fired bookkeeping rather than network requests. This establishes no directly PID-attributed collector traffic, but it is not the closure assertion: CIM, CDXML, and service-backed providers could delegate work to a Windows service with another PID.
 
 The raw ETL, decoded CSV, provider list, process-correlation markers, and synchronization markers were deleted immediately after sanitization. A post-run boundary check found zero transient trace artifacts. The retained evidence contains only provider/event classifications and aggregate counts; it contains no process ID, endpoint, packet, address, name, or local topology value.
+
+## Open closure evidence blocker
+
+The remaining closure assertion must cover delegated Windows-service activity as well as the collector process. The proposed stronger validation uses two separate, bounded 16 MiB system-wide ETW sessions: an immediately preceding loopback-only calibration and a collector-only measurement window. The measurement accepts only zero total DNS, Winsock name-resolution/socket, and Kernel Network send/connect events across every process before, during, and after the collector attempt. Raw ETL/CSV material would be deleted immediately and only sanitized aggregate event classifications retained.
+
+That trace can transiently contain unrelated applications' private network metadata. It is materially broader than the approved collector-PID trace and therefore requires explicit authorization before execution. Windows Sandbox is not currently available on this host, and enabling or installing it is not authorized. Until the maintainer explicitly approves this bounded system-wide trace (or supplies an already-approved disposable isolated Windows environment), issue #61 and PR #94 remain open and unmerged.
 
 ## Threat model and security review
 

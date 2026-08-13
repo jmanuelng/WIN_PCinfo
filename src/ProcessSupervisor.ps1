@@ -119,10 +119,6 @@ namespace WinPCInfo.ProcessSupervisor
     public sealed class NativeRunResult
     {
         public bool Started { get; set; }
-        // Private orchestration fact used by security validation to correlate
-        // an external Windows trace with this exact owned attempt. It is never
-        // included in an Assessment Record or public application projection.
-        public int ProcessId { get; set; }
         public int ExitCode { get; set; }
         public NativeFailureStage FailureStage { get; set; }
         public int NativeError { get; set; }
@@ -473,8 +469,6 @@ namespace WinPCInfo.ProcessSupervisor
                 if (!CreateProcess(executable, commandLine, IntPtr.Zero, IntPtr.Zero, true, flags,
                     environmentBlock, workingDirectory, ref startup, out process))
                 { result.FailureStage = NativeFailureStage.CreateProcess; result.NativeError = Marshal.GetLastWin32Error(); return result; }
-                result.ProcessId = unchecked((int)process.dwProcessId);
-
                 if (simulateJobIncompatible)
                 {
                     // The conformance fixture models the documented Windows
