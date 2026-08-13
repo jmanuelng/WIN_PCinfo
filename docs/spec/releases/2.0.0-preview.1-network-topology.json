@@ -21,7 +21,7 @@
     "writesAllowed": false,
     "maximumAttempts": 1,
     "deadlineMilliseconds": 30000,
-    "resultMaximumUtf8Bytes": 131072,
+    "resultMaximumUtf8Bytes": 524288,
     "maximumItemsPerScope": 8,
     "cleanup": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent"
   },

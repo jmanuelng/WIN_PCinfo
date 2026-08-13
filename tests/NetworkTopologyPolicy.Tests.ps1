@@ -20,6 +20,8 @@ Assert-Equal 3 @($policy.networkDependentScopes).Count `
     'Local Only explicitly accounts for every deferred network-dependent scope'
 Assert-Equal 30000 $policy.collector.deadlineMilliseconds `
     'the local collector has an evidence-based finite cold-provider deadline'
+Assert-Equal 524288 $policy.collector.resultMaximumUtf8Bytes `
+    'the finite worker-output ceiling includes bounded serialization overhead'
 Assert-Equal 3 @($policy.networkDependentScopes |
     Where-Object deadlineMilliseconds -eq 5000).Count `
     'future network probes retain their separately frozen five-second bounds'
