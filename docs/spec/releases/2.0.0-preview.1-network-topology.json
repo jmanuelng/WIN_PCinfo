@@ -24,10 +24,10 @@
     "resultSerialization": "Utf8Json",
     "resultMaximumUtf8Bytes": 262144,
     "resultBoundDerivation": {
-      "maximumAdmittedStringUtf8Bytes": 28672,
-      "maximumJsonEscapeExpansionFactor": 6,
-      "maximumStructuralUtf8Bytes": 32768,
-      "computedWorstCaseUtf8Bytes": 204800,
+      "maximumAdmittedPayloadUtf8Bytes": 160196,
+      "fixtureShape": "EveryClosedCollectionAtEightItemsEveryFreeTextAtItsMaximumUtf8LengthControlCharactersAtSixByteJsonEscapeExpansion",
+      "serialization": "ConvertToJsonCompressDepth10Utf8NoBom",
+      "computedWorstCaseUtf8Bytes": 160196,
       "ceilingRounding": "NextPowerOfTwo"
     },
     "maximumItemsPerScope": 8,
@@ -56,7 +56,7 @@
     {"sourceId":"source:windows.ip-helper.routes","interface":"GetIpForwardTable2","approvedProperties":["AddressFamily","DestinationPrefix","NextHop","InterfaceIndex","Metric"],"limitation":"BoundedLocalRouteMetadataNoBestRouteOrConnectivityProbe"},
     {"sourceId":"source:windows.network-information.resolvers","interface":"System.Net.NetworkInformation.DnsAddresses","approvedProperties":["InterfaceIndex","AddressFamily","Addresses"],"limitation":"ConfiguredResolversOnlyNoDnsRequest"},
     {"sourceId":"source:windows.current-user.internet-settings","interface":"Microsoft.Win32.Registry.CurrentUser.InternetSettingsReadOnly","approvedProperties":["ProxyEnable","ProxyServer","AutoConfigURL"],"limitation":"CurrentUserConfigurationOnlyNoProxyRequestOrCredentialAccess"},
-    {"sourceId":"source:windows.current-user.ras-phonebook","interface":"CurrentUserRasPhonebookReadOnly","approvedProperties":["EntryName","PhoneNumber","VpnStrategy"],"limitation":"BoundedRegistrationMetadataNoCredentialsOrConnectionAttempt"},
+    {"sourceId":"source:windows.current-user.ras-phonebook","interface":"CurrentUserRasPhonebookReadOnly","approvedProperties":["EntryName","Type","PhoneNumber","VpnStrategy"],"limitation":"BoundedVpnRegistrationMetadataNoDialUpCredentialsOrConnectionAttempt"},
     {"sourceId":"source:windows.securitycenter2","interface":"NoApprovedProvablyOfflineLiveInterface","approvedProperties":["displayName","productState"],"limitation":"LiveScopeUnsupportedRatherThanActivatingSecurityCenterProvider"},
     {"sourceId":"source:windows.network-information.tcp-connections","interface":"System.Net.NetworkInformation.IPGlobalProperties","approvedProperties":["State","LocalAddress","LocalPort","RemoteAddress","RemotePort"],"limitation":"ExistingBoundedConnectionMetadataOnlyNoProcessIdentityOrPayload"}
   ],

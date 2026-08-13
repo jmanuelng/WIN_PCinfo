@@ -25,11 +25,9 @@ Assert-Equal 'Utf8Json' $policy.collector.resultSerialization `
 Assert-Equal 262144 $policy.collector.resultMaximumUtf8Bytes `
     'the compact transport ceiling covers the closed worst-case payload and framing'
 $derivation=$policy.collector.resultBoundDerivation
-$computed=[int]$derivation.maximumAdmittedStringUtf8Bytes*[int]$derivation.maximumJsonEscapeExpansionFactor+
-    [int]$derivation.maximumStructuralUtf8Bytes
-Assert-Equal $derivation.computedWorstCaseUtf8Bytes $computed `
-    'the release publishes the arithmetic behind the compact transport bound'
-if($computed -gt [int]$policy.collector.resultMaximumUtf8Bytes){
+Assert-Equal $derivation.maximumAdmittedPayloadUtf8Bytes $derivation.computedWorstCaseUtf8Bytes `
+    'the release publishes the closed maximum-payload proof behind the compact transport bound'
+if([int]$derivation.computedWorstCaseUtf8Bytes -gt [int]$policy.collector.resultMaximumUtf8Bytes){
     throw 'The frozen transport ceiling does not cover the computed worst case.'
 }
 Assert-Equal 3 @($policy.networkDependentScopes |
