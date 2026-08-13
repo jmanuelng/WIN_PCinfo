@@ -26,7 +26,11 @@ The maintainer subsequently authorized a system-wide trace that could cover dele
 
 The collector-only system window nevertheless contained 1,025 outbound-operation events from background applications and Windows services. Because the system-wide trace deliberately removed PID filtering to include delegated work, those unrelated events cannot be causally separated from a hypothetical collector-delegated request. Baseline subtraction would be probabilistic rather than a zero-request proof and was rejected. Both raw ETL/CSV files and all synchronization/provider artifacts were deleted; no issue-owned trace session remains.
 
-The remaining closure assertion therefore requires an isolated disposable Windows environment with no unrelated network activity, while retaining the calibrated system-wide observer. Windows Sandbox is not installed on this host, and enabling the optional feature may require an installation, virtualization support, and a restart that are not authorized by this ticket. Until such an environment is supplied or that authority is explicitly granted, issue #61 and PR #94 remain open and unmerged.
+The maintainer authorized an Azure disposable device on the current server's existing subnet. A dedicated, fully tagged resource group was created with an exact Windows 11 image, one VM, one NIC, and one managed OS disk; no public IP, NSG, VNet, subnet, peering, or gateway was created. The guest harness pinned the exact WIN-PCInfo commit and PowerShell 7.6.4 ZIP hashes, removed each failed attempt's user/workspace/task/trace state, and always restored the VM adapter.
+
+The Azure attempt did not reach an admissible collector measurement. Azure Run Command executes as SYSTEM; direct standard-user process creation was denied, and the subsequently isolated Task Scheduler master boundary exited before entering the guarded measurement body. No result was inferred from those failures. Guest cleanup was verified before teardown, then the exact tagged group was deleted. The VM, NIC, disk, group, and all issue-tagged Azure resources were independently verified absent.
+
+The remaining closure assertion still requires an isolated Windows environment with a pre-established, auditable standard-user execution channel that remains independent of the network isolation being measured. Until that environment is supplied, issue #61 and PR #94 remain open and unmerged.
 
 ## Threat model and security review
 
