@@ -13,7 +13,7 @@
     "privilege": "NoElevation",
     "networkBehavior": "OfflineOnly",
     "executable": "ActiveMicrosoftSignedPowerShellHost",
-    "dependencies": ["NetAdapter", "NetConnection", "NetTCPIP", "DnsClient", "VpnClient", "Microsoft.Win32.Registry", "Windows CIM provider"],
+    "dependencies": ["System.Net.NetworkInformation", "iphlpapi.dll", "Network List Manager COM", "Microsoft.Win32.Registry", "Current User RAS phonebook"],
     "mayPrompt": false,
     "mayInstall": false,
     "mayDownload": false,
@@ -21,20 +21,28 @@
     "writesAllowed": false,
     "maximumAttempts": 1,
     "deadlineMilliseconds": 30000,
-    "resultMaximumUtf8Bytes": 524288,
+    "resultSerialization": "Utf8Json",
+    "resultMaximumUtf8Bytes": 262144,
+    "resultBoundDerivation": {
+      "maximumAdmittedStringUtf8Bytes": 28672,
+      "maximumJsonEscapeExpansionFactor": 6,
+      "maximumStructuralUtf8Bytes": 32768,
+      "computedWorstCaseUtf8Bytes": 204800,
+      "ceilingRounding": "NextPowerOfTwo"
+    },
     "maximumItemsPerScope": 8,
     "cleanup": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent"
   },
   "localScopes": [
-    {"scopeId":"scope:network.adapters","sourceId":"source:windows.netadapter","fieldIds":["field:network.adapter.name","field:network.adapter.status","field:network.adapter.interface-index","field:network.adapter.hardware-interface"]},
-    {"scopeId":"scope:network.connection-profiles","sourceId":"source:windows.netconnectionprofile","fieldIds":["field:network.profile.name","field:network.profile.category","field:network.profile.connectivity"]},
-    {"scopeId":"scope:network.ip-configuration","sourceId":"source:windows.netipconfiguration","fieldIds":["field:network.ip.interface-index","field:network.ip.address-family","field:network.ip.address","field:network.ip.prefix-length"]},
-    {"scopeId":"scope:network.routes","sourceId":"source:windows.netroute","fieldIds":["field:network.route.address-family","field:network.route.destination-prefix","field:network.route.next-hop","field:network.route.metric"]},
-    {"scopeId":"scope:network.resolvers","sourceId":"source:windows.dnsclientserveraddress","fieldIds":["field:network.resolver.address-family","field:network.resolver.addresses"]},
+    {"scopeId":"scope:network.adapters","sourceId":"source:windows.network-information.adapters","fieldIds":["field:network.adapter.name","field:network.adapter.status","field:network.adapter.interface-index","field:network.adapter.hardware-interface"]},
+    {"scopeId":"scope:network.connection-profiles","sourceId":"source:windows.network-list-manager.profiles","fieldIds":["field:network.profile.name","field:network.profile.category","field:network.profile.connectivity"]},
+    {"scopeId":"scope:network.ip-configuration","sourceId":"source:windows.network-information.ip-configuration","fieldIds":["field:network.ip.interface-index","field:network.ip.address-family","field:network.ip.address","field:network.ip.prefix-length"]},
+    {"scopeId":"scope:network.routes","sourceId":"source:windows.ip-helper.routes","fieldIds":["field:network.route.address-family","field:network.route.destination-prefix","field:network.route.next-hop","field:network.route.metric"]},
+    {"scopeId":"scope:network.resolvers","sourceId":"source:windows.network-information.resolvers","fieldIds":["field:network.resolver.address-family","field:network.resolver.addresses"]},
     {"scopeId":"scope:network.proxy","sourceId":"source:windows.current-user.internet-settings","fieldIds":["field:network.proxy.enabled","field:network.proxy.server","field:network.proxy.auto-config-url"]},
-    {"scopeId":"scope:network.vpn-components","sourceId":"source:windows.vpnconnection","fieldIds":["field:network.vpn.name","field:network.vpn.server-address","field:network.vpn.tunnel-type","field:network.vpn.connection-status"]},
+    {"scopeId":"scope:network.vpn-components","sourceId":"source:windows.current-user.ras-phonebook","fieldIds":["field:network.vpn.name","field:network.vpn.server-address","field:network.vpn.tunnel-type","field:network.vpn.connection-status"]},
     {"scopeId":"scope:network.security-components","sourceId":"source:windows.securitycenter2","fieldIds":["field:network.security-component.kind","field:network.security-component.name","field:network.security-component.state-code"]},
-    {"scopeId":"scope:network.local-connections","sourceId":"source:windows.nettcpconnection","fieldIds":["field:network.connection.state","field:network.connection.local-endpoint","field:network.connection.remote-endpoint"]}
+    {"scopeId":"scope:network.local-connections","sourceId":"source:windows.network-information.tcp-connections","fieldIds":["field:network.connection.state","field:network.connection.local-endpoint","field:network.connection.remote-endpoint"]}
   ],
   "networkDependentScopes": [
     {"scopeId":"scope:network.microsoft-connectivity","collectorId":"collector:windows.microsoft-connectivity","collectorVersion":"1.0.0","operationId":"test-microsoft-connectivity","source":"Release-owned bounded Microsoft service connectivity catalog","executionContext":"StandardUser","privilege":"NoElevation","networkBehavior":"MicrosoftConnectivityEnabledOnly","executable":"ActiveMicrosoftSignedPowerShellHost","dependencies":["DnsClient","System.Net.Sockets","System.Net.Security","System.Net.Http"],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":5000,"resultMaximumUtf8Bytes":4096,"cleanup":"CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent","localOnlyState":"NotAttempted","reasonCode":"NETWORK.LOCAL_ONLY_NOT_ATTEMPTED"},
@@ -42,15 +50,15 @@
     {"scopeId":"scope:network.tls-trust","collectorId":"collector:windows.microsoft-tls-trust","collectorVersion":"1.0.0","operationId":"test-microsoft-tls-trust","source":"Release-owned bounded Microsoft TLS trust catalog","executionContext":"StandardUser","privilege":"NoElevation","networkBehavior":"MicrosoftConnectivityEnabledOnly","executable":"ActiveMicrosoftSignedPowerShellHost","dependencies":["System.Net.Sockets","System.Net.Security"],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":5000,"resultMaximumUtf8Bytes":4096,"cleanup":"CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent","localOnlyState":"NotAttempted","reasonCode":"NETWORK.LOCAL_ONLY_NOT_ATTEMPTED"}
   ],
   "sourceCatalog": [
-    {"sourceId":"source:windows.netadapter","interface":"Get-NetAdapter","approvedProperties":["Name","InterfaceDescription","Status","InterfaceIndex","LinkSpeed","HardwareInterface"],"limitation":"LocalConfigurationOnlyNoTrafficOrPacketCapture"},
-    {"sourceId":"source:windows.netconnectionprofile","interface":"Get-NetConnectionProfile","approvedProperties":["Name","NetworkCategory","IPv4Connectivity","IPv6Connectivity","InterfaceIndex"],"limitation":"WindowsReportedProfileOnlyNoConnectivityProbe"},
-    {"sourceId":"source:windows.netipconfiguration","interface":"Get-NetIPAddressAndDefaultNetRoute","approvedProperties":["InterfaceIndex","AddressFamily","IPAddress","PrefixLength","NextHop"],"limitation":"LocalConfigurationOnlyNoNeighborOrLeaseInventory"},
-    {"sourceId":"source:windows.netroute","interface":"Get-NetRoute","approvedProperties":["AddressFamily","DestinationPrefix","NextHop","InterfaceIndex","RouteMetric"],"limitation":"BoundedActiveStoreMetadataOnly"},
-    {"sourceId":"source:windows.dnsclientserveraddress","interface":"Get-DnsClientServerAddress","approvedProperties":["InterfaceIndex","AddressFamily","ServerAddresses"],"limitation":"ConfiguredResolversOnlyNoDnsRequest"},
+    {"sourceId":"source:windows.network-information.adapters","interface":"System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces","approvedProperties":["Name","Description","OperationalStatus","InterfaceIndex","Speed","NetworkInterfaceType"],"limitation":"LocalConfigurationOnlyNoTrafficOrPacketCapture"},
+    {"sourceId":"source:windows.network-list-manager.profiles","interface":"INetworkListManagerConnectedNetworkProjection","approvedProperties":["Name","Category","Connectivity","AdapterId","InterfaceIndex"],"limitation":"ConnectedWindowsReportedProfilesOnlyNoConnectivityProbe"},
+    {"sourceId":"source:windows.network-information.ip-configuration","interface":"System.Net.NetworkInformation.IPInterfaceProperties","approvedProperties":["InterfaceIndex","AddressFamily","Address","PrefixLength","GatewayAddresses"],"limitation":"LocalConfigurationOnlyNoNeighborOrLeaseInventory"},
+    {"sourceId":"source:windows.ip-helper.routes","interface":"GetIpForwardTable2","approvedProperties":["AddressFamily","DestinationPrefix","NextHop","InterfaceIndex","Metric"],"limitation":"BoundedLocalRouteMetadataNoBestRouteOrConnectivityProbe"},
+    {"sourceId":"source:windows.network-information.resolvers","interface":"System.Net.NetworkInformation.DnsAddresses","approvedProperties":["InterfaceIndex","AddressFamily","Addresses"],"limitation":"ConfiguredResolversOnlyNoDnsRequest"},
     {"sourceId":"source:windows.current-user.internet-settings","interface":"Microsoft.Win32.Registry.CurrentUser.InternetSettingsReadOnly","approvedProperties":["ProxyEnable","ProxyServer","AutoConfigURL"],"limitation":"CurrentUserConfigurationOnlyNoProxyRequestOrCredentialAccess"},
-    {"sourceId":"source:windows.vpnconnection","interface":"Get-VpnConnection","approvedProperties":["Name","ServerAddress","TunnelType","ConnectionStatus"],"limitation":"CurrentUserConnectionMetadataOnlyNoCredentialOrConnectionAttempt"},
-    {"sourceId":"source:windows.securitycenter2","interface":"SecurityCenter2AntiVirusAndFirewallProduct","approvedProperties":["displayName","productState"],"limitation":"RegistrationMetadataOnlyNoHealthApprovalOrProtectionInference"},
-    {"sourceId":"source:windows.nettcpconnection","interface":"Get-NetTCPConnection","approvedProperties":["State","LocalAddress","LocalPort","RemoteAddress","RemotePort"],"limitation":"ExistingBoundedConnectionMetadataOnlyNoProcessIdentityOrPayload"}
+    {"sourceId":"source:windows.current-user.ras-phonebook","interface":"CurrentUserRasPhonebookReadOnly","approvedProperties":["EntryName","PhoneNumber","VpnStrategy"],"limitation":"BoundedRegistrationMetadataNoCredentialsOrConnectionAttempt"},
+    {"sourceId":"source:windows.securitycenter2","interface":"NoApprovedProvablyOfflineLiveInterface","approvedProperties":["displayName","productState"],"limitation":"LiveScopeUnsupportedRatherThanActivatingSecurityCenterProvider"},
+    {"sourceId":"source:windows.network-information.tcp-connections","interface":"System.Net.NetworkInformation.IPGlobalProperties","approvedProperties":["State","LocalAddress","LocalPort","RemoteAddress","RemotePort"],"limitation":"ExistingBoundedConnectionMetadataOnlyNoProcessIdentityOrPayload"}
   ],
   "rules": [
     {"findingKind":"local-network-configuration","ruleId":"rule:network.local-configuration/1.0.0","operationId":"op:rule.network.local-configuration.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":384,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"},

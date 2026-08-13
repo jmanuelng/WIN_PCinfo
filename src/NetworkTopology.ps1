@@ -135,18 +135,37 @@ function Test-NetworkTopologyString {
         [Text.UTF8Encoding]::new($false).GetByteCount([string]$Value) -le $MaximumBytes
 }
 
+function Test-NetworkTopologyInteger {
+    param($Value,[long]$Minimum=[long]::MinValue,[long]$Maximum=[long]::MaxValue)
+    ($Value -is [int] -or $Value -is [long]) -and [long]$Value -ge $Minimum -and [long]$Value -le $Maximum
+}
+
+function Test-NetworkTopologyTransportLength {
+    param([Parameter(Mandatory)][long]$Utf8ByteCount,[Parameter(Mandatory)]$Policy)
+    $Utf8ByteCount -ge 0 -and $Utf8ByteCount -le [long]$Policy.collector.resultMaximumUtf8Bytes
+}
+
+function ConvertFrom-NetworkTopologyTransport {
+    param([Parameter(Mandatory)][byte[]]$Bytes,[Parameter(Mandatory)]$Policy)
+    if(-not (Test-NetworkTopologyTransportLength -Utf8ByteCount $Bytes.LongLength -Policy $Policy)){
+        throw 'The Network Topology transport exceeds its release-owned UTF-8 byte ceiling.'
+    }
+    $json=[Text.UTF8Encoding]::new($false,$true).GetString($Bytes)
+    ConvertFrom-Json -InputObject $json -Depth 20 -ErrorAction Stop
+}
+
 function Test-NetworkTopologyItem {
     param([string]$Kind,$Value)
     $x=$Value
     switch($Kind){
-        'adapters'{return (Test-NetworkTopologyObjectShape $x @('name','description','status','interfaceIndex','linkSpeed','hardwareInterface')) -and (Test-NetworkTopologyString $x.name 256) -and (Test-NetworkTopologyString $x.description 512) -and [string]$x.status -in @('Up','Down','Disconnected','Disabled','Unknown') -and $x.interfaceIndex -is [int] -and [int]$x.interfaceIndex -ge 0 -and ($x.linkSpeed -is [long] -or $x.linkSpeed -is [int]) -and [long]$x.linkSpeed -ge 0 -and $x.hardwareInterface -is [bool]}
-        'profiles'{return (Test-NetworkTopologyObjectShape $x @('name','category','ipv4Connectivity','ipv6Connectivity','interfaceIndex')) -and (Test-NetworkTopologyString $x.name 256) -and [string]$x.category -in @('Public','Private','DomainAuthenticated','Unknown') -and (Test-NetworkTopologyString $x.ipv4Connectivity 32) -and (Test-NetworkTopologyString $x.ipv6Connectivity 32) -and $x.interfaceIndex -is [int]}
-        'ipConfigurations'{return (Test-NetworkTopologyObjectShape $x @('interfaceIndex','addressFamily','address','prefixLength','defaultGateway')) -and $x.interfaceIndex -is [int] -and [string]$x.addressFamily -in @('IPv4','IPv6') -and (Test-NetworkTopologyString $x.address 64) -and $x.prefixLength -is [int] -and [int]$x.prefixLength -ge 0 -and [int]$x.prefixLength -le 128 -and (Test-NetworkTopologyString $x.defaultGateway 64 -AllowNull)}
-        'routes'{return (Test-NetworkTopologyObjectShape $x @('addressFamily','destinationPrefix','nextHop','interfaceIndex','metric')) -and [string]$x.addressFamily -in @('IPv4','IPv6') -and (Test-NetworkTopologyString $x.destinationPrefix 80) -and (Test-NetworkTopologyString $x.nextHop 64) -and $x.interfaceIndex -is [int] -and $x.metric -is [int]}
-        'resolvers'{return (Test-NetworkTopologyObjectShape $x @('interfaceIndex','addressFamily','addresses')) -and $x.interfaceIndex -is [int] -and [string]$x.addressFamily -in @('IPv4','IPv6') -and @($x.addresses).Count -le 4 -and @($x.addresses|Where-Object {-not (Test-NetworkTopologyString $_ 64)}).Count -eq 0}
-        'vpnComponents'{return (Test-NetworkTopologyObjectShape $x @('name','serverAddress','tunnelType','connectionStatus')) -and (Test-NetworkTopologyString $x.name 256) -and (Test-NetworkTopologyString $x.serverAddress 512) -and (Test-NetworkTopologyString $x.tunnelType 64) -and (Test-NetworkTopologyString $x.connectionStatus 32)}
-        'securityComponents'{return (Test-NetworkTopologyObjectShape $x @('kind','name','stateCode')) -and [string]$x.kind -in @('AntiVirus','Firewall') -and (Test-NetworkTopologyString $x.name 256) -and $x.stateCode -is [int]}
-        'connections'{return (Test-NetworkTopologyObjectShape $x @('state','localAddress','localPort','remoteAddress','remotePort')) -and (Test-NetworkTopologyString $x.state 32) -and (Test-NetworkTopologyString $x.localAddress 64) -and $x.localPort -is [int] -and [int]$x.localPort -ge 0 -and [int]$x.localPort -le 65535 -and (Test-NetworkTopologyString $x.remoteAddress 64) -and $x.remotePort -is [int] -and [int]$x.remotePort -ge 0 -and [int]$x.remotePort -le 65535}
+        'adapters'{return (Test-NetworkTopologyObjectShape $x @('name','description','status','interfaceIndex','linkSpeed','hardwareInterface')) -and (Test-NetworkTopologyString $x.name 256) -and (Test-NetworkTopologyString $x.description 512) -and [string]$x.status -in @('Up','Down','Disconnected','Disabled','Unknown') -and (Test-NetworkTopologyInteger $x.interfaceIndex 0 ([int]::MaxValue)) -and (Test-NetworkTopologyInteger $x.linkSpeed 0 ([long]::MaxValue)) -and $x.hardwareInterface -is [bool]}
+        'profiles'{return (Test-NetworkTopologyObjectShape $x @('name','category','ipv4Connectivity','ipv6Connectivity','interfaceIndex')) -and (Test-NetworkTopologyString $x.name 256) -and [string]$x.category -in @('Public','Private','DomainAuthenticated','Unknown') -and (Test-NetworkTopologyString $x.ipv4Connectivity 32) -and (Test-NetworkTopologyString $x.ipv6Connectivity 32) -and (Test-NetworkTopologyInteger $x.interfaceIndex 0 ([int]::MaxValue))}
+        'ipConfigurations'{return (Test-NetworkTopologyObjectShape $x @('interfaceIndex','addressFamily','address','prefixLength','defaultGateway')) -and (Test-NetworkTopologyInteger $x.interfaceIndex 0 ([int]::MaxValue)) -and [string]$x.addressFamily -in @('IPv4','IPv6') -and (Test-NetworkTopologyString $x.address 64) -and (Test-NetworkTopologyInteger $x.prefixLength 0 128) -and (Test-NetworkTopologyString $x.defaultGateway 64 -AllowNull)}
+        'routes'{return (Test-NetworkTopologyObjectShape $x @('addressFamily','destinationPrefix','nextHop','interfaceIndex','metric')) -and [string]$x.addressFamily -in @('IPv4','IPv6') -and (Test-NetworkTopologyString $x.destinationPrefix 80) -and (Test-NetworkTopologyString $x.nextHop 64) -and (Test-NetworkTopologyInteger $x.interfaceIndex 0 ([int]::MaxValue)) -and (Test-NetworkTopologyInteger $x.metric ([int]::MinValue) ([int]::MaxValue))}
+        'resolvers'{return (Test-NetworkTopologyObjectShape $x @('interfaceIndex','addressFamily','addresses')) -and (Test-NetworkTopologyInteger $x.interfaceIndex 0 ([int]::MaxValue)) -and [string]$x.addressFamily -in @('IPv4','IPv6') -and @($x.addresses).Count -le 4 -and @($x.addresses|Where-Object {-not (Test-NetworkTopologyString $_ 64)}).Count -eq 0}
+        'vpnComponents'{return (Test-NetworkTopologyObjectShape $x @('name','serverAddress','tunnelType','connectionStatus')) -and (Test-NetworkTopologyString $x.name 256) -and (Test-NetworkTopologyString $x.serverAddress 512) -and (Test-NetworkTopologyString $x.tunnelType 64 -AllowNull) -and (Test-NetworkTopologyString $x.connectionStatus 32 -AllowNull)}
+        'securityComponents'{return (Test-NetworkTopologyObjectShape $x @('kind','name','stateCode')) -and [string]$x.kind -in @('AntiVirus','Firewall') -and (Test-NetworkTopologyString $x.name 256) -and (Test-NetworkTopologyInteger $x.stateCode ([int]::MinValue) ([int]::MaxValue))}
+        'connections'{return (Test-NetworkTopologyObjectShape $x @('state','localAddress','localPort','remoteAddress','remotePort')) -and (Test-NetworkTopologyString $x.state 32) -and (Test-NetworkTopologyString $x.localAddress 64) -and (Test-NetworkTopologyInteger $x.localPort 0 65535) -and (Test-NetworkTopologyString $x.remoteAddress 64) -and (Test-NetworkTopologyInteger $x.remotePort 0 65535)}
     }
     $false
 }
@@ -157,7 +176,7 @@ function Test-NetworkTopologyCollectorPayload {
         if(-not (Test-NetworkTopologyObjectShape $Payload @('sourceLocale','assessmentUserContextVerified','processRelationship','networkBehavior','outboundRequestCount','adapters','profiles','ipConfigurations','routes','resolvers','proxy','vpnComponents','securityComponents','connections','scopeStates','executionContext'))){return $false}
         if($Payload.assessmentUserContextVerified -isnot [bool] -or
             [string]$Payload.processRelationship -notin @('SameUser','AlternateAdministrator','ElevatedAssessmentUser','DifferentStandardUser','ProhibitedSystemContext','Unavailable') -or [string]$Payload.networkBehavior -ne 'LocalOnly' -or
-            $Payload.outboundRequestCount -isnot [int] -or [int]$Payload.outboundRequestCount -ne 0 -or
+            -not (Test-NetworkTopologyInteger $Payload.outboundRequestCount 0 0) -or
             [string]$Payload.executionContext -notin @('Synthetic','StandardUser','Administrator','LocalSystem') -or
             -not (Test-NetworkTopologyString $Payload.sourceLocale 35)){return $false}
         if([bool]$Payload.assessmentUserContextVerified){
@@ -180,7 +199,7 @@ function Test-NetworkTopologyCollectorPayload {
         $expected=@($Policy.localScopes.scopeId)+@($Policy.networkDependentScopes.scopeId)
         if(@($Payload.scopeStates).Count -ne $expected.Count -or (@($Payload.scopeStates.scopeId|Sort-Object)-join '|') -ne (@($expected|Sort-Object)-join '|')){return $false}
         foreach($scope in @($Payload.scopeStates)){
-            if(-not (Test-NetworkTopologyObjectShape $scope @('scopeId','state','reasonCode')) -or [string]$scope.state -notin @('Complete','Partial','Unavailable','Denied','Malformed','TimedOut','Cancelled','Failed','NotAttempted') -or ($scope.state -eq 'Complete' -and $scope.reasonCode) -or ($scope.state -ne 'Complete' -and [string]::IsNullOrWhiteSpace([string]$scope.reasonCode))){return $false}
+            if(-not (Test-NetworkTopologyObjectShape $scope @('scopeId','state','reasonCode')) -or [string]$scope.state -notin @('Complete','Partial','Unavailable','Unsupported','Denied','Malformed','TimedOut','Cancelled','Failed','NotAttempted') -or ($scope.state -eq 'Complete' -and $scope.reasonCode) -or ($scope.state -ne 'Complete' -and (-not (Test-NetworkTopologyString $scope.reasonCode 128) -or [string]$scope.reasonCode -cnotmatch '^[A-Z][A-Z0-9_.-]+$'))){return $false}
         }
         foreach($scope in @($Policy.networkDependentScopes)){
             $actual=@($Payload.scopeStates|Where-Object scopeId -eq $scope.scopeId)[0]
@@ -333,36 +352,154 @@ function New-NetworkTopologyGapPayload {
 }
 
 function Get-NetworkTopologyLiveSource {
-    # The child reads structured, local Windows state only. None of these APIs
-    # resolves a name, opens a remote connection, refreshes policy, or changes
-    # configuration. Each provider is isolated so a denied or malformed source
-    # reduces only its own Evidence Scope. Bounds are applied while streaming,
-    # preventing a large provider inventory from becoming an output channel.
+    # The child deliberately avoids PowerShell networking modules and CIM. Their
+    # provider activation crossed the Local Only boundary during isolated ETW
+    # validation. The replacements below read the local IP Helper tables, .NET's
+    # local NetworkInformation projection, Network List Manager's already-known
+    # profiles, Current User registry values, and the bounded Current User RAS
+    # phonebook. None resolves a name or opens a connection.
+    #
+    # Each source owns one coverage result, and each output list stops after the
+    # ninth unique item establishes overflow. A source error therefore cannot
+    # erase accepted evidence from another source or fabricate Complete absence.
+    # The only stdout write is one compressed UTF-8 JSON document; the parent
+    # treats those bytes as hostile until exact shape/type/bound validation and
+    # fresh-object projection complete.
 @'
 $ErrorActionPreference='Stop'
+$PSModuleAutoLoadingPreference='None'
 function New-Scope([string]$id){[pscustomobject][ordered]@{scopeId=$id;state='Complete';reasonCode=''}}
-function Set-Scope($scopes,[string]$id,[string]$state,[string]$reason){$s=@($scopes|Where-Object scopeId -eq $id)[0];if($s.state -eq 'Complete' -or $state -in @('Denied','Failed','Malformed')){$s.state=$state;$s.reasonCode=$reason}}
+function Set-Scope($scopes,[string]$id,[string]$state,[string]$reason){$s=@($scopes|Where-Object scopeId -eq $id)[0];if($s.state -eq 'Complete' -or $state -in @('Denied','Failed','Malformed','Unsupported')){$s.state=$state;$s.reasonCode=$reason}}
 function Failure-State([Exception]$e){if($e -is [UnauthorizedAccessException] -or $e.HResult -eq -2147024891){'Denied'}else{'Failed'}}
-function Add-Bounded($list,$item,[int]$maximum,$scopes,[string]$scope){if($list.Count -ge $maximum){Set-Scope $scopes $scope 'Partial' 'NETWORK.EVIDENCE_BOUND_EXCEEDED';return};$list.Add($item)}
+function Add-Bounded($list,$item,[int]$maximum,$scopes,[string]$scope){if($list.Count -ge $maximum){Set-Scope $scopes $scope 'Partial' 'NETWORK.EVIDENCE_BOUND_EXCEEDED';return};$null=$list.Add($item)}
+function Valid-Text($value,[int]$maximum){$value -is [string] -and -not [string]::IsNullOrWhiteSpace([string]$value) -and [Text.Encoding]::UTF8.GetByteCount([string]$value) -le $maximum}
+function Address-Family([Net.Sockets.AddressFamily]$family){if($family -eq [Net.Sockets.AddressFamily]::InterNetwork){'IPv4'}elseif($family -eq [Net.Sockets.AddressFamily]::InterNetworkV6){'IPv6'}else{$null}}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent();$principal=[Security.Principal.WindowsPrincipal]::new($identity)
 $actualSid=[string]$identity.User.Value;$expectedSid=[string]$env:WINPCINFO_NETWORK_ASSESSMENT_SID
 if($actualSid -eq 'S-1-5-18' -or $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) -or -not [string]::Equals($actualSid,$expectedSid,[StringComparison]::OrdinalIgnoreCase)){throw 'The child is outside the verified Assessment User Context.'}
 $maximum=[int]$env:WINPCINFO_NETWORK_MAXIMUM
 $scopeIds=@('scope:network.adapters','scope:network.connection-profiles','scope:network.ip-configuration','scope:network.routes','scope:network.resolvers','scope:network.proxy','scope:network.vpn-components','scope:network.security-components','scope:network.local-connections')
 $scopes=@($scopeIds|ForEach-Object {New-Scope $_})
-$adapters=[Collections.Generic.List[object]]::new();try{$null=Get-NetAdapter -ErrorAction Stop|ForEach-Object {if($_.Name -isnot [string] -or $_.InterfaceDescription -isnot [string] -or $null -eq $_.InterfaceIndex -or $null -eq $_.LinkSpeed -or $null -eq $_.HardwareInterface){Set-Scope $scopes 'scope:network.adapters' 'Partial' 'NETWORK.ADAPTER_MALFORMED';return};Add-Bounded $adapters ([pscustomobject][ordered]@{name=[string]$_.Name;description=[string]$_.InterfaceDescription;status=if([string]$_.Status -in @('Up','Down','Disconnected','Disabled')){[string]$_.Status}else{'Unknown'};interfaceIndex=[int]$_.InterfaceIndex;linkSpeed=[long]$_.LinkSpeed;hardwareInterface=[bool]$_.HardwareInterface}) $maximum $scopes 'scope:network.adapters'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.adapters' $s 'NETWORK.ADAPTER_SOURCE_FAILED'}
-$profiles=[Collections.Generic.List[object]]::new();try{$null=Get-NetConnectionProfile -ErrorAction Stop|ForEach-Object {if($_.Name -isnot [string] -or $null -eq $_.InterfaceIndex){Set-Scope $scopes 'scope:network.connection-profiles' 'Partial' 'NETWORK.PROFILE_MALFORMED';return};Add-Bounded $profiles ([pscustomobject][ordered]@{name=[string]$_.Name;category=if([string]$_.NetworkCategory -in @('Public','Private','DomainAuthenticated')){[string]$_.NetworkCategory}else{'Unknown'};ipv4Connectivity=[string]$_.IPv4Connectivity;ipv6Connectivity=[string]$_.IPv6Connectivity;interfaceIndex=[int]$_.InterfaceIndex}) $maximum $scopes 'scope:network.connection-profiles'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.connection-profiles' $s 'NETWORK.PROFILE_SOURCE_FAILED'}
-$ips=[Collections.Generic.List[object]]::new();try{$null=Get-NetIPAddress -ErrorAction Stop|ForEach-Object {if($null -eq $_.InterfaceIndex -or $_.IPAddress -isnot [string] -or $null -eq $_.PrefixLength){Set-Scope $scopes 'scope:network.ip-configuration' 'Partial' 'NETWORK.IP_CONFIGURATION_MALFORMED';return};Add-Bounded $ips ([pscustomobject][ordered]@{interfaceIndex=[int]$_.InterfaceIndex;addressFamily=[string]$_.AddressFamily;address=[string]$_.IPAddress;prefixLength=[int]$_.PrefixLength;defaultGateway=$null}) $maximum $scopes 'scope:network.ip-configuration'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.ip-configuration' $s 'NETWORK.IP_CONFIGURATION_SOURCE_FAILED'}
-$routes=[Collections.Generic.List[object]]::new();try{$null=Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop|ForEach-Object {if($_.DestinationPrefix -isnot [string] -or $_.NextHop -isnot [string] -or $null -eq $_.InterfaceIndex -or $null -eq $_.RouteMetric){Set-Scope $scopes 'scope:network.routes' 'Partial' 'NETWORK.ROUTE_MALFORMED';return};Add-Bounded $routes ([pscustomobject][ordered]@{addressFamily=[string]$_.AddressFamily;destinationPrefix=[string]$_.DestinationPrefix;nextHop=[string]$_.NextHop;interfaceIndex=[int]$_.InterfaceIndex;metric=[int]$_.RouteMetric}) $maximum $scopes 'scope:network.routes'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.routes' $s 'NETWORK.ROUTE_SOURCE_FAILED'}
-$resolvers=[Collections.Generic.List[object]]::new();try{$null=Get-DnsClientServerAddress -ErrorAction Stop|ForEach-Object {$addresses=@($_.ServerAddresses);if($null -eq $_.InterfaceIndex -or [string]$_.AddressFamily -notin @('IPv4','IPv6') -or $addresses.Count -gt 4 -or @($addresses|Where-Object {$_ -isnot [string]}).Count){Set-Scope $scopes 'scope:network.resolvers' 'Partial' 'NETWORK.RESOLVER_MALFORMED';return};Add-Bounded $resolvers ([pscustomobject][ordered]@{interfaceIndex=[int]$_.InterfaceIndex;addressFamily=[string]$_.AddressFamily;addresses=@($addresses)}) $maximum $scopes 'scope:network.resolvers'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.resolvers' $s 'NETWORK.RESOLVER_SOURCE_FAILED'}
+$adapters=[Collections.Generic.List[object]]::new();$ips=[Collections.Generic.List[object]]::new();$resolvers=[Collections.Generic.List[object]]::new();$interfaceIndexById=@{}
+try{
+    [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()|ForEach-Object {
+        try{
+            $properties=$_.GetIPProperties();$ipv4=$null;$ipv6=$null
+            try{$ipv4=$properties.GetIPv4Properties()}catch{}
+            try{$ipv6=$properties.GetIPv6Properties()}catch{}
+            $index=if($null -ne $ipv4){[int]$ipv4.Index}elseif($null -ne $ipv6){[int]$ipv6.Index}else{$null}
+            if($null -eq $index -or -not (Valid-Text $_.Name 256) -or -not (Valid-Text $_.Description 512)){Set-Scope $scopes 'scope:network.adapters' 'Partial' 'NETWORK.ADAPTER_MALFORMED'}else{
+                $interfaceIndexById[[string]$_.Id]=$index
+                $status=switch([string]$_.OperationalStatus){'Up'{'Up'};'Down'{'Down'};'NotPresent'{'Disconnected'};default{'Unknown'}}
+                $hardware=if($_.NetworkInterfaceType -in @([Net.NetworkInformation.NetworkInterfaceType]::Loopback,[Net.NetworkInformation.NetworkInterfaceType]::Tunnel)){$false}else{$true}
+                Add-Bounded $adapters ([pscustomobject][ordered]@{name=[string]$_.Name;description=[string]$_.Description;status=$status;interfaceIndex=$index;linkSpeed=[long][Math]::Max(0,$_.Speed);hardwareInterface=$hardware}) $maximum $scopes 'scope:network.adapters'
+            }
+            foreach($unicast in @($properties.UnicastAddresses)){
+                $family=Address-Family $unicast.Address.AddressFamily;if($null -eq $family){continue}
+                $prefix=if($family -eq 'IPv4'){$unicast.PrefixLength}else{$unicast.PrefixLength};$gateway=@($properties.GatewayAddresses|Where-Object {$_.Address.AddressFamily -eq $unicast.Address.AddressFamily}|Select-Object -First 1)
+                Add-Bounded $ips ([pscustomobject][ordered]@{interfaceIndex=$index;addressFamily=$family;address=$unicast.Address.ToString();prefixLength=[int]$prefix;defaultGateway=if($gateway.Count){$gateway[0].Address.ToString()}else{$null}}) $maximum $scopes 'scope:network.ip-configuration'
+            }
+            foreach($family in @('IPv4','IPv6')){
+                $addresses=@($properties.DnsAddresses|Where-Object {(Address-Family $_.AddressFamily) -eq $family}|Select-Object -First 5|ForEach-Object {$_.ToString()})
+                if($addresses.Count -gt 4){Set-Scope $scopes 'scope:network.resolvers' 'Partial' 'NETWORK.EVIDENCE_BOUND_EXCEEDED';$addresses=@($addresses|Select-Object -First 4)}
+                if($addresses.Count){Add-Bounded $resolvers ([pscustomobject][ordered]@{interfaceIndex=$index;addressFamily=$family;addresses=$addresses}) $maximum $scopes 'scope:network.resolvers'}
+            }
+        }catch{Set-Scope $scopes 'scope:network.adapters' 'Partial' 'NETWORK.ADAPTER_MALFORMED';Set-Scope $scopes 'scope:network.ip-configuration' 'Partial' 'NETWORK.IP_CONFIGURATION_MALFORMED';Set-Scope $scopes 'scope:network.resolvers' 'Partial' 'NETWORK.RESOLVER_MALFORMED'}
+    }
+}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.adapters' $s 'NETWORK.ADAPTER_SOURCE_FAILED';Set-Scope $scopes 'scope:network.ip-configuration' $s 'NETWORK.IP_CONFIGURATION_SOURCE_FAILED';Set-Scope $scopes 'scope:network.resolvers' $s 'NETWORK.RESOLVER_SOURCE_FAILED'}
+$profiles=[Collections.Generic.List[object]]::new()
+try{
+    if(-not ('WinPCInfo.NetworkTopology.NetworkProfileReader' -as [type])){$null=Add-Type -Language CSharp -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
+namespace WinPCInfo.NetworkTopology {
+  public sealed class ProfileValue { public string name; public string category; public string ipv4Connectivity; public string ipv6Connectivity; public int interfaceIndex; }
+  public static class NetworkProfileReader {
+    // Network List Manager is a dual COM interface. Calling its published
+    // IDispatch-aware vtable slots avoids PowerShell module activation while
+    // retaining the exact HRESULT for fail-closed coverage. Every acquired COM
+    // pointer and BSTR is released inside this short-lived Job-owned worker.
+    [DllImport("ole32.dll")] static extern int CoCreateInstance(ref Guid clsid,IntPtr outer,uint context,ref Guid iid,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetNetworksDelegate(IntPtr self,int flags,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int NextDelegate(IntPtr self,uint count,out IntPtr value,out uint fetched);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetStringDelegate(IntPtr self,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetIntDelegate(IntPtr self,out int value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetObjectDelegate(IntPtr self,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetGuidDelegate(IntPtr self,out Guid value);
+    static T Method<T>(IntPtr self,int slot) where T:Delegate { IntPtr table=Marshal.ReadIntPtr(self);return Marshal.GetDelegateForFunctionPointer<T>(Marshal.ReadIntPtr(table,slot*IntPtr.Size)); }
+    static void Check(int result){if(result<0)Marshal.ThrowExceptionForHR(result);}
+    static string Connectivity(int value,int subnet,int local,int internet) { return (value&internet)!=0?"Internet":(value&local)!=0?"LocalNetwork":(value&subnet)!=0?"Subnet":"Disconnected"; }
+    public static ProfileValue[] Read(int maximum,out bool exceeded,out bool malformed) {
+      exceeded=false;malformed=false;var indices=new Dictionary<Guid,int>();foreach(var nic in NetworkInterface.GetAllNetworkInterfaces()){Guid id;try{if(Guid.TryParse(nic.Id,out id))indices[id]=nic.GetIPProperties().GetIPv4Properties().Index;}catch{}}
+      var clsid=new Guid("DCB00C01-570F-4A9B-8D69-199FDBA5723B");var iid=new Guid("DCB00000-570F-4A9B-8D69-199FDBA5723B");IntPtr manager=IntPtr.Zero,networks=IntPtr.Zero;var values=new List<ProfileValue>();
+      try { Check(CoCreateInstance(ref clsid,IntPtr.Zero,23,ref iid,out manager));Check(Method<GetNetworksDelegate>(manager,7)(manager,1,out networks));
+        while(true){IntPtr network=IntPtr.Zero;uint fetched;int next=Method<NextDelegate>(networks,8)(networks,1,out network,out fetched);if(next!=0||fetched==0)break;try{IntPtr text;Check(Method<GetStringDelegate>(network,7)(network,out text));string name=Marshal.PtrToStringBSTR(text);Marshal.FreeBSTR(text);int category,connectivity;Check(Method<GetIntDelegate>(network,18)(network,out category));Check(Method<GetIntDelegate>(network,17)(network,out connectivity));IntPtr connections;Check(Method<GetObjectDelegate>(network,13)(network,out connections));try{while(true){IntPtr connection;uint connectionFetched;int connectionNext=Method<NextDelegate>(connections,8)(connections,1,out connection,out connectionFetched);if(connectionNext!=0||connectionFetched==0)break;try{Guid adapter;Check(Method<GetGuidDelegate>(connection,12)(connection,out adapter));int index;if(!indices.TryGetValue(adapter,out index)){malformed=true;continue;}if(values.Count>=maximum){exceeded=true;return values.ToArray();}values.Add(new ProfileValue{name=name,category=category==0?"Public":category==1?"Private":category==2?"DomainAuthenticated":"Unknown",ipv4Connectivity=Connectivity(connectivity,16,32,64),ipv6Connectivity=Connectivity(connectivity,256,512,1024),interfaceIndex=index});}finally{Marshal.Release(connection);}}}finally{Marshal.Release(connections);}}finally{Marshal.Release(network);}}
+        return values.ToArray();
+      } finally {if(networks!=IntPtr.Zero)Marshal.Release(networks);if(manager!=IntPtr.Zero)Marshal.Release(manager);}
+    }
+  }
+}
+"@}
+    $exceeded=$false;$malformed=$false;foreach($profile in [WinPCInfo.NetworkTopology.NetworkProfileReader]::Read($maximum,[ref]$exceeded,[ref]$malformed)){$null=$profiles.Add([pscustomobject][ordered]@{name=[string]$profile.name;category=[string]$profile.category;ipv4Connectivity=[string]$profile.ipv4Connectivity;ipv6Connectivity=[string]$profile.ipv6Connectivity;interfaceIndex=[int]$profile.interfaceIndex})}
+    if($exceeded){Set-Scope $scopes 'scope:network.connection-profiles' 'Partial' 'NETWORK.EVIDENCE_BOUND_EXCEEDED'};if($malformed){Set-Scope $scopes 'scope:network.connection-profiles' 'Partial' 'NETWORK.PROFILE_MALFORMED'}
+}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.connection-profiles' $s 'NETWORK.PROFILE_SOURCE_FAILED'}
+$routes=[Collections.Generic.List[object]]::new()
+try{
+    if(-not ('WinPCInfo.NetworkTopology.NativeRouteReader' -as [type])){$null=Add-Type -Language CSharp -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Net;
+using System.Runtime.InteropServices;
+namespace WinPCInfo.NetworkTopology {
+  public sealed class RouteValue { public string addressFamily; public string destinationPrefix; public string nextHop; public int interfaceIndex; public int metric; }
+  public static class NativeRouteReader {
+    // IP Helper returns one process-owned table containing the already-local
+    // route state. MIB_IPFORWARD_ROW2 has a fixed SDK layout: the offsets below
+    // read only family/address/prefix/index/metric, never a best-route probe.
+    // FreeMibTable runs even when a malformed row or managed projection fails.
+    [DllImport("iphlpapi.dll")] static extern uint GetIpForwardTable2(ushort family,out IntPtr table);
+    [DllImport("iphlpapi.dll")] static extern void FreeMibTable(IntPtr table);
+    static IPAddress Address(IntPtr row,int sockaddrOffset,ushort family){int length=family==2?4:16;int addressOffset=sockaddrOffset+(family==2?4:8);byte[] bytes=new byte[length];Marshal.Copy(IntPtr.Add(row,addressOffset),bytes,0,length);return new IPAddress(bytes);}
+    public static RouteValue[] GetIpForwardTable(int maximum, out bool exceeded, out bool malformed) {
+      exceeded=false; malformed=false;IntPtr table;uint status=GetIpForwardTable2(0,out table);if(status!=0)throw new Win32Exception((int)status);
+      try {uint count=(uint)Marshal.ReadInt32(table);int header=IntPtr.Size==8?8:4;const int rowSize=104;var values=new List<RouteValue>();
+        for(uint index=0;index<count;index++){IntPtr row=IntPtr.Add(table,header+(int)index*rowSize);uint interfaceIndex=(uint)Marshal.ReadInt32(row,8);ushort family=(ushort)Marshal.ReadInt16(row,12);byte prefixLength=Marshal.ReadByte(row,40);uint metric=(uint)Marshal.ReadInt32(row,84);if((family!=2&&family!=23)||interfaceIndex>Int32.MaxValue||metric>Int32.MaxValue||prefixLength>(family==2?32:128)){malformed=true;continue;}if(values.Count>=maximum){exceeded=true;break;}values.Add(new RouteValue{addressFamily=family==2?"IPv4":"IPv6",destinationPrefix=Address(row,12,family)+"/"+prefixLength,nextHop=Address(row,44,family).ToString(),interfaceIndex=(int)interfaceIndex,metric=(int)metric});}
+        return values.ToArray();
+      } finally {if(table!=IntPtr.Zero)FreeMibTable(table);}
+    }
+  }
+}
+"@}
+    $exceeded=$false;$malformed=$false;foreach($route in [WinPCInfo.NetworkTopology.NativeRouteReader]::GetIpForwardTable($maximum,[ref]$exceeded,[ref]$malformed)){$null=$routes.Add([pscustomobject][ordered]@{addressFamily=[string]$route.addressFamily;destinationPrefix=[string]$route.destinationPrefix;nextHop=[string]$route.nextHop;interfaceIndex=[int]$route.interfaceIndex;metric=[int]$route.metric})}
+    if($exceeded){Set-Scope $scopes 'scope:network.routes' 'Partial' 'NETWORK.EVIDENCE_BOUND_EXCEEDED'};if($malformed){Set-Scope $scopes 'scope:network.routes' 'Partial' 'NETWORK.ROUTE_MALFORMED'}
+}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.routes' $s 'NETWORK.ROUTE_SOURCE_FAILED'}
 $proxy=[pscustomobject][ordered]@{enabled=$false;server=$null;autoConfigUrl=$null};try{$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Internet Settings',$false);try{if($null -ne $key){$enabled=$key.GetValue('ProxyEnable',$null);$server=$key.GetValue('ProxyServer',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames);$auto=$key.GetValue('AutoConfigURL',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames);if($null -ne $enabled -and $enabled -isnot [int]){Set-Scope $scopes 'scope:network.proxy' 'Partial' 'NETWORK.PROXY_MALFORMED'}else{$proxy=[pscustomobject][ordered]@{enabled=($null -ne $enabled -and [int]$enabled -eq 1);server=if($server -is [string]){[string]$server}else{$null};autoConfigUrl=if($auto -is [string]){[string]$auto}else{$null}}}}}finally{if($null -ne $key){$key.Dispose()}}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.proxy' $s 'NETWORK.PROXY_SOURCE_FAILED'}
-$vpns=[Collections.Generic.List[object]]::new();try{$null=Get-VpnConnection -AllUserConnection:$false -ErrorAction Stop|ForEach-Object {if($_.Name -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$_.Name) -or $_.ServerAddress -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$_.ServerAddress) -or $_.TunnelType -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$_.TunnelType) -or $_.ConnectionStatus -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$_.ConnectionStatus)){Set-Scope $scopes 'scope:network.vpn-components' 'Partial' 'NETWORK.VPN_MALFORMED';return};Add-Bounded $vpns ([pscustomobject][ordered]@{name=[string]$_.Name;serverAddress=[string]$_.ServerAddress;tunnelType=[string]$_.TunnelType;connectionStatus=[string]$_.ConnectionStatus}) $maximum $scopes 'scope:network.vpn-components'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.vpn-components' $s 'NETWORK.VPN_SOURCE_FAILED'}
-$components=[Collections.Generic.List[object]]::new();foreach($definition in @(@('AntiVirusProduct','AntiVirus'),@('FirewallProduct','Firewall'))){try{$null=Get-CimInstance -Namespace root/SecurityCenter2 -ClassName $definition[0] -Property displayName,productState -ErrorAction Stop|ForEach-Object {if($_.displayName -isnot [string] -or $null -eq $_.productState){Set-Scope $scopes 'scope:network.security-components' 'Partial' 'NETWORK.SECURITY_COMPONENT_MALFORMED';return};Add-Bounded $components ([pscustomobject][ordered]@{kind=$definition[1];name=[string]$_.displayName;stateCode=[int]$_.productState}) $maximum $scopes 'scope:network.security-components'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.security-components' $s 'NETWORK.SECURITY_COMPONENT_SOURCE_FAILED'}}
-$connections=[Collections.Generic.List[object]]::new();try{$null=Get-NetTCPConnection -ErrorAction Stop|ForEach-Object {if($_.LocalAddress -isnot [string] -or $_.RemoteAddress -isnot [string] -or $null -eq $_.LocalPort -or $null -eq $_.RemotePort){Set-Scope $scopes 'scope:network.local-connections' 'Partial' 'NETWORK.CONNECTION_MALFORMED';return};Add-Bounded $connections ([pscustomobject][ordered]@{state=[string]$_.State;localAddress=[string]$_.LocalAddress;localPort=[int]$_.LocalPort;remoteAddress=[string]$_.RemoteAddress;remotePort=[int]$_.RemotePort}) $maximum $scopes 'scope:network.local-connections'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.local-connections' $s 'NETWORK.CONNECTION_SOURCE_FAILED'}
+$vpns=[Collections.Generic.List[object]]::new();try{$phonebook=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)) 'Microsoft\Network\Connections\Pbk\rasphone.pbk';if([IO.File]::Exists($phonebook)){$info=[IO.FileInfo]::new($phonebook);if($info.Length -gt 65536){Set-Scope $scopes 'scope:network.vpn-components' 'Partial' 'NETWORK.EVIDENCE_BOUND_EXCEEDED'}else{$entry=$null;foreach($line in [IO.File]::ReadLines($phonebook,[Text.Encoding]::UTF8)){if($line -match '^\[(.+)\]$'){if($null -ne $entry -and $entry.server){Add-Bounded $vpns ([pscustomobject][ordered]@{name=$entry.name;serverAddress=$entry.server;tunnelType=$entry.tunnel;connectionStatus=$null}) $maximum $scopes 'scope:network.vpn-components'};$entry=[ordered]@{name=$Matches[1];server=$null;tunnel=$null}}elseif($null -ne $entry -and $line -match '^PhoneNumber=(.*)$'){$entry.server=$Matches[1]}elseif($null -ne $entry -and $line -match '^VpnStrategy=(\d+)$'){$entry.tunnel=switch([int]$Matches[1]){1{'Pptp'};2{'PptpFirst'};3{'L2tp'};4{'L2tpFirst'};5{'Sstp'};6{'SstpFirst'};7{'Ikev2'};8{'Ikev2First'};9{'PptpSstp'};10{'L2tpSstp'};11{'Ikev2Sstp'};12{'ProtocolList'};default{'Automatic'}}}};if($null -ne $entry -and $entry.server){Add-Bounded $vpns ([pscustomobject][ordered]@{name=$entry.name;serverAddress=$entry.server;tunnelType=$entry.tunnel;connectionStatus=$null}) $maximum $scopes 'scope:network.vpn-components'}}}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.vpn-components' $s 'NETWORK.VPN_SOURCE_FAILED'}
+$components=[Collections.Generic.List[object]]::new();Set-Scope $scopes 'scope:network.security-components' 'Unsupported' 'NETWORK.SECURITY_COMPONENT_OFFLINE_SOURCE_UNAVAILABLE'
+$connections=[Collections.Generic.List[object]]::new();try{$properties=[Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties();foreach($connection in $properties.GetActiveTcpConnections()){Add-Bounded $connections ([pscustomobject][ordered]@{state=[string]$connection.State;localAddress=$connection.LocalEndPoint.Address.ToString();localPort=[int]$connection.LocalEndPoint.Port;remoteAddress=$connection.RemoteEndPoint.Address.ToString();remotePort=[int]$connection.RemoteEndPoint.Port}) $maximum $scopes 'scope:network.local-connections'};foreach($listener in $properties.GetActiveTcpListeners()){Add-Bounded $connections ([pscustomobject][ordered]@{state='Listen';localAddress=$listener.Address.ToString();localPort=[int]$listener.Port;remoteAddress=if($listener.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork){'0.0.0.0'}else{'::'};remotePort=0}) $maximum $scopes 'scope:network.local-connections'}}catch{$s=Failure-State $_.Exception;Set-Scope $scopes 'scope:network.local-connections' $s 'NETWORK.CONNECTION_SOURCE_FAILED'}
 $dependent=@('scope:network.microsoft-connectivity','scope:network.enrollment-dns','scope:network.tls-trust')|ForEach-Object {[pscustomobject][ordered]@{scopeId=$_;state='NotAttempted';reasonCode='NETWORK.LOCAL_ONLY_NOT_ATTEMPTED'}}
 $payload=[pscustomobject][ordered]@{sourceLocale='und';assessmentUserContextVerified=$true;processRelationship='SameUser';networkBehavior='LocalOnly';outboundRequestCount=0;adapters=@($adapters);profiles=@($profiles);ipConfigurations=@($ips);routes=@($routes);resolvers=@($resolvers);proxy=$proxy;vpnComponents=@($vpns);securityComponents=@($components);connections=@($connections);scopeStates=@($scopes)+@($dependent);executionContext='StandardUser'}
-$utf8=[Text.UTF8Encoding]::new($false,$true);$xml=[Management.Automation.PSSerializer]::Serialize($payload,8);[Console]::Out.Write([Convert]::ToBase64String($utf8.GetBytes($xml)))
+$json=$payload|ConvertTo-Json -Compress -Depth 8;[Console]::Out.Write($json)
 '@
+}
+
+function ConvertTo-NetworkTopologyEncodedCommand {
+    param([Parameter(Mandatory)][string]$Source)
+    # CreateProcess has a finite command-line limit. Compressing the immutable,
+    # release-owned source keeps that launch boundary bounded without staging a
+    # writable script pathname that another same-user process could replace.
+    $input=[IO.MemoryStream]::new([Text.UTF8Encoding]::new($false).GetBytes($Source))
+    $output=[IO.MemoryStream]::new()
+    try{
+        $gzip=[IO.Compression.GZipStream]::new($output,[IO.Compression.CompressionLevel]::Optimal,$true)
+        try{$input.CopyTo($gzip)}finally{$gzip.Dispose()}
+        $payload=[Convert]::ToBase64String($output.ToArray())
+    }finally{$input.Dispose();$output.Dispose()}
+    $bootstrap='$b=[Convert]::FromBase64String('''+$payload+''');$m=[IO.MemoryStream]::new($b);$g=[IO.Compression.GZipStream]::new($m,[IO.Compression.CompressionMode]::Decompress);$r=[IO.StreamReader]::new($g,[Text.Encoding]::UTF8);try{&([scriptblock]::Create($r.ReadToEnd()))}finally{$r.Dispose();$g.Dispose();$m.Dispose()}'
+    [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
 }
 
 function Invoke-BoundedNetworkTopologySnapshot {
@@ -381,7 +518,7 @@ function Invoke-BoundedNetworkTopologySnapshot {
     $collector=$Policy.collector;$maximumMilliseconds=[int]$collector.deadlineMilliseconds
     $terminationMilliseconds=[Math]::Min(1000,[Math]::Max(1,[Math]::Floor($maximumMilliseconds/4)))
     $activeMilliseconds=[Math]::Max(1,$maximumMilliseconds-$terminationMilliseconds)
-    $source=Get-NetworkTopologyLiveSource;$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($source))
+    $source=Get-NetworkTopologyLiveSource;$encoded=ConvertTo-NetworkTopologyEncodedCommand -Source $source
     $started=[DateTimeOffset]::UtcNow;$executable=[IO.Path]::GetFullPath((Join-Path $PSHOME 'pwsh.exe'))
     if(-not [IO.File]::Exists($executable) -or -not [string]::Equals($executable,[Environment]::ProcessPath,[StringComparison]::OrdinalIgnoreCase)){return [pscustomobject]@{succeeded=$false;payload=$null;reasonCode='NETWORK.BOUNDARY_UNAVAILABLE';startedAt=$started;completedAt=[DateTimeOffset]::UtcNow}}
     $environment=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase);$environment['SystemRoot']=[Environment]::GetFolderPath('Windows');$environment['WINPCINFO_NETWORK_ASSESSMENT_SID']=$AssessmentUserSid;$environment['WINPCINFO_NETWORK_MAXIMUM']=[string]$collector.maximumItemsPerScope
@@ -391,8 +528,8 @@ function Invoke-BoundedNetworkTopologySnapshot {
         $native=[WinPCInfo.ProcessSupervisor.NativeRunner]::Run($executable,@('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',$encoded),$PSHOME,$environment,$activeMilliseconds,[int]$collector.resultMaximumUtf8Bytes,4096,[Threading.CancellationToken]::None,$event,1,$terminationMilliseconds,$false)
         if($native.Started -and -not $native.CompleteOwnedTreeAbsent){$e=[InvalidOperationException]::new('The Network Topology worker tree could not be proved absent.');$e.Data['ReasonCode']='NETWORK.COLLECTOR_CLEANUP_INCOMPLETE';throw $e}
         if(-not $native.Started -or $native.FailureStage -ne [WinPCInfo.ProcessSupervisor.NativeFailureStage]::None -or $native.ExitCode -ne 0 -or $native.StandardOutputExceeded -or $native.StandardErrorBytes -ne 0){$reason=Get-NativeSupervisorReasonCode -NativeResult $native;if(-not $reason){$reason='NETWORK.SOURCE_FAILED'};return [pscustomobject]@{succeeded=$false;payload=$null;reasonCode=$reason;startedAt=$started;completedAt=[DateTimeOffset]::UtcNow}}
-        $base64=[Text.UTF8Encoding]::new($false,$true).GetString($native.StandardOutput);$xml=[Text.UTF8Encoding]::new($false,$true).GetString([Convert]::FromBase64String($base64))
-        [pscustomobject]@{succeeded=$true;payload=[Management.Automation.PSSerializer]::Deserialize($xml);reasonCode='';startedAt=$started;completedAt=[DateTimeOffset]::UtcNow}
+        if(-not (Test-NetworkTopologyTransportLength -Utf8ByteCount $native.StandardOutputBytes -Policy $Policy)){return [pscustomobject]@{succeeded=$false;payload=$null;reasonCode='PROCESS.OUTPUT_LIMIT_EXCEEDED';startedAt=$started;completedAt=[DateTimeOffset]::UtcNow}}
+        [pscustomobject]@{succeeded=$true;payload=ConvertFrom-NetworkTopologyTransport -Bytes $native.StandardOutput -Policy $Policy;reasonCode='';startedAt=$started;completedAt=[DateTimeOffset]::UtcNow}
     }catch{if($_.Exception.Data['ReasonCode']){throw};[pscustomobject]@{succeeded=$false;payload=$null;reasonCode='NETWORK.SOURCE_FAILED';startedAt=$started;completedAt=[DateTimeOffset]::UtcNow}}finally{if($null -ne $event){$event.Dispose()}}
 }
 

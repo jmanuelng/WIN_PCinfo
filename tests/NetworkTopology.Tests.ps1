@@ -72,6 +72,11 @@ Assert-Equal 2 @($isolatedVpn.securityComponents).Count 'malformed VPN evidence 
 Assert-Equal 'Complete' @($isolatedVpn.scopeStates|Where-Object scopeId -eq 'scope:network.security-components')[0].state `
     'malformed VPN evidence does not degrade security-component coverage'
 
+$unboundedReason=New-NetworkTopologySyntheticPayload -Scenario Denied -Policy $policy
+$unboundedReason.scopeStates[0].reasonCode='N'+('X'*128)
+Assert-Equal $false (Test-NetworkTopologyCollectorPayload -Payload $unboundedReason -Policy $policy) `
+    'an unbounded worker reason cannot invalidate the release-owned transport derivation'
+
 $projection=New-NetworkTopologyPublicProjection -CollectorResult (
     Invoke-NetworkTopologyCollection -Policy $policy -ValidationScenario Unicode -NetworkBehavior LocalOnly
 ) -Policy $policy

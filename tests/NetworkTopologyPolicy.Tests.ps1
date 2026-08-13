@@ -20,8 +20,18 @@ Assert-Equal 3 @($policy.networkDependentScopes).Count `
     'Local Only explicitly accounts for every deferred network-dependent scope'
 Assert-Equal 30000 $policy.collector.deadlineMilliseconds `
     'the local collector has an evidence-based finite cold-provider deadline'
-Assert-Equal 524288 $policy.collector.resultMaximumUtf8Bytes `
-    'the draft worker output remains finite and fails closed pending the compact transport'
+Assert-Equal 'Utf8Json' $policy.collector.resultSerialization `
+    'the release freezes the compact worker transport before collection'
+Assert-Equal 262144 $policy.collector.resultMaximumUtf8Bytes `
+    'the compact transport ceiling covers the closed worst-case payload and framing'
+$derivation=$policy.collector.resultBoundDerivation
+$computed=[int]$derivation.maximumAdmittedStringUtf8Bytes*[int]$derivation.maximumJsonEscapeExpansionFactor+
+    [int]$derivation.maximumStructuralUtf8Bytes
+Assert-Equal $derivation.computedWorstCaseUtf8Bytes $computed `
+    'the release publishes the arithmetic behind the compact transport bound'
+if($computed -gt [int]$policy.collector.resultMaximumUtf8Bytes){
+    throw 'The frozen transport ceiling does not cover the computed worst case.'
+}
 Assert-Equal 3 @($policy.networkDependentScopes |
     Where-Object deadlineMilliseconds -eq 5000).Count `
     'future network probes retain their separately frozen five-second bounds'

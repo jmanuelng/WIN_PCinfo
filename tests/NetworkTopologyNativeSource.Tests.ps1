@@ -10,13 +10,27 @@ $repositoryRoot=Split-Path -Parent $PSScriptRoot
 $policy=Get-NetworkTopologyPolicy -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
 
 $source=Get-NetworkTopologyLiveSource
-foreach($required in @('Get-NetAdapter','Get-NetConnectionProfile','Get-NetIPAddress','Get-NetRoute','Get-DnsClientServerAddress','Get-VpnConnection','root/SecurityCenter2','Get-NetTCPConnection','[Microsoft.Win32.Registry]::CurrentUser')){
+foreach($required in @('[Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()','GetActiveTcpConnections()','[Microsoft.Win32.Registry]::CurrentUser','GetIpForwardTable','ConvertTo-Json')){
     if($source -notmatch [regex]::Escape($required)){throw "The live source omitted $required."}
 }
-foreach($prohibited in @('Resolve-DnsName','Dns.GetHost','Test-NetConnection','Invoke-WebRequest','Invoke-RestMethod','HttpClient','TcpClient','Socket','ping','curl','Update-','Install-','Set-Net','New-Net','Remove-Net','Enable-Net','Disable-Net','Restart-Net','Packet','Capture','Credential','MacAddress','InterfaceGuid','CimSession')){
+foreach($prohibited in @('Get-Net','Get-CimInstance','Import-Module','Resolve-DnsName','Dns.GetHost','Test-NetConnection','Invoke-WebRequest','Invoke-RestMethod','HttpClient','TcpClient','[Net.Sockets.Socket]','ping','curl','Update-','Install-','Set-Net','New-Net','Remove-Net','Enable-Net','Disable-Net','Restart-Net','Packet','Capture','Credential','MacAddress','InterfaceGuid','CimSession','PSSerializer')){
     if($source -match [regex]::Escape($prohibited)){throw "Local Only admits a prohibited network or identity operation: $prohibited"}
 }
 if($source -match '\$rows\s*='){throw 'Provider inventories must stream through bounded reducers.'}
+
+$maximum=[int]$policy.collector.resultMaximumUtf8Bytes
+$minimal=New-NetworkTopologySyntheticPayload -Scenario Empty -Policy $policy
+$minimalBytes=[Text.UTF8Encoding]::new($false).GetBytes(($minimal|ConvertTo-Json -Compress -Depth 10))
+$exactBytes=[byte[]]::new($maximum);[Array]::Copy($minimalBytes,$exactBytes,$minimalBytes.Length)
+for($index=$minimalBytes.Length;$index -lt $exactBytes.Length;$index++){$exactBytes[$index]=0x20}
+$exact=ConvertFrom-NetworkTopologyTransport -Bytes $exactBytes -Policy $policy
+Assert-Equal 'LocalOnly' $exact.networkBehavior `
+    'an exact-bound valid UTF-8 JSON fixture passes the transport boundary'
+$overBytes=[byte[]]::new($maximum+1);[Array]::Copy($exactBytes,$overBytes,$exactBytes.Length);$overBytes[-1]=0x20
+$overRejected=$false
+try{$null=ConvertFrom-NetworkTopologyTransport -Bytes $overBytes -Policy $policy}catch{$overRejected=$true}
+Assert-Equal $true $overRejected `
+    'a one-byte-over valid UTF-8 JSON fixture fails closed'
 
 $gap=Invoke-NetworkTopologyCollection -Policy $policy -Live -NetworkBehavior LocalOnly `
     -AssessmentUserSid 'S-1-5-21-1-2-3-1001' -ProcessContextOverride LocalSystem
