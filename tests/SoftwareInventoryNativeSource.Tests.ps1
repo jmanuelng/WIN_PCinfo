@@ -33,6 +33,7 @@ Assert-Equal 'ProhibitedSystemContext' $system.relationship 'SYSTEM is prohibite
 $source = Get-SoftwareInventoryLiveSource
 foreach ($required in @(
     '[Microsoft.Win32.RegistryKey]::OpenBaseKey', 'Registry32', 'Registry64',
+    "GetValue('UpgradeCode'",
     'LocalMachine', 'CurrentUser', 'MsiEnumProductsExW', 'MsiGetProductInfoExW',
     'Windows.Management.Deployment.PackageManager', 'FindPackagesForUser',
     'FindPackages()'
@@ -56,6 +57,7 @@ foreach ($prohibited in @(
 
 $adapterExpectations=@(
     @{file='adapter-registry.json';kind='Registry';context='Machine';state='Registered';type='DesktopRegistration'},
+    @{file='adapter-registry-upgrade-code.json';kind='Registry';context='Machine';state='Registered';type='MsiRegistration'},
     @{file='adapter-msi.json';kind='Msi';context='AssessmentUserUnmanaged';state='Advertised';type='MsiProduct'},
     @{file='adapter-msix.json';kind='Msix';context='AssessmentUser';state='StatusOk';type='Framework'}
 )
@@ -67,6 +69,10 @@ foreach($expectation in $adapterExpectations){
     Assert-Equal $expectation.state $entry.installerState "$($expectation.file) maps provider state without activating the product"
     Assert-Equal $expectation.type $entry.packageType "$($expectation.file) maps the release-owned package type"
     Assert-Equal $true (Test-SoftwareInventoryEntry -Entry $entry -Policy $policy) "$($expectation.file) crosses the same closed tuple boundary as live child output"
+    if($expectation.file -eq 'adapter-registry-upgrade-code.json'){
+        Assert-Equal '{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}' $entry.upgradeCode `
+            'the live-shaped uninstall-registration fixture retains its exact UpgradeCode'
+    }
 }
 $registryMaximum=Get-Content -Raw (Join-Path $PSScriptRoot 'fixtures/software-inventory/adapter-registry.json')|ConvertFrom-Json
 $registryMaximum.registrationKeyName=('r'*256 -join '')

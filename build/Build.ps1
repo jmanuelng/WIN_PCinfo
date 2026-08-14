@@ -26,6 +26,7 @@ $sourcePaths = @(
     'src/NetworkTopology.ps1'
     'src/SoftwareInventory.ps1'
     'src/CertificateTrust.ps1'
+    'src/SoftwareRecognition.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -79,6 +80,8 @@ $softwareInventoryPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0
 $softwareInventorySchemaPath = Join-Path $repositoryRoot 'schemas/software-inventory.schema.json'
 $certificateTrustPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
 $certificateTrustSchemaPath = Join-Path $repositoryRoot 'schemas/certificate-trust.schema.json'
+$softwareRecognitionCatalogPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
+$softwareRecognitionCatalogSchemaPath = Join-Path $repositoryRoot 'schemas/software-recognition-catalog.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
 $assessmentPackageManifestSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-package-manifest.schema.json'
 $recipientSharingPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
@@ -103,7 +106,8 @@ foreach ($requiredDefinitionPath in @(
     $resourceDependenciesPolicyPath, $resourceDependenciesSchemaPath,
     $networkTopologyPolicyPath, $networkTopologySchemaPath,
     $softwareInventoryPolicyPath, $softwareInventorySchemaPath,
-    $certificateTrustPolicyPath, $certificateTrustSchemaPath
+    $certificateTrustPolicyPath, $certificateTrustSchemaPath,
+    $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -219,6 +223,16 @@ $certificateTrustPolicyDigest = Get-Sha256Hex -Bytes $certificateTrustPolicyByte
 $certificateTrustPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $certificateTrustPolicyBytes
 )
+$softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
+$softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
+$softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
+$softwareRecognitionCatalogJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $softwareRecognitionCatalogBytes
+)
+$softwareRecognitionSchemaBytes = Get-Utf8LfBytes `
+    -LiteralPath $softwareRecognitionCatalogSchemaPath
+$softwareRecognitionSchemaBase64 = [Convert]::ToBase64String($softwareRecognitionSchemaBytes)
+$softwareRecognitionSchemaDigest = Get-Sha256Hex -Bytes $softwareRecognitionSchemaBytes
 $effectivePolicyPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $effectivePolicyPolicyBytes
 )
@@ -269,6 +283,9 @@ if (-not (Test-Json -Json $softwareInventoryPolicyJson -SchemaFile $softwareInve
 }
 if (-not (Test-Json -Json $certificateTrustPolicyJson -SchemaFile $certificateTrustSchemaPath)) {
     throw 'The Certificate Trust policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $softwareRecognitionCatalogJson -SchemaFile $softwareRecognitionCatalogSchemaPath)) {
+    throw 'The Software Recognition Catalog does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -323,6 +340,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/network-topology.schema.json'
     'schemas/software-inventory.schema.json'
     'schemas/certificate-trust.schema.json'
+    'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -340,6 +358,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-network-topology.json'
     'docs/spec/releases/2.0.0-preview.1-software-inventory.json'
     'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
+    'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -579,6 +598,20 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__CERTIFICATE_TRUST_POLICY_SHA256__', $certificateTrustPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/SoftwareRecognition.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__SOFTWARE_RECOGNITION_CATALOG_BASE64__', $softwareRecognitionCatalogBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__SOFTWARE_RECOGNITION_CATALOG_SHA256__', $softwareRecognitionCatalogDigest
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__SOFTWARE_RECOGNITION_SCHEMA_BASE64__', $softwareRecognitionSchemaBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__SOFTWARE_RECOGNITION_SCHEMA_SHA256__', $softwareRecognitionSchemaDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"

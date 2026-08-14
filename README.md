@@ -36,6 +36,8 @@ To understand the read-only software slice—explicit 32-bit and 64-bit uninstal
 
 To understand the purpose-bound certificate slice—management, authentication, device identity, code trust, TLS inspection, and service-connectivity questions; separate presence, validity, chain, trust, and key-protection states; offline read-only store access; Restricted fingerprints; and the prohibition on private-key access or trust changes—read [Purpose-bound certificates and local trust](docs/certificate-trust.md).
 
+To understand the separate conservative family/role labels—exact Windows identities, contextual composites, ambiguity, unknown and `NotEvaluated` outcomes, catalog provenance, offline behavior, and why recognition never creates a finding—read [Software Recognition annotations](docs/software-recognition.md).
+
 To understand the direct local-administrator slice—well-known-SID group selection, direct-only membership, unresolved and nested identities, alternate-administrator separation, Restricted evidence, and non-removal guidance—read [Local administrator exposure and execution context](docs/local-administrator-exposure.md).
 
 To understand the policy slice—cached applied Group Policy identity/link/precedence, configured registry signals, local SAM policy, Audit Policy, direct user-right assignments, three-layer evidence semantics, Restricted identifiers, and no-refresh/no-install limits—read [Applied Group Policy and local security policy](docs/effective-policy-assessment.md).

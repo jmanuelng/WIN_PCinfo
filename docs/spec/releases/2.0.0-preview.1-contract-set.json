@@ -6,7 +6,8 @@
   "requiredFeatures": [
     "closed-scope-coverage",
     "evidence-references",
-    "prohibited-material-omission"
+    "prohibited-material-omission",
+    "software-recognition-annotations"
   ],
   "limits": {
     "maximumDocumentUtf8Bytes": 2097152,

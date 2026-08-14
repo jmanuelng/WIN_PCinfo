@@ -6,6 +6,7 @@ $ErrorActionPreference='Stop'
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'NetworkTopologyContract.Tests.ps1')
 . (Join-Path $repositoryRoot 'src/SoftwareInventory.ps1')
+. (Join-Path $repositoryRoot 'src/SoftwareRecognition.ps1')
 $softwarePolicy=Get-SoftwareInventoryPolicy -ConvertFromJsonCommand $facts.convertFromJsonCommand
 
 $enabledSelection=Get-DeviceReadinessSliceSelection -DeviceFixture $false -IdentityFixture $false `
@@ -48,9 +49,21 @@ foreach($definition in @($contractSet.fieldDefinitions|Where-Object fieldId -lik
 $sourceValidation=Test-CanonicalRecord $record
 Assert-Equal 'CONTRACT.ACCEPTED' $sourceValidation.reasonCode 'MSI installed and advertised states cross the canonical field contract'
 $record=Complete-ValidatedSoftwareInventoryAssessmentRecord $record $softwarePolicy $sourceValidation
+$recognitionCatalog=Get-SoftwareRecognitionCatalog `
+    -ConvertFromJsonCommand $facts.convertFromJsonCommand `
+    -TestJsonCommand $facts.testJsonCommand
+$findingCountBeforeRecognition=@($record.findings).Count
+$record=Add-SoftwareRecognitionAnnotations -Record $record `
+    -Entries @($collector.payload.entries) `
+    -CatalogResult $recognitionCatalog
 $validation=Test-CanonicalRecord $record
-Assert-Equal 'CONTRACT.ACCEPTED' $validation.reasonCode 'the final Software Inventory record remains canonical'
+Assert-Equal 'CONTRACT.ACCEPTED' $validation.reasonCode `
+    'the final Software Inventory record with recognition annotations remains canonical'
 Assert-Equal 2 @($record.subjects|Where-Object kind -eq Application).Count 'separate MSI products retain separate source identities'
+Assert-Equal 2 @($record.softwareRecognition).Count `
+    'every authoritative software subject receives exactly one recognition outcome'
+Assert-Equal $findingCountBeforeRecognition @($record.findings).Count `
+    'a Software Recognition Outcome never creates an Assessment Finding by itself'
 Assert-Equal 'Advertised|Installed' ((@($record.observations|Where-Object fieldId -eq 'field:software.msi.installer-state').value|Sort-Object)-join '|') 'MSI provider states remain distinct bounded evidence'
 
 $denied=New-NetworkReadyRecord
