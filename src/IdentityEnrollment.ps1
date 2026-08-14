@@ -4,7 +4,7 @@ $script:IdentityEnrollmentPolicyDigest = '__IDENTITY_ENROLLMENT_POLICY_SHA256__'
 function Get-IdentityEnrollmentPolicy {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
-    if ($script:IdentityEnrollmentPolicyBase64 -eq '__IDENTITY_ENROLLMENT_POLICY_BASE64__') {
+    if ($script:IdentityEnrollmentPolicyBase64 -eq ('__IDENTITY_ENROLLMENT_' + 'POLICY_BASE64__')) {
         $path = Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-identity-enrollment.json'
         $bytes = Get-CanonicalSupervisorTextBytes -LiteralPath $path

@@ -191,6 +191,7 @@ $usingAdministratorExposureFixture = -not [string]::IsNullOrWhiteSpace($Administ
 $usingEffectivePolicyFixture = -not [string]::IsNullOrWhiteSpace($EffectivePolicyFixturePath)
 $usingResourceDependenciesFixture = -not [string]::IsNullOrWhiteSpace($ResourceDependenciesFixturePath)
 $usingNetworkTopologyFixture = -not [string]::IsNullOrWhiteSpace($NetworkTopologyFixturePath)
+$usingSoftwareInventoryFixture = -not [string]::IsNullOrWhiteSpace($SoftwareInventoryFixturePath)
 $validationContext = [pscustomobject][ordered]@{
     PreparationFixturePath = $PreparationFixturePath
     ContractFixturePath = $ContractFixturePath
@@ -206,13 +207,15 @@ $validationContext = [pscustomobject][ordered]@{
     EffectivePolicyFixturePath = $EffectivePolicyFixturePath
     ResourceDependenciesFixturePath = $ResourceDependenciesFixturePath
     NetworkTopologyFixturePath = $NetworkTopologyFixturePath
+    SoftwareInventoryFixturePath = $SoftwareInventoryFixturePath
     IsFixture = ($usingRuntimeFixture -or $usingPreparationFixture -or
         $usingContractFixture -or $usingRunFixture -or $usingPrivilegedCollectionFixture -or
         $usingSystemCollectionFixture -or $usingEvidenceWorkspaceFixture -or
         $usingProtectedPackageFixture -or $usingRecipientSharingFixture -or
         $usingDeviceReadinessFixture -or $usingIdentityEnrollmentFixture -or
         $usingAdministratorExposureFixture -or $usingEffectivePolicyFixture -or
-        $usingResourceDependenciesFixture -or $usingNetworkTopologyFixture)
+        $usingResourceDependenciesFixture -or $usingNetworkTopologyFixture -or
+        $usingSoftwareInventoryFixture)
 }
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
     -Mode $Mode -AcceptPreparation:$AcceptPreparation -ValidationContext $validationContext `

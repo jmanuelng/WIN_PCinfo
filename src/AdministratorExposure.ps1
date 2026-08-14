@@ -9,7 +9,7 @@ function Get-AdministratorExposureSha256 {
 function Get-AdministratorExposurePolicy {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
-    if ($script:AdministratorExposurePolicyBase64 -eq '__ADMINISTRATOR_EXPOSURE_POLICY_BASE64__') {
+    if ($script:AdministratorExposurePolicyBase64 -eq ('__ADMINISTRATOR_EXPOSURE_' + 'POLICY_BASE64__')) {
         $path = Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-administrator-exposure.json'
         $bytes = [IO.File]::ReadAllBytes($path)

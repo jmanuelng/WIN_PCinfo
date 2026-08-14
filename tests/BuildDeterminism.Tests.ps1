@@ -42,6 +42,7 @@ $expectedSourcePaths = @(
     'src/EffectivePolicy.ps1'
     'src/ResourceDependencies.ps1'
     'src/NetworkTopology.ps1'
+    'src/SoftwareInventory.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -84,6 +85,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/effective-policy.schema.json'
     'schemas/resource-dependencies.schema.json'
     'schemas/network-topology.schema.json'
+    'schemas/software-inventory.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -99,6 +101,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-effective-policy.json'
     'docs/spec/releases/2.0.0-preview.1-resource-dependencies.json'
     'docs/spec/releases/2.0.0-preview.1-network-topology.json'
+    'docs/spec/releases/2.0.0-preview.1-software-inventory.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq
     (@($expectedApplicationResourcePaths | Sort-Object) -join '|')) `
@@ -156,6 +159,17 @@ Assert-True (@($relocated.Records | Where-Object {
     $_.recordType -eq 'win-pcinfo.device-readiness-validation'
 }).Count -eq 1) `
     'the relocated artifact completes the public Device Readiness seam'
+$standaloneSoftware = Invoke-GeneratedApplication -CandidatePath $firstPath -Arguments @(
+    '-Mode','Automation','-RequestPath',(Join-Path $PSScriptRoot 'fixtures/automation-request.json'),
+    '-AcceptPreparation','-PreparationFixturePath',(Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'),
+    '-SoftwareInventoryFixturePath',(Join-Path $PSScriptRoot 'fixtures/software-inventory/registry-views.json')
+)
+Assert-True ($standaloneSoftware.ExitCode -eq 10) `
+    'a generated artifact outside an adjacent resource tree uses embedded Software Inventory policy bytes'
+Assert-True (@($standaloneSoftware.Records | Where-Object {
+    $_.recordType -eq 'win-pcinfo.software-inventory-validation' -and $_.assessmentRecordValidated
+}).Count -eq 1) `
+    'standalone Software Inventory completes record, report, package, and cleanup validation'
 Assert-True ($firstBytes[0] -eq 0xEF -and $firstBytes[1] -eq 0xBB -and $firstBytes[2] -eq 0xBF) `
     'the signing representation starts with a UTF-8 BOM'
 

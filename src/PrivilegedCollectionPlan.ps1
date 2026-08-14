@@ -18,7 +18,7 @@ function Get-PrivilegedCollectionPlanPolicy {
         throw 'The privilege policy JSON command does not have built-in provenance.'
     }
 
-    if ($script:PrivilegedCollectionPlanPolicyBase64 -eq '__PRIVILEGED_COLLECTION_PLAN_POLICY_BASE64__') {
+    if ($script:PrivilegedCollectionPlanPolicyBase64 -eq ('__PRIVILEGED_COLLECTION_PLAN_' + 'POLICY_BASE64__')) {
         $repositoryRoot = Split-Path -Parent $PSScriptRoot
         $text = [System.IO.File]::ReadAllText(
             (Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-privileged-collection-plan.json'),

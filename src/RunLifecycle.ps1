@@ -10,7 +10,7 @@ function Get-RunLifecyclePolicyDigest {
 }
 
 function Get-AssessmentRunLifecyclePolicy {
-    if ($script:RunLifecyclePolicyBase64 -eq '__RUN_LIFECYCLE_POLICY_BASE64__') {
+    if ($script:RunLifecyclePolicyBase64 -eq ('__RUN_LIFECYCLE_' + 'POLICY_BASE64__')) {
         $repositoryRoot = Split-Path -Parent $PSScriptRoot
         $text = [System.IO.File]::ReadAllText(
             (Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'),

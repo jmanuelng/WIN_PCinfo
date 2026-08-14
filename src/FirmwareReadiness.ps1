@@ -4,7 +4,7 @@ $script:FirmwareReadinessPolicyDigest = '__FIRMWARE_READINESS_POLICY_SHA256__'
 function Get-FirmwareReadinessPolicy {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
-    if ($script:FirmwareReadinessPolicyBase64 -eq '__FIRMWARE_READINESS_POLICY_BASE64__') {
+    if ($script:FirmwareReadinessPolicyBase64 -eq ('__FIRMWARE_READINESS_' + 'POLICY_BASE64__')) {
         $path = Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-firmware-readiness.json'
         $bytes = Get-CanonicalSupervisorTextBytes -LiteralPath $path

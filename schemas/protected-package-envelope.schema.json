@@ -11,8 +11,8 @@
     "keyProtection": { "const": "DPAPI-CurrentUser" },
     "recipientKeyProtection": { "enum": ["None", "RSA-OAEP-SHA-256"] },
     "chunkPlaintextBytes": { "const": 16384 },
-    "plaintextLength": { "type": "integer", "minimum": 1, "maximum": 1048576 },
-    "chunkCount": { "type": "integer", "minimum": 1, "maximum": 64 },
+    "plaintextLength": { "type": "integer", "minimum": 1, "maximum": 2621440 },
+    "chunkCount": { "type": "integer", "minimum": 1, "maximum": 160 },
     "noncePrefix": { "type": "string", "pattern": "^[A-Za-z0-9+/]{11}=$" },
     "protectedContentKey": { "type": "string", "minLength": 44, "maxLength": 5464, "pattern": "^[A-Za-z0-9+/]+={0,2}$" },
     "recipientWrappedContentKey": {

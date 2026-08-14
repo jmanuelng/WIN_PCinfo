@@ -9,7 +9,7 @@ function Get-EffectivePolicySha256 {
 function Get-EffectivePolicyPolicy {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
-    if ($script:EffectivePolicyPolicyBase64 -eq '__EFFECTIVE_POLICY_POLICY_BASE64__') {
+    if ($script:EffectivePolicyPolicyBase64 -eq ('__EFFECTIVE_POLICY_' + 'POLICY_BASE64__')) {
         $repositoryRoot = Split-Path -Parent $PSScriptRoot
         $text = [IO.File]::ReadAllText(
             (Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-effective-policy.json'),

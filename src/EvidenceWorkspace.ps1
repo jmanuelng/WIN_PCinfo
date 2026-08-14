@@ -20,7 +20,7 @@ function Get-EvidenceWorkspacePolicy {
         throw 'The Evidence Workspace policy JSON command does not have built-in provenance.'
     }
 
-    if ($script:EvidenceWorkspacePolicyBase64 -eq '__EVIDENCE_WORKSPACE_POLICY_BASE64__') {
+    if ($script:EvidenceWorkspacePolicyBase64 -eq ('__EVIDENCE_WORKSPACE_' + 'POLICY_BASE64__')) {
         $repositoryRoot = Split-Path -Parent $PSScriptRoot
         $path = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-evidence-workspace.json'
         $text = [System.IO.File]::ReadAllText(
@@ -287,7 +287,7 @@ function Get-EvidenceWorkspaceFileSystemIdentity {
 }
 
 function Get-RunRecoveryJournalSchemaText {
-    if ($script:RunRecoveryJournalSchemaBase64 -eq '__RUN_RECOVERY_JOURNAL_SCHEMA_BASE64__') {
+    if ($script:RunRecoveryJournalSchemaBase64 -eq ('__RUN_RECOVERY_JOURNAL_' + 'SCHEMA_BASE64__')) {
         $repositoryRoot = Split-Path -Parent $PSScriptRoot
         $path = Join-Path $repositoryRoot 'schemas/run-recovery-journal.schema.json'
         $text = [System.IO.File]::ReadAllText(

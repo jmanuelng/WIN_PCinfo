@@ -11,7 +11,9 @@ The Local Package Protector is the Windows user who initiated the run. WIN-PCInf
 ## What finalization does
 
 1. WIN-PCInfo validates the Assessment Record against its exact Assessment Contract Set.
-2. It creates a deterministic ZIP in memory. The ZIP contains exactly `assessment-record.json`, `assessment-report.html`, and `package-manifest.json`; no plaintext archive is written to disk.
+2. It creates a deterministic ZIP in memory. The ZIP contains exactly `assessment-record.json`, `assessment-report.html`, and `package-manifest.json`; no plaintext archive is written to disk. Protected Package policy `1.1.0` admits at most a 2 MiB Assessment Record, 256 KiB report, and 2.5 MiB deterministic archive/plaintext envelope, with a 160-chunk ceiling derived from 16 KiB authenticated chunks.
+
+Readers retain the frozen policy `1.0.0` limits for historical packages: 512 KiB Assessment Record, 256 KiB report, and 1 MiB archive/plaintext. A historical manifest cannot opt into the larger `1.1.0` limits, while a package that satisfied the older policy remains decryptable with its matching Windows-user/device key context.
 3. The manifest records the product release, Contract Set, package policy, manifest contract, completeness, protection state, and the exact path, media type, byte length, and SHA-256 digest of each artifact. It explicitly makes no authorship or durable-tamper-evidence claim.
 4. The in-memory ZIP is encrypted in 16 KiB AES-256-GCM chunks. Every chunk receives a unique 96-bit nonce and a full 128-bit tag. The closed header and each chunk's index, lengths, and nonce are authenticated as associated data.
 5. Only provisional ciphertext is written. It is flushed to disk, closed, reopened with DPAPI, authenticated, decompressed in memory, and checked against the envelope schema, archive rules, manifest schema, digests, and Assessment Contract semantics.

@@ -137,7 +137,12 @@ param(
     # It cannot provide an address, adapter, route, resolver, proxy, component,
     # connection, command, network permission, or collection authority.
     [Parameter(DontShow)]
-    [string] $NetworkTopologyFixturePath
+    [string] $NetworkTopologyFixturePath,
+
+    # Internal release-validation seam. The fixture contains only a scenario
+    # name; software identities remain inside the protected package.
+    [Parameter(DontShow)]
+    [string] $SoftwareInventoryFixturePath
 )
 
 Set-StrictMode -Version Latest

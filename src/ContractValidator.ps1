@@ -12,7 +12,7 @@ function Get-EmbeddedAssessmentContractSet {
     # application trust gate supplies the publisher/integrity boundary. These
     # digests detect substitution inside that trusted artifact; they do not let
     # modified code self-attest. Any mismatch stops validation and collection.
-    if ($script:AssessmentContractSetBase64 -eq '__ASSESSMENT_CONTRACT_SET_BASE64__') {
+    if ($script:AssessmentContractSetBase64 -eq ('__ASSESSMENT_CONTRACT_' + 'SET_BASE64__')) {
         # Modular source tests use the reviewed repository resources. The
         # deterministic build replaces these sentinels with the exact canonical
         # bytes and digests, so the generated application never trusts mutable

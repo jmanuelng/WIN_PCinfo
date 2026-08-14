@@ -295,6 +295,11 @@ function New-PreparationPlan {
         # that Local Only must leave NotAttempted; approval cannot later widen
         # those probes into DNS, TCP, TLS, HTTP, catalog, update, or telemetry.
         networkTopology = $Definition.networkTopology
+        # Software inventory is limited to explicit uninstall registry views,
+        # inventory-only MSI APIs, and Windows package identities. Freezing the
+        # complete policy here prevents a later profile, hive, binary, repair,
+        # package-content, or network operation from entering after approval.
+        softwareInventory = $Definition.softwareInventory
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -451,6 +456,7 @@ function Invoke-PreparationGate {
     $effectivePolicyFixturePath = [string] $ValidationContext.EffectivePolicyFixturePath
     $resourceDependenciesFixturePath = [string] $ValidationContext.ResourceDependenciesFixturePath
     $networkTopologyFixturePath = [string] $ValidationContext.NetworkTopologyFixturePath
+    $softwareInventoryFixturePath = [string] $ValidationContext.SoftwareInventoryFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -527,7 +533,8 @@ function Invoke-PreparationGate {
             $protectedPackageFixturePath, $recipientSharingFixturePath,
             $deviceReadinessFixturePath, $identityEnrollmentFixturePath,
             $administratorExposureFixturePath, $effectivePolicyFixturePath,
-            $resourceDependenciesFixturePath, $networkTopologyFixturePath) |
+            $resourceDependenciesFixturePath, $networkTopologyFixturePath,
+            $softwareInventoryFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -658,6 +665,20 @@ function Invoke-PreparationGate {
             -ConvertToJsonCommand $ConvertToJsonCommand
         return Invoke-DeviceReadinessSlice `
             -NetworkTopologyLiteralPath $networkTopologyFixturePath `
+            -PreparationPlan $planResult.Plan `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($softwareInventoryFixturePath)) {
+        Write-ContractRecord (New-ProgressRecord `
+            -Sequence 9 -Phase 'Collection' `
+            -State 'Started' -MessageId 'software-inventory.collection.started' `
+            -CompletedUnits 0 -TotalUnits 1 -Unit 'SoftwareInventory') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return Invoke-DeviceReadinessSlice -SoftwareInventoryLiteralPath $softwareInventoryFixturePath `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `

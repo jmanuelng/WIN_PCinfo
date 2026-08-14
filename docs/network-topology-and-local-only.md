@@ -10,6 +10,8 @@ Each source has a fixed property list, an eight-item ceiling per Evidence Scope,
 
 Local configuration cannot prove external reachability, authorization, service health, certificate trust, tenant assignment, or Microsoft endpoint availability. To request those facts, start a new Preparation Summary using the separately approved Microsoft Connectivity Enabled mode; approval for Local Only cannot be widened after collection starts.
 
+Microsoft Connectivity Enabled is a distinct approved request choice, but its DNS, TCP, TLS, and HTTP operations are not implemented in this preview. When selected, WIN-PCInfo preserves that choice, performs only the same offline local inventory, makes zero assessment network requests, and reports each enabled operation as `NotAttempted` with `NETWORK.CONNECTIVITY_OPERATIONS_NOT_IMPLEMENTED`. It never silently substitutes a successful Local Only claim.
+
 ## Reading the report
 
 The report distinguishes local-source coverage from network-dependent coverage. Complete means the cataloged local source completed within its bound. Partial, Denied, Malformed, Unavailable, TimedOut, Cancelled, or Failed identifies the affected scope without discarding successful unrelated scopes. An empty Complete scope can establish that the cataloged local source returned no items; an incomplete scope cannot establish absence.

@@ -8,7 +8,7 @@ function Get-NetworkTopologySha256 {
 
 function Get-NetworkTopologyPolicy {
     param([Parameter(Mandatory)]$ConvertFromJsonCommand)
-    if($script:NetworkTopologyPolicyBase64 -eq '__NETWORK_TOPOLOGY_POLICY_BASE64__'){
+    if($script:NetworkTopologyPolicyBase64 -eq ('__NETWORK_TOPOLOGY_' + 'POLICY_BASE64__')){
         $path=Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-network-topology.json'
         $text=[IO.File]::ReadAllText($path,[Text.UTF8Encoding]::new($false,$true)).Replace("`r`n","`n").Replace("`r","`n")
@@ -175,7 +175,7 @@ function Test-NetworkTopologyCollectorPayload {
     try{
         if(-not (Test-NetworkTopologyObjectShape $Payload @('sourceLocale','assessmentUserContextVerified','processRelationship','networkBehavior','outboundRequestCount','adapters','profiles','ipConfigurations','routes','resolvers','proxy','vpnComponents','securityComponents','connections','scopeStates','executionContext'))){return $false}
         if($Payload.assessmentUserContextVerified -isnot [bool] -or
-            [string]$Payload.processRelationship -notin @('SameUser','AlternateAdministrator','ElevatedAssessmentUser','DifferentStandardUser','ProhibitedSystemContext','Unavailable') -or [string]$Payload.networkBehavior -ne 'LocalOnly' -or
+            [string]$Payload.processRelationship -notin @('SameUser','AlternateAdministrator','ElevatedAssessmentUser','DifferentStandardUser','ProhibitedSystemContext','Unavailable') -or [string]$Payload.networkBehavior -notin @('LocalOnly','MicrosoftConnectivityEnabled') -or
             -not (Test-NetworkTopologyInteger $Payload.outboundRequestCount 0 0) -or
             [string]$Payload.executionContext -notin @('Synthetic','StandardUser','Administrator','LocalSystem') -or
             -not (Test-NetworkTopologyString $Payload.sourceLocale 35)){return $false}
@@ -203,7 +203,8 @@ function Test-NetworkTopologyCollectorPayload {
         }
         foreach($scope in @($Policy.networkDependentScopes)){
             $actual=@($Payload.scopeStates|Where-Object scopeId -eq $scope.scopeId)[0]
-            if($actual.state -ne 'NotAttempted' -or $actual.reasonCode -ne 'NETWORK.LOCAL_ONLY_NOT_ATTEMPTED'){return $false}
+            $expectedReason=if($Payload.networkBehavior -eq 'LocalOnly'){'NETWORK.LOCAL_ONLY_NOT_ATTEMPTED'}else{'NETWORK.CONNECTIVITY_OPERATIONS_NOT_IMPLEMENTED'}
+            if($actual.state -ne 'NotAttempted' -or $actual.reasonCode -ne $expectedReason){return $false}
         }
         if(-not [bool]$Payload.assessmentUserContextVerified -and
             (@($Payload.adapters).Count+@($Payload.profiles).Count+@($Payload.ipConfigurations).Count+
@@ -256,7 +257,11 @@ function ConvertTo-NetworkTopologyAttemptPayload {
 }
 
 function Copy-NetworkTopologyCollectorPayload {
-    param([Parameter(Mandatory)]$Payload,[Parameter(Mandatory)]$Policy)
+    param([Parameter(Mandatory)]$Payload,[Parameter(Mandatory)]$Policy,[Parameter()][ValidateSet('LocalOnly','MicrosoftConnectivityEnabled')][string]$NetworkBehavior='LocalOnly')
+    $Payload.networkBehavior=$NetworkBehavior
+    if($NetworkBehavior -eq 'MicrosoftConnectivityEnabled'){
+        foreach($scope in @($Payload.scopeStates|Where-Object scopeId -in @($Policy.networkDependentScopes.scopeId))){$scope.state='NotAttempted';$scope.reasonCode='NETWORK.CONNECTIVITY_OPERATIONS_NOT_IMPLEMENTED'}
+    }
     $Payload=ConvertTo-NetworkTopologyAttemptPayload -Payload $Payload -Policy $Policy
     if(-not (Test-NetworkTopologyCollectorPayload -Payload $Payload -Policy $Policy)){throw 'The Network Topology payload is outside the frozen contract.'}
     # Re-project every admitted primitive into coordinator-owned objects. This
@@ -272,7 +277,7 @@ function Copy-NetworkTopologyCollectorPayload {
         sourceLocale=[string]$Payload.sourceLocale
         assessmentUserContextVerified=[bool]$Payload.assessmentUserContextVerified
         processRelationship=[string]$Payload.processRelationship
-        networkBehavior='LocalOnly';outboundRequestCount=0
+        networkBehavior=$NetworkBehavior;outboundRequestCount=0
         adapters=Copy-Items $Payload.adapters @('name','description','status','interfaceIndex','linkSpeed','hardwareInterface')
         profiles=Copy-Items $Payload.profiles @('name','category','ipv4Connectivity','ipv6Connectivity','interfaceIndex')
         ipConfigurations=Copy-Items $Payload.ipConfigurations @('interfaceIndex','addressFamily','address','prefixLength','defaultGateway')
@@ -290,14 +295,14 @@ function Copy-NetworkTopologyCollectorPayload {
 function Invoke-NetworkTopologyCollection {
     param(
         [Parameter(Mandatory)]$Policy,[Parameter()][string]$ValidationScenario,
-        [Parameter(Mandatory)][ValidateSet('LocalOnly')][string]$NetworkBehavior,
+        [Parameter(Mandatory)][ValidateSet('LocalOnly','MicrosoftConnectivityEnabled')][string]$NetworkBehavior,
         [Parameter()][switch]$Live,[Parameter()][string]$AssessmentUserSid,
         [Parameter()][ValidateSet('','Administrator','LocalSystem','AlternateUser')][string]$ProcessContextOverride=''
     )
     if($Live){
         $started=[DateTimeOffset]::UtcNow
         if(-not (Test-NetworkTopologySid $AssessmentUserSid)){
-            $payload=New-NetworkTopologyGapPayload -Policy $Policy -State Unavailable -ReasonCode 'NETWORK.ASSESSMENT_USER_CONTEXT_UNAVAILABLE' -Relationship Unavailable -ObservedContext StandardUser
+            $payload=New-NetworkTopologyGapPayload -Policy $Policy -State Unavailable -ReasonCode 'NETWORK.ASSESSMENT_USER_CONTEXT_UNAVAILABLE' -Relationship Unavailable -ObservedContext StandardUser -NetworkBehavior $NetworkBehavior
             return [pscustomobject][ordered]@{state='Completed';reasonCode='NETWORK.ASSESSMENT_USER_CONTEXT_UNAVAILABLE';payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=$started.ToString('o');completedAt=([DateTimeOffset]::UtcNow).ToString('o');executionContext='StandardUser';attempts=1};cleanupVerified=$true}
         }
         $identity=[Security.Principal.WindowsIdentity]::GetCurrent();$principal=[Security.Principal.WindowsPrincipal]::new($identity)
@@ -309,21 +314,21 @@ function Invoke-NetworkTopologyCollection {
         }
         $disposition=Get-NetworkTopologyProcessDisposition $processSid $AssessmentUserSid $isAdministrator
         if($null -ne $disposition){
-            $payload=New-NetworkTopologyGapPayload -Policy $Policy -State Denied -ReasonCode 'NETWORK.ASSESSMENT_USER_CONTEXT_REQUIRED' -Relationship $disposition.relationship -ObservedContext $disposition.executionContext
+            $payload=New-NetworkTopologyGapPayload -Policy $Policy -State Denied -ReasonCode 'NETWORK.ASSESSMENT_USER_CONTEXT_REQUIRED' -Relationship $disposition.relationship -ObservedContext $disposition.executionContext -NetworkBehavior $NetworkBehavior
             return [pscustomobject][ordered]@{state='Completed';reasonCode='NETWORK.ASSESSMENT_USER_CONTEXT_REQUIRED';payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=$started.ToString('o');completedAt=([DateTimeOffset]::UtcNow).ToString('o');executionContext=$disposition.executionContext;attempts=1};cleanupVerified=$true}
         }
         $attempt=Invoke-BoundedNetworkTopologySnapshot -Policy $Policy -AssessmentUserSid $AssessmentUserSid
         if([bool]$attempt.succeeded){
-            $payload=Copy-NetworkTopologyCollectorPayload -Payload $attempt.payload -Policy $Policy
+            $payload=Copy-NetworkTopologyCollectorPayload -Payload $attempt.payload -Policy $Policy -NetworkBehavior $NetworkBehavior
             return [pscustomobject][ordered]@{state='Completed';reasonCode='NETWORK.COLLECTION_COMPLETED';payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=([DateTimeOffset]$attempt.startedAt).ToString('o');completedAt=([DateTimeOffset]$attempt.completedAt).ToString('o');executionContext='StandardUser';attempts=1};cleanupVerified=$true}
         }
         $state=if($attempt.reasonCode -match 'TIMEOUT'){'TimedOut'}elseif($attempt.reasonCode -match 'CANCEL'){'Cancelled'}elseif($attempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
-        $payload=New-NetworkTopologyGapPayload -Policy $Policy -State $state -ReasonCode ([string]$attempt.reasonCode) -Relationship SameUser -ObservedContext StandardUser
+        $payload=New-NetworkTopologyGapPayload -Policy $Policy -State $state -ReasonCode ([string]$attempt.reasonCode) -Relationship SameUser -ObservedContext StandardUser -NetworkBehavior $NetworkBehavior
         return [pscustomobject][ordered]@{state='Completed';reasonCode=[string]$attempt.reasonCode;payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=([DateTimeOffset]$attempt.startedAt).ToString('o');completedAt=([DateTimeOffset]$attempt.completedAt).ToString('o');executionContext='StandardUser';attempts=1};cleanupVerified=$true}
     }
     if($ValidationScenario -notin @($Policy.validationScenarios)){throw 'The Network Topology validation scenario is not release-owned.'}
     $started=[DateTimeOffset]::UtcNow
-    $payload=Copy-NetworkTopologyCollectorPayload -Payload (New-NetworkTopologySyntheticPayload -Scenario $ValidationScenario -Policy $Policy) -Policy $Policy
+    $payload=Copy-NetworkTopologyCollectorPayload -Payload (New-NetworkTopologySyntheticPayload -Scenario $ValidationScenario -Policy $Policy) -Policy $Policy -NetworkBehavior $NetworkBehavior
     [pscustomobject][ordered]@{state='Completed';reasonCode='NETWORK.COLLECTION_COMPLETED';payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=$started.ToString('o');completedAt=([DateTimeOffset]::UtcNow).ToString('o');executionContext='Synthetic';attempts=1};cleanupVerified=$true}
 }
 
@@ -341,12 +346,12 @@ function Get-NetworkTopologyProcessDisposition {
 }
 
 function New-NetworkTopologyGapPayload {
-    param($Policy,[string]$State,[string]$ReasonCode,[string]$Relationship,[string]$ObservedContext)
+    param($Policy,[string]$State,[string]$ReasonCode,[string]$Relationship,[string]$ObservedContext,[ValidateSet('LocalOnly','MicrosoftConnectivityEnabled')][string]$NetworkBehavior='LocalOnly')
     [pscustomobject][ordered]@{
         sourceLocale='und';assessmentUserContextVerified=($Relationship -eq 'SameUser');processRelationship=$Relationship
-        networkBehavior='LocalOnly';outboundRequestCount=0;adapters=@();profiles=@();ipConfigurations=@();routes=@();resolvers=@()
+        networkBehavior=$NetworkBehavior;outboundRequestCount=0;adapters=@();profiles=@();ipConfigurations=@();routes=@();resolvers=@()
         proxy=[pscustomobject][ordered]@{enabled=$false;server=$null;autoConfigUrl=$null};vpnComponents=@();securityComponents=@();connections=@()
-        scopeStates=@($Policy.localScopes|ForEach-Object {New-NetworkTopologyScopeState $_.scopeId $State $ReasonCode})+@($Policy.networkDependentScopes|ForEach-Object {New-NetworkTopologyScopeState $_.scopeId $_.localOnlyState $_.reasonCode})
+        scopeStates=@($Policy.localScopes|ForEach-Object {New-NetworkTopologyScopeState $_.scopeId $State $ReasonCode})+@($Policy.networkDependentScopes|ForEach-Object {New-NetworkTopologyScopeState $_.scopeId $_.localOnlyState $(if($NetworkBehavior -eq 'LocalOnly'){$_.reasonCode}else{'NETWORK.CONNECTIVITY_OPERATIONS_NOT_IMPLEMENTED'})})
         executionContext=$ObservedContext
     }
 }
@@ -617,7 +622,7 @@ function Add-NetworkTopologyEvidenceRecord {
     foreach($scopeState in $payload.scopeStates){
         $suffix=([string]$scopeState.scopeId).Substring('scope:network.'.Length).Replace('.','-');$coverageId="coverage:network-$suffix`:$runId"
         $entry=[ordered]@{coverageId=$coverageId;scopeId=[string]$scopeState.scopeId;state=[string]$scopeState.state;observationIds=@($scopeObservationIds[[string]$scopeState.scopeId]);diagnosticIds=@()}
-        if($scopeState.state -ne 'Complete'){$diagnosticId="diagnostic:network-$suffix`:$runId";$entry.reasonCode=[string]$scopeState.reasonCode;$entry.diagnosticIds=@($diagnosticId);$diagnostics.Add([pscustomobject][ordered]@{diagnosticId=$diagnosticId;scopeId=[string]$scopeState.scopeId;phase='Collection';reasonCode=[string]$scopeState.reasonCode;operatorMessageId=if($scopeState.state -eq 'NotAttempted'){'network.local-only.not-attempted'}else{'network.local-collection.incomplete'}})}
+        if($scopeState.state -ne 'Complete'){$diagnosticId="diagnostic:network-$suffix`:$runId";$entry.reasonCode=[string]$scopeState.reasonCode;$entry.diagnosticIds=@($diagnosticId);$diagnostics.Add([pscustomobject][ordered]@{diagnosticId=$diagnosticId;scopeId=[string]$scopeState.scopeId;phase='Collection';reasonCode=[string]$scopeState.reasonCode;operatorMessageId=if($scopeState.reasonCode -eq 'NETWORK.CONNECTIVITY_OPERATIONS_NOT_IMPLEMENTED'){'network.connectivity.not-implemented'}elseif($scopeState.state -eq 'NotAttempted'){'network.local-only.not-attempted'}else{'network.local-collection.incomplete'}})}
         $coverage.Add([pscustomobject]$entry)
     }
     $Record.subjects=@($Record.subjects)+@($subjects);$Record.observations=@($Record.observations)+@($observations);$Record.provenance=@($Record.provenance)+@($provenance);$Record.coverage=@($Record.coverage)+@($coverage);$Record.diagnostics=@($Record.diagnostics)+@($diagnostics)
@@ -659,6 +664,7 @@ function New-NetworkTopologyPublicProjection {
     $payload=$CollectorResult.payload
     [pscustomobject][ordered]@{
         recordType='win-pcinfo.network-topology-validation';contractVersion='1.0.0'
+        networkBehavior=[string]$payload.networkBehavior
         localScopeCoverage=if(@($payload.scopeStates|Where-Object {$_.scopeId -in @($Policy.localScopes.scopeId) -and $_.state -ne 'Complete'}).Count){'Partial'}else{'Complete'}
         networkDependentCoverage='NotAttempted';adapterCount=@($payload.adapters).Count
         profileCount=@($payload.profiles).Count;routeCount=@($payload.routes).Count

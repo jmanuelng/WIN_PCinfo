@@ -18,7 +18,7 @@ function Get-SystemCollectionPlanPolicy {
         throw 'The SYSTEM policy JSON command does not have built-in provenance.'
     }
 
-    if ($script:SystemCollectionPlanPolicyBase64 -eq '__SYSTEM_COLLECTION_PLAN_POLICY_BASE64__') {
+    if ($script:SystemCollectionPlanPolicyBase64 -eq ('__SYSTEM_COLLECTION_PLAN_' + 'POLICY_BASE64__')) {
         $repositoryRoot = Split-Path -Parent $PSScriptRoot
         $path = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-system-collection-plan.json'
         $text = [System.IO.File]::ReadAllText(
