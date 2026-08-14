@@ -747,7 +747,8 @@ function New-DeviceReadinessReportBytes {
         [Parameter()] $EffectivePolicyPolicy,
         [Parameter()] $ResourceDependenciesPolicy,
         [Parameter()] $NetworkTopologyPolicy,
-        [Parameter()] $SoftwareInventoryPolicy
+        [Parameter()] $SoftwareInventoryPolicy,
+        [Parameter()] $CertificateTrustPolicy
     )
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
@@ -1132,6 +1133,40 @@ $identityGuidance
 <p>Display name and publisher are metadata, not identity. Versions are preserved as provider text without semantic-version assumptions. An observed registration does not prove compatibility, support, licensing, safety, health, approval, or migration success; confirm retained dependencies against the target design.</p>
 "@
     }else{''}
+    $certificateFinding=$Record.findings|Where-Object ruleId -eq 'rule:certificate.presence/1.0.0'|Select-Object -First 1
+    $certificateSection=if($null -ne $certificateFinding){
+        if($null -eq $CertificateTrustPolicy){throw 'Certificate Trust guidance requires its frozen policy definition.'}
+        $purposeRows=@($CertificateTrustPolicy.purposes|ForEach-Object {
+            $purpose=$_;$purposeCoverage=@($Record.coverage|Where-Object scopeId -eq $purpose.scopeId)[0]
+            $scopeSuffix=([string]$purpose.scopeId).Substring('scope:certificate.'.Length)
+            $presenceOutcome=[string]@($Record.findings|Where-Object findingId -like "finding:certificate-presence-$scopeSuffix`:*")[0].outcome
+            $validityOutcome=[string]@($Record.findings|Where-Object findingId -like "finding:certificate-validity-$scopeSuffix`:*")[0].outcome
+            $trustOutcome=[string]@($Record.findings|Where-Object findingId -like "finding:certificate-trust-$scopeSuffix`:*")[0].outcome
+            $keyOutcome=[string]@($Record.findings|Where-Object findingId -like "finding:certificate-key-protection-$scopeSuffix`:*")[0].outcome
+            '<li><strong>'+[Net.WebUtility]::HtmlEncode([string]$purpose.purposeId)+':</strong> '+
+                [Net.WebUtility]::HtmlEncode([string]$purposeCoverage.state)+'. Presence: '+
+                [Net.WebUtility]::HtmlEncode($presenceOutcome)+'. Validity: '+
+                [Net.WebUtility]::HtmlEncode($validityOutcome)+'. Chain and trust: '+
+                [Net.WebUtility]::HtmlEncode($trustOutcome)+'. Key protection: '+
+                [Net.WebUtility]::HtmlEncode($keyOutcome)+'. '+
+                [Net.WebUtility]::HtmlEncode([string]$purpose.limitation)+'</li>'
+        })
+        $certificateSubjects=@($Record.subjects|Where-Object kind -eq Certificate)
+        $certificateRows=@($certificateSubjects|ForEach-Object {
+            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $lines=@($items|Where-Object valueState -eq ObservedValue|ForEach-Object {
+                '<strong>'+[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+':</strong> '+[Net.WebUtility]::HtmlEncode([string]$_.value)
+            });'<li>'+($lines -join '<br>')+'</li>'
+        })
+@"
+<h2>Purpose-bound certificates and local trust</h2>
+<p>Presence, validity dates, offline chain completeness, Windows trust, and key-protection metadata are separate observations. Each conclusion applies only to management, authentication, device identity, code trust, TLS inspection, or service connectivity as declared below; it is not a universal trust verdict.</p>
+<h3>Purpose coverage and limitations</h3><ul>$($purposeRows -join '')</ul>
+<details><summary>Restricted certificate metadata</summary><ul>$($certificateRows -join '')</ul></details>
+<p>An inaccessible store, incomplete chain, expired certificate, or absent purpose remains an explicit coverage or advisory state. Offline evaluation disables certificate downloads and makes no revocation or remote-service claim.</p>
+<p>WIN-PCInfo opens only release-selected stores as read-only. It does not request a private-key handle, export a certificate or PFX, collect a password or recovery value, import or delete a certificate, enroll or renew, or change any trust configuration. Certificate values and fingerprints remain Restricted inside this protected package.</p>
+"@
+    }else{''}
     $html = @"
 <!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
 <h1>Device, Windows, activation, and power context</h1><p>$summary</p>
@@ -1159,6 +1194,7 @@ $effectivePolicySection
 $resourceSection
 $networkSection
 $softwareSection
+$certificateSection
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -1339,6 +1375,9 @@ function Get-DeviceReadinessFailureDisposition {
         'SOFTWARE.COLLECTOR_CLEANUP_INCOMPLETE' {
             [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
         }
+        'CERTIFICATE.COLLECTOR_CLEANUP_INCOMPLETE' {
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
+        }
         default {
             [pscustomobject]@{
                 outcome=if($CollectionStarted){'IntegrityFailed'}else{'NotStarted'}
@@ -1351,29 +1390,31 @@ function Get-DeviceReadinessFailureDisposition {
 function Get-DeviceReadinessSliceSelection {
     param(
         [bool]$DeviceFixture,[bool]$IdentityFixture,[bool]$AdministratorFixture,
-        [bool]$EffectivePolicyFixture,[bool]$ResourceFixture,[bool]$NetworkFixture,[bool]$SoftwareFixture,
+        [bool]$EffectivePolicyFixture,[bool]$ResourceFixture,[bool]$NetworkFixture,[bool]$SoftwareFixture,[bool]$CertificateFixture,
         [string]$NetworkBehavior
     )
     $isFixture=$DeviceFixture -or $IdentityFixture -or $AdministratorFixture -or
-        $EffectivePolicyFixture -or $ResourceFixture -or $NetworkFixture -or $SoftwareFixture
+        $EffectivePolicyFixture -or $ResourceFixture -or $NetworkFixture -or $SoftwareFixture -or $CertificateFixture
     $dependentFixture=$IdentityFixture -or $AdministratorFixture -or
-        $EffectivePolicyFixture -or $ResourceFixture -or $NetworkFixture -or $SoftwareFixture
+        $EffectivePolicyFixture -or $ResourceFixture -or $NetworkFixture -or $SoftwareFixture -or $CertificateFixture
     [pscustomobject][ordered]@{
         isFixture=$isFixture;usesSyntheticPrerequisites=$dependentFixture
         identityRequested=$dependentFixture -or -not $isFixture
         administratorRequested=$AdministratorFixture -or $EffectivePolicyFixture -or
-            $ResourceFixture -or $NetworkFixture -or $SoftwareFixture -or -not $isFixture
+            $ResourceFixture -or $NetworkFixture -or $SoftwareFixture -or $CertificateFixture -or -not $isFixture
         effectivePolicyRequested=$EffectivePolicyFixture -or $ResourceFixture -or
-            $NetworkFixture -or $SoftwareFixture -or -not $isFixture
-        resourceRequested=$ResourceFixture -or $NetworkFixture -or $SoftwareFixture -or -not $isFixture
-        networkRequested=$NetworkFixture -or $SoftwareFixture -or -not $isFixture
-        softwareRequested=$SoftwareFixture -or -not $isFixture
+            $NetworkFixture -or $SoftwareFixture -or $CertificateFixture -or -not $isFixture
+        resourceRequested=$ResourceFixture -or $NetworkFixture -or $SoftwareFixture -or $CertificateFixture -or -not $isFixture
+        networkRequested=$NetworkFixture -or $SoftwareFixture -or $CertificateFixture -or -not $isFixture
+        softwareRequested=$SoftwareFixture -or $CertificateFixture -or -not $isFixture
+        certificateRequested=$CertificateFixture -or -not $isFixture
     }
 }
 
 function Get-CombinedAssessmentContractSetVersion {
-    param($SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
-    if($null -ne $SoftwareCollector){'1.8.0'}
+    param($CertificateCollector,$SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
+    if($null -ne $CertificateCollector){'1.8.0'}
+    elseif($null -ne $SoftwareCollector){'1.8.0'}
     elseif($null -ne $NetworkCollector){'1.6.0'}
     elseif($null -ne $ResourceCollector){'1.5.0'}
     elseif($null -ne $EffectivePolicyCollector){'1.4.0'}
@@ -1390,6 +1431,7 @@ function Invoke-DeviceReadinessSlice {
         [Parameter()] [string] $ResourceDependenciesLiteralPath,
         [Parameter()] [string] $NetworkTopologyLiteralPath,
         [Parameter()] [string] $SoftwareInventoryLiteralPath,
+        [Parameter()] [string] $CertificateTrustLiteralPath,
         [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
         [Parameter()] $ApprovedRecipient,
@@ -1407,6 +1449,7 @@ function Invoke-DeviceReadinessSlice {
     $isResourceDependenciesFixture = -not [string]::IsNullOrWhiteSpace($ResourceDependenciesLiteralPath)
     $isNetworkTopologyFixture = -not [string]::IsNullOrWhiteSpace($NetworkTopologyLiteralPath)
     $isSoftwareInventoryFixture = -not [string]::IsNullOrWhiteSpace($SoftwareInventoryLiteralPath)
+    $isCertificateTrustFixture = -not [string]::IsNullOrWhiteSpace($CertificateTrustLiteralPath)
     $sliceSelection=Get-DeviceReadinessSliceSelection `
         -DeviceFixture $isDeviceFixture -IdentityFixture $isIdentityFixture `
         -AdministratorFixture $isAdministratorFixture `
@@ -1414,6 +1457,7 @@ function Invoke-DeviceReadinessSlice {
         -ResourceFixture $isResourceDependenciesFixture `
         -NetworkFixture $isNetworkTopologyFixture `
         -SoftwareFixture $isSoftwareInventoryFixture `
+        -CertificateFixture $isCertificateTrustFixture `
         -NetworkBehavior ([string]$PreparationPlan.network.behavior)
     $isFixture=[bool]$sliceSelection.isFixture
     $scenario = if ($isFixture) { '' } else { 'Actual' }
@@ -1424,7 +1468,9 @@ function Invoke-DeviceReadinessSlice {
     $effectivePolicy=$null;$effectivePolicyCollector=$null
     $resourcePolicy=$null;$resourceCollector=$null
     $networkPolicy=$null;$networkCollector=$null
-    $softwarePolicy=$null;$softwareCollector=$null;$recognitionCatalogResult=$null
+    $softwarePolicy=$null;$softwareCollector=$null
+    $certificatePolicy=$null;$certificateCollector=$null
+    $recognitionCatalogResult=$null
     $privilegeResult = $null; $identityCollector = $null; $systemResult = $null
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
@@ -1460,9 +1506,12 @@ function Invoke-DeviceReadinessSlice {
     $userResourceFinding='Indeterminate';$peripheralFinding='Indeterminate'
     $networkScenario=if($isNetworkTopologyFixture){''}else{'Live'}
     $softwareScenario=if($isSoftwareInventoryFixture){''}else{'Live'}
+    $certificateScenario=if($isCertificateTrustFixture){''}else{'Live'}
     $softwareMachineCoverage='NotAttempted';$softwareUserCoverage='NotAttempted'
     $softwareMachineFinding='Indeterminate';$softwareUserFinding='Indeterminate'
     $softwareContractReason='NotEvaluated'
+    $certificatePurposeCoverage='NotAttempted';$certificatePresenceFinding='Indeterminate'
+    $certificateValidityFinding='Indeterminate';$certificateTrustFinding='Indeterminate'
     $recognitionScenario='Evaluate';$recognitionAnnotationCount=0
     $recognizedExactCount=0;$recognizedCompositeCount=0;$ambiguousCount=0
     $unrecognizedCount=0;$notEvaluatedCount=0
@@ -1487,6 +1536,7 @@ function Invoke-DeviceReadinessSlice {
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $networkPolicy=Get-NetworkTopologyPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $softwarePolicy=Get-SoftwareInventoryPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $certificatePolicy=Get-CertificateTrustPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $recognitionCatalogResult=Get-SoftwareRecognitionCatalog `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -TestJsonCommand $TestJsonCommand
@@ -1553,12 +1603,22 @@ function Invoke-DeviceReadinessSlice {
                 $recognitionCatalogResult.logicalLoadValid=$false
             }
         }
+        elseif($isCertificateTrustFixture){
+            $firmwareScenario='Supported';$identityScenario='StandardUser'
+            $administratorScenario='LocalPrincipal';$effectivePolicyScenario='Workgroup'
+            $resourceScenario='Empty';$networkScenario='Empty';$softwareScenario='Empty'
+            $privilegeScenario='AcceptedElevation'
+            $certificateScenario=Read-CertificateTrustFixture -LiteralPath $CertificateTrustLiteralPath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $certificatePolicy
+            $scenario=if($certificateScenario -eq 'VirtualDevice'){'Virtual'}else{'Complete'}
+        }
         $identityRequested=[bool]$sliceSelection.identityRequested
         $administratorRequested=[bool]$sliceSelection.administratorRequested
         $effectivePolicyRequested=[bool]$sliceSelection.effectivePolicyRequested
         $resourceRequested=[bool]$sliceSelection.resourceRequested
         $networkRequested=[bool]$sliceSelection.networkRequested
         $softwareRequested=[bool]$sliceSelection.softwareRequested
+        $certificateRequested=[bool]$sliceSelection.certificateRequested
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
         if($identityRequested){
             $sliceStage='IDENTITY'
@@ -1611,6 +1671,17 @@ function Invoke-DeviceReadinessSlice {
             }
             $collectionStarted=$true
             if(-not [bool]$softwareCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Software Inventory worker cleanup was not verified.');$exception.Data['ReasonCode']='SOFTWARE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
+        }
+        if($certificateRequested){
+            $sliceStage='CERTIFICATE_TRUST'
+            $certificateCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
+                Invoke-CertificateTrustCollection -Policy $certificatePolicy -ValidationScenario $certificateScenario
+            }else{
+                Invoke-CertificateTrustCollection -Policy $certificatePolicy -Live `
+                    -AssessmentUserSid $(if($null -ne $identityCollector){[string]$identityCollector.privateAssessmentUserSid}else{''})
+            }
+            $collectionStarted=$true
+            if(-not [bool]$certificateCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Certificate Trust cleanup was not verified.');$exception.Data['ReasonCode']='CERTIFICATE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
         }
         $sliceStage='PRIVILEGE'
         if ($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) {
@@ -1920,6 +1991,25 @@ function Invoke-DeviceReadinessSlice {
                     }
                     $sourceValidation=$softwareSourceValidation
                 }
+                if($null -ne $certificateCollector){
+                    $sliceStage='CERTIFICATE_TRUST_SOURCE'
+                    $record=Add-CertificateTrustEvidenceRecord -Record $record `
+                        -CollectorResult $certificateCollector -Policy $certificatePolicy
+                    [byte[]]$certificateSourceBytes=[Text.UTF8Encoding]::new($false).GetBytes(
+                        (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                    )
+                    $certificateSourceValidation=Test-AssessmentContract `
+                        -Utf8Bytes $certificateSourceBytes `
+                        -ConvertFromJsonCommand $ConvertFromJsonCommand `
+                        -TestJsonCommand $TestJsonCommand
+                    if([bool]$certificateSourceValidation.accepted){
+                        $sliceStage='CERTIFICATE_TRUST_RULES'
+                        $record=Complete-ValidatedCertificateTrustAssessmentRecord `
+                            -Record $record -Policy $certificatePolicy `
+                            -ContractValidation $certificateSourceValidation
+                    }
+                    $sourceValidation=$certificateSourceValidation
+                }
                 $sliceStage='FINAL_SERIALIZE'
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
@@ -2072,6 +2162,16 @@ function Invoke-DeviceReadinessSlice {
                     $unrecognizedCount=@($record.softwareRecognition|Where-Object outcome -eq Unrecognized).Count
                     $notEvaluatedCount=@($record.softwareRecognition|Where-Object outcome -eq NotEvaluated).Count
                 }
+                if($null -ne $certificateCollector -and [bool]$sourceValidation.accepted){
+                    $sliceStage='CERTIFICATE_TRUST_METRICS'
+                    $applicableCertificateStates=@($certificateCollector.payload.scopeStates|Where-Object state -ne NotApplicable)
+                    $certificatePurposeCoverage=Get-CertificateTrustPurposeCoverage $certificateCollector.payload
+                    $fixtureScope=if($applicableCertificateStates.Count){[string]$applicableCertificateStates[0].scopeId}else{[string]$certificatePolicy.purposes[0].scopeId}
+                    $fixtureScopeSuffix=$fixtureScope.Substring('scope:certificate.'.Length)
+                    $certificatePresenceFinding=[string]@($record.findings|Where-Object findingId -like "finding:certificate-presence-$fixtureScopeSuffix`:*")[0].outcome
+                    $certificateValidityFinding=[string]@($record.findings|Where-Object findingId -like "finding:certificate-validity-$fixtureScopeSuffix`:*")[0].outcome
+                    $certificateTrustFinding=[string]@($record.findings|Where-Object findingId -like "finding:certificate-trust-$fixtureScopeSuffix`:*")[0].outcome
+                }
                 $findingOutcome = [string]@($record.findings | Where-Object {
                     $_.findingId -like 'finding:device-readiness:*'
                 })[0].outcome
@@ -2139,6 +2239,9 @@ function Invoke-DeviceReadinessSlice {
                         }else{$null}) `
                         -SoftwareInventoryPolicy $(if($null -ne $softwareCollector){
                             $softwarePolicy
+                        }else{$null}) `
+                        -CertificateTrustPolicy $(if($null -ne $certificateCollector){
+                            $certificatePolicy
                         }else{$null})
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportVerified = $reportText.StartsWith('<!doctype html>') -and
@@ -2190,6 +2293,13 @@ function Invoke-DeviceReadinessSlice {
                             $reportText.Contains('Software recognition is an annotation, not an Assessment Finding') -and
                             $reportText.Contains('Catalog revision')
                     }
+                    if($null -ne $certificateCollector){
+                        $reportVerified=$reportVerified -and
+                            $reportText.Contains('Purpose-bound certificates and local trust') -and
+                            $reportText.Contains('not a universal trust verdict') -and
+                            $reportText.Contains('does not request a private-key handle') -and
+                            $reportText.Contains('Certificate values and fingerprints remain Restricted')
+                    }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
                     $sliceStage='PACKAGE'
                     if ($isFixture) {
@@ -2217,6 +2327,7 @@ function Invoke-DeviceReadinessSlice {
                     }
                     else { 'RecoverablePartial' }
                     $contractSetVersion=Get-CombinedAssessmentContractSetVersion `
+                        -CertificateCollector $certificateCollector `
                         -SoftwareCollector $softwareCollector `
                         -NetworkCollector $networkCollector -ResourceCollector $resourceCollector `
                         -EffectivePolicyCollector $effectivePolicyCollector `
@@ -2402,6 +2513,19 @@ function Invoke-DeviceReadinessSlice {
         $projection|Add-Member -NotePropertyName unrecognizedCount -NotePropertyValue $unrecognizedCount
         $projection|Add-Member -NotePropertyName notEvaluatedCount -NotePropertyValue $notEvaluatedCount
         $projection|Add-Member -NotePropertyName recognitionCreatedAssessmentFinding -NotePropertyValue $false
+        $projection|Add-Member -NotePropertyName assessmentRecordValidated -NotePropertyValue $recordAccepted
+        $projection|Add-Member -NotePropertyName beginnerReportVerified -NotePropertyValue $reportVerified
+        $projection|Add-Member -NotePropertyName protectedPackageVerified -NotePropertyValue $packageVerified
+        $projection|Add-Member -NotePropertyName validationCleanupVerified -NotePropertyValue $cleanupVerified
+        Write-ContractRecord $projection -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if($isCertificateTrustFixture -and $null -ne $certificateCollector){
+        $projection=New-CertificateTrustPublicProjection -CollectorResult $certificateCollector
+        $projection|Add-Member -NotePropertyName scenario -NotePropertyValue $certificateScenario
+        $projection|Add-Member -NotePropertyName purposeCoverage -NotePropertyValue $certificatePurposeCoverage -Force
+        $projection|Add-Member -NotePropertyName presenceFinding -NotePropertyValue $certificatePresenceFinding
+        $projection|Add-Member -NotePropertyName validityFinding -NotePropertyValue $certificateValidityFinding
+        $projection|Add-Member -NotePropertyName trustFinding -NotePropertyValue $certificateTrustFinding
         $projection|Add-Member -NotePropertyName assessmentRecordValidated -NotePropertyValue $recordAccepted
         $projection|Add-Member -NotePropertyName beginnerReportVerified -NotePropertyValue $reportVerified
         $projection|Add-Member -NotePropertyName protectedPackageVerified -NotePropertyValue $packageVerified

@@ -1,6 +1,6 @@
 # Privileged Collection Plan
 
-WIN-PCInfo has a narrow Privileged Collection Plan runner that executes the four Administrator operations already shown in the approved Preparation Summary as one contiguous Privileged Collection Phase. The plan is immutable and run-bound. Its original no-evidence tracer remains the default validation operation. Requested firmware, direct-administrator, and Effective Policy slices may return only their exact private release projections; the runner is not a general assessment-evidence channel and cannot make Preview/Supported claims.
+WIN-PCInfo has a narrow Privileged Collection Plan runner that executes the three Administrator operations already shown in the approved Preparation Summary as one contiguous Privileged Collection Phase. The plan is immutable and run-bound. Its original no-evidence tracer remains the default validation operation. Requested firmware, direct-administrator, and Effective Policy slices may return only their exact private release projections; the runner is not a general assessment-evidence channel and cannot make Preview/Supported claims. Certificate Trust is deliberately outside this worker because its selected stores are observed read-only in the standard-user phase.
 
 The prepared LocalSystem operation is not added to this administrator worker. It is reduced again into a separate [SYSTEM Collection Sub-plan](system-collection-sub-plan.md), because Administrator and LocalSystem are different Windows trust contexts. The administrator worker carries only the frozen operations, including the direct local-administrator SID projection, and cannot become a SYSTEM command channel.
 
@@ -12,15 +12,15 @@ Preparation remains in the standard-user coordinator. It owns consent, the Asses
 
 After approval:
 
-1. The coordinator verifies the full Preparation Plan digest and extracts exactly four `Administrator` operations. A mismatch stops before UAC.
+1. The coordinator verifies the full Preparation Plan digest and extracts exactly three `Administrator` operations. A mismatch stops before UAC.
 2. If the coordinator already has an eligible Administrator token, it launches the worker directly and requests no elevation.
 3. Otherwise it uses Windows `runas` once. There is no retry and no second product prompt.
 4. Before launch, the coordinator creates and retains a protected kill-on-close Windows Job Object. The elevated worker joins that exact object before connecting or receiving the plan.
 5. Both processes verify the other process and PowerShell artifact through the connected named-pipe handle.
-6. The worker validates the nonce, plan digest, exact ordered operation IDs, and closed parameters. It runs all four in one phase and returns operation status plus only the specifically requested release-shaped firmware, direct-administrator, or Effective Policy projection.
+6. The worker validates the nonce, plan digest, exact ordered operation IDs, and closed parameters. It runs all three in one phase and returns operation status plus only the specifically requested release-shaped firmware, direct-administrator, or Effective Policy projection.
 7. Both processes close the one-use pipe. The coordinator queries its Job Object until the complete owned tree is empty, then closes the handle and permits standard-user work to continue.
 
-If the operator denies UAC, all four privileged operations become explicitly `Unavailable` with `PRIVILEGE.ELEVATION_DENIED`. Safe standard-user work continues and WIN-PCInfo never asks again.
+If the operator denies UAC, all three privileged operations become explicitly `Unavailable` with `PRIVILEGE.ELEVATION_DENIED`. Safe standard-user work continues and WIN-PCInfo never asks again.
 
 ## Why an alternate administrator does not become the assessed user
 
@@ -48,7 +48,7 @@ Coordinator to worker:
 - protocol version;
 - random run nonce;
 - approved Preparation Plan digest; and
-- the four release-owned operation IDs, each with a closed empty typed parameter object.
+- the three release-owned operation IDs, each with a closed empty typed parameter object.
 
 Worker to coordinator:
 

@@ -23,7 +23,6 @@ $preparationPlan = [pscustomobject][ordered]@{
             [pscustomobject][ordered]@{ operationId = 'observe-firmware-tpm'; context = 'Administrator'; parameters = [pscustomobject]@{} }
             [pscustomobject][ordered]@{ operationId = 'observe-local-administrators'; context = 'Administrator'; parameters = [pscustomobject]@{} }
             [pscustomobject][ordered]@{ operationId = 'observe-effective-policy'; context = 'Administrator'; parameters = [pscustomobject]@{} }
-            [pscustomobject][ordered]@{ operationId = 'observe-certificate-trust'; context = 'Administrator'; parameters = [pscustomobject]@{} }
         )
     }
 }
@@ -41,7 +40,7 @@ Assert-Equal 'PRIVILEGE.COMPLETED' $accepted.reasonCode `
     'accepted elevation returns a stable sanitized reason'
 Assert-Equal 1 $accepted.elevation.uacInteractionCount `
     'a normal launch makes exactly one front-loaded elevation request'
-Assert-Equal 4 @($accepted.operations).Count `
+Assert-Equal 3 @($accepted.operations).Count `
     'every Privileged Collection Plan operation executes inside one contiguous phase'
 Assert-Equal 1 @($accepted.operations.phaseId | Sort-Object -Unique).Count `
     'all Administrator operations share one Privileged Collection Phase identity'

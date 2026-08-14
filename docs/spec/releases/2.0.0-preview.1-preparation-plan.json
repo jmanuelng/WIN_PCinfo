@@ -16,7 +16,7 @@
     { "operationId": "observe-network-context", "capabilityId": "CAP-0011", "kind": "Collection", "phase": "StandardCollection", "context": "StandardUser", "network": "None" },
     { "operationId": "test-microsoft-connectivity", "capabilityId": "CAP-0012", "kind": "Collection", "phase": "StandardCollection", "context": "StandardUser", "network": "MicrosoftConnectivityEnabledOnly" },
     { "operationId": "test-enrollment-dns", "capabilityId": "CAP-0013", "kind": "Collection", "phase": "StandardCollection", "context": "StandardUser", "network": "MicrosoftConnectivityEnabledOnly" },
-    { "operationId": "observe-certificate-trust", "capabilityId": "CAP-0014", "kind": "Collection", "phase": "PrivilegedCollection", "context": "Administrator", "network": "None" },
+    { "operationId": "observe-certificate-trust", "capabilityId": "CAP-0014", "kind": "Collection", "phase": "StandardCollection", "context": "StandardUser", "network": "None" },
     { "operationId": "control-assessment-run", "capabilityId": "CAP-0015", "kind": "RunControl", "phase": "All", "context": "StandardUser", "network": "None" },
     { "operationId": "observe-mdm-system-context", "capabilityId": "CAP-0016", "kind": "Collection", "phase": "PrivilegedCollection", "context": "LocalSystem", "network": "None" },
     { "operationId": "record-incomplete-outcomes", "capabilityId": "CAP-0017", "kind": "RunControl", "phase": "All", "context": "StandardUser", "network": "None" },

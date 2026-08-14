@@ -142,7 +142,13 @@ param(
     # Internal release-validation seam. The fixture contains only a scenario
     # name; software identities remain inside the protected package.
     [Parameter(DontShow)]
-    [string] $SoftwareInventoryFixturePath
+    [string] $SoftwareInventoryFixturePath,
+
+    # Internal release-validation seam. The fixture selects one frozen
+    # certificate scenario; it cannot carry a certificate, fingerprint, key,
+    # password, store path, trust change, command, or collection authority.
+    [Parameter(DontShow)]
+    [string] $CertificateTrustFixturePath
 )
 
 Set-StrictMode -Version Latest

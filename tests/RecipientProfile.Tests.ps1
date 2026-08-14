@@ -101,10 +101,16 @@ try {
         Assert-Equal $true (Test-Json -Json $profileJson -SchemaFile (
             Join-Path $repositoryRoot 'schemas/recipient-profile.schema.json'
         )) 'the exported profile satisfies its closed schema'
-        if ($profileJson -match '(?i)privateKey|pfx|password|credential|recoveryPhrase') {
+        $profile = $profileJson | ConvertFrom-Json -Depth 10
+        # DER is randomized public-certificate Base64 and may contain a short
+        # text token such as "pfx" by chance. Secret-shaped property names are
+        # prohibited; public bytes are verified separately below.
+        $profilePropertyNames = @($profile.PSObject.Properties.Name) +
+            @($profile.syntheticRoundTrip.PSObject.Properties.Name)
+        if (($profilePropertyNames -join '|') -match
+            '(?i)privateKey|pfx|password|credential|recoveryPhrase') {
             throw 'A Recipient Profile exposed prohibited private or recovery material.'
         }
-        $profile = $profileJson | ConvertFrom-Json -Depth 10
         Assert-Equal 3072 $profile.rsaKeyBits 'setup defaults to RSA 3072'
         $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
             [System.Convert]::FromBase64String([string] $profile.certificateDerBase64)

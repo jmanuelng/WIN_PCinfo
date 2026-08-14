@@ -22,13 +22,12 @@
     },
     "operations": {
       "type": "array",
-      "minItems": 4,
-      "maxItems": 4,
+      "minItems": 3,
+      "maxItems": 3,
       "prefixItems": [
         { "$ref": "#/$defs/firmwareTpm" },
         { "$ref": "#/$defs/localAdministrators" },
-        { "$ref": "#/$defs/effectivePolicy" },
-        { "$ref": "#/$defs/certificateTrust" }
+        { "$ref": "#/$defs/effectivePolicy" }
       ],
       "items": false
     },
@@ -103,7 +102,6 @@
     },
     "firmwareTpm": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-firmware-tpm" } } }] },
     "localAdministrators": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-local-administrators" } } }] },
-    "effectivePolicy": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-effective-policy" } } }] },
-    "certificateTrust": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-certificate-trust" } } }] }
+    "effectivePolicy": { "allOf": [{ "$ref": "#/$defs/operation" }, { "properties": { "operationId": { "const": "observe-effective-policy" } } }] }
   }
 }
