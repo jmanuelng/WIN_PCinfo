@@ -1,9 +1,9 @@
 # WIN-PCInfo
 
-WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect narrow Device, Windows, firmware-security, domain/Entra registration, Assessment User Context, work-or-school, enrollment, direct local-administrator, three-layer applied/local-policy, user-resource/peripheral migration-dependency, and offline local-network-topology context after approval, validate typed evidence, supervise approved work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, protect an assessment package for the local user and optionally one preapproved recipient, reopen one requested artifact safely, exercise warned restricted HTML export, and drive each validation path to one honest terminal outcome.
+WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect narrow Device, Windows, firmware-security, domain/Entra registration, Assessment User Context, work-or-school, enrollment, direct local-administrator, three-layer applied/local-policy, user-resource/peripheral migration-dependency, offline local-network-topology, and safe software-registration context after approval, validate typed evidence, supervise approved work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, protect an assessment package for the local user and optionally one preapproved recipient, reopen one requested artifact safely, exercise warned restricted HTML export, and drive each validation path to one honest terminal outcome.
 
 > [!IMPORTANT]
-> The v2 application implements only the narrow device-context, firmware-security, identity/enrollment, direct local-administrator, applied/local-policy, user-resource/peripheral dependency, and Local Only network-topology slices described below. It is not the complete assessment and does not by itself create a Preview/Supported capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance; repository validation uses closed synthetic fixtures.
+> The v2 application implements only the narrow device-context, firmware-security, identity/enrollment, direct local-administrator, applied/local-policy, user-resource/peripheral dependency, Local Only network-topology, and software-registration slices described below. It is not the complete assessment and does not by itself create a Preview/Supported capability claim. The locally built development artifact is intentionally unsigned and fails the artifact-trust gate, so it cannot self-assert release provenance; repository validation uses closed synthetic fixtures.
 
 ## Try the v2 launch safely
 
@@ -31,6 +31,8 @@ To understand the locale-neutral identity slice—verified Assessment User Conte
 To understand the bounded mapped-resource, printer, driver, and common-peripheral slice—including its Assessment User boundary, exact source catalog, prohibited material, absence semantics, privacy rules, and advisory migration guidance—read [User resources and peripheral migration dependencies](docs/resource-peripheral-dependencies.md).
 
 To understand the offline network slice—local adapters, profiles, addressing, routes, configured resolvers/proxy, VPN and security registrations, existing local connections, three deliberately unattempted network-dependent checks, privacy boundaries, and proof that Local Only makes zero assessment network requests—read [Local network topology and Local Only](docs/network-topology-and-local-only.md).
+
+To understand the read-only software slice—explicit 32-bit and 64-bit uninstall registration views, inventory-only MSI APIs, Windows package identities, Assessment User context, bounded gaps, Restricted identities, and the prohibition on `Win32_Product` and repair actions—read [Safe Software Inventory](docs/software-inventory.md).
 
 To understand the direct local-administrator slice—well-known-SID group selection, direct-only membership, unresolved and nested identities, alternate-administrator separation, Restricted evidence, and non-removal guidance—read [Local administrator exposure and execution context](docs/local-administrator-exposure.md).
 
@@ -72,7 +74,7 @@ The `ComputerInfo.ps1` script collects the following information:
 
 4. **Enterprise Enrollment DNS Resolution**: The script tests DNS resolution for Enterprise Enrollment and Enterprise Registration, using both the default DNS server and a set of known DNS servers. This is done using the "Resolve-DnsName" cmdlet.
 
-5. **Software Inventory**: The script generates a list of all installed software, including details such as the software name, version, vendor, installation date, and more. This information is gathered using the "Get-WmiObject" cmdlet with the "Win32_Product" class.
+5. **Software Inventory**: The legacy script generates a list of installed software with `Get-WmiObject Win32_Product`. That legacy source can trigger Windows Installer consistency work and is deliberately **not** used by the v2 application. The v2 safe replacement is documented in [Safe Software Inventory](docs/software-inventory.md).
 
 6. **Battery Report**: If the computer is a laptop, the script generates a detailed battery report using the `powercfg /batteryreport` command.
 

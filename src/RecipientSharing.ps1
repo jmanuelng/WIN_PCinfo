@@ -12,7 +12,7 @@ function Get-RecipientSharingSha256 {
 }
 
 function Get-RecipientSharingPolicy {
-    if ($script:RecipientSharingPolicyBase64 -eq '__RECIPIENT_SHARING_POLICY_BASE64__') {
+    if ($script:RecipientSharingPolicyBase64 -eq ('__RECIPIENT_SHARING_' + 'POLICY_BASE64__')) {
         $path = Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
         [byte[]] $bytes = [System.IO.File]::ReadAllBytes($path)
@@ -30,7 +30,7 @@ function Get-RecipientSharingPolicy {
 }
 
 function Get-RecipientProfileSchemaText {
-    if ($script:RecipientProfileSchemaBase64 -eq '__RECIPIENT_PROFILE_SCHEMA_BASE64__') {
+    if ($script:RecipientProfileSchemaBase64 -eq ('__RECIPIENT_PROFILE_' + 'SCHEMA_BASE64__')) {
         $path = Join-Path (Split-Path -Parent $PSScriptRoot) 'schemas/recipient-profile.schema.json'
         [byte[]] $bytes = [System.IO.File]::ReadAllBytes($path)
         $expectedDigest = Get-RecipientSharingSha256 $bytes

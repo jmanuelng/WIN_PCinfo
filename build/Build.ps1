@@ -24,6 +24,7 @@ $sourcePaths = @(
     'src/EffectivePolicy.ps1'
     'src/ResourceDependencies.ps1'
     'src/NetworkTopology.ps1'
+    'src/SoftwareInventory.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -73,6 +74,8 @@ $resourceDependenciesPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/
 $resourceDependenciesSchemaPath = Join-Path $repositoryRoot 'schemas/resource-dependencies.schema.json'
 $networkTopologyPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-network-topology.json'
 $networkTopologySchemaPath = Join-Path $repositoryRoot 'schemas/network-topology.schema.json'
+$softwareInventoryPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-software-inventory.json'
+$softwareInventorySchemaPath = Join-Path $repositoryRoot 'schemas/software-inventory.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
 $assessmentPackageManifestSchemaPath = Join-Path $repositoryRoot 'schemas/assessment-package-manifest.schema.json'
 $recipientSharingPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-recipient-sharing.json'
@@ -95,7 +98,8 @@ foreach ($requiredDefinitionPath in @(
     $administratorExposurePolicyPath, $administratorExposureSchemaPath,
     $effectivePolicyPolicyPath, $effectivePolicySchemaPath,
     $resourceDependenciesPolicyPath, $resourceDependenciesSchemaPath,
-    $networkTopologyPolicyPath, $networkTopologySchemaPath
+    $networkTopologyPolicyPath, $networkTopologySchemaPath,
+    $softwareInventoryPolicyPath, $softwareInventorySchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
         throw "Preparation definition input is missing: $requiredDefinitionPath"
@@ -199,6 +203,12 @@ $networkTopologyPolicyDigest = Get-Sha256Hex -Bytes $networkTopologyPolicyBytes
 $networkTopologyPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $networkTopologyPolicyBytes
 )
+$softwareInventoryPolicyBytes = Get-Utf8LfBytes -LiteralPath $softwareInventoryPolicyPath
+$softwareInventoryPolicyBase64 = [Convert]::ToBase64String($softwareInventoryPolicyBytes)
+$softwareInventoryPolicyDigest = Get-Sha256Hex -Bytes $softwareInventoryPolicyBytes
+$softwareInventoryPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $softwareInventoryPolicyBytes
+)
 $effectivePolicyPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $effectivePolicyPolicyBytes
 )
@@ -243,6 +253,9 @@ if (-not (Test-Json -Json $resourceDependenciesPolicyJson -SchemaFile $resourceD
 }
 if (-not (Test-Json -Json $networkTopologyPolicyJson -SchemaFile $networkTopologySchemaPath)) {
     throw 'The Network Topology policy does not satisfy its release schema.'
+}
+if (-not (Test-Json -Json $softwareInventoryPolicyJson -SchemaFile $softwareInventorySchemaPath)) {
+    throw 'The Software Inventory policy does not satisfy its release schema.'
 }
 $selectedIds = @($releaseDefinition.profile.selectedCapabilityIds)
 $releaseEnabledIds = @($releaseDefinition.releaseEnabledCapabilityIds)
@@ -295,6 +308,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/effective-policy.schema.json'
     'schemas/resource-dependencies.schema.json'
     'schemas/network-topology.schema.json'
+    'schemas/software-inventory.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -310,6 +324,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-effective-policy.json'
     'docs/spec/releases/2.0.0-preview.1-resource-dependencies.json'
     'docs/spec/releases/2.0.0-preview.1-network-topology.json'
+    'docs/spec/releases/2.0.0-preview.1-software-inventory.json'
 )
 $applicationResources = @(
     foreach ($path in $applicationResourcePaths) {
@@ -341,6 +356,7 @@ $preparationDefinition = [pscustomobject][ordered]@{
     effectivePolicy = ($effectivePolicyPolicyJson | ConvertFrom-Json -Depth 20)
     resourceDependencies = ($resourceDependenciesPolicyJson | ConvertFrom-Json -Depth 20)
     networkTopology = ($networkTopologyPolicyJson | ConvertFrom-Json -Depth 20)
+    softwareInventory = ($softwareInventoryPolicyJson | ConvertFrom-Json -Depth 20)
     requiredFreeDiskMiB = [int] $preparationPlan.requiredFreeDiskMiB
     governingResources = @(
         foreach ($path in @(
@@ -531,6 +547,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__NETWORK_TOPOLOGY_POLICY_SHA256__', $networkTopologyPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/SoftwareInventory.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__SOFTWARE_INVENTORY_POLICY_BASE64__', $softwareInventoryPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__SOFTWARE_INVENTORY_POLICY_SHA256__', $softwareInventoryPolicyDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"

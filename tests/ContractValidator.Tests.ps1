@@ -90,7 +90,7 @@ Assert-Equal 'CONTRACT.UNICODE_INVALID' $invalidUnicodeValidation.reasonCode `
 Write-Output 'PASS: invalid Unicode fails closed while multilingual UTF-8 remains accepted.'
 
 $oversizePath = Join-Path $generatedFixtureRoot 'oversize.json'
-$oversizeText = '{"syntheticPadding":"' + ('x' * 524288) + '"}'
+$oversizeText = '{"syntheticPadding":"' + ('x' * 2097152) + '"}'
 [System.IO.File]::WriteAllText($oversizePath, $oversizeText, [System.Text.UTF8Encoding]::new($false))
 $oversize = Invoke-ContractFixture -LiteralPath $oversizePath
 $oversizeValidation = $oversize.Validation

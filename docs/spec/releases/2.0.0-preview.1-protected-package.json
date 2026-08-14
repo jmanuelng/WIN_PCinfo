@@ -2,12 +2,12 @@
   "kind": "win-pcinfo.protected-package-policy",
   "contractVersion": "1.0.0",
   "release": "2.0.0-preview.1",
-  "policyId": "win-pcinfo.protected-package/1.0.0",
+  "policyId": "win-pcinfo.protected-package/1.1.0",
   "envelope": {
     "magic": "WINPCPK1",
     "formatVersion": 1,
     "maximumHeaderUtf8Bytes": 8192,
-    "maximumPlaintextBytes": 1048576,
+    "maximumPlaintextBytes": 2621440,
     "contentEncryption": {
       "algorithm": "AES-256-GCM",
       "keyBytes": 32,
@@ -38,11 +38,11 @@
     "manifestContract": "win-pcinfo.assessment-package-manifest/1.0.0",
     "deterministic": true,
     "artifacts": [
-      { "relativePath": "assessment-record.json", "mediaType": "application/json", "required": true, "maximumBytes": 524288 },
+      { "relativePath": "assessment-record.json", "mediaType": "application/json", "required": true, "maximumBytes": 2097152 },
       { "relativePath": "assessment-report.html", "mediaType": "text/html", "required": true, "maximumBytes": 262144 }
     ],
     "maximumEntryCount": 3,
-    "maximumArchiveBytes": 1048576
+    "maximumArchiveBytes": 2621440
   },
   "manifest": {
     "governingVersions": ["productRelease", "assessmentContractSet", "packagePolicy", "manifestContract"],

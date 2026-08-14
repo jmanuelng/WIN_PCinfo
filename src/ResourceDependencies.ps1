@@ -9,7 +9,7 @@ function Get-ResourceDependenciesSha256 {
 function Get-ResourceDependenciesPolicy {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
-    if($script:ResourceDependenciesPolicyBase64 -eq '__RESOURCE_DEPENDENCIES_POLICY_BASE64__'){
+    if($script:ResourceDependenciesPolicyBase64 -eq ('__RESOURCE_DEPENDENCIES_' + 'POLICY_BASE64__')){
         $path=Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-resource-dependencies.json'
         $text=[IO.File]::ReadAllText($path,[Text.UTF8Encoding]::new($false,$true)).Replace("`r`n","`n").Replace("`r","`n")

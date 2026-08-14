@@ -16,8 +16,18 @@ Assert-Equal $true (Test-Json -Json $policyJson -SchemaFile $schemaPath) `
     'the release Protected Package policy satisfies its closed schema'
 $policy = $policyJson | ConvertFrom-Json -Depth 30
 
-Assert-Equal 'win-pcinfo.protected-package/1.0.0' $policy.policyId `
+Assert-Equal 'win-pcinfo.protected-package/1.1.0' $policy.policyId `
     'package protection has one release-owned identity'
+Assert-Equal 2097152 @($policy.innerPackage.artifacts | Where-Object relativePath -eq 'assessment-record.json')[0].maximumBytes `
+    'the package admits the release Assessment Contract document ceiling'
+Assert-Equal 262144 @($policy.innerPackage.artifacts | Where-Object relativePath -eq 'assessment-report.html')[0].maximumBytes `
+    'the report retains its bounded Restricted Report Export ceiling'
+Assert-Equal 2621440 $policy.innerPackage.maximumArchiveBytes `
+    'the deterministic archive has one versioned release ceiling'
+Assert-Equal 2621440 $policy.envelope.maximumPlaintextBytes `
+    'the authenticated plaintext has the same versioned release ceiling'
+Assert-Equal 160 ([int]($policy.envelope.maximumPlaintextBytes / $policy.envelope.contentEncryption.chunkPlaintextBytes)) `
+    'the maximum envelope is exactly 160 authenticated chunks'
 Assert-Equal 'AES-256-GCM' $policy.envelope.contentEncryption.algorithm `
     'content uses the required authenticated encryption algorithm'
 Assert-Equal 32 $policy.envelope.contentEncryption.keyBytes `

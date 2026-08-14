@@ -9,13 +9,13 @@
     "kind": { "const": "win-pcinfo.protected-package-policy" },
     "contractVersion": { "const": "1.0.0" },
     "release": { "const": "2.0.0-preview.1" },
-    "policyId": { "const": "win-pcinfo.protected-package/1.0.0" },
+    "policyId": { "const": "win-pcinfo.protected-package/1.1.0" },
     "envelope": {
       "type": "object", "additionalProperties": false,
       "required": ["magic", "formatVersion", "maximumHeaderUtf8Bytes", "maximumPlaintextBytes", "contentEncryption", "keyProtection", "associatedData", "outerMetadata"],
       "properties": {
         "magic": { "const": "WINPCPK1" }, "formatVersion": { "const": 1 },
-        "maximumHeaderUtf8Bytes": { "const": 8192 }, "maximumPlaintextBytes": { "const": 1048576 },
+        "maximumHeaderUtf8Bytes": { "const": 8192 }, "maximumPlaintextBytes": { "const": 2621440 },
         "contentEncryption": {
           "type": "object", "additionalProperties": false,
           "required": ["algorithm", "keyBytes", "chunkPlaintextBytes", "nonceBytes", "noncePrefixBytes", "tagBytes", "freshKeyPerPackage", "uniqueNoncePerChunk"],
@@ -59,10 +59,10 @@
         "format": { "const": "ZIP-Store" }, "manifestPath": { "const": "package-manifest.json" },
         "manifestContract": { "const": "win-pcinfo.assessment-package-manifest/1.0.0" }, "deterministic": { "const": true },
         "artifacts": { "type": "array", "prefixItems": [
-          { "type":"object", "additionalProperties":false, "required":["relativePath","mediaType","required","maximumBytes"], "properties":{"relativePath":{"const":"assessment-record.json"},"mediaType":{"const":"application/json"},"required":{"const":true},"maximumBytes":{"const":524288}} },
+          { "type":"object", "additionalProperties":false, "required":["relativePath","mediaType","required","maximumBytes"], "properties":{"relativePath":{"const":"assessment-record.json"},"mediaType":{"const":"application/json"},"required":{"const":true},"maximumBytes":{"const":2097152}} },
           { "type":"object", "additionalProperties":false, "required":["relativePath","mediaType","required","maximumBytes"], "properties":{"relativePath":{"const":"assessment-report.html"},"mediaType":{"const":"text/html"},"required":{"const":true},"maximumBytes":{"const":262144}} }
         ], "items": false, "minItems": 2, "maxItems": 2 },
-        "maximumEntryCount": { "const": 3 }, "maximumArchiveBytes": { "const": 1048576 }
+        "maximumEntryCount": { "const": 3 }, "maximumArchiveBytes": { "const": 2621440 }
       }
     },
     "manifest": {

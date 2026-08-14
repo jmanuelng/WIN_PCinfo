@@ -65,6 +65,18 @@ foreach($case in $cases){
     if($result.StandardError){throw "$($case.scenario) wrote stderr: $($result.StandardError)"}
 }
 
+$enabled=Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+    '-Mode','Automation','-RequestPath',(Join-Path $PSScriptRoot 'fixtures/automation-request-connectivity.json'),
+    '-AcceptPreparation','-PreparationFixturePath',$preparationPath,
+    '-NetworkTopologyFixturePath',(Join-Path $PSScriptRoot 'fixtures/network-empty.json')
+)
+$enabledValidation=@($enabled.Records|Where-Object recordType -eq 'win-pcinfo.network-topology-validation')
+Assert-Equal 10 $enabled.ExitCode 'unimplemented approved connectivity operations finish with explicit gaps'
+Assert-Equal 'MicrosoftConnectivityEnabled' $enabledValidation[0].networkBehavior `
+    'the generated public seam preserves the approved enabled behavior'
+Assert-Equal $true $enabledValidation[0].beginnerReportVerified `
+    'the enabled-mode report describes unimplemented operations rather than Local Only execution'
+
 $invalid=Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
     '-Mode','Automation','-RequestPath',$requestPath,'-AcceptPreparation',
     '-PreparationFixturePath',$preparationPath,'-NetworkTopologyFixturePath',(

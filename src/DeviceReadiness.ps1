@@ -4,7 +4,7 @@ $script:DeviceReadinessPolicyDigest = '__DEVICE_READINESS_POLICY_SHA256__'
 function Get-DeviceReadinessPolicy {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
-    if ($script:DeviceReadinessPolicyBase64 -eq '__DEVICE_READINESS_POLICY_BASE64__') {
+    if ($script:DeviceReadinessPolicyBase64 -eq ('__DEVICE_READINESS_' + 'POLICY_BASE64__')) {
         $path = Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-device-readiness.json'
         $bytes = Get-CanonicalSupervisorTextBytes -LiteralPath $path
@@ -746,7 +746,8 @@ function New-DeviceReadinessReportBytes {
         [Parameter()] $AdministratorExposurePolicy,
         [Parameter()] $EffectivePolicyPolicy,
         [Parameter()] $ResourceDependenciesPolicy,
-        [Parameter()] $NetworkTopologyPolicy
+        [Parameter()] $NetworkTopologyPolicy,
+        [Parameter()] $SoftwareInventoryPolicy
     )
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
@@ -1042,6 +1043,14 @@ $identityGuidance
         $localOnlyFinding=@($Record.findings|Where-Object ruleId -eq 'rule:network.local-only-coverage/1.0.0')[0]
         $localCoverage=@($Record.coverage|Where-Object scopeId -in @($NetworkTopologyPolicy.localScopes.scopeId))
         $networkCoverage=@($Record.coverage|Where-Object scopeId -in @($NetworkTopologyPolicy.networkDependentScopes.scopeId))
+        $connectivityEnabled = @($networkCoverage | Where-Object reasonCode -eq 'NETWORK.CONNECTIVITY_OPERATIONS_NOT_IMPLEMENTED').Count -gt 0
+        $networkModeHeading = if($connectivityEnabled){'Local network topology and Microsoft Connectivity Enabled coverage'}else{'Local network topology and Local Only coverage'}
+        $networkModeSummary = if($connectivityEnabled){
+            'The operator approved Microsoft Connectivity Enabled, but this release does not implement those bounded operations. WIN-PCInfo made zero DNS, TCP, TLS, HTTP, catalog, update, or telemetry requests and records each operation as NotAttempted.'
+        }else{
+            'In Local Only mode WIN-PCInfo made zero DNS, TCP, TLS, HTTP, catalog, update, or telemetry requests. Network-dependent checks remain explicitly NotAttempted rather than being reported as successful or absent.'
+        }
+        $networkCoverageLabel = if($connectivityEnabled){'Enabled-operation coverage finding'}else{'Local Only coverage finding'}
         $topologyRows=@($Record.observations|Where-Object fieldId -like 'field:network.*'|ForEach-Object {
             $renderedValue=if($_.valueState -eq 'ObservedValue'){
                 [Net.WebUtility]::HtmlEncode([string]$_.value)
@@ -1055,15 +1064,34 @@ $identityGuidance
                 [Net.WebUtility]::HtmlEncode([string]$_.reasonCode)+')</li>'
         })
 @"
-<h2>Local network topology and Local Only coverage</h2>
-<p>WIN-PCInfo observed only release-cataloged local Windows state. In Local Only mode it made zero DNS, TCP, TLS, HTTP, catalog, update, or telemetry requests. Network-dependent checks remain explicitly NotAttempted rather than being reported as successful or absent.</p>
+<h2>$networkModeHeading</h2>
+<p>WIN-PCInfo observed only release-cataloged local Windows state. $networkModeSummary</p>
 <dl><dt>Local scopes</dt><dd>$($localCoverage.Count)</dd><dt>Network-dependent scopes</dt><dd>$($networkCoverage.Count)</dd>
 <dt>Local configuration finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$networkFinding.outcome))</dd>
 <dt>Network component finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$componentFinding.outcome))</dd>
-<dt>Local Only coverage finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$localOnlyFinding.outcome))</dd></dl>
+<dt>$networkCoverageLabel</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$localOnlyFinding.outcome))</dd></dl>
 <h3>Network-dependent checks not attempted</h3><ul>$($probeRows -join '')</ul>
 <details><summary>Restricted local topology evidence</summary><ul>$($topologyRows -join '')</ul></details>
 <p>Product or component names are inventory evidence only. They do not establish health, approval, reachability, trust, compliance, or future compatibility. WIN-PCInfo does not change an adapter, route, resolver, proxy, VPN, firewall, connection, or other network configuration.</p>
+"@
+    }else{''}
+    $softwareFinding=$Record.findings|Where-Object ruleId -eq 'rule:software.machine-inventory/1.0.0'|Select-Object -First 1
+    $softwareSection=if($null -ne $softwareFinding){
+        if($null -eq $SoftwareInventoryPolicy){throw 'Software Inventory guidance requires its frozen policy definition.'}
+        $userFinding=@($Record.findings|Where-Object ruleId -eq 'rule:software.assessment-user-inventory/1.0.0')[0]
+        $softwareCoverage=@($Record.coverage|Where-Object scopeId -in @($SoftwareInventoryPolicy.scopes.scopeId))
+        $softwareSubjects=@($Record.subjects|Where-Object subjectId -like 'subject:software:*')
+        $rows=@($softwareSubjects|ForEach-Object {
+            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $lines=@($items|Where-Object valueState -eq ObservedValue|ForEach-Object {[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+': '+[Net.WebUtility]::HtmlEncode([string]$_.value)})
+            '<li>'+($lines -join '<br>')+'</li>'
+        })
+@"
+<h2>Installed software and application migration inventory</h2>
+<p>Machine finding: $([Net.WebUtility]::HtmlEncode([string]$softwareFinding.outcome)). Assessment User finding: $([Net.WebUtility]::HtmlEncode([string]$userFinding.outcome)). Covered source contexts: $($softwareCoverage.Count). Distinct registrations: $($softwareSubjects.Count).</p>
+<p>WIN-PCInfo reads explicit 32-bit and 64-bit uninstall registration views, inventory-only Windows Installer APIs, and Windows package identities. It never invokes Win32_Product, a consistency check, repair, install, uninstall, package-content inspection, binary hashing, profile loading, or network lookup.</p>
+<details><summary>Restricted installed-software evidence</summary><ul>$($rows -join '')</ul></details>
+<p>Display name and publisher are metadata, not identity. Versions are preserved as provider text without semantic-version assumptions. An observed registration does not prove compatibility, support, licensing, safety, health, approval, or migration success; confirm retained dependencies against the target design.</p>
 "@
     }else{''}
     $html = @"
@@ -1092,6 +1120,7 @@ $administratorSection
 $effectivePolicySection
 $resourceSection
 $networkSection
+$softwareSection
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -1269,6 +1298,9 @@ function Get-DeviceReadinessFailureDisposition {
         'NETWORK.COLLECTOR_CLEANUP_INCOMPLETE' {
             [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
         }
+        'SOFTWARE.COLLECTOR_CLEANUP_INCOMPLETE' {
+            [pscustomobject]@{outcome='CleanupIncomplete';exitCode=60;reasonCode=$ReasonCode;cleanupVerified=$false}
+        }
         default {
             [pscustomobject]@{
                 outcome=if($CollectionStarted){'IntegrityFailed'}else{'NotStarted'}
@@ -1281,28 +1313,30 @@ function Get-DeviceReadinessFailureDisposition {
 function Get-DeviceReadinessSliceSelection {
     param(
         [bool]$DeviceFixture,[bool]$IdentityFixture,[bool]$AdministratorFixture,
-        [bool]$EffectivePolicyFixture,[bool]$ResourceFixture,[bool]$NetworkFixture,
+        [bool]$EffectivePolicyFixture,[bool]$ResourceFixture,[bool]$NetworkFixture,[bool]$SoftwareFixture,
         [string]$NetworkBehavior
     )
     $isFixture=$DeviceFixture -or $IdentityFixture -or $AdministratorFixture -or
-        $EffectivePolicyFixture -or $ResourceFixture -or $NetworkFixture
+        $EffectivePolicyFixture -or $ResourceFixture -or $NetworkFixture -or $SoftwareFixture
     $dependentFixture=$IdentityFixture -or $AdministratorFixture -or
-        $EffectivePolicyFixture -or $ResourceFixture -or $NetworkFixture
+        $EffectivePolicyFixture -or $ResourceFixture -or $NetworkFixture -or $SoftwareFixture
     [pscustomobject][ordered]@{
         isFixture=$isFixture;usesSyntheticPrerequisites=$dependentFixture
         identityRequested=$dependentFixture -or -not $isFixture
         administratorRequested=$AdministratorFixture -or $EffectivePolicyFixture -or
-            $ResourceFixture -or $NetworkFixture -or -not $isFixture
+            $ResourceFixture -or $NetworkFixture -or $SoftwareFixture -or -not $isFixture
         effectivePolicyRequested=$EffectivePolicyFixture -or $ResourceFixture -or
-            $NetworkFixture -or -not $isFixture
-        resourceRequested=$ResourceFixture -or $NetworkFixture -or -not $isFixture
-        networkRequested=$NetworkFixture -or (-not $isFixture -and $NetworkBehavior -eq 'LocalOnly')
+            $NetworkFixture -or $SoftwareFixture -or -not $isFixture
+        resourceRequested=$ResourceFixture -or $NetworkFixture -or $SoftwareFixture -or -not $isFixture
+        networkRequested=$NetworkFixture -or $SoftwareFixture -or -not $isFixture
+        softwareRequested=$SoftwareFixture -or -not $isFixture
     }
 }
 
 function Get-CombinedAssessmentContractSetVersion {
-    param($NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
-    if($null -ne $NetworkCollector){'1.6.0'}
+    param($SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
+    if($null -ne $SoftwareCollector){'1.7.0'}
+    elseif($null -ne $NetworkCollector){'1.6.0'}
     elseif($null -ne $ResourceCollector){'1.5.0'}
     elseif($null -ne $EffectivePolicyCollector){'1.4.0'}
     elseif($null -ne $AdministratorCollector){'1.3.0'}
@@ -1317,6 +1351,7 @@ function Invoke-DeviceReadinessSlice {
         [Parameter()] [string] $EffectivePolicyLiteralPath,
         [Parameter()] [string] $ResourceDependenciesLiteralPath,
         [Parameter()] [string] $NetworkTopologyLiteralPath,
+        [Parameter()] [string] $SoftwareInventoryLiteralPath,
         [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
         [Parameter()] $ApprovedRecipient,
@@ -1333,12 +1368,14 @@ function Invoke-DeviceReadinessSlice {
     $isEffectivePolicyFixture = -not [string]::IsNullOrWhiteSpace($EffectivePolicyLiteralPath)
     $isResourceDependenciesFixture = -not [string]::IsNullOrWhiteSpace($ResourceDependenciesLiteralPath)
     $isNetworkTopologyFixture = -not [string]::IsNullOrWhiteSpace($NetworkTopologyLiteralPath)
+    $isSoftwareInventoryFixture = -not [string]::IsNullOrWhiteSpace($SoftwareInventoryLiteralPath)
     $sliceSelection=Get-DeviceReadinessSliceSelection `
         -DeviceFixture $isDeviceFixture -IdentityFixture $isIdentityFixture `
         -AdministratorFixture $isAdministratorFixture `
         -EffectivePolicyFixture $isEffectivePolicyFixture `
         -ResourceFixture $isResourceDependenciesFixture `
         -NetworkFixture $isNetworkTopologyFixture `
+        -SoftwareFixture $isSoftwareInventoryFixture `
         -NetworkBehavior ([string]$PreparationPlan.network.behavior)
     $isFixture=[bool]$sliceSelection.isFixture
     $scenario = if ($isFixture) { '' } else { 'Actual' }
@@ -1349,6 +1386,7 @@ function Invoke-DeviceReadinessSlice {
     $effectivePolicy=$null;$effectivePolicyCollector=$null
     $resourcePolicy=$null;$resourceCollector=$null
     $networkPolicy=$null;$networkCollector=$null
+    $softwarePolicy=$null;$softwareCollector=$null
     $privilegeResult = $null; $identityCollector = $null; $systemResult = $null
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
@@ -1383,6 +1421,10 @@ function Invoke-DeviceReadinessSlice {
     $printerDriverCount=0;$peripheralCount=0
     $userResourceFinding='Indeterminate';$peripheralFinding='Indeterminate'
     $networkScenario=if($isNetworkTopologyFixture){''}else{'Live'}
+    $softwareScenario=if($isSoftwareInventoryFixture){''}else{'Live'}
+    $softwareMachineCoverage='NotAttempted';$softwareUserCoverage='NotAttempted'
+    $softwareMachineFinding='Indeterminate';$softwareUserFinding='Indeterminate'
+    $softwareContractReason='NotEvaluated'
     $localNetworkCoverage='NotAttempted';$networkDependentCoverage='NotAttempted'
     $networkConfigurationFinding='Indeterminate';$networkComponentFinding='Indeterminate'
     $networkAdapterCount=0;$networkProfileCount=0;$networkRouteCount=0;$networkResolverCount=0
@@ -1403,6 +1445,7 @@ function Invoke-DeviceReadinessSlice {
         $resourcePolicy=Get-ResourceDependenciesPolicy `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $networkPolicy=Get-NetworkTopologyPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $softwarePolicy=Get-SoftwareInventoryPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $sliceStage='FIXTURE'
         if ($isDeviceFixture) {
             $fixtureSelection = Read-DeviceReadinessFixture -LiteralPath $LiteralPath `
@@ -1454,11 +1497,19 @@ function Invoke-DeviceReadinessSlice {
             $networkScenario=Read-NetworkTopologyFixture -LiteralPath $NetworkTopologyLiteralPath `
                 -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $networkPolicy
         }
+        elseif($isSoftwareInventoryFixture){
+            $scenario='Complete';$firmwareScenario='Supported';$identityScenario='StandardUser'
+            $administratorScenario='LocalPrincipal';$effectivePolicyScenario='Workgroup'
+            $resourceScenario='Empty';$networkScenario='Empty';$privilegeScenario='AcceptedElevation'
+            $softwareScenario=Read-SoftwareInventoryFixture -LiteralPath $SoftwareInventoryLiteralPath `
+                -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $softwarePolicy
+        }
         $identityRequested=[bool]$sliceSelection.identityRequested
         $administratorRequested=[bool]$sliceSelection.administratorRequested
         $effectivePolicyRequested=[bool]$sliceSelection.effectivePolicyRequested
         $resourceRequested=[bool]$sliceSelection.resourceRequested
         $networkRequested=[bool]$sliceSelection.networkRequested
+        $softwareRequested=[bool]$sliceSelection.softwareRequested
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
         if($identityRequested){
             $sliceStage='IDENTITY'
@@ -1471,7 +1522,7 @@ function Invoke-DeviceReadinessSlice {
         }
         if($resourceRequested){
             $sliceStage='RESOURCE_DEPENDENCIES'
-            $resourceCollector=if($isResourceDependenciesFixture){
+            $resourceCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-ResourceDependenciesCollection -Policy $resourcePolicy `
                     -ValidationScenario $resourceScenario
             }else{
@@ -1489,15 +1540,28 @@ function Invoke-DeviceReadinessSlice {
         }
         if($networkRequested){
             $sliceStage='NETWORK_TOPOLOGY'
-            $networkCollector=if($isNetworkTopologyFixture){
+            $networkCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-NetworkTopologyCollection -Policy $networkPolicy `
-                    -ValidationScenario $networkScenario -NetworkBehavior LocalOnly
+                    -ValidationScenario $networkScenario `
+                    -NetworkBehavior ([string]$PreparationPlan.network.behavior)
             }else{
                 Invoke-NetworkTopologyCollection -Policy $networkPolicy -Live `
-                    -NetworkBehavior LocalOnly -AssessmentUserSid $(if($null -ne $identityCollector){[string]$identityCollector.privateAssessmentUserSid}else{''})
+                    -NetworkBehavior ([string]$PreparationPlan.network.behavior) `
+                    -AssessmentUserSid $(if($null -ne $identityCollector){[string]$identityCollector.privateAssessmentUserSid}else{''})
             }
             $collectionStarted=$true
             if(-not [bool]$networkCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Network Topology worker cleanup was not verified.');$exception.Data['ReasonCode']='NETWORK.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
+        }
+        if($softwareRequested){
+            $sliceStage='SOFTWARE_INVENTORY'
+            $softwareCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
+                Invoke-SoftwareInventoryCollection -Policy $softwarePolicy -ValidationScenario $softwareScenario
+            }else{
+                Invoke-SoftwareInventoryCollection -Policy $softwarePolicy -Live `
+                    -AssessmentUserSid $(if($null -ne $identityCollector){[string]$identityCollector.privateAssessmentUserSid}else{''})
+            }
+            $collectionStarted=$true
+            if(-not [bool]$softwareCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Software Inventory worker cleanup was not verified.');$exception.Data['ReasonCode']='SOFTWARE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
         }
         $sliceStage='PRIVILEGE'
         if ($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) {
@@ -1783,6 +1847,26 @@ function Invoke-DeviceReadinessSlice {
                     }
                     $sourceValidation=$networkSourceValidation
                 }
+                if($null -ne $softwareCollector){
+                    $sliceStage='SOFTWARE_INVENTORY_SOURCE'
+                    $record=Add-SoftwareInventoryEvidenceRecord -Record $record `
+                        -CollectorResult $softwareCollector -Policy $softwarePolicy
+                    [byte[]]$softwareSourceBytes=[Text.UTF8Encoding]::new($false).GetBytes(
+                        (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
+                    )
+                    $softwareSourceValidation=Test-AssessmentContract `
+                        -Utf8Bytes $softwareSourceBytes `
+                        -ConvertFromJsonCommand $ConvertFromJsonCommand `
+                        -TestJsonCommand $TestJsonCommand
+                    $softwareContractReason=[string]$softwareSourceValidation.reasonCode
+                    if([bool]$softwareSourceValidation.accepted){
+                        $sliceStage='SOFTWARE_INVENTORY_RULES'
+                        $record=Complete-ValidatedSoftwareInventoryAssessmentRecord `
+                            -Record $record -Policy $softwarePolicy `
+                            -ContractValidation $softwareSourceValidation
+                    }
+                    $sourceValidation=$softwareSourceValidation
+                }
                 $sliceStage='FINAL_SERIALIZE'
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
@@ -1920,6 +2004,15 @@ function Invoke-DeviceReadinessSlice {
                     $localConnectionCount=@($networkCollector.payload.connections).Count
                     $outboundRequestCount=[int]$networkCollector.payload.outboundRequestCount
                 }
+                if($null -ne $softwareCollector -and [bool]$sourceValidation.accepted){
+                    $sliceStage='SOFTWARE_INVENTORY_METRICS'
+                    $machineScopeIds=@($softwarePolicy.scopes|Where-Object scopeId -like '*.machine*'|ForEach-Object scopeId)
+                    $userScopeIds=@($softwarePolicy.scopes|Where-Object scopeId -like '*.assessment-user*'|ForEach-Object scopeId)
+                    $softwareMachineCoverage=if(@($softwareCollector.payload.scopeStates|Where-Object {$_.scopeId -in $machineScopeIds -and $_.state -eq 'Denied'}).Count){'Denied'}elseif(@($softwareCollector.payload.scopeStates|Where-Object {$_.scopeId -in $machineScopeIds -and $_.state -ne 'Complete'}).Count){'Partial'}else{'Complete'}
+                    $softwareUserCoverage=if(@($softwareCollector.payload.scopeStates|Where-Object {$_.scopeId -in $userScopeIds -and $_.state -eq 'Denied'}).Count){'Denied'}elseif(@($softwareCollector.payload.scopeStates|Where-Object {$_.scopeId -in $userScopeIds -and $_.state -ne 'Complete'}).Count){'Partial'}else{'Complete'}
+                    $softwareMachineFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:software.machine-inventory/1.0.0')[0].outcome
+                    $softwareUserFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:software.assessment-user-inventory/1.0.0')[0].outcome
+                }
                 $findingOutcome = [string]@($record.findings | Where-Object {
                     $_.findingId -like 'finding:device-readiness:*'
                 })[0].outcome
@@ -1984,6 +2077,9 @@ function Invoke-DeviceReadinessSlice {
                         }else{$null}) `
                         -NetworkTopologyPolicy $(if($null -ne $networkCollector){
                             $networkPolicy
+                        }else{$null}) `
+                        -SoftwareInventoryPolicy $(if($null -ne $softwareCollector){
+                            $softwarePolicy
                         }else{$null})
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportVerified = $reportText.StartsWith('<!doctype html>') -and
@@ -2020,10 +2116,18 @@ function Invoke-DeviceReadinessSlice {
                             $reportText.Contains('do not promise universal peripheral compatibility')
                     }
                     if($null -ne $networkCollector){
+                        $enabledNetworkReport = [string]$networkCollector.payload.networkBehavior -eq 'MicrosoftConnectivityEnabled'
                         $reportVerified=$reportVerified -and
-                            $reportText.Contains('Local network topology and Local Only coverage') -and
+                            $reportText.Contains($(if($enabledNetworkReport){'Local network topology and Microsoft Connectivity Enabled coverage'}else{'Local network topology and Local Only coverage'})) -and
                             $reportText.Contains('made zero DNS, TCP, TLS, HTTP, catalog, update, or telemetry requests') -and
+                            $(if($enabledNetworkReport){$reportText.Contains('does not implement those bounded operations') -and -not $reportText.Contains('In Local Only mode')}else{$true}) -and
                             $reportText.Contains('do not establish health, approval, reachability, trust, compliance, or future compatibility')
+                    }
+                    if($null -ne $softwareCollector){
+                        $reportVerified=$reportVerified -and
+                            $reportText.Contains('Installed software and application migration inventory') -and
+                            $reportText.Contains('never invokes Win32_Product') -and
+                            $reportText.Contains('Display name and publisher are metadata, not identity')
                     }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
                     $sliceStage='PACKAGE'
@@ -2052,6 +2156,7 @@ function Invoke-DeviceReadinessSlice {
                     }
                     else { 'RecoverablePartial' }
                     $contractSetVersion=Get-CombinedAssessmentContractSetVersion `
+                        -SoftwareCollector $softwareCollector `
                         -NetworkCollector $networkCollector -ResourceCollector $resourceCollector `
                         -EffectivePolicyCollector $effectivePolicyCollector `
                         -AdministratorCollector $administratorCollector -IdentityCollector $identityCollector
@@ -2215,6 +2320,20 @@ function Invoke-DeviceReadinessSlice {
         $projection|Add-Member -NotePropertyName localScopeCoverage -NotePropertyValue $localNetworkCoverage -Force
         $projection|Add-Member -NotePropertyName networkConfigurationFinding -NotePropertyValue $networkConfigurationFinding
         $projection|Add-Member -NotePropertyName networkComponentFinding -NotePropertyValue $networkComponentFinding
+        $projection|Add-Member -NotePropertyName assessmentRecordValidated -NotePropertyValue $recordAccepted
+        $projection|Add-Member -NotePropertyName beginnerReportVerified -NotePropertyValue $reportVerified
+        $projection|Add-Member -NotePropertyName protectedPackageVerified -NotePropertyValue $packageVerified
+        $projection|Add-Member -NotePropertyName validationCleanupVerified -NotePropertyValue $cleanupVerified
+        Write-ContractRecord $projection -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    if($isSoftwareInventoryFixture -and $null -ne $softwareCollector){
+        $projection=New-SoftwareInventoryPublicProjection -CollectorResult $softwareCollector
+        $projection|Add-Member -NotePropertyName scenario -NotePropertyValue $softwareScenario
+        $projection|Add-Member -NotePropertyName machineScopeCoverage -NotePropertyValue $softwareMachineCoverage
+        $projection|Add-Member -NotePropertyName assessmentUserScopeCoverage -NotePropertyValue $softwareUserCoverage
+        $projection|Add-Member -NotePropertyName machineFinding -NotePropertyValue $softwareMachineFinding
+        $projection|Add-Member -NotePropertyName assessmentUserFinding -NotePropertyValue $softwareUserFinding
+        $projection|Add-Member -NotePropertyName contractReasonCode -NotePropertyValue $softwareContractReason
         $projection|Add-Member -NotePropertyName assessmentRecordValidated -NotePropertyValue $recordAccepted
         $projection|Add-Member -NotePropertyName beginnerReportVerified -NotePropertyValue $reportVerified
         $projection|Add-Member -NotePropertyName protectedPackageVerified -NotePropertyValue $packageVerified

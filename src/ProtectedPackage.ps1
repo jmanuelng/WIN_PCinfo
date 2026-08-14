@@ -15,7 +15,8 @@ function Get-ProtectedPackageSha256 {
 }
 
 function Get-ProtectedPackagePolicy {
-    if ($script:ProtectedPackagePolicyBase64 -eq '__PROTECTED_PACKAGE_POLICY_BASE64__') {
+    $developmentSentinel = '__PROTECTED_PACKAGE_' + 'POLICY_BASE64__'
+    if ($script:ProtectedPackagePolicyBase64 -eq $developmentSentinel) {
         $policyPath = Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-protected-package.json'
         $bytes = [System.IO.File]::ReadAllBytes($policyPath)
@@ -36,7 +37,8 @@ function Get-ProtectedPackageJsonCommands {
     if ($null -ne $script:ProtectedPackageJsonCommands) {
         return $script:ProtectedPackageJsonCommands
     }
-    if ($script:ProtectedPackagePolicyBase64 -ne '__PROTECTED_PACKAGE_POLICY_BASE64__') {
+    $developmentSentinel = '__PROTECTED_PACKAGE_' + 'POLICY_BASE64__'
+    if ($script:ProtectedPackagePolicyBase64 -ne $developmentSentinel) {
         if (-not (Get-Command Get-BuiltInModuleCompatibilityFacts -CommandType Function `
                 -ErrorAction SilentlyContinue)) {
             throw 'The trusted JSON command boundary is unavailable.'
@@ -72,13 +74,13 @@ function Get-ProtectedPackageSchemaText {
     if ($Kind -eq 'Envelope') {
         $base64 = $script:ProtectedPackageEnvelopeSchemaBase64
         $digest = $script:ProtectedPackageEnvelopeSchemaDigest
-        $sentinel = '__PROTECTED_PACKAGE_ENVELOPE_SCHEMA_BASE64__'
+        $sentinel = '__PROTECTED_PACKAGE_ENVELOPE_' + 'SCHEMA_BASE64__'
         $relativePath = 'schemas/protected-package-envelope.schema.json'
     }
     else {
         $base64 = $script:AssessmentPackageManifestSchemaBase64
         $digest = $script:AssessmentPackageManifestSchemaDigest
-        $sentinel = '__ASSESSMENT_PACKAGE_MANIFEST_SCHEMA_BASE64__'
+        $sentinel = '__ASSESSMENT_PACKAGE_MANIFEST_' + 'SCHEMA_BASE64__'
         $relativePath = 'schemas/assessment-package-manifest.schema.json'
     }
     if ($base64 -eq $sentinel) {
@@ -384,9 +386,9 @@ function Test-AssessmentPackageManifest {
     if ((@($Manifest.PSObject.Properties.Name | Sort-Object) -join '|') -ne ($expectedTop -join '|') -or
         $Manifest.kind -ne 'win-pcinfo.assessment-package-manifest' -or
         $Manifest.contractVersion -ne '1.0.0' -or $Manifest.productRelease -ne $policy.release -or
-        $Manifest.packagePolicy -ne $policy.policyId -or
+        $Manifest.packagePolicy -notin @('win-pcinfo.protected-package/1.0.0',$policy.policyId) -or
         $Manifest.manifestContract -ne $policy.innerPackage.manifestContract -or
-        $Manifest.assessmentContractSet -notin @('1.0.0','1.1.0','1.2.0','1.3.0','1.4.0','1.5.0','1.6.0') -or
+        $Manifest.assessmentContractSet -notin @('1.0.0','1.1.0','1.2.0','1.3.0','1.4.0','1.5.0','1.6.0','1.7.0') -or
         $Manifest.completeness -notin @($policy.manifest.completenessStates)) { return $false }
     $protectionNames = @($Manifest.protection.PSObject.Properties.Name | Sort-Object)
     if (($protectionNames -join '|') -ne 'authorshipClaim|durableTamperEvidenceClaim|state' -or
@@ -404,7 +406,11 @@ function Test-AssessmentPackageManifest {
             $content.mediaType -ne $definition.mediaType -or
             -not $Artifacts.Contains([string] $content.relativePath)) { return $false }
         [byte[]] $bytes = $Artifacts[[string] $content.relativePath]
-        if ([long] $content.byteLength -ne $bytes.Length -or
+        $historicalMaximum = if($Manifest.packagePolicy -eq 'win-pcinfo.protected-package/1.0.0'){
+            if($content.relativePath -eq 'assessment-record.json'){524288}else{262144}
+        }else{[int]$definition.maximumBytes}
+        if ($bytes.Length -gt $historicalMaximum -or
+            [long] $content.byteLength -ne $bytes.Length -or
             [string] $content.sha256 -ne (Get-ProtectedPackageSha256 -Bytes $bytes)) { return $false }
     }
     # Package completeness describes whether this closed package contains the
@@ -445,6 +451,10 @@ function Read-DeterministicAssessmentPackage {
             }
             $manifest = & (Get-ProtectedPackageJsonCommands).ConvertFromJsonCommand `
                 -InputObject $manifestJson -Depth 20
+            if($manifest.packagePolicy -eq 'win-pcinfo.protected-package/1.0.0' -and
+                $Bytes.Length -gt 1048576){
+                throw 'The historical inner package exceeded its frozen release bound.'
+            }
             $artifacts = [ordered]@{}
             foreach ($definition in @($policy.innerPackage.artifacts)) {
                 $entry = $entries | Where-Object FullName -eq $definition.relativePath
@@ -550,6 +560,10 @@ function Write-ProtectedPackageEnvelope {
         throw 'The exact owned-file write boundary is unavailable.'
     }
     $policy = Get-ProtectedPackagePolicy
+    if ($Plaintext.Length -lt 1 -or
+        $Plaintext.Length -gt [int] $policy.envelope.maximumPlaintextBytes) {
+        throw 'The package plaintext exceeded its release bound.'
+    }
     [byte[]] $contentKey = [byte[]]::new(32)
     [byte[]] $noncePrefix = [byte[]]::new(8)
     $fileSystemIdentity = ''
@@ -699,7 +713,7 @@ function Read-ProtectedEvidencePackage {
         $policy = Get-ProtectedPackagePolicy
         $fullPath = [System.IO.Path]::GetFullPath($LiteralPath)
         $fileInfo = [System.IO.FileInfo]::new($fullPath)
-        if (-not $fileInfo.Exists -or $fileInfo.Length -gt 2097152) { return $integrityFailure }
+        if (-not $fileInfo.Exists -or $fileInfo.Length -gt 3145728) { return $integrityFailure }
         $stream = [System.IO.File]::Open($fullPath, [System.IO.FileMode]::Open,
             [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
         $reader = [System.IO.BinaryReader]::new($stream, [System.Text.UTF8Encoding]::new($false, $true), $true)
@@ -807,7 +821,7 @@ function New-ProtectedEvidencePackage {
     param(
         [Parameter(Mandatory)] [string] $DestinationDirectory,
         [Parameter(Mandatory)] [System.Collections.IDictionary] $Artifacts,
-        [Parameter(Mandatory)] [ValidateSet('1.0.0','1.1.0','1.2.0','1.3.0','1.4.0','1.5.0','1.6.0')] [string] $AssessmentContractSetVersion,
+        [Parameter(Mandatory)] [ValidateSet('1.0.0','1.1.0','1.2.0','1.3.0','1.4.0','1.5.0','1.6.0','1.7.0')] [string] $AssessmentContractSetVersion,
         [Parameter(Mandatory)] [ValidateSet('Complete', 'RecoverablePartial')] [string] $Completeness,
         [Parameter()] [string] $JournalPath,
         [Parameter()] $ApprovedRecipient,
@@ -1075,20 +1089,25 @@ function New-SyntheticProtectedPackageRecordBytes {
 }
 
 function New-SyntheticInvalidManifestInnerPackage {
-    param([byte[]] $RecordBytes, [byte[]] $ReportBytes)
+    param(
+        [byte[]] $RecordBytes,
+        [byte[]] $ReportBytes,
+        [string] $PackagePolicy,
+        [switch] $ValidDigests
+    )
 
     $policy = Get-ProtectedPackagePolicy
     $manifest = [pscustomobject][ordered]@{
         kind='win-pcinfo.assessment-package-manifest'; contractVersion='1.0.0'
         productRelease=[string]$policy.release; assessmentContractSet='1.0.0'
-        packagePolicy=[string]$policy.policyId
+        packagePolicy=if([string]::IsNullOrWhiteSpace($PackagePolicy)){[string]$policy.policyId}else{$PackagePolicy}
         manifestContract=[string]$policy.innerPackage.manifestContract
         completeness='Complete'
         protection=[pscustomobject][ordered]@{
             state='EncryptedAuthenticated'; authorshipClaim=$false; durableTamperEvidenceClaim=$false
         }
         contents=@(
-            [pscustomobject][ordered]@{relativePath='assessment-record.json';mediaType='application/json';byteLength=$RecordBytes.Length;sha256=('0'*64)},
+            [pscustomobject][ordered]@{relativePath='assessment-record.json';mediaType='application/json';byteLength=$RecordBytes.Length;sha256=if($ValidDigests){Get-ProtectedPackageSha256 $RecordBytes}else{'0'*64}},
             [pscustomobject][ordered]@{relativePath='assessment-report.html';mediaType='text/html';byteLength=$ReportBytes.Length;sha256=(Get-ProtectedPackageSha256 $ReportBytes)}
         )
     }

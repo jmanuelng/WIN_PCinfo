@@ -16,7 +16,7 @@ function Get-ApprovedCollectorCatalog {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
     try {
-        if ($script:ApprovedCollectorCatalogBase64 -eq '__APPROVED_COLLECTOR_CATALOG_BASE64__') {
+        if ($script:ApprovedCollectorCatalogBase64 -eq ('__APPROVED_COLLECTOR_' + 'CATALOG_BASE64__')) {
             # Modular source tests use the reviewed repository catalog. The
             # deterministic build replaces this branch's sentinel with those
             # exact canonical bytes and their digest, so the generated public
