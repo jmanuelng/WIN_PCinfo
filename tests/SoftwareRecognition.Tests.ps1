@@ -5,6 +5,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $repositoryRoot 'src/SoftwareInventory.ps1')
 . (Join-Path $repositoryRoot 'src/SoftwareRecognition.ps1')
 $matrix = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot `
     'fixtures/software-recognition/matcher-matrix.json') | ConvertFrom-Json -Depth 10
@@ -35,6 +36,13 @@ $catalog = [pscustomobject][ordered]@{
         writesAllowed = $false
     }
     roles = @('DeviceManagement')
+    licenseReview = [pscustomobject][ordered]@{
+        reviewedOn = '2026-08-14'
+        reviewer = 'WIN-PCInfo maintainer'
+        reuseBasis = 'Synthetic factual test identifiers only.'
+        thirdPartyAssetsIncluded = $false
+        unlicensedCatalogDataIncluded = $false
+    }
     families = @(
         [pscustomobject][ordered]@{
             familyId = 'family:synthetic.company-portal'
@@ -134,9 +142,9 @@ $upgradeFamily.matchers = @([pscustomobject][ordered]@{
 })
 $upgradeCatalog = $catalog | Select-Object *
 $upgradeCatalog.families = @($upgradeFamily)
-$upgradeEntry = $msiEntry | Select-Object *
-$upgradeEntry.productCode = $null
-$upgradeEntry.upgradeCode = [string]$matrix.exactMsiUpgradeCode
+$upgradeAdapter = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot `
+    'fixtures/software-inventory/adapter-registry-upgrade-code.json') | ConvertFrom-Json
+$upgradeEntry = ConvertFrom-SoftwareInventoryAdapterRow -Row $upgradeAdapter
 $upgradeResult = Invoke-SoftwareRecognition -Entries @($upgradeEntry) `
     -Catalog $upgradeCatalog -CatalogDigest ('b' * 64)
 Assert-Equal 'RecognizedExact' $upgradeResult.annotations[0].outcome `
@@ -208,6 +216,71 @@ foreach ($candidateCatalog in @($orderedCatalog, $reversedCatalog)) {
     Assert-Equal 0 @($ambiguous.annotations[0].roles).Count `
         'ambiguity cannot inherit roles from whichever family appeared first'
 }
+
+$caseVariantFamily = $catalog.families[0] | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
+$caseVariantFamily.familyId = 'family:Synthetic.Company-Portal'
+$caseVariantFamily.label = 'Case Variant A'
+$caseVariantFamily.matchers[0].matcherId = 'matcher:Synthetic.Company-Portal.pfn'
+$lowerCaseVariantFamily = $caseVariantFamily | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
+$lowerCaseVariantFamily.familyId = 'family:synthetic.company-portal'
+$lowerCaseVariantFamily.label = 'Case Variant B'
+$lowerCaseVariantFamily.matchers[0].matcherId = 'matcher:synthetic.company-portal.pfn'
+foreach ($families in @(
+    @($caseVariantFamily, $lowerCaseVariantFamily),
+    @($lowerCaseVariantFamily, $caseVariantFamily)
+)) {
+    $caseCollisionCatalog = $catalog | Select-Object *
+    $caseCollisionCatalog.families = $families
+    $caseCollision = Invoke-SoftwareRecognition -Entries @($inventory) `
+        -Catalog $caseCollisionCatalog -CatalogDigest ('f' * 64)
+    Assert-Equal 'Ambiguous' $caseCollision.annotations[0].outcome `
+        'case-distinct ordinal family IDs remain distinct and ambiguous in every order'
+}
+
+$releaseCatalogResult = Get-SoftwareRecognitionCatalog `
+    -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet) `
+    -TestJsonCommand (Get-Command Test-Json -CommandType Cmdlet)
+foreach ($publishedMatcher in @($matrix.publishedPackageFamilyNames)) {
+    $publishedEntry = $inventory | Select-Object *
+    $publishedEntry.packageFamilyName = [string]$publishedMatcher.exact
+    $publishedResult = Invoke-SoftwareRecognition -Entries @($publishedEntry) `
+        -Catalog $releaseCatalogResult.catalog -CatalogDigest $releaseCatalogResult.digest
+    Assert-Equal 'RecognizedExact' $publishedResult.annotations[0].outcome `
+        "$($publishedMatcher.familyId) has a positive release-seed fixture"
+    Assert-Equal ([string]$publishedMatcher.familyId) $publishedResult.annotations[0].familyId `
+        "$($publishedMatcher.familyId) resolves to its intended family"
+    $publishedEntry.packageFamilyName = [string]$publishedMatcher.near
+    $publishedNear = Invoke-SoftwareRecognition -Entries @($publishedEntry) `
+        -Catalog $releaseCatalogResult.catalog -CatalogDigest $releaseCatalogResult.digest
+    Assert-Equal 'Unrecognized' $publishedNear.annotations[0].outcome `
+        "$($publishedMatcher.familyId) has a near-match negative fixture"
+}
+
+$missingReviewer = $releaseCatalogResult.catalog | ConvertTo-Json -Depth 30 |
+    ConvertFrom-Json -Depth 30
+$missingReviewer.families[0].sources[0].PSObject.Properties.Remove('reviewer')
+Assert-Equal $false (Test-SoftwareRecognitionCatalog -Catalog $missingReviewer) `
+    'schema-invalid provenance is a logical catalog failure before annotation'
+
+$oversizedCatalog = $catalog | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+$oversizedCatalog.families[0].sources = @(
+    foreach ($index in 1..8) {
+        [pscustomobject][ordered]@{
+            sourceType = 'PrimaryPublisherDocumentation'
+            owner = "Synthetic Publisher $index"
+            url = 'https://example.invalid/' + ('x' * 1900) + $index
+            verifiedOn = '2026-08-14'
+            reviewer = 'WIN-PCInfo maintainer'
+            pinnedCommit = $null
+            manifestPath = $null
+        }
+    }
+)
+$boundedFailure = Invoke-SoftwareRecognitionSafely -Entries @(
+    foreach ($index in 1..128) { $inventory | Select-Object * }
+) -Catalog $oversizedCatalog -CatalogDigest ('9' * 64)
+Assert-Equal 'NotEvaluated' $boundedFailure.state `
+    'recognition output above the frozen UTF-8 ceiling is confined to NotEvaluated'
 
 $logicalFailure = Invoke-SoftwareRecognitionSafely -Entries @($inventory, $msiEntry) `
     -Catalog ([pscustomobject]@{ kind = 'malformed-logical-catalog' }) `

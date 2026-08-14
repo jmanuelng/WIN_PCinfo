@@ -15,7 +15,8 @@ Assert-Equal $true (Test-Json -Json $catalogJson -SchemaFile $schemaPath) `
     'the release snapshot satisfies its strict Draft 2020-12 data-only schema'
 
 $catalogResult = Get-SoftwareRecognitionCatalog `
-    -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
+    -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet) `
+    -TestJsonCommand (Get-Command Test-Json -CommandType Cmdlet)
 $catalog = $catalogResult.catalog
 Assert-Equal '2.0.0-preview.1' $catalog.release 'the catalog belongs to one product release'
 Assert-Equal 1 $catalog.catalogRevision 'the catalog revision is monotonically explicit'
@@ -69,25 +70,51 @@ Assert-Equal $false ([regex]::IsMatch($runtimeSource, '(?im)&\s*winget|Start-Pro
 
 $savedBase64 = $script:SoftwareRecognitionCatalogBase64
 $savedDigest = $script:SoftwareRecognitionCatalogDigest
+$savedSchemaBase64 = $script:SoftwareRecognitionSchemaBase64
+$savedSchemaDigest = $script:SoftwareRecognitionSchemaDigest
 try {
+    $schemaJson = Get-Content -Raw -LiteralPath $schemaPath
+    $schemaBytes = [Text.UTF8Encoding]::new($false).GetBytes(
+        $schemaJson.Replace("`r`n", "`n").Replace("`r", "`n")
+    )
+    $script:SoftwareRecognitionSchemaBase64 = [Convert]::ToBase64String($schemaBytes)
+    $script:SoftwareRecognitionSchemaDigest = Get-SoftwareRecognitionSha256 `
+        -Bytes $schemaBytes
     $malformedText = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot `
         'fixtures/software-recognition/malformed-catalog.json')
     $malformedBytes = [Text.UTF8Encoding]::new($false).GetBytes($malformedText)
     $script:SoftwareRecognitionCatalogBase64 = [Convert]::ToBase64String($malformedBytes)
     $script:SoftwareRecognitionCatalogDigest = Get-SoftwareRecognitionSha256 -Bytes $malformedBytes
     $malformedResult = Get-SoftwareRecognitionCatalog `
-        -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
+        -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet) `
+        -TestJsonCommand (Get-Command Test-Json -CommandType Cmdlet)
     Assert-Equal $false $malformedResult.logicalLoadValid `
         'authenticated but malformed JSON is a confined logical-load failure'
 
-    $script:SoftwareRecognitionCatalogBase64 = [Convert]::ToBase64String(
-        [Text.UTF8Encoding]::new($false).GetBytes($catalogJson.Replace("`r`n", "`n"))
+    $schemaInvalid = $catalog | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+    $schemaInvalid.families[0].sources[0] | Add-Member `
+        -NotePropertyName extra -NotePropertyValue 'rejected'
+    $schemaInvalidText = $schemaInvalid | ConvertTo-Json -Depth 30 -Compress
+    $schemaInvalidBytes = [Text.UTF8Encoding]::new($false).GetBytes($schemaInvalidText)
+    $script:SoftwareRecognitionCatalogBase64 = [Convert]::ToBase64String($schemaInvalidBytes)
+    $script:SoftwareRecognitionCatalogDigest = Get-SoftwareRecognitionSha256 `
+        -Bytes $schemaInvalidBytes
+    $schemaInvalidResult = Get-SoftwareRecognitionCatalog `
+        -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet) `
+        -TestJsonCommand (Get-Command Test-Json -CommandType Cmdlet)
+    Assert-Equal $false $schemaInvalidResult.logicalLoadValid `
+        'authenticated parseable input that violates the strict schema is confined'
+
+    $catalogBytes = [Text.UTF8Encoding]::new($false).GetBytes(
+        $catalogJson.Replace("`r`n", "`n").Replace("`r", "`n")
     )
+    $script:SoftwareRecognitionCatalogBase64 = [Convert]::ToBase64String($catalogBytes)
     $script:SoftwareRecognitionCatalogDigest = '0' * 64
     $integrityFailed = $false
     try {
         $null = Get-SoftwareRecognitionCatalog `
-            -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
+            -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet) `
+            -TestJsonCommand (Get-Command Test-Json -CommandType Cmdlet)
     }
     catch {
         $integrityFailed = $_.Exception.Data['ReasonCode'] -eq `
@@ -95,10 +122,28 @@ try {
     }
     Assert-Equal $true $integrityFailed `
         'an authenticated-resource digest mismatch has one typed no-bypass failure'
+
+    $script:SoftwareRecognitionCatalogDigest = Get-SoftwareRecognitionSha256 `
+        -Bytes $catalogBytes
+    $script:SoftwareRecognitionSchemaDigest = '0' * 64
+    $schemaIntegrityFailed = $false
+    try {
+        $null = Get-SoftwareRecognitionCatalog `
+            -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet) `
+            -TestJsonCommand (Get-Command Test-Json -CommandType Cmdlet)
+    }
+    catch {
+        $schemaIntegrityFailed = $_.Exception.Data['ReasonCode'] -eq `
+            'SOFTWARE_RECOGNITION.INTEGRITY_FAILED'
+    }
+    Assert-Equal $true $schemaIntegrityFailed `
+        'an embedded schema digest mismatch has the same typed no-bypass failure'
 }
 finally {
     $script:SoftwareRecognitionCatalogBase64 = $savedBase64
     $script:SoftwareRecognitionCatalogDigest = $savedDigest
+    $script:SoftwareRecognitionSchemaBase64 = $savedSchemaBase64
+    $script:SoftwareRecognitionSchemaDigest = $savedSchemaDigest
 }
 
 $candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'

@@ -51,6 +51,14 @@ Assert-Equal 'Bundle|Framework|Main|Optional|Resource' `
     ((@($types.entries.packageType) | Sort-Object) -join '|') `
     'the five release-owned packaged application types remain distinct'
 
+$upgradeAdapter = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot `
+    'fixtures/software-inventory/adapter-registry-upgrade-code.json') | ConvertFrom-Json
+$upgradeIdentity = ConvertFrom-SoftwareInventoryAdapterRow -Row $upgradeAdapter
+Assert-Equal '{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}' $upgradeIdentity.upgradeCode `
+    'an observed exact UpgradeCode survives the authoritative read-only registration entry'
+Assert-Equal $true (Test-SoftwareInventoryEntry -Entry $upgradeIdentity -Policy $policy) `
+    'strict authoritative-entry validation admits the bounded MSI UpgradeCode identity'
+
 $allUsersDenied = (Invoke-SoftwareInventoryCollection -Policy $policy `
     -ValidationScenario DeniedAllUsers).payload
 $allUsersState = @($allUsersDenied.scopeStates | Where-Object `

@@ -219,6 +219,10 @@ $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCat
 $softwareRecognitionCatalogJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $softwareRecognitionCatalogBytes
 )
+$softwareRecognitionSchemaBytes = Get-Utf8LfBytes `
+    -LiteralPath $softwareRecognitionCatalogSchemaPath
+$softwareRecognitionSchemaBase64 = [Convert]::ToBase64String($softwareRecognitionSchemaBytes)
+$softwareRecognitionSchemaDigest = Get-Sha256Hex -Bytes $softwareRecognitionSchemaBytes
 $effectivePolicyPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $effectivePolicyPolicyBytes
 )
@@ -578,6 +582,12 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__SOFTWARE_RECOGNITION_CATALOG_SHA256__', $softwareRecognitionCatalogDigest
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__SOFTWARE_RECOGNITION_SCHEMA_BASE64__', $softwareRecognitionSchemaBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__SOFTWARE_RECOGNITION_SCHEMA_SHA256__', $softwareRecognitionSchemaDigest
         )
     }
     "#region Generated from $($sourceFile.path)`n$($normalizedSource.TrimEnd("`n"))`n#endregion Generated from $($sourceFile.path)"

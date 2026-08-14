@@ -1488,7 +1488,8 @@ function Invoke-DeviceReadinessSlice {
         $networkPolicy=Get-NetworkTopologyPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $softwarePolicy=Get-SoftwareInventoryPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $recognitionCatalogResult=Get-SoftwareRecognitionCatalog `
-            -ConvertFromJsonCommand $ConvertFromJsonCommand
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -TestJsonCommand $TestJsonCommand
         $sliceStage='FIXTURE'
         if ($isDeviceFixture) {
             $fixtureSelection = Read-DeviceReadinessFixture -LiteralPath $LiteralPath `

@@ -1,9 +1,74 @@
 $script:SoftwareRecognitionCatalogBase64 = '__SOFTWARE_RECOGNITION_CATALOG_BASE64__'
 $script:SoftwareRecognitionCatalogDigest = '__SOFTWARE_RECOGNITION_CATALOG_SHA256__'
+$script:SoftwareRecognitionSchemaBase64 = '__SOFTWARE_RECOGNITION_SCHEMA_BASE64__'
+$script:SoftwareRecognitionSchemaDigest = '__SOFTWARE_RECOGNITION_SCHEMA_SHA256__'
 
 function Get-SoftwareRecognitionSha256 {
     param([Parameter(Mandatory)] [byte[]] $Bytes)
     [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($Bytes)).ToLowerInvariant()
+}
+
+function Test-SoftwareRecognitionText {
+    param($Value, [int] $Minimum, [int] $Maximum, [switch] $AllowNull)
+    if ($null -eq $Value) { return [bool]$AllowNull }
+    if ($Value -isnot [string]) { return $false }
+    $length = [Text.Encoding]::UTF8.GetByteCount([string]$Value)
+    $length -ge $Minimum -and $length -le $Maximum
+}
+
+function Test-SoftwareRecognitionDate {
+    param($Value)
+    if ($Value -isnot [string]) { return $false }
+    $parsed = [DateTime]::MinValue
+    [DateTime]::TryParseExact(
+        [string]$Value, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::None, [ref]$parsed
+    )
+}
+
+function Get-SoftwareRecognitionOrdinalStrings {
+    param([AllowEmptyCollection()] [object[]] $Values)
+    $set = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($value in $Values) { $null = $set.Add([string]$value) }
+    [string[]]$items = @($set)
+    [Array]::Sort($items, [StringComparer]::Ordinal)
+    $items
+}
+
+function Get-SoftwareRecognitionResultMaximumUtf8Bytes {
+    param([Parameter(Mandatory)] [object[]] $Annotations)
+
+    # JsonEncodedText gives the exact escaped UTF-8 length of string values. The
+    # fixed allowance deliberately overcounts property names, quotes, commas,
+    # arrays, numbers, booleans, and object delimiters. This keeps enforcement
+    # independent of the ambient PowerShell command table while guaranteeing the
+    # serialized annotation result stays below the release operation ceiling.
+    $encodedLength = {
+        param($Value)
+        if ($null -eq $Value) { return 4 }
+        2 + [Text.Encoding]::UTF8.GetByteCount(
+            [Text.Json.JsonEncodedText]::Encode([string]$Value).Value
+        )
+    }
+    [long]$total = 512
+    foreach ($annotation in $Annotations) {
+        $total += 1024
+        foreach ($value in @(
+            $annotation.outcome, $annotation.familyId, $annotation.familyLabel,
+            $annotation.matchStrengthExplanation, $annotation.reasonCode,
+            $annotation.catalogRelease, $annotation.catalogDigest
+        )) { $total += & $encodedLength $value }
+        foreach ($value in @($annotation.roles) + @($annotation.matcherIds) +
+            @($annotation.matcherTypes)) { $total += & $encodedLength $value }
+        foreach ($source in @($annotation.provenance)) {
+            $total += 512
+            foreach ($value in @(
+                $source.sourceType, $source.owner, $source.url, $source.verifiedOn,
+                $source.reviewer, $source.pinnedCommit, $source.manifestPath
+            )) { $total += & $encodedLength $value }
+        }
+    }
+    $total
 }
 
 function Test-SoftwareRecognitionCatalog {
@@ -18,6 +83,25 @@ function Test-SoftwareRecognitionCatalog {
             @($Catalog.families).Count -lt 1 -or @($Catalog.families).Count -gt 16) {
             return $false
         }
+        if (-not (Test-SoftwareRecognitionText $Catalog.sourceRevision 1 128) -or
+            @($Catalog.roles).Count -lt 1 -or @($Catalog.roles).Count -gt 16 -or
+            @(Get-SoftwareRecognitionOrdinalStrings @($Catalog.roles)).Count -ne
+                @($Catalog.roles).Count) { return $false }
+        $knownRoles = @('EndpointSecurity','DeviceManagement','VpnOrZeroTrustNetworkAccess',
+            'DataLossPrevention','Encryption','RemoteSupport',
+            'AuthenticationOrCredentialProvider','Browser','PatchOrUpdateAgent',
+            'BackupOrRecoveryAgent','OtherMigrationDependency')
+        if (@($Catalog.roles | Where-Object { [string]$_ -notin $knownRoles }).Count -gt 0) {
+            return $false
+        }
+        $licenseReview = $Catalog.licenseReview
+        if (-not (Test-SoftwareRecognitionDate $licenseReview.reviewedOn) -or
+            -not (Test-SoftwareRecognitionText $licenseReview.reviewer 1 128) -or
+            -not (Test-SoftwareRecognitionText $licenseReview.reuseBasis 1 512) -or
+            $licenseReview.thirdPartyAssetsIncluded -isnot [bool] -or
+            [bool]$licenseReview.thirdPartyAssetsIncluded -or
+            $licenseReview.unlicensedCatalogDataIncluded -isnot [bool] -or
+            [bool]$licenseReview.unlicensedCatalogDataIncluded) { return $false }
         $operation = $Catalog.operation
         if ([string]$operation.operationId -ne 'annotate-software-recognition' -or
             [string]$operation.executionContext -ne 'InProcessValidatedAssessmentRecord' -or
@@ -28,7 +112,7 @@ function Test-SoftwareRecognitionCatalog {
             [int]$operation.deadlineMilliseconds -gt 5000 -or
             [int]$operation.maximumInputEntries -ne 128 -or
             [int]$operation.maximumOutputAnnotations -ne 128 -or
-            [int]$operation.maximumEvidenceUtf8Bytes -gt 262144 -or
+            [int]$operation.maximumEvidenceUtf8Bytes -ne 262144 -or
             [string]$operation.cleanup -ne 'InMemoryOnly') { return $false }
         foreach ($flag in @('mayPrompt','mayInstall','mayDownload','maySelfElevate',
             'mayWidenScope','mayRequestAuthority','writesAllowed')) {
@@ -40,10 +124,14 @@ function Test-SoftwareRecognitionCatalog {
         $matcherIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
         foreach ($family in @($Catalog.families)) {
             if (-not $familyIds.Add([string]$family.familyId) -or
-                [string]::IsNullOrWhiteSpace([string]$family.label) -or
-                @($family.roles).Count -lt 1 -or
+                [string]$family.familyId -notmatch '^[A-Za-z][A-Za-z0-9._:/-]*$' -or
+                -not (Test-SoftwareRecognitionText $family.label 1 128) -or
+                @($family.roles).Count -lt 1 -or @($family.roles).Count -gt 8 -or
+                @(Get-SoftwareRecognitionOrdinalStrings @($family.roles)).Count -ne
+                    @($family.roles).Count -or
                 @($family.roles | Where-Object { [string]$_ -notin $allowedRoles }).Count -gt 0 -or
-                @($family.sources).Count -lt 1) { return $false }
+                @($family.sources).Count -lt 1 -or @($family.sources).Count -gt 8 -or
+                @($family.matchers).Count -gt 16) { return $false }
             $state = [string]$family.lifecycle.state
             if ($state -eq 'active') {
                 if (@($family.matchers).Count -lt 1 -or
@@ -58,8 +146,13 @@ function Test-SoftwareRecognitionCatalog {
             }
             else { return $false }
             foreach ($source in @($family.sources)) {
-                if ([string]$source.url -notmatch '^https://' -or
-                    [string]::IsNullOrWhiteSpace([string]$source.owner) -or
+                $uri = $null
+                if (-not (Test-SoftwareRecognitionText $source.url 1 2048) -or
+                    -not [Uri]::TryCreate([string]$source.url,[UriKind]::Absolute,[ref]$uri) -or
+                    [string]$uri.Scheme -cne 'https' -or
+                    -not (Test-SoftwareRecognitionText $source.owner 1 128) -or
+                    -not (Test-SoftwareRecognitionDate $source.verifiedOn) -or
+                    -not (Test-SoftwareRecognitionText $source.reviewer 1 128) -or
                     [string]$source.sourceType -notin @(
                         'PrimaryPublisherDocumentation','ControlledFreshInstallation',
                         'PinnedWinGetManifest'
@@ -71,16 +164,19 @@ function Test-SoftwareRecognitionCatalog {
                 }
             }
             foreach ($matcher in @($family.matchers)) {
-                if (-not $matcherIds.Add([string]$matcher.matcherId)) { return $false }
+                if (-not (Test-SoftwareRecognitionText $matcher.matcherId 1 128) -or
+                    [string]$matcher.matcherId -notmatch '^[A-Za-z][A-Za-z0-9._:/-]*$' -or
+                    -not $matcherIds.Add([string]$matcher.matcherId)) { return $false }
                 switch ([string]$matcher.type) {
                     'ExactPackageFamilyName' {
-                        if ([string]::IsNullOrWhiteSpace([string]$matcher.value) -or
+                        if (-not (Test-SoftwareRecognitionText $matcher.value 1 256) -or
                             [string]$matcher.value -notmatch '^[^_]+_[A-Za-z0-9]+$') {
                             return $false
                         }
                     }
                     { $_ -in @('ExactMsiProductCode','ExactMsiUpgradeCode') } {
-                        if ([string]$matcher.value -notmatch '^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$') {
+                        if (-not (Test-SoftwareRecognitionText $matcher.value 38 38) -or
+                            [string]$matcher.value -notmatch '^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$') {
                             return $false
                         }
                     }
@@ -92,6 +188,12 @@ function Test-SoftwareRecognitionCatalog {
                             @($names | Where-Object {
                                 $_ -notin @('registrationId','displayName','publisher','version','packageType')
                             }).Count -gt 0) { return $false }
+                        foreach ($name in $names) {
+                            $maximum = if ($name -eq 'version') { 256 } else { 512 }
+                            if (-not (Test-SoftwareRecognitionText $matcher.fields.$name 1 $maximum)) {
+                                return $false
+                            }
+                        }
                     }
                     default { return $false }
                 }
@@ -104,7 +206,10 @@ function Test-SoftwareRecognitionCatalog {
 
 function Get-SoftwareRecognitionCatalog {
     [CmdletBinding()]
-    param([Parameter(Mandatory)] $ConvertFromJsonCommand)
+    param(
+        [Parameter(Mandatory)] $ConvertFromJsonCommand,
+        [Parameter(Mandatory)] $TestJsonCommand
+    )
 
     # The generated application embeds the reviewed bytes and a build-computed
     # digest. A digest mismatch means an authenticated release resource changed:
@@ -119,9 +224,19 @@ function Get-SoftwareRecognitionCatalog {
             Replace("`r`n", "`n").Replace("`r", "`n")
         $bytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
         $expectedDigest = Get-SoftwareRecognitionSha256 -Bytes $bytes
+        $schemaPath = Join-Path (Split-Path -Parent $PSScriptRoot) `
+            'schemas/software-recognition-catalog.schema.json'
+        $schemaText = [IO.File]::ReadAllText(
+            $schemaPath, [Text.UTF8Encoding]::new($false, $true)
+        ).Replace("`r`n", "`n").Replace("`r", "`n")
+        $schemaBytes = [Text.UTF8Encoding]::new($false).GetBytes($schemaText)
+        $expectedSchemaDigest = Get-SoftwareRecognitionSha256 -Bytes $schemaBytes
     }
     else {
-        try { $bytes = [Convert]::FromBase64String($script:SoftwareRecognitionCatalogBase64) }
+        try {
+            $bytes = [Convert]::FromBase64String($script:SoftwareRecognitionCatalogBase64)
+            $schemaBytes = [Convert]::FromBase64String($script:SoftwareRecognitionSchemaBase64)
+        }
         catch {
             $exception = [Security.SecurityException]::new(
                 'The embedded Software Recognition Catalog is not authentic.', $_.Exception
@@ -130,9 +245,12 @@ function Get-SoftwareRecognitionCatalog {
             throw $exception
         }
         $expectedDigest = $script:SoftwareRecognitionCatalogDigest
+        $expectedSchemaDigest = $script:SoftwareRecognitionSchemaDigest
     }
     $actualDigest = Get-SoftwareRecognitionSha256 -Bytes $bytes
-    if ($actualDigest -ne $expectedDigest) {
+    $actualSchemaDigest = Get-SoftwareRecognitionSha256 -Bytes $schemaBytes
+    if ($actualDigest -ne $expectedDigest -or
+        $actualSchemaDigest -ne $expectedSchemaDigest) {
         $exception = [Security.SecurityException]::new(
             'The embedded Software Recognition Catalog failed digest validation.'
         )
@@ -145,10 +263,13 @@ function Get-SoftwareRecognitionCatalog {
     # defect must not erase software already observed, so it becomes a confined
     # NotEvaluated annotation after collection rather than a run-level failure.
     try {
-        $catalog = & $ConvertFromJsonCommand -InputObject (
-            [Text.UTF8Encoding]::new($false, $true).GetString($bytes)
-        ) -Depth 30 -ErrorAction Stop
-        $logicalLoadValid = Test-SoftwareRecognitionCatalog -Catalog $catalog
+        $catalogText = [Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+        $schemaText = [Text.UTF8Encoding]::new($false, $true).GetString($schemaBytes)
+        $catalog = & $ConvertFromJsonCommand -InputObject $catalogText `
+            -Depth 30 -ErrorAction Stop
+        $logicalLoadValid = [bool](& $TestJsonCommand -Json $catalogText `
+            -Schema $schemaText -ErrorAction Stop) -and
+            (Test-SoftwareRecognitionCatalog -Catalog $catalog)
     }
     catch {
         $catalog = $null
@@ -241,17 +362,31 @@ function Invoke-SoftwareRecognition {
         # Keep this as an explicit array even when exactly one family matches.
         # PowerShell otherwise unwraps the single string produced by an `if`
         # expression, and indexing that string would select its first character.
-        $matchedFamilyIds = @()
+        [string[]]$matchedFamilyIds = @()
         if ($matchedRecords.Count -gt 0) {
-            $matchedFamilyIds = @($matchedRecords.family.familyId | Sort-Object -Unique)
+            $matchedFamilyIds = @(Get-SoftwareRecognitionOrdinalStrings `
+                -Values @($matchedRecords.family.familyId))
         }
         if ($matchedFamilyIds.Count -eq 1) {
             $familyMatches = @($matchedRecords | Where-Object {
-                [string]$_.family.familyId -eq [string]$matchedFamilyIds[0]
+                [string]::Equals([string]$_.family.familyId,
+                    [string]$matchedFamilyIds[0],[StringComparison]::Ordinal)
             })
-            $selectedMatch = @($familyMatches | Sort-Object {
-                if ([string]$_.matcher.type -eq 'CompositeRegistration') { 1 } else { 0 }
-            })[0]
+            $selectedMatch = $null
+            foreach ($type in @('ExactPackageFamilyName','ExactMsiProductCode',
+                'ExactMsiUpgradeCode','CompositeRegistration')) {
+                $typeMatches = @($familyMatches | Where-Object {
+                    [string]$_.matcher.type -ceq $type
+                })
+                if ($typeMatches.Count -eq 0) { continue }
+                $selectedId = @(Get-SoftwareRecognitionOrdinalStrings `
+                    -Values @($typeMatches.matcher.matcherId))[0]
+                $selectedMatch = $typeMatches | Where-Object {
+                    [string]::Equals([string]$_.matcher.matcherId,$selectedId,
+                        [StringComparison]::Ordinal)
+                } | Select-Object -First 1
+                break
+            }
             [pscustomobject][ordered]@{
                 subjectId = $null
                 outcome = if ([string]$selectedMatch.matcher.type -eq 'CompositeRegistration') {
@@ -260,8 +395,10 @@ function Invoke-SoftwareRecognition {
                 familyId = [string]$selectedMatch.family.familyId
                 familyLabel = [string]$selectedMatch.family.label
                 roles = @($selectedMatch.family.roles)
-                matcherIds = @($familyMatches.matcher.matcherId | Sort-Object -Unique)
-                matcherTypes = @($familyMatches.matcher.type | Sort-Object -Unique)
+                matcherIds = @(Get-SoftwareRecognitionOrdinalStrings `
+                    -Values @($familyMatches.matcher.matcherId))
+                matcherTypes = @(Get-SoftwareRecognitionOrdinalStrings `
+                    -Values @($familyMatches.matcher.type))
                 matchStrengthExplanation = switch ([string]$selectedMatch.matcher.type) {
                     'ExactPackageFamilyName' { 'Exact package family name' }
                     'ExactMsiProductCode' { 'Exact MSI ProductCode' }
@@ -284,8 +421,10 @@ function Invoke-SoftwareRecognition {
                 familyId = $null
                 familyLabel = $null
                 roles = @()
-                matcherIds = @($matchedRecords.matcher.matcherId | Sort-Object -Unique)
-                matcherTypes = @($matchedRecords.matcher.type | Sort-Object -Unique)
+                matcherIds = @(Get-SoftwareRecognitionOrdinalStrings `
+                    -Values @($matchedRecords.matcher.matcherId))
+                matcherTypes = @(Get-SoftwareRecognitionOrdinalStrings `
+                    -Values @($matchedRecords.matcher.type))
                 matchStrengthExplanation = 'More than one catalog family matched; WIN-PCInfo did not choose by catalog order.'
                 reasonCode = 'SOFTWARE_RECOGNITION.MULTIPLE_FAMILIES_MATCHED'
                 catalogRevision = [int]$Catalog.catalogRevision
@@ -311,6 +450,10 @@ function Invoke-SoftwareRecognition {
                 provenance = @()
             }
         }
+    }
+    if ((Get-SoftwareRecognitionResultMaximumUtf8Bytes -Annotations @($annotations)) -gt
+        [int]$Catalog.operation.maximumEvidenceUtf8Bytes) {
+        throw 'The Software Recognition annotation output exceeds its frozen UTF-8 ceiling.'
     }
     [pscustomobject][ordered]@{
         state = 'Evaluated'

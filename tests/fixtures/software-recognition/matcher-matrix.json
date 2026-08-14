@@ -2,6 +2,23 @@
   "contractVersion": "1.0.0",
   "exactPackageFamilyName": "Microsoft.CompanyPortal_8wekyb3d8bbwe",
   "nearPackageFamilyName": "Microsoft.CompanyPortal_8wekyb3d8bbwe.preview",
+  "publishedPackageFamilyNames": [
+    {
+      "familyId": "family:microsoft.company-portal",
+      "exact": "Microsoft.CompanyPortal_8wekyb3d8bbwe",
+      "near": "Microsoft.CompanyPortal_8wekyb3d8bbwe.preview"
+    },
+    {
+      "familyId": "family:microsoft.onenote-for-windows-10",
+      "exact": "Microsoft.Office.OneNote_8wekyb3d8bbwe",
+      "near": "Microsoft.Office.OneNote_8wekyb3d8bbwf"
+    },
+    {
+      "familyId": "family:microsoft.store",
+      "exact": "Microsoft.WindowsStore_8wekyb3d8bbwe",
+      "near": "Microsoft.WindowsStore_8wekyb3d8bbwe.beta"
+    }
+  ],
   "exactMsiProductCode": "{11111111-2222-3333-4444-555555555555}",
   "exactMsiUpgradeCode": "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}",
   "composite": {

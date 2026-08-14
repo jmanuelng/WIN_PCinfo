@@ -50,7 +50,8 @@ $sourceValidation=Test-CanonicalRecord $record
 Assert-Equal 'CONTRACT.ACCEPTED' $sourceValidation.reasonCode 'MSI installed and advertised states cross the canonical field contract'
 $record=Complete-ValidatedSoftwareInventoryAssessmentRecord $record $softwarePolicy $sourceValidation
 $recognitionCatalog=Get-SoftwareRecognitionCatalog `
-    -ConvertFromJsonCommand $facts.convertFromJsonCommand
+    -ConvertFromJsonCommand $facts.convertFromJsonCommand `
+    -TestJsonCommand $facts.testJsonCommand
 $findingCountBeforeRecognition=@($record.findings).Count
 $record=Add-SoftwareRecognitionAnnotations -Record $record `
     -Entries @($collector.payload.entries) `

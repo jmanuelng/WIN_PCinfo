@@ -10,7 +10,7 @@ The initial seed contains three primary-source-backed Microsoft package-family i
 
 ## Focused evidence
 
-The focused suites cover exact PFN, MSI ProductCode, MSI UpgradeCode, Unicode composite, near-match rejection, user/machine and registry-view context, cross-family ambiguity in both orders, unknown software, malformed logical load, duplicate IDs, forbidden matcher types, reasoned withdrawn tombstones, invalid active withdrawn matchers, deterministic embedding, protected-package reopening, report language, and digest alteration before collection.
+The focused suites cover exact PFN, MSI ProductCode, MSI UpgradeCode from a strict read-only uninstall registration, Unicode composite, near-match rejection for every published PFN, user/machine and registry-view context, ordinal case-distinct cross-family ambiguity in both catalog orders, unknown software, malformed and strict-schema-invalid logical loads, duplicate IDs, forbidden matcher types, reasoned withdrawn tombstones, invalid active withdrawn matchers, bounded UTF-8 output, deterministic catalog-and-schema embedding, protected-package reopening, report language, and digest alteration before collection.
 
 The generated positive fixture preserves five ordinary registrations, emits five annotations, recognizes one exact release-seed PFN, leaves four safely unrecognized, and creates no finding. The logical-failure fixture preserves the same five registrations and emits five `NotEvaluated` annotations. The digest-tamper fixture exits 20 as `NotStarted` with `SOFTWARE_RECOGNITION.INTEGRITY_FAILED` and `collectionStarted=false`.
 
@@ -28,4 +28,4 @@ pwsh -NoLogo -NoProfile -File ./tests/BuildDeterminism.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1
 ```
 
-The final uninterrupted repository gate passed all 80 test files in 1,669.8 seconds. The normalized release-catalog SHA-256 is `e24f18f2f46ec7f20fa45a84791e7ebd3319856e1ac6f44851a1dc1020fb2150`; the deterministic generated-application SHA-256 is `6cbdc804d6e25e920ae0ef4e8bfb04cbbab936ab60f22e0a0ebc1a7a0eb42bba`; and its authenticated application-manifest digest is `dca36fbd3ccdcd4bbd9390a8685325734bb1bb9650293e316bc994d3c87c9fb1`.
+The final uninterrupted repository gate passed all 80 test files in 1,947.6 seconds. The normalized release-catalog SHA-256 is `e24f18f2f46ec7f20fa45a84791e7ebd3319856e1ac6f44851a1dc1020fb2150`; the deterministic generated-application SHA-256 is `637d135ed5fb8b959241f103170b7f9578a4b83ec7ba84cf2b22461daac566fb`; and its authenticated application-manifest digest is `ce14b9d91d39b1b04765daf711f0eded22ebb5b84df0749b18684b3b277a4852`.

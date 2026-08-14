@@ -75,7 +75,7 @@
       "properties": {
         "sourceType": { "enum": ["PrimaryPublisherDocumentation", "ControlledFreshInstallation", "PinnedWinGetManifest"] },
         "owner": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "url": { "type": "string", "format": "uri", "pattern": "^https://", "maxLength": 2048 },
         "verifiedOn": { "type": "string", "format": "date" },
         "reviewer": { "type": "string", "minLength": 1, "maxLength": 128 },
         "pinnedCommit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
@@ -116,6 +116,7 @@
         "fields": {
           "type": "object",
           "additionalProperties": false,
+          "required": ["registrationId"],
           "minProperties": 2,
           "properties": {
             "registrationId": { "type": "string", "minLength": 1, "maxLength": 512 },
