@@ -74,7 +74,7 @@ Assert-Equal 'observe-device-registration|observe-enrollment-context|observe-mdm
 Assert-Equal 'StandardUser|StandardUser|LocalSystem' `
     (@($automationSummary.plan.identityEnrollment.collectors.executionContext) -join '|') `
     'the immutable plan keeps identity execution contexts separate'
-Assert-Equal 5 $automationSummary.plan.privilege.privilegedOperations.Count 'administrator and SYSTEM work is concrete and frozen'
+Assert-Equal 4 $automationSummary.plan.privilege.privilegedOperations.Count 'administrator and SYSTEM work is concrete and frozen'
 Assert-Equal 'LocalOnly' $automationSummary.plan.network.behavior 'local-only behavior is explicit'
 Assert-Equal 0 $automationSummary.plan.network.plannedRequests.Count 'local-only plans no assessment requests'
 Assert-Equal $true $automationSummary.plan.privilege.elevationRequired 'the frozen plan discloses its one elevation boundary'

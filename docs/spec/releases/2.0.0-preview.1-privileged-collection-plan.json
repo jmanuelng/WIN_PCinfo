@@ -11,8 +11,7 @@
   "operations": [
     { "operationId": "observe-firmware-tpm", "context": "Administrator", "parameterContract": "ClosedEmptyObject" },
     { "operationId": "observe-local-administrators", "context": "Administrator", "parameterContract": "ClosedEmptyObject" },
-    { "operationId": "observe-effective-policy", "context": "Administrator", "parameterContract": "ClosedEmptyObject" },
-    { "operationId": "observe-certificate-trust", "context": "Administrator", "parameterContract": "ClosedEmptyObject" }
+    { "operationId": "observe-effective-policy", "context": "Administrator", "parameterContract": "ClosedEmptyObject" }
   ],
   "channel": {
     "pipeNamePrefix": "WINPCInfo-PrivilegedCollectionPlan-v1-",
@@ -30,7 +29,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "CompressedInlineReleaseSource",
-    "payloadSha256": "9fe7885c57aec3be6bb8692ba43af4b1d9488673aa8ad34545606076640c45cc"
+    "payloadSha256": "3f0090624d3318eccfb5862e8700ad6f72182360c41e62c977ee2f2c760e44bf"
   },
   "deadlines": {
     "connectMaximumMilliseconds": 5000,

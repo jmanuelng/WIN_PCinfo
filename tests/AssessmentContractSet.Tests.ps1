@@ -18,16 +18,39 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.7.0' $contractSet.contractVersion `
-    'the additive Software Inventory contract has an explicit version'
+Assert-Equal '1.8.0' $contractSet.contractVersion `
+    'the additive Certificate Trust contract has an explicit version'
 Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 149 @($contractSet.fieldDefinitions).Count `
-    'historical fields remain while bounded software fields are admitted'
-Assert-Equal 51 @($contractSet.scopeDefinitions).Count `
-    'historical through software inventory scopes remain distinct'
+Assert-Equal 161 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while bounded certificate fields are admitted'
+Assert-Equal 57 @($contractSet.scopeDefinitions).Count `
+    'historical through purpose-bound certificate scopes remain distinct'
+$certificateFields = @($contractSet.fieldDefinitions | Where-Object fieldId -like 'field:certificate.*')
+Assert-Equal 12 $certificateFields.Count `
+    'presence, purpose, identity, store, dates, validity, chain, trust, and key protection remain explicit fields'
+foreach ($certificateField in $certificateFields) {
+    Assert-Equal 'CAP-0014' $certificateField.capabilityIds[0] `
+        'every certificate field traces to the release certificate capability'
+    Assert-Equal 'RestrictedDiagnosticEvidence' $certificateField.sensitivity `
+        'certificate values and fingerprints remain Restricted Diagnostic Evidence'
+    Assert-Equal $false $certificateField.publicEligibility.values `
+        'no certificate field value is eligible for public output'
+}
+$certificateScopes = @($contractSet.scopeDefinitions | Where-Object scopeId -like 'scope:certificate.*')
+Assert-Equal 6 $certificateScopes.Count `
+    'management, authentication, device identity, code trust, TLS inspection, and service connectivity stay independent'
+foreach ($certificateScope in $certificateScopes) {
+    Assert-Equal 12 @($certificateScope.fieldIds).Count `
+        'every purpose scope can distinguish all certificate evidence states'
+    Assert-Equal 'collector:windows.purpose-bound-certificate-trust' $certificateScope.collectorIds[0] `
+        'certificate scopes resolve only to the purpose-bound read-only collector'
+}
+$certificateProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness'
+Assert-Equal 55 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
+    'the additive certificate profile inherits every earlier scope and adds six purpose scopes'
 
 $definition = @($contractSet.fieldDefinitions | Where-Object fieldId -eq 'field:device.os.display-name')[0]
 Assert-Equal 'field:device.os.display-name' $definition.fieldId 'the admitted field identity is release-bound'
@@ -142,4 +165,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.7 binds historical through Software Inventory scopes to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.8 binds historical through Certificate Trust scopes to Draft 2020-12 contracts.'

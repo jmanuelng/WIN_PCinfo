@@ -43,6 +43,7 @@ $expectedSourcePaths = @(
     'src/ResourceDependencies.ps1'
     'src/NetworkTopology.ps1'
     'src/SoftwareInventory.ps1'
+    'src/CertificateTrust.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -86,6 +87,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/resource-dependencies.schema.json'
     'schemas/network-topology.schema.json'
     'schemas/software-inventory.schema.json'
+    'schemas/certificate-trust.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
     'docs/spec/releases/2.0.0-preview.1-run-lifecycle.json'
@@ -102,6 +104,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-resource-dependencies.json'
     'docs/spec/releases/2.0.0-preview.1-network-topology.json'
     'docs/spec/releases/2.0.0-preview.1-software-inventory.json'
+    'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq
     (@($expectedApplicationResourcePaths | Sort-Object) -join '|')) `
@@ -170,6 +173,17 @@ Assert-True (@($standaloneSoftware.Records | Where-Object {
     $_.recordType -eq 'win-pcinfo.software-inventory-validation' -and $_.assessmentRecordValidated
 }).Count -eq 1) `
     'standalone Software Inventory completes record, report, package, and cleanup validation'
+$standaloneCertificate = Invoke-GeneratedApplication -CandidatePath $firstPath -Arguments @(
+    '-Mode','Automation','-RequestPath',(Join-Path $PSScriptRoot 'fixtures/automation-request.json'),
+    '-AcceptPreparation','-PreparationFixturePath',(Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'),
+    '-CertificateTrustFixturePath',(Join-Path $PSScriptRoot 'fixtures/certificate-trust/valid-trusted.json')
+)
+Assert-True ($standaloneCertificate.ExitCode -eq 10) `
+    'a generated artifact outside an adjacent resource tree uses embedded Certificate Trust policy bytes'
+Assert-True (@($standaloneCertificate.Records | Where-Object {
+    $_.recordType -eq 'win-pcinfo.certificate-trust-validation' -and $_.assessmentRecordValidated
+}).Count -eq 1) `
+    'standalone Certificate Trust completes record, report, package, and cleanup validation'
 Assert-True ($firstBytes[0] -eq 0xEF -and $firstBytes[1] -eq 0xBB -and $firstBytes[2] -eq 0xBF) `
     'the signing representation starts with a UTF-8 BOM'
 

@@ -25,8 +25,8 @@ Assert-Equal $false $policy.elevation.retryDeniedElevation `
     'denial cannot trigger another prompt'
 Assert-Equal 'AlreadyElevatedNoPrompt' $policy.elevation.alreadyElevatedDisposition `
     'an eligible elevated launch does not request elevation again'
-Assert-Equal 4 @($policy.operations).Count `
-    'the worker accepts exactly the four Administrator operations in the immutable Privileged Collection Plan'
+Assert-Equal 3 @($policy.operations).Count `
+    'the worker accepts exactly the three Administrator operations in the immutable Privileged Collection Plan'
 foreach ($operation in @($policy.operations)) {
     Assert-Equal 'Administrator' $operation.context `
         "$($operation.operationId) remains inside the Administrator phase"
@@ -57,7 +57,7 @@ Assert-Equal $true $policy.channel.requirePeerProcessId `
 Assert-Equal $true $policy.channel.requireArtifactDigest `
     'both peers bind the handshake to reviewed worker source'
 Assert-Equal 'FirmwareTpmLocalAdministratorsAndEffectivePolicyProjectionV1' $policy.channel.assessmentEvidenceContract `
-    'only the two release-owned bounded privileged projections may cross the privilege channel'
+    'only the three release-owned bounded privileged projections may cross the privilege channel'
 $canonicalWorkerSource = (Get-PrivilegedCollectionWorkerSource).Replace("`r`n", "`n").Replace("`r", "`n")
 $workerDigest = Get-PrivilegedCollectionPlanSha256 -Bytes (
     [System.Text.UTF8Encoding]::new($false).GetBytes($canonicalWorkerSource)

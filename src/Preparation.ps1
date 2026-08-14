@@ -300,6 +300,10 @@ function New-PreparationPlan {
         # complete policy here prevents a later profile, hive, binary, repair,
         # package-content, or network operation from entering after approval.
         softwareInventory = $Definition.softwareInventory
+        # Certificate evidence is purpose-bound before approval. The plan
+        # freezes exact stores, EKUs, offline chain behavior, metadata limits,
+        # and the prohibition on private-key access or trust modification.
+        certificateTrust = $Definition.certificateTrust
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -457,6 +461,7 @@ function Invoke-PreparationGate {
     $resourceDependenciesFixturePath = [string] $ValidationContext.ResourceDependenciesFixturePath
     $networkTopologyFixturePath = [string] $ValidationContext.NetworkTopologyFixturePath
     $softwareInventoryFixturePath = [string] $ValidationContext.SoftwareInventoryFixturePath
+    $certificateTrustFixturePath = [string] $ValidationContext.CertificateTrustFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -534,7 +539,7 @@ function Invoke-PreparationGate {
             $deviceReadinessFixturePath, $identityEnrollmentFixturePath,
             $administratorExposureFixturePath, $effectivePolicyFixturePath,
             $resourceDependenciesFixturePath, $networkTopologyFixturePath,
-            $softwareInventoryFixturePath) |
+            $softwareInventoryFixturePath, $certificateTrustFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -679,6 +684,22 @@ function Invoke-PreparationGate {
             -CompletedUnits 0 -TotalUnits 1 -Unit 'SoftwareInventory') `
             -ConvertToJsonCommand $ConvertToJsonCommand
         return Invoke-DeviceReadinessSlice -SoftwareInventoryLiteralPath $softwareInventoryFixturePath `
+            -PreparationPlan $planResult.Plan `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($certificateTrustFixturePath)) {
+        # Certificate identities, fingerprints, dates, and trust observations
+        # are Restricted. Public progress names only the frozen operation.
+        Write-ContractRecord (New-ProgressRecord `
+            -Sequence 10 -Phase 'Collection' `
+            -State 'Started' -MessageId 'certificate-trust.collection.started' `
+            -CompletedUnits 0 -TotalUnits 1 -Unit 'CertificateTrust') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return Invoke-DeviceReadinessSlice -CertificateTrustLiteralPath $certificateTrustFixturePath `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `

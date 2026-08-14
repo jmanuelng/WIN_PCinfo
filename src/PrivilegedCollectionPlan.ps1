@@ -44,8 +44,8 @@ function Get-PrivilegedCollectionPlanPolicy {
         $policy.release -ne '2.0.0-preview.1' -or
         $policy.policyId -ne 'win-pcinfo.privileged-collection-plan/1.0.0' -or
         $policy.elevation.maximumUacInteractions -ne 1 -or
-        @($operationIds).Count -ne 4 -or
-        @($operationIds | Sort-Object -Unique).Count -ne 4 -or
+        @($operationIds).Count -ne 3 -or
+        @($operationIds | Sort-Object -Unique).Count -ne 3 -or
         $policy.channel.maximumServerInstances -ne 1 -or
         @($policy.validationScenarios).Count -ne 9) {
         throw 'The privilege policy is not semantically closed.'
@@ -135,7 +135,7 @@ function Get-PrivilegedCollectionWorkerSource {
     # This is reviewed product source, not caller input. It is encoded directly
     # into the fixed PowerShell launch argument so there is no writable script
     # file to replace between validation and elevation. The worker understands
-    # one tiny framed protocol and four empty-parameter operation identities; it
+    # one tiny framed protocol and three empty-parameter operation identities; it
     # has no command parser, plug-in loader, path parameter, evidence serializer,
     # or credential input.
     @'
@@ -1166,10 +1166,10 @@ try {
         $assessmentUserSid=$root.GetProperty('assessmentUserSid').GetString()
         $allowed = @(
             'observe-firmware-tpm', 'observe-local-administrators',
-            'observe-effective-policy', 'observe-certificate-trust'
+            'observe-effective-policy'
         )
         $operations = @($root.GetProperty('operations').EnumerateArray())
-        if ($operations.Count -ne 4) { throw 'The privileged operation set is incomplete.' }
+        if ($operations.Count -ne 3) { throw 'The privileged operation set is incomplete.' }
         for ($index = 0; $index -lt $operations.Count; $index++) {
             $operation = $operations[$index]
             $operationNames = @($operation.EnumerateObject() | ForEach-Object Name)
@@ -1217,7 +1217,7 @@ try {
         phaseId = $phaseId
         operations = @(
             'observe-firmware-tpm', 'observe-local-administrators',
-            'observe-effective-policy', 'observe-certificate-trust'
+            'observe-effective-policy'
         ) | ForEach-Object { [ordered]@{ operationId = $_; state = 'Completed'; phaseId = $phaseId } }
     }
     if ([string]$configuration.firmwareScenario -ne 'None') {
@@ -2128,10 +2128,10 @@ finally { $pipe.Dispose() }
             $workerResult.contractVersion -ne '1.0.0' -or
             $workerResult.nonce -ne $nonce -or $workerResult.planDigest -ne $PlanDigest -or
             [string]::IsNullOrWhiteSpace([string] $workerResult.phaseId) -or
-            @($workerResult.operations).Count -ne 4) {
+            @($workerResult.operations).Count -ne 3) {
             throw 'The privilege worker result failed its closed schema.'
         }
-        for ($index = 0; $index -lt 4; $index++) {
+        for ($index = 0; $index -lt 3; $index++) {
             $operation = $workerResult.operations[$index]
             if (-not (Test-PrivilegedCollectionOperationResult -Operation $operation `
                 -ExpectedOperationId $policy.operations[$index].operationId `

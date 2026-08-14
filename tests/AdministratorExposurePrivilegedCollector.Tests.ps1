@@ -20,8 +20,7 @@ $plan=[pscustomobject][ordered]@{
         privilegedOperations=@(
             [pscustomobject][ordered]@{operationId='observe-firmware-tpm';context='Administrator';parameters=[pscustomobject]@{}},
             [pscustomobject][ordered]@{operationId='observe-local-administrators';context='Administrator';parameters=[pscustomobject]@{}},
-            [pscustomobject][ordered]@{operationId='observe-effective-policy';context='Administrator';parameters=[pscustomobject]@{}},
-            [pscustomobject][ordered]@{operationId='observe-certificate-trust';context='Administrator';parameters=[pscustomobject]@{}}
+            [pscustomobject][ordered]@{operationId='observe-effective-policy';context='Administrator';parameters=[pscustomobject]@{}}
         )
     }
 }
