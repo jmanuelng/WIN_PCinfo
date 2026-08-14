@@ -1,0 +1,104 @@
+{
+  "kind": "win-pcinfo.microsoft-connectivity-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "catalogVersion": "2026-08-14",
+  "evidenceProfileId": "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness",
+  "collector": {
+    "collectorId": "collector:windows.microsoft-connectivity",
+    "collectorVersion": "1.0.0",
+    "operationId": "op:microsoft-connectivity.collect",
+    "sourceId": "source:release.microsoft-connectivity-probe-plan",
+    "executionContext": "StandardUser",
+    "privilege": "StandardUser",
+    "networkBehavior": "MicrosoftConnectivityEnabled",
+    "executable": "InProcessDotNet",
+    "dependency": "BuiltInDotNet",
+    "deadlineMilliseconds": 45000,
+    "maximumEndpoints": 3,
+    "maximumAddressesPerEndpoint": 8,
+    "maximumCertificateChainElements": 8,
+    "maximumHeaderEntries": 32,
+    "maximumResultUtf8Bytes": 65536,
+    "maximumAttempts": 1,
+    "mayPrompt": false,
+    "mayInstall": false,
+    "mayDownload": false,
+    "maySelfElevate": false,
+    "writesAllowed": false,
+    "cleanup": "Dispose sockets, TLS streams, HTTP handlers, certificates, and cancellation sources; retain no payload bytes."
+  },
+  "endpoints": [
+    {
+      "endpointId": "endpoint:microsoft.intune-enrollment",
+      "service": "MicrosoftIntuneEnrollment",
+      "dnsName": "enterpriseenrollment-s.manage.microsoft.com",
+      "uri": "https://enterpriseenrollment-s.manage.microsoft.com/EnrollmentServer/Discovery.svc",
+      "port": 443,
+      "transportModes": ["Direct", "WindowsProxy"],
+      "http": { "method": "HEAD", "maximumResponseBodyBytes": 0, "maximumHeaderBytes": 16384, "maximumRedirects": 0 },
+      "source": {
+        "url": "https://learn.microsoft.com/en-us/intune/device-enrollment/windows/create-cname-autodiscovery",
+        "reviewedOn": "2026-08-14",
+        "limitation": "This generic Microsoft target does not validate an organization's tenant-specific EnterpriseEnrollment CNAME."
+      }
+    },
+    {
+      "endpointId": "endpoint:microsoft.entra-device-registration",
+      "service": "MicrosoftEntraDeviceRegistration",
+      "dnsName": "enterpriseregistration.windows.net",
+      "uri": "https://enterpriseregistration.windows.net/",
+      "port": 443,
+      "transportModes": ["Direct", "WindowsProxy"],
+      "http": { "method": "HEAD", "maximumResponseBodyBytes": 0, "maximumHeaderBytes": 16384, "maximumRedirects": 0 },
+      "source": {
+        "url": "https://learn.microsoft.com/en-us/intune/device-enrollment/windows/create-cname-autodiscovery",
+        "reviewedOn": "2026-08-14",
+        "limitation": "This generic Microsoft target does not validate an organization's tenant-specific EnterpriseRegistration CNAME."
+      }
+    },
+    {
+      "endpointId": "endpoint:microsoft.identity-security-common",
+      "service": "MicrosoftIdentityAndDefenderSecurityManagement",
+      "dnsName": "login.microsoftonline.com",
+      "uri": "https://login.microsoftonline.com/",
+      "port": 443,
+      "transportModes": ["Direct", "WindowsProxy"],
+      "http": { "method": "HEAD", "maximumResponseBodyBytes": 0, "maximumHeaderBytes": 16384, "maximumRedirects": 0 },
+      "source": {
+        "url": "https://learn.microsoft.com/en-us/defender-endpoint/standard-device-connectivity-urls-commercial",
+        "reviewedOn": "2026-08-14",
+        "limitation": "This shared endpoint does not prove tenant authorization, Defender onboarding, regional service reachability, or product health."
+      }
+    }
+  ],
+  "scopes": [
+    { "scopeId": "scope:connectivity.dns", "sourceId": "source:dotnet.dns.release-endpoint", "fieldIds": ["field:connectivity.endpoint-id", "field:connectivity.service", "field:connectivity.catalog-state", "field:connectivity.dns.state", "field:connectivity.dns.address-count"] },
+    { "scopeId": "scope:connectivity.tcp", "sourceId": "source:dotnet.tcp.release-endpoint", "fieldIds": ["field:connectivity.tcp.state", "field:connectivity.tcp.port"] },
+    { "scopeId": "scope:connectivity.tls", "sourceId": "source:dotnet.tls.release-endpoint", "fieldIds": ["field:connectivity.tls.state"] },
+    { "scopeId": "scope:connectivity.certificate-chain", "sourceId": "source:dotnet.tls-certificate-chain", "fieldIds": ["field:connectivity.certificate-chain.state", "field:connectivity.certificate-chain.element-count", "field:connectivity.certificate-chain.direct-leaf-sha256", "field:connectivity.certificate-chain.http-leaf-sha256", "field:connectivity.certificate-chain.status-codes", "field:connectivity.tls-inspection.outcome", "field:connectivity.tls-inspection.corroboration"] },
+    { "scopeId": "scope:connectivity.negotiation", "sourceId": "source:dotnet.tls-negotiation", "fieldIds": ["field:connectivity.negotiated-protocol", "field:connectivity.negotiated-cipher"] },
+    { "scopeId": "scope:connectivity.proxy", "sourceId": "source:windows.system-proxy-http", "fieldIds": ["field:connectivity.proxy.mode", "field:connectivity.proxy.state"] },
+    { "scopeId": "scope:connectivity.http", "sourceId": "source:dotnet.http-metadata", "fieldIds": ["field:connectivity.http.state", "field:connectivity.http.status-code", "field:connectivity.http.redirect-state", "field:connectivity.http.header-count"] },
+    { "scopeId": "scope:connectivity.enrollment-dns", "sourceId": "source:dotnet.dns.microsoft-enrollment-target", "fieldIds": ["field:connectivity.enrollment-dns.state"] }
+  ],
+  "operations": [
+    { "operationId": "op:microsoft-connectivity.catalog.validate", "sourceId": "source:release.microsoft-endpoint-catalog", "executionContext": "StandardUser", "privilege": "StandardUser", "networkBehavior": "None", "executable": "InProcessPowerShell", "dependency": "None", "deadlineMilliseconds": 250, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "No runtime resource is created." },
+    { "operationId": "op:microsoft-connectivity.dns.resolve", "sourceId": "source:dotnet.dns.release-endpoint", "executionContext": "StandardUser", "privilege": "StandardUser", "networkBehavior": "MicrosoftConnectivityEnabled", "executable": "InProcessDotNet", "dependency": "BuiltInDotNet", "deadlineMilliseconds": 5000, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "Dispose the deadline cancellation source; retain only bounded typed results." },
+    { "operationId": "op:microsoft-connectivity.tcp.connect", "sourceId": "source:dotnet.tcp.release-endpoint", "executionContext": "StandardUser", "privilege": "StandardUser", "networkBehavior": "MicrosoftConnectivityEnabled", "executable": "InProcessDotNet", "dependency": "BuiltInDotNet", "deadlineMilliseconds": 5000, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "Dispose the owned TCP client and deadline cancellation source." },
+    { "operationId": "op:microsoft-connectivity.tls.handshake", "sourceId": "source:dotnet.tls.release-endpoint", "executionContext": "StandardUser", "privilege": "StandardUser", "networkBehavior": "MicrosoftConnectivityEnabled", "executable": "InProcessDotNet", "dependency": "BuiltInDotNet", "deadlineMilliseconds": 5000, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "Dispose the owned TLS stream, socket, and temporary remote certificate object." },
+    { "operationId": "op:microsoft-connectivity.certificate-chain.build", "sourceId": "source:dotnet.tls-certificate-chain", "executionContext": "StandardUser", "privilege": "StandardUser", "networkBehavior": "MicrosoftConnectivityEnabled", "executable": "InProcessDotNet", "dependency": "BuiltInDotNet", "deadlineMilliseconds": 1000, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "Disable certificate downloads and revocation network access; dispose the offline chain and copied certificates." },
+    { "operationId": "op:microsoft-connectivity.proxy.observe", "sourceId": "source:windows.system-proxy-http", "executionContext": "StandardUser", "privilege": "StandardUser", "networkBehavior": "MicrosoftConnectivityEnabled", "executable": "InProcessDotNet", "dependency": "BuiltInWindowsProxy", "deadlineMilliseconds": 1000, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "Dispose the proxy and handler objects without changing Windows proxy settings." },
+    { "operationId": "op:microsoft-connectivity.http.head", "sourceId": "source:dotnet.http-metadata", "executionContext": "StandardUser", "privilege": "StandardUser", "networkBehavior": "MicrosoftConnectivityEnabled", "executable": "InProcessDotNet", "dependency": "BuiltInDotNet", "deadlineMilliseconds": 5000, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "Dispose the response, request, HTTP client, handler, captured certificate, and cancellation source; read no body." },
+    { "operationId": "op:microsoft-connectivity.enrollment-dns.resolve", "sourceId": "source:dotnet.dns.microsoft-enrollment-target", "executionContext": "StandardUser", "privilege": "StandardUser", "networkBehavior": "MicrosoftConnectivityEnabled", "executable": "InProcessDotNet", "dependency": "BuiltInDotNet", "deadlineMilliseconds": 5000, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "Dispose the deadline cancellation source; transmit no tenant-derived DNS label." }
+  ],
+  "rules": [
+    { "operationId": "op:rule.microsoft-connectivity.evaluate", "ruleId": "rule:microsoft-connectivity.reachability/1.0.0", "findingKind": "microsoft-service-connectivity", "sourceId": "source:assessment-record.validated-connectivity-observations", "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "None", "executable": "InProcessPowerShell", "dependency": "None", "deadlineMilliseconds": 100, "maximumInputObservations": 48, "maximumOutputFindings": 1, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "No runtime resource or retained intermediate result is created." },
+    { "operationId": "op:rule.tls-inspection.evaluate", "ruleId": "rule:microsoft-connectivity.tls-inspection/1.0.0", "findingKind": "tls-inspection", "sourceId": "source:assessment-record.validated-connectivity-observations", "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "None", "executable": "InProcessPowerShell", "dependency": "None", "deadlineMilliseconds": 100, "maximumInputObservations": 24, "maximumOutputFindings": 1, "maximumAttempts": 1, "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false, "cleanup": "No runtime resource or retained intermediate result is created." }
+  ],
+  "recommendations": [
+    { "findingKind": "microsoft-service-connectivity", "definitionId": "recommendation:review-microsoft-connectivity/1.0.0" },
+    { "findingKind": "tls-inspection", "definitionId": "recommendation:review-tls-inspection/1.0.0" }
+  ],
+  "validationScenarios": ["DirectOutbound", "WindowsProxy", "Blocked", "PartiallyReachable", "DnsFailure", "Redirect", "Timeout", "TlsInspectionConfirmed", "TlsInspectionSuspected", "InvalidChain", "HttpMetadata", "LocalOnly", "EndpointRetired", "Unicode"]
+}

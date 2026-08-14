@@ -44,6 +44,7 @@ $expectedSourcePaths = @(
     'src/NetworkTopology.ps1'
     'src/SoftwareInventory.ps1'
     'src/CertificateTrust.ps1'
+    'src/MicrosoftConnectivity.ps1'
     'src/SoftwareRecognition.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
@@ -89,6 +90,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/network-topology.schema.json'
     'schemas/software-inventory.schema.json'
     'schemas/certificate-trust.schema.json'
+    'schemas/microsoft-connectivity.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -107,6 +109,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-network-topology.json'
     'docs/spec/releases/2.0.0-preview.1-software-inventory.json'
     'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
+    'docs/spec/releases/2.0.0-preview.1-microsoft-connectivity.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq

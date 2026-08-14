@@ -304,6 +304,10 @@ function New-PreparationPlan {
         # freezes exact stores, EKUs, offline chain behavior, metadata limits,
         # and the prohibition on private-key access or trust modification.
         certificateTrust = $Definition.certificateTrust
+        # Approval freezes the exact generic endpoint catalog, ports, methods,
+        # deadlines, redirect policy, and privacy limits. Local Only remains a
+        # zero-outbound path after this plan is approved.
+        microsoftConnectivity = $Definition.microsoftConnectivity
         # This is a declaration, not elevation. A later execution slice may
         # create at most one Windows administrator boundary and may use SYSTEM
         # only for the predefined evidence sources frozen into that same plan.
@@ -462,6 +466,7 @@ function Invoke-PreparationGate {
     $networkTopologyFixturePath = [string] $ValidationContext.NetworkTopologyFixturePath
     $softwareInventoryFixturePath = [string] $ValidationContext.SoftwareInventoryFixturePath
     $certificateTrustFixturePath = [string] $ValidationContext.CertificateTrustFixturePath
+    $microsoftConnectivityFixturePath = [string] $ValidationContext.MicrosoftConnectivityFixturePath
     $validationFixture = [bool] $ValidationContext.IsFixture
     $requestDigest = Get-RequestDigest -Request $Request -ConvertToJsonCommand $ConvertToJsonCommand
     $definitionResult = Get-PreparationDefinition -ConvertFromJsonCommand $ConvertFromJsonCommand `
@@ -539,7 +544,8 @@ function Invoke-PreparationGate {
             $deviceReadinessFixturePath, $identityEnrollmentFixturePath,
             $administratorExposureFixturePath, $effectivePolicyFixturePath,
             $resourceDependenciesFixturePath, $networkTopologyFixturePath,
-            $softwareInventoryFixturePath, $certificateTrustFixturePath) |
+            $softwareInventoryFixturePath, $certificateTrustFixturePath,
+            $microsoftConnectivityFixturePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     )
     if ($accepted -and $selectedExecutionFixtures.Count -gt 1) {
@@ -700,6 +706,23 @@ function Invoke-PreparationGate {
             -CompletedUnits 0 -TotalUnits 1 -Unit 'CertificateTrust') `
             -ConvertToJsonCommand $ConvertToJsonCommand
         return Invoke-DeviceReadinessSlice -CertificateTrustLiteralPath $certificateTrustFixturePath `
+            -PreparationPlan $planResult.Plan `
+            -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
+            -ApprovedRecipient $recipientSelection.approvedRecipient `
+            -RequestDigest $requestDigest -PlanDigest $planResult.Digest `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -ConvertToJsonCommand $ConvertToJsonCommand -TestJsonCommand $TestJsonCommand
+    }
+    if ($accepted -and -not [string]::IsNullOrWhiteSpace($microsoftConnectivityFixturePath)) {
+        # Endpoint observations, certificate paths, proxy outcomes, and HTTP
+        # metadata are Restricted. Progress exposes only the approved slice.
+        Write-ContractRecord (New-ProgressRecord `
+            -Sequence 11 -Phase 'Collection' `
+            -State 'Started' -MessageId 'microsoft-connectivity.collection.started' `
+            -CompletedUnits 0 -TotalUnits 1 -Unit 'MicrosoftConnectivity') `
+            -ConvertToJsonCommand $ConvertToJsonCommand
+        return Invoke-DeviceReadinessSlice `
+            -MicrosoftConnectivityLiteralPath $microsoftConnectivityFixturePath `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `

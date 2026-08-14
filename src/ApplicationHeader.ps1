@@ -148,7 +148,12 @@ param(
     # certificate scenario; it cannot carry a certificate, fingerprint, key,
     # password, store path, trust change, command, or collection authority.
     [Parameter(DontShow)]
-    [string] $CertificateTrustFixturePath
+    [string] $CertificateTrustFixturePath,
+
+    # Internal release-validation seam. The fixture selects only one frozen
+    # connectivity scenario and cannot supply a host, request, or credential.
+    [Parameter(DontShow)]
+    [string] $MicrosoftConnectivityFixturePath
 )
 
 Set-StrictMode -Version Latest
