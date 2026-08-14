@@ -31,7 +31,7 @@ pwsh -NoLogo -NoProfile -File ./tests/AssessmentContractSet.Tests.ps1
 
 Final local result on 2026-08-14:
 
-- `PASS: 81 test files completed.`
-- deterministic generated artifact SHA-256: `e3ab2427ec171aad952b661c8e317806f7fbd40b5dd8213cd691ea321ff9d488`
+- `PASS: 84 test files completed.`
+- deterministic generated artifact SHA-256: `2796ad20c532b54f743a0ec781e086821f611c572162b548d64ee4c964517456`
 
 This is repository and synthetic-fixture evidence only. It is not live physical-device, virtual-device, tenant, remote-service, revocation, or recipient-environment validation.
