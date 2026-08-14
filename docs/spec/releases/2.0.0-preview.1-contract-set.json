@@ -1,12 +1,13 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.7.0",
+  "contractVersion": "1.8.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
     "closed-scope-coverage",
     "evidence-references",
-    "prohibited-material-omission"
+    "prohibited-material-omission",
+    "software-recognition-annotations"
   ],
   "limits": {
     "maximumDocumentUtf8Bytes": 2097152,

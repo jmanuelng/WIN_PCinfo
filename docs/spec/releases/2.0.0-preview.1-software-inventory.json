@@ -32,7 +32,7 @@
     {
       "sourceId": "source:windows.registry.uninstall-registration",
       "interface": "Microsoft.Win32.RegistryKey.OpenBaseKey with explicit LocalMachine or CurrentUser and Registry32 or Registry64",
-      "approvedProperties": ["RegistrationId", "DisplayName", "DisplayVersion", "Publisher", "WindowsInstaller", "SystemComponent"],
+      "approvedProperties": ["RegistrationId", "DisplayName", "DisplayVersion", "Publisher", "UpgradeCode", "WindowsInstaller", "SystemComponent"],
       "limitation": "ReadOnlyExactAssessmentUserOrMachineRegistrationMetadata"
     },
     {

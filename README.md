@@ -34,6 +34,8 @@ To understand the offline network slice—local adapters, profiles, addressing, 
 
 To understand the read-only software slice—explicit 32-bit and 64-bit uninstall registration views, inventory-only MSI APIs, Windows package identities, Assessment User context, bounded gaps, Restricted identities, and the prohibition on `Win32_Product` and repair actions—read [Safe Software Inventory](docs/software-inventory.md).
 
+To understand the separate conservative family/role labels—exact Windows identities, contextual composites, ambiguity, unknown and `NotEvaluated` outcomes, catalog provenance, offline behavior, and why recognition never creates a finding—read [Software Recognition annotations](docs/software-recognition.md).
+
 To understand the direct local-administrator slice—well-known-SID group selection, direct-only membership, unresolved and nested identities, alternate-administrator separation, Restricted evidence, and non-removal guidance—read [Local administrator exposure and execution context](docs/local-administrator-exposure.md).
 
 To understand the policy slice—cached applied Group Policy identity/link/precedence, configured registry signals, local SAM policy, Audit Policy, direct user-right assignments, three-layer evidence semantics, Restricted identifiers, and no-refresh/no-install limits—read [Applied Group Policy and local security policy](docs/effective-policy-assessment.md).

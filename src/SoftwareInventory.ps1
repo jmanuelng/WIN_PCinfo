@@ -53,10 +53,11 @@ function Read-SoftwareInventoryFixture {
         $bytes=[IO.File]::ReadAllBytes([IO.Path]::GetFullPath($LiteralPath))
         if($bytes.Length -lt 1 -or $bytes.Length -gt 512){throw 'Fixture size is invalid.'}
         $json=[Text.UTF8Encoding]::new($false,$true).GetString($bytes);$document=[Text.Json.JsonDocument]::Parse($json)
-        try{$names=@($document.RootElement.EnumerateObject()|ForEach-Object Name);if($document.RootElement.ValueKind -ne [Text.Json.JsonValueKind]::Object -or (@($names|Sort-Object)-join '|') -ne 'contractVersion|scenario'){throw 'Fixture shape is invalid.'}}finally{$document.Dispose()}
+        try{$names=@($document.RootElement.EnumerateObject()|ForEach-Object Name);$shape=(@($names|Sort-Object)-join '|');if($document.RootElement.ValueKind -ne [Text.Json.JsonValueKind]::Object -or $shape -notin @('contractVersion|scenario','contractVersion|recognitionScenario|scenario')){throw 'Fixture shape is invalid.'}}finally{$document.Dispose()}
         $fixture=& $ConvertFromJsonCommand -InputObject $json -Depth 5 -ErrorAction Stop
-        if($fixture.contractVersion -ne '1.0.0' -or [string]$fixture.scenario -notin @($Policy.validationScenarios)){throw 'Fixture scenario is not release-owned.'}
-        [string]$fixture.scenario
+        $recognitionScenario=if($fixture.PSObject.Properties['recognitionScenario']){[string]$fixture.recognitionScenario}else{'Evaluate'}
+        if($fixture.contractVersion -ne '1.0.0' -or [string]$fixture.scenario -notin @($Policy.validationScenarios) -or $recognitionScenario -notin @('Evaluate','LogicalFailure')){throw 'Fixture scenario is not release-owned.'}
+        [pscustomobject][ordered]@{inventoryScenario=[string]$fixture.scenario;recognitionScenario=$recognitionScenario}
     }catch{throw [InvalidOperationException]::new('The Software Inventory fixture is invalid.', $_.Exception)}
 }
 
@@ -79,6 +80,7 @@ function New-SoftwareInventoryEntry {
         [Parameter(Mandatory)] [string] $SourceKind,
         [Parameter(Mandatory)] [string] $RegistrationId,
         [AllowNull()] $ProductCode = $null,
+        [AllowNull()] $UpgradeCode = $null,
         [AllowNull()] $PackageFamilyName = $null,
         [AllowNull()] $PackageFullName = $null,
         [AllowNull()] $DisplayName = $null,
@@ -97,6 +99,7 @@ function New-SoftwareInventoryEntry {
         sourceKind = $SourceKind
         registrationId = $RegistrationId
         productCode = $ProductCode
+        upgradeCode = $UpgradeCode
         packageFamilyName = $PackageFamilyName
         packageFullName = $PackageFullName
         displayName = $DisplayName
@@ -117,10 +120,13 @@ function ConvertFrom-SoftwareInventoryAdapterRow {
     $kind=[string]$Row.adapterKind
     switch ($kind) {
         'Registry' {
-            if (-not (Test-SoftwareInventoryObjectShape $Row @('adapterKind','scopeId','registrationKeyName','registrationContext','registryView','displayName','version','publisher','windowsInstaller','systemComponent'))) { throw 'Registry adapter shape is invalid.' }
+            if (-not (Test-SoftwareInventoryObjectShape $Row @('adapterKind','scopeId','registrationKeyName','registrationContext','registryView','displayName','version','publisher','upgradeCode','windowsInstaller','systemComponent'))) { throw 'Registry adapter shape is invalid.' }
             if(-not (Test-SoftwareInventoryText $Row.registrationKeyName 256) -or [string]::IsNullOrWhiteSpace([string]$Row.registrationKeyName) -or
                 -not (Test-SoftwareInventoryText $Row.displayName 512 -AllowNull) -or -not (Test-SoftwareInventoryText $Row.version 256 -AllowNull) -or
                 -not (Test-SoftwareInventoryText $Row.publisher 512 -AllowNull) -or
+                -not (Test-SoftwareInventoryText $Row.upgradeCode 38 -AllowNull) -or
+                ($null -ne $Row.upgradeCode -and [string]$Row.upgradeCode -notmatch
+                    '^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$') -or
                 ($null -ne $Row.windowsInstaller -and ($Row.windowsInstaller -isnot [int] -and $Row.windowsInstaller -isnot [long])) -or
                 ($null -ne $Row.windowsInstaller -and [int]$Row.windowsInstaller -notin @(0,1)) -or
                 ($null -ne $Row.systemComponent -and ($Row.systemComponent -isnot [int] -and $Row.systemComponent -isnot [long])) -or
@@ -130,6 +136,7 @@ function ConvertFrom-SoftwareInventoryAdapterRow {
             if($context -notin @('Machine','AssessmentUser') -or $view -notin @('Registry32','Registry64') -or [string]$Row.scopeId -ne $scopeId){throw 'Registry adapter context is invalid.'}
             return New-SoftwareInventoryEntry -ScopeId $scopeId -SourceKind Registry `
                 -RegistrationId ([string]$Row.registrationKeyName) `
+                -UpgradeCode $Row.upgradeCode `
                 -DisplayName $Row.displayName -Version $Row.version -Publisher $Row.publisher `
                 -SystemComponent $(if($null -eq $Row.systemComponent){$null}else{[int]$Row.systemComponent -eq 1}) `
                 -RegistrationContext $context -RegistryView $view -InstallerState Registered `
@@ -274,7 +281,17 @@ function New-SoftwareInventorySyntheticPayload {
             $index = 0
             foreach ($type in @('Main', 'Bundle', 'Framework', 'Resource', 'Optional')) {
                 $index++
-                $entries.Add((& $newMsix $msixUser "Synthetic.$type`_1.2.3.$index`_neutral__synthetic" "Synthetic.$type" "1.2.3.$index" 'synthetic' AssessmentUser $type Neutral))
+                if($type -eq 'Main'){
+                    $entries.Add((New-SoftwareInventoryEntry -ScopeId $msixUser -SourceKind Msix `
+                        -RegistrationId 'msix:AssessmentUser:Microsoft.CompanyPortal_1.2.3.1_neutral__8wekyb3d8bbwe' `
+                        -PackageFamilyName 'Microsoft.CompanyPortal_8wekyb3d8bbwe' `
+                        -PackageFullName 'Microsoft.CompanyPortal_1.2.3.1_neutral__8wekyb3d8bbwe' `
+                        -DisplayName 'Portal de empresa' -Version '1.2.3.1' `
+                        -PublisherId '8wekyb3d8bbwe' -RegistrationContext AssessmentUser `
+                        -RegistryView None -InstallerState StatusOk -PackageType Main -Architecture Neutral))
+                }else{
+                    $entries.Add((& $newMsix $msixUser "Synthetic.$type`_1.2.3.$index`_neutral__synthetic" "Synthetic.$type" "1.2.3.$index" 'synthetic' AssessmentUser $type Neutral))
+                }
             }
         }
         'Duplicates' {
@@ -374,7 +391,7 @@ function Test-SoftwareInventoryText {
 
 function Test-SoftwareInventoryEntry {
     param($Entry, $Policy)
-    $names = @('scopeId','sourceKind','registrationId','productCode','packageFamilyName',
+    $names = @('scopeId','sourceKind','registrationId','productCode','upgradeCode','packageFamilyName',
         'packageFullName','displayName','version','publisher','publisherId','systemComponent',
         'registrationContext','registryView','installerState','packageType','architecture')
     if (-not (Test-SoftwareInventoryObjectShape $Entry $names)) { return $false }
@@ -383,6 +400,7 @@ function Test-SoftwareInventoryEntry {
         -not (Test-SoftwareInventoryText $Entry.registrationId 512) -or
         [string]::IsNullOrWhiteSpace([string]$Entry.registrationId) -or
         -not (Test-SoftwareInventoryText $Entry.productCode 64 -AllowNull) -or
+        -not (Test-SoftwareInventoryText $Entry.upgradeCode 38 -AllowNull) -or
         -not (Test-SoftwareInventoryText $Entry.packageFamilyName 256 -AllowNull) -or
         -not (Test-SoftwareInventoryText $Entry.packageFullName 512 -AllowNull) -or
         -not (Test-SoftwareInventoryText $Entry.displayName 512 -AllowNull) -or
@@ -400,6 +418,9 @@ function Test-SoftwareInventoryEntry {
     }
     if ($null -ne $Entry.productCode -and
         [string]$Entry.productCode -notmatch '^\{[0-9A-Fa-f-]{36}\}$') { return $false }
+    if ($null -ne $Entry.upgradeCode -and
+        [string]$Entry.upgradeCode -notmatch
+            '^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$') { return $false }
     Test-SoftwareInventoryEntryTuple -Entry $Entry
 }
 
@@ -416,6 +437,8 @@ function Test-SoftwareInventoryEntryTuple {
         $type -in @('DesktopRegistration','MsiRegistration') -and $architecture -eq 'None' -and
         $null -eq $Entry.productCode -and $null -eq $Entry.packageFamilyName -and
         $null -eq $Entry.packageFullName -and $null -eq $Entry.publisherId
+    if ($registryTuple -and $null -ne $Entry.upgradeCode -and
+        $type -ne 'MsiRegistration') { $registryTuple = $false }
     switch ($scopeId) {
         'scope:software.registry.machine.32' { return $registryTuple -and $context -eq 'Machine' -and $view -eq 'Registry32' }
         'scope:software.registry.machine.64' { return $registryTuple -and $context -eq 'Machine' -and $view -eq 'Registry64' }
@@ -423,6 +446,7 @@ function Test-SoftwareInventoryEntryTuple {
         'scope:software.registry.assessment-user.64' { return $registryTuple -and $context -eq 'AssessmentUser' -and $view -eq 'Registry64' }
     }
     $msiTuple = $sourceKind -eq 'Msi' -and $null -ne $Entry.productCode -and
+        $null -eq $Entry.upgradeCode -and
         $view -eq 'None' -and $state -in @('Installed','Advertised') -and
         $type -eq 'MsiProduct' -and $architecture -eq 'None' -and
         $null -eq $Entry.packageFamilyName -and $null -eq $Entry.packageFullName -and
@@ -432,6 +456,7 @@ function Test-SoftwareInventoryEntryTuple {
         'scope:software.msi.assessment-user' { return $msiTuple -and $context -in @('AssessmentUserManaged','AssessmentUserUnmanaged') }
     }
     $msixTuple = $sourceKind -eq 'Msix' -and $null -eq $Entry.productCode -and
+        $null -eq $Entry.upgradeCode -and
         -not [string]::IsNullOrWhiteSpace([string]$Entry.packageFamilyName) -and
         -not [string]::IsNullOrWhiteSpace([string]$Entry.packageFullName) -and
         $view -eq 'None' -and $state -in @('StatusOk','StatusNotOk') -and
@@ -524,6 +549,7 @@ function ConvertTo-SoftwareInventoryAttemptPayload {
         $entryParameters = @{
             ScopeId=[string]$entry.scopeId; SourceKind=[string]$entry.sourceKind
             RegistrationId=[string]$entry.registrationId; ProductCode=$entry.productCode
+            UpgradeCode=$entry.upgradeCode
             PackageFamilyName=$entry.packageFamilyName; PackageFullName=$entry.packageFullName
             DisplayName=$entry.displayName; Version=$entry.version; Publisher=$entry.publisher
             PublisherId=$entry.publisherId; SystemComponent=$entry.systemComponent
@@ -685,11 +711,13 @@ foreach($context in @('Machine','AssessmentUser')){
                     $displayName=$key.GetValue('DisplayName',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                     $version=$key.GetValue('DisplayVersion',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                     $publisher=$key.GetValue('Publisher',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                    $upgradeCode=$key.GetValue('UpgradeCode',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                     $windowsInstaller=$key.GetValue('WindowsInstaller',$null)
                     $systemComponent=$key.GetValue('SystemComponent',$null)
                     if(($null -ne $displayName -and $displayName -isnot [string]) -or
                         ($null -ne $version -and $version -isnot [string]) -or
                         ($null -ne $publisher -and $publisher -isnot [string]) -or
+                        ($null -ne $upgradeCode -and $upgradeCode -isnot [string]) -or
                         ($null -ne $windowsInstaller -and $windowsInstaller -isnot [int]) -or
                         ($null -ne $systemComponent -and $systemComponent -isnot [int])){
                         Set-Scope $scopes $scopeId 'Partial' 'SOFTWARE.REGISTRATION_MALFORMED';continue
@@ -698,7 +726,8 @@ foreach($context in @('Machine','AssessmentUser')){
                         adapterKind='Registry';scopeId=$scopeId;registrationKeyName=[string]$name
                         registrationContext=$context;registryView=$viewName
                         displayName=Text-Or-Null $displayName;version=Text-Or-Null $version
-                        publisher=Text-Or-Null $publisher;windowsInstaller=$windowsInstaller
+                        publisher=Text-Or-Null $publisher;upgradeCode=Text-Or-Null $upgradeCode
+                        windowsInstaller=$windowsInstaller
                         systemComponent=$systemComponent
                     }) $maximum $scopes
                 }catch{Set-Scope $scopes $scopeId 'Partial' 'SOFTWARE.REGISTRATION_UNAVAILABLE'}

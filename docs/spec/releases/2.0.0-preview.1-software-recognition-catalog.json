@@ -1,0 +1,138 @@
+{
+  "kind": "win-pcinfo.software-recognition-catalog",
+  "schemaVersion": 1,
+  "catalogRevision": 1,
+  "release": "2.0.0-preview.1",
+  "sourceRevision": "issue-59-initial-reviewed-seed",
+  "operation": {
+    "operationId": "annotate-software-recognition",
+    "executionContext": "InProcessValidatedAssessmentRecord",
+    "privilege": "StandardUser",
+    "networkBehavior": "OfflineOnly",
+    "executableOrDependency": "GeneratedWIN-PCInfoPowerShell",
+    "deadlineMilliseconds": 1000,
+    "maximumInputEntries": 128,
+    "maximumOutputAnnotations": 128,
+    "maximumEvidenceUtf8Bytes": 262144,
+    "cleanup": "InMemoryOnly",
+    "mayPrompt": false,
+    "mayInstall": false,
+    "mayDownload": false,
+    "maySelfElevate": false,
+    "mayWidenScope": false,
+    "mayRequestAuthority": false,
+    "writesAllowed": false
+  },
+  "roles": [
+    "EndpointSecurity",
+    "DeviceManagement",
+    "VpnOrZeroTrustNetworkAccess",
+    "DataLossPrevention",
+    "Encryption",
+    "RemoteSupport",
+    "AuthenticationOrCredentialProvider",
+    "Browser",
+    "PatchOrUpdateAgent",
+    "BackupOrRecoveryAgent",
+    "OtherMigrationDependency"
+  ],
+  "licenseReview": {
+    "reviewedOn": "2026-08-14",
+    "reviewer": "WIN-PCInfo maintainer",
+    "reuseBasis": "Minimal factual Windows package-family identifiers and source citations transcribed from Microsoft publisher documentation; no catalog database, installer, executable, image, logo, marketing copy, or third-party asset is included.",
+    "thirdPartyAssetsIncluded": false,
+    "unlicensedCatalogDataIncluded": false
+  },
+  "families": [
+    {
+      "familyId": "family:microsoft.company-portal",
+      "label": "Microsoft Company Portal",
+      "roles": ["DeviceManagement"],
+      "lifecycle": {
+        "state": "active",
+        "addedInRelease": "2.0.0-preview.1",
+        "reviewedInRelease": "2.0.0-preview.1",
+        "reason": null,
+        "replacementFamilyId": null
+      },
+      "matchers": [
+        {
+          "matcherId": "matcher:microsoft.company-portal.pfn",
+          "type": "ExactPackageFamilyName",
+          "value": "Microsoft.CompanyPortal_8wekyb3d8bbwe"
+        }
+      ],
+      "sources": [
+        {
+          "sourceType": "PrimaryPublisherDocumentation",
+          "owner": "Microsoft",
+          "url": "https://learn.microsoft.com/en-us/intune/user-help/diagnostics/collect-logs-company-portal-windows",
+          "verifiedOn": "2026-08-14",
+          "reviewer": "WIN-PCInfo maintainer",
+          "pinnedCommit": null,
+          "manifestPath": null
+        }
+      ]
+    },
+    {
+      "familyId": "family:microsoft.onenote-for-windows-10",
+      "label": "OneNote for Windows 10",
+      "roles": ["OtherMigrationDependency"],
+      "lifecycle": {
+        "state": "active",
+        "addedInRelease": "2.0.0-preview.1",
+        "reviewedInRelease": "2.0.0-preview.1",
+        "reason": null,
+        "replacementFamilyId": null
+      },
+      "matchers": [
+        {
+          "matcherId": "matcher:microsoft.onenote-for-windows-10.pfn",
+          "type": "ExactPackageFamilyName",
+          "value": "Microsoft.Office.OneNote_8wekyb3d8bbwe"
+        }
+      ],
+      "sources": [
+        {
+          "sourceType": "PrimaryPublisherDocumentation",
+          "owner": "Microsoft",
+          "url": "https://learn.microsoft.com/en-us/microsoft-365-apps/deploy/onenote-for-windows-10-migration-guide",
+          "verifiedOn": "2026-08-14",
+          "reviewer": "WIN-PCInfo maintainer",
+          "pinnedCommit": null,
+          "manifestPath": null
+        }
+      ]
+    },
+    {
+      "familyId": "family:microsoft.store",
+      "label": "Microsoft Store",
+      "roles": ["OtherMigrationDependency"],
+      "lifecycle": {
+        "state": "active",
+        "addedInRelease": "2.0.0-preview.1",
+        "reviewedInRelease": "2.0.0-preview.1",
+        "reason": null,
+        "replacementFamilyId": null
+      },
+      "matchers": [
+        {
+          "matcherId": "matcher:microsoft.store.pfn",
+          "type": "ExactPackageFamilyName",
+          "value": "Microsoft.WindowsStore_8wekyb3d8bbwe"
+        }
+      ],
+      "sources": [
+        {
+          "sourceType": "PrimaryPublisherDocumentation",
+          "owner": "Microsoft",
+          "url": "https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/troubleshooting-microsoft-store-apps-download-failure",
+          "verifiedOn": "2026-08-14",
+          "reviewer": "WIN-PCInfo maintainer",
+          "pinnedCommit": null,
+          "manifestPath": null
+        }
+      ]
+    }
+  ]
+}

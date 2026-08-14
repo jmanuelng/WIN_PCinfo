@@ -1081,15 +1081,53 @@ $identityGuidance
         $userFinding=@($Record.findings|Where-Object ruleId -eq 'rule:software.assessment-user-inventory/1.0.0')[0]
         $softwareCoverage=@($Record.coverage|Where-Object scopeId -in @($SoftwareInventoryPolicy.scopes.scopeId))
         $softwareSubjects=@($Record.subjects|Where-Object subjectId -like 'subject:software:*')
+        $hasRecognition=$null -ne $Record.PSObject.Properties['softwareRecognition']
+        $recognitionItems=if($hasRecognition){@($Record.softwareRecognition)}else{@()}
         $rows=@($softwareSubjects|ForEach-Object {
             $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
-            $lines=@($items|Where-Object valueState -eq ObservedValue|ForEach-Object {[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+': '+[Net.WebUtility]::HtmlEncode([string]$_.value)})
-            '<li>'+($lines -join '<br>')+'</li>'
+            # PackageFullName remains in the canonical protected record. The
+            # report uses the stable family identity instead, preserving room
+            # for a bounded recognition explanation at the 128-entry ceiling.
+            $lines=@($items|Where-Object {
+                $_.valueState -eq 'ObservedValue' -and
+                $_.fieldId -ne 'field:software.msix.package-full-name'
+            }|ForEach-Object {[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+': '+[Net.WebUtility]::HtmlEncode([string]$_.value)})
+            if(-not $hasRecognition){return '<li>'+($lines -join '<br>')+'</li>'}
+            $annotation=$recognitionItems|Where-Object subjectId -eq $subjectId|Select-Object -First 1
+            if($null -eq $annotation){$annotation=[pscustomobject]@{outcome='NotEvaluated';familyLabel=$null;roles=@();matchStrengthExplanation='';catalogRevision=0;catalogRelease='2.0.0-preview.1';matcherTypes=@();provenance=@()}}
+            if([string]$annotation.outcome -eq 'Unrecognized'){
+                return '<li>'+($lines -join '<br>')+'<br><strong>Recognition</strong>: Unrecognized (catalog revision '+[Net.WebUtility]::HtmlEncode([string]$annotation.catalogRevision)+').</li>'
+            }
+            if([string]$annotation.outcome -eq 'NotEvaluated'){
+                return '<li>'+($lines -join '<br>')+'<br><strong>Recognition</strong>: Not evaluated; inventory remains authoritative.</li>'
+            }
+            $recognitionText=switch([string]$annotation.outcome){
+                'RecognizedExact' { 'Recognized family: '+[Net.WebUtility]::HtmlEncode([string]$annotation.familyLabel)+'. Roles: '+[Net.WebUtility]::HtmlEncode((@($annotation.roles)-join ', '))+'. '+[Net.WebUtility]::HtmlEncode([string]$annotation.matchStrengthExplanation)+'.' }
+                'RecognizedComposite' { 'Recognized family: '+[Net.WebUtility]::HtmlEncode([string]$annotation.familyLabel)+'. Roles: '+[Net.WebUtility]::HtmlEncode((@($annotation.roles)-join ', '))+'. '+[Net.WebUtility]::HtmlEncode([string]$annotation.matchStrengthExplanation)+'.' }
+                'Ambiguous' { 'Ambiguous: more than one reviewed family matched. WIN-PCInfo did not choose by catalog order; review the observed registration in its authorized context.' }
+                'NotEvaluated' { 'Not evaluated; the observed inventory remains authoritative.' }
+                default { 'Unrecognized in catalog revision '+[Net.WebUtility]::HtmlEncode([string]$annotation.catalogRevision)+'; this is not a warning or suspicion.' }
+            }
+            $sourceRows=@($annotation.provenance|ForEach-Object {
+                '<li>'+[Net.WebUtility]::HtmlEncode([string]$_.sourceType)+': '+
+                '<a href="'+[Net.WebUtility]::HtmlEncode([string]$_.url)+'">'+
+                [Net.WebUtility]::HtmlEncode([string]$_.owner)+'</a>, verified '+
+                [Net.WebUtility]::HtmlEncode([string]$_.verifiedOn)+'</li>'
+            })
+            $technicalDetail=if(@($annotation.matcherTypes).Count -gt 0 -or $sourceRows.Count -gt 0){
+                '<details><summary>Catalog revision and provenance</summary><p>Catalog revision '+
+                [Net.WebUtility]::HtmlEncode([string]$annotation.catalogRevision)+', release '+
+                [Net.WebUtility]::HtmlEncode([string]$annotation.catalogRelease)+'. Matcher types: '+
+                [Net.WebUtility]::HtmlEncode((@($annotation.matcherTypes)-join ', '))+'.</p><ul>'+($sourceRows -join '')+'</ul></details>'
+            }else{''}
+            '<li><strong>Observed application</strong><br>'+($lines -join '<br>')+
+            '<br><strong>Recognition</strong>: '+$recognitionText+$technicalDetail+'</li>'
         })
 @"
 <h2>Installed software and application migration inventory</h2>
 <p>Machine finding: $([Net.WebUtility]::HtmlEncode([string]$softwareFinding.outcome)). Assessment User finding: $([Net.WebUtility]::HtmlEncode([string]$userFinding.outcome)). Covered source contexts: $($softwareCoverage.Count). Distinct registrations: $($softwareSubjects.Count).</p>
 <p>WIN-PCInfo reads explicit 32-bit and 64-bit uninstall registration views, inventory-only Windows Installer APIs, and Windows package identities. It never invokes Win32_Product, a consistency check, repair, install, uninstall, package-content inspection, binary hashing, profile loading, or network lookup.</p>
+<p>Software recognition is an annotation, not an Assessment Finding. It adds a conservative family and migration-role label without claiming compatibility, health, licensing, safety, support, Intune readiness, Defender readiness, or deployment success. Unrecognized is not a warning or suspicion; NotEvaluated leaves ordinary inventory authoritative. Catalog revision and provenance appear with identity matches. Live WinGet package availability is not evaluated in Preview.1.</p>
 <details><summary>Restricted installed-software evidence</summary><ul>$($rows -join '')</ul></details>
 <p>Display name and publisher are metadata, not identity. Versions are preserved as provider text without semantic-version assumptions. An observed registration does not prove compatibility, support, licensing, safety, health, approval, or migration success; confirm retained dependencies against the target design.</p>
 "@
@@ -1335,7 +1373,7 @@ function Get-DeviceReadinessSliceSelection {
 
 function Get-CombinedAssessmentContractSetVersion {
     param($SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
-    if($null -ne $SoftwareCollector){'1.7.0'}
+    if($null -ne $SoftwareCollector){'1.8.0'}
     elseif($null -ne $NetworkCollector){'1.6.0'}
     elseif($null -ne $ResourceCollector){'1.5.0'}
     elseif($null -ne $EffectivePolicyCollector){'1.4.0'}
@@ -1386,7 +1424,7 @@ function Invoke-DeviceReadinessSlice {
     $effectivePolicy=$null;$effectivePolicyCollector=$null
     $resourcePolicy=$null;$resourceCollector=$null
     $networkPolicy=$null;$networkCollector=$null
-    $softwarePolicy=$null;$softwareCollector=$null
+    $softwarePolicy=$null;$softwareCollector=$null;$recognitionCatalogResult=$null
     $privilegeResult = $null; $identityCollector = $null; $systemResult = $null
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
@@ -1425,6 +1463,9 @@ function Invoke-DeviceReadinessSlice {
     $softwareMachineCoverage='NotAttempted';$softwareUserCoverage='NotAttempted'
     $softwareMachineFinding='Indeterminate';$softwareUserFinding='Indeterminate'
     $softwareContractReason='NotEvaluated'
+    $recognitionScenario='Evaluate';$recognitionAnnotationCount=0
+    $recognizedExactCount=0;$recognizedCompositeCount=0;$ambiguousCount=0
+    $unrecognizedCount=0;$notEvaluatedCount=0
     $localNetworkCoverage='NotAttempted';$networkDependentCoverage='NotAttempted'
     $networkConfigurationFinding='Indeterminate';$networkComponentFinding='Indeterminate'
     $networkAdapterCount=0;$networkProfileCount=0;$networkRouteCount=0;$networkResolverCount=0
@@ -1446,6 +1487,9 @@ function Invoke-DeviceReadinessSlice {
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $networkPolicy=Get-NetworkTopologyPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $softwarePolicy=Get-SoftwareInventoryPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $recognitionCatalogResult=Get-SoftwareRecognitionCatalog `
+            -ConvertFromJsonCommand $ConvertFromJsonCommand `
+            -TestJsonCommand $TestJsonCommand
         $sliceStage='FIXTURE'
         if ($isDeviceFixture) {
             $fixtureSelection = Read-DeviceReadinessFixture -LiteralPath $LiteralPath `
@@ -1501,8 +1545,13 @@ function Invoke-DeviceReadinessSlice {
             $scenario='Complete';$firmwareScenario='Supported';$identityScenario='StandardUser'
             $administratorScenario='LocalPrincipal';$effectivePolicyScenario='Workgroup'
             $resourceScenario='Empty';$networkScenario='Empty';$privilegeScenario='AcceptedElevation'
-            $softwareScenario=Read-SoftwareInventoryFixture -LiteralPath $SoftwareInventoryLiteralPath `
+            $softwareFixtureSelection=Read-SoftwareInventoryFixture -LiteralPath $SoftwareInventoryLiteralPath `
                 -ConvertFromJsonCommand $ConvertFromJsonCommand -Policy $softwarePolicy
+            $softwareScenario=[string]$softwareFixtureSelection.inventoryScenario
+            $recognitionScenario=[string]$softwareFixtureSelection.recognitionScenario
+            if($recognitionScenario -eq 'LogicalFailure'){
+                $recognitionCatalogResult.logicalLoadValid=$false
+            }
         }
         $identityRequested=[bool]$sliceSelection.identityRequested
         $administratorRequested=[bool]$sliceSelection.administratorRequested
@@ -1864,6 +1913,10 @@ function Invoke-DeviceReadinessSlice {
                         $record=Complete-ValidatedSoftwareInventoryAssessmentRecord `
                             -Record $record -Policy $softwarePolicy `
                             -ContractValidation $softwareSourceValidation
+                        $sliceStage='SOFTWARE_RECOGNITION'
+                        $record=Add-SoftwareRecognitionAnnotations -Record $record `
+                            -Entries @($softwareCollector.payload.entries) `
+                            -CatalogResult $recognitionCatalogResult
                     }
                     $sourceValidation=$softwareSourceValidation
                 }
@@ -2012,6 +2065,12 @@ function Invoke-DeviceReadinessSlice {
                     $softwareUserCoverage=if(@($softwareCollector.payload.scopeStates|Where-Object {$_.scopeId -in $userScopeIds -and $_.state -eq 'Denied'}).Count){'Denied'}elseif(@($softwareCollector.payload.scopeStates|Where-Object {$_.scopeId -in $userScopeIds -and $_.state -ne 'Complete'}).Count){'Partial'}else{'Complete'}
                     $softwareMachineFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:software.machine-inventory/1.0.0')[0].outcome
                     $softwareUserFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:software.assessment-user-inventory/1.0.0')[0].outcome
+                    $recognitionAnnotationCount=@($record.softwareRecognition).Count
+                    $recognizedExactCount=@($record.softwareRecognition|Where-Object outcome -eq RecognizedExact).Count
+                    $recognizedCompositeCount=@($record.softwareRecognition|Where-Object outcome -eq RecognizedComposite).Count
+                    $ambiguousCount=@($record.softwareRecognition|Where-Object outcome -eq Ambiguous).Count
+                    $unrecognizedCount=@($record.softwareRecognition|Where-Object outcome -eq Unrecognized).Count
+                    $notEvaluatedCount=@($record.softwareRecognition|Where-Object outcome -eq NotEvaluated).Count
                 }
                 $findingOutcome = [string]@($record.findings | Where-Object {
                     $_.findingId -like 'finding:device-readiness:*'
@@ -2127,7 +2186,9 @@ function Invoke-DeviceReadinessSlice {
                         $reportVerified=$reportVerified -and
                             $reportText.Contains('Installed software and application migration inventory') -and
                             $reportText.Contains('never invokes Win32_Product') -and
-                            $reportText.Contains('Display name and publisher are metadata, not identity')
+                            $reportText.Contains('Display name and publisher are metadata, not identity') -and
+                            $reportText.Contains('Software recognition is an annotation, not an Assessment Finding') -and
+                            $reportText.Contains('Catalog revision')
                     }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
                     $sliceStage='PACKAGE'
@@ -2334,6 +2395,13 @@ function Invoke-DeviceReadinessSlice {
         $projection|Add-Member -NotePropertyName machineFinding -NotePropertyValue $softwareMachineFinding
         $projection|Add-Member -NotePropertyName assessmentUserFinding -NotePropertyValue $softwareUserFinding
         $projection|Add-Member -NotePropertyName contractReasonCode -NotePropertyValue $softwareContractReason
+        $projection|Add-Member -NotePropertyName recognitionAnnotationCount -NotePropertyValue $recognitionAnnotationCount
+        $projection|Add-Member -NotePropertyName recognizedExactCount -NotePropertyValue $recognizedExactCount
+        $projection|Add-Member -NotePropertyName recognizedCompositeCount -NotePropertyValue $recognizedCompositeCount
+        $projection|Add-Member -NotePropertyName ambiguousCount -NotePropertyValue $ambiguousCount
+        $projection|Add-Member -NotePropertyName unrecognizedCount -NotePropertyValue $unrecognizedCount
+        $projection|Add-Member -NotePropertyName notEvaluatedCount -NotePropertyValue $notEvaluatedCount
+        $projection|Add-Member -NotePropertyName recognitionCreatedAssessmentFinding -NotePropertyValue $false
         $projection|Add-Member -NotePropertyName assessmentRecordValidated -NotePropertyValue $recordAccepted
         $projection|Add-Member -NotePropertyName beginnerReportVerified -NotePropertyValue $reportVerified
         $projection|Add-Member -NotePropertyName protectedPackageVerified -NotePropertyValue $packageVerified
