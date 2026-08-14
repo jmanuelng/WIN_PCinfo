@@ -1,0 +1,15 @@
+{
+  "contractVersion": "1.0.0",
+  "exactPackageFamilyName": "Microsoft.CompanyPortal_8wekyb3d8bbwe",
+  "nearPackageFamilyName": "Microsoft.CompanyPortal_8wekyb3d8bbwe.preview",
+  "exactMsiProductCode": "{11111111-2222-3333-4444-555555555555}",
+  "exactMsiUpgradeCode": "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}",
+  "composite": {
+    "registrationContext": "Machine",
+    "registryView": "Registry64",
+    "registrationId": "synthetic-über-vpn",
+    "displayName": "Über VPN 客户端",
+    "publisher": "Éditeur Synthétique"
+  },
+  "nearCompositeContext": "AssessmentUser"
+}

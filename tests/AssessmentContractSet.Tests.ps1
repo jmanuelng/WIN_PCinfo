@@ -18,8 +18,8 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.7.0' $contractSet.contractVersion `
-    'the additive Software Inventory contract has an explicit version'
+Assert-Equal '1.8.0' $contractSet.contractVersion `
+    'the additive Software Recognition annotation contract has an explicit version'
 Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
@@ -142,4 +142,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.7 binds historical through Software Inventory scopes to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.8 binds historical scopes and Software Recognition annotations to Draft 2020-12 contracts.'

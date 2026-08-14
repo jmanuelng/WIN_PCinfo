@@ -98,6 +98,11 @@
       "type": "array",
       "maxItems": 64,
       "items": { "$ref": "#/$defs/recommendationRelationship" }
+    },
+    "softwareRecognition": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/softwareRecognitionAnnotation" }
     }
   },
   "$defs": {
@@ -245,6 +250,70 @@
         "toRecommendationId": { "$ref": "#/$defs/id" },
         "kind": { "enum": ["Requires", "Enables", "ConflictsWith"] }
       }
+    },
+    "softwareRecognitionSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceType", "owner", "url", "verifiedOn", "reviewer", "pinnedCommit", "manifestPath"],
+      "properties": {
+        "sourceType": { "enum": ["PrimaryPublisherDocumentation", "ControlledFreshInstallation", "PinnedWinGetManifest"] },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "verifiedOn": { "type": "string", "format": "date" },
+        "reviewer": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "pinnedCommit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+        "manifestPath": { "type": ["string", "null"], "minLength": 1, "maxLength": 512 }
+      }
+    },
+    "softwareRecognitionAnnotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["annotationId", "subjectId", "outcome", "familyId", "familyLabel", "roles", "matcherIds", "matcherTypes", "matchStrengthExplanation", "reasonCode", "catalogRevision", "catalogRelease", "catalogDigest", "provenance"],
+      "properties": {
+        "annotationId": { "$ref": "#/$defs/id" },
+        "subjectId": { "$ref": "#/$defs/id" },
+        "outcome": { "enum": ["RecognizedExact", "RecognizedComposite", "Ambiguous", "Unrecognized", "NotEvaluated"] },
+        "familyId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "familyLabel": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "roles": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "enum": ["EndpointSecurity", "DeviceManagement", "VpnOrZeroTrustNetworkAccess", "DataLossPrevention", "Encryption", "RemoteSupport", "AuthenticationOrCredentialProvider", "Browser", "PatchOrUpdateAgent", "BackupOrRecoveryAgent", "OtherMigrationDependency"] } },
+        "matcherIds": { "type": "array", "maxItems": 16, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "matcherTypes": { "type": "array", "maxItems": 4, "uniqueItems": true, "items": { "enum": ["ExactPackageFamilyName", "ExactMsiProductCode", "ExactMsiUpgradeCode", "CompositeRegistration"] } },
+        "matchStrengthExplanation": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "reasonCode": { "anyOf": [{ "$ref": "#/$defs/reasonCode" }, { "type": "null" }] },
+        "catalogRevision": { "type": "integer", "minimum": 0 },
+        "catalogRelease": { "const": "2.0.0-preview.1" },
+        "catalogDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "provenance": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/softwareRecognitionSource" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "outcome": { "enum": ["RecognizedExact", "RecognizedComposite"] } } },
+          "then": {
+            "properties": {
+              "familyId": { "$ref": "#/$defs/id" },
+              "familyLabel": { "type": "string" },
+              "roles": { "minItems": 1 },
+              "matcherIds": { "minItems": 1 },
+              "matcherTypes": { "minItems": 1 },
+              "reasonCode": { "type": "null" },
+              "catalogRevision": { "minimum": 1 },
+              "provenance": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "enum": ["Ambiguous", "Unrecognized", "NotEvaluated"] } } },
+          "then": {
+            "properties": {
+              "familyId": { "type": "null" },
+              "familyLabel": { "type": "null" },
+              "roles": { "maxItems": 0 },
+              "reasonCode": { "$ref": "#/$defs/reasonCode" },
+              "provenance": { "maxItems": 0 }
+            }
+          }
+        }
+      ]
     }
   }
 }

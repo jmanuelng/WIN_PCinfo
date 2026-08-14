@@ -1,6 +1,6 @@
 # Software Recognition Catalog governance
 
-Status: **planned for WIN-PCInfo 2.0.0-preview.1**. This rulebook defines how the catalog must behave; it does not contain the catalog entries or implement matching.
+Status: **implemented for WIN-PCInfo 2.0.0-preview.1**. The governed release snapshot is [2.0.0-preview.1-software-recognition-catalog.json](./releases/2.0.0-preview.1-software-recognition-catalog.json), validated by [software-recognition-catalog.schema.json](../../schemas/software-recognition-catalog.schema.json).
 
 The governing decision is [Define Software Recognition Catalog governance](https://github.com/jmanuelng/WIN_PCinfo/issues/35), part of the [WIN-PCInfo v2 product and release specification map](https://github.com/jmanuelng/WIN_PCinfo/issues/1).
 
@@ -28,7 +28,7 @@ Unknown software is not suspicious merely because the catalog does not recognize
 
 ## Initial scope
 
-Preview.1 has no catalog-size quota. A useful initial target is approximately 50 to 150 well-evidenced product families, and a smaller catalog is acceptable when the evidence does not justify more.
+Preview.1 deliberately starts with three Microsoft package-family identities whose values are documented in primary publisher sources. The schema caps a release snapshot at 16 families and the runtime caps input and output at 128 entries. New entries require the same evidence and negative-test discipline; catalog breadth is not a release goal.
 
 The initial controlled roles may cover:
 
@@ -84,7 +84,7 @@ Each family entry contains only:
 
 Source records identify the source type and owner, authoritative URL, verification date, reviewer, and any applicable pinned WinGet commit and manifest. A superseded or withdrawn family remains as a tombstone with a brief reason and replacement link. Historical assessment packages are never silently reclassified.
 
-The published snapshot records a schema version, monotonically increasing catalog revision, owning WIN-PCInfo release, source revision, and exact digest. It has no independent update channel or semantic-version lifecycle. Every published addition, correction, or retirement ships in a new WIN-PCInfo release.
+The published snapshot records a schema version, monotonically increasing catalog revision, owning WIN-PCInfo release, and source revision. Its exact digest is computed during the deterministic build and authenticated through the application manifest, avoiding a circular self-digest. It has no independent update channel or semantic-version lifecycle. Every published addition, correction, or retirement ships in a new WIN-PCInfo release.
 
 ## Runtime and failure behavior
 
@@ -144,4 +144,4 @@ Preview.1 does not perform that live check. The future checkbox-driven enrichmen
 
 ## Implementation handoff
 
-Implementation must publish the catalog schema, controlled-role taxonomy, initial entries, synthetic fixtures, contributor checklist, review ownership, and release validation evidence under this rulebook. Those artifacts must remain small, data-only, authenticated, deterministic, and easy for a beginner to inspect.
+The implementation publishes the strict schema and controlled-role taxonomy beside the three-entry seed. Synthetic matcher and lifecycle fixtures live under `tests/fixtures/software-recognition`; the [contributor checklist](../software-recognition-contributing.md) records review ownership and false-positive/licensing requirements; and [issue #59 validation evidence](../validation/issue-59-software-recognition.md) records the release gate. These artifacts remain small, data-only, authenticated, deterministic, and easy for a beginner to inspect.

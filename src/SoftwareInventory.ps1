@@ -53,10 +53,11 @@ function Read-SoftwareInventoryFixture {
         $bytes=[IO.File]::ReadAllBytes([IO.Path]::GetFullPath($LiteralPath))
         if($bytes.Length -lt 1 -or $bytes.Length -gt 512){throw 'Fixture size is invalid.'}
         $json=[Text.UTF8Encoding]::new($false,$true).GetString($bytes);$document=[Text.Json.JsonDocument]::Parse($json)
-        try{$names=@($document.RootElement.EnumerateObject()|ForEach-Object Name);if($document.RootElement.ValueKind -ne [Text.Json.JsonValueKind]::Object -or (@($names|Sort-Object)-join '|') -ne 'contractVersion|scenario'){throw 'Fixture shape is invalid.'}}finally{$document.Dispose()}
+        try{$names=@($document.RootElement.EnumerateObject()|ForEach-Object Name);$shape=(@($names|Sort-Object)-join '|');if($document.RootElement.ValueKind -ne [Text.Json.JsonValueKind]::Object -or $shape -notin @('contractVersion|scenario','contractVersion|recognitionScenario|scenario')){throw 'Fixture shape is invalid.'}}finally{$document.Dispose()}
         $fixture=& $ConvertFromJsonCommand -InputObject $json -Depth 5 -ErrorAction Stop
-        if($fixture.contractVersion -ne '1.0.0' -or [string]$fixture.scenario -notin @($Policy.validationScenarios)){throw 'Fixture scenario is not release-owned.'}
-        [string]$fixture.scenario
+        $recognitionScenario=if($fixture.PSObject.Properties['recognitionScenario']){[string]$fixture.recognitionScenario}else{'Evaluate'}
+        if($fixture.contractVersion -ne '1.0.0' -or [string]$fixture.scenario -notin @($Policy.validationScenarios) -or $recognitionScenario -notin @('Evaluate','LogicalFailure')){throw 'Fixture scenario is not release-owned.'}
+        [pscustomobject][ordered]@{inventoryScenario=[string]$fixture.scenario;recognitionScenario=$recognitionScenario}
     }catch{throw [InvalidOperationException]::new('The Software Inventory fixture is invalid.', $_.Exception)}
 }
 
@@ -274,7 +275,17 @@ function New-SoftwareInventorySyntheticPayload {
             $index = 0
             foreach ($type in @('Main', 'Bundle', 'Framework', 'Resource', 'Optional')) {
                 $index++
-                $entries.Add((& $newMsix $msixUser "Synthetic.$type`_1.2.3.$index`_neutral__synthetic" "Synthetic.$type" "1.2.3.$index" 'synthetic' AssessmentUser $type Neutral))
+                if($type -eq 'Main'){
+                    $entries.Add((New-SoftwareInventoryEntry -ScopeId $msixUser -SourceKind Msix `
+                        -RegistrationId 'msix:AssessmentUser:Microsoft.CompanyPortal_1.2.3.1_neutral__8wekyb3d8bbwe' `
+                        -PackageFamilyName 'Microsoft.CompanyPortal_8wekyb3d8bbwe' `
+                        -PackageFullName 'Microsoft.CompanyPortal_1.2.3.1_neutral__8wekyb3d8bbwe' `
+                        -DisplayName 'Portal de empresa' -Version '1.2.3.1' `
+                        -PublisherId '8wekyb3d8bbwe' -RegistrationContext AssessmentUser `
+                        -RegistryView None -InstallerState StatusOk -PackageType Main -Architecture Neutral))
+                }else{
+                    $entries.Add((& $newMsix $msixUser "Synthetic.$type`_1.2.3.$index`_neutral__synthetic" "Synthetic.$type" "1.2.3.$index" 'synthetic' AssessmentUser $type Neutral))
+                }
             }
         }
         'Duplicates' {

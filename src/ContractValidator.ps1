@@ -136,6 +136,13 @@ function Get-AssessmentReferenceReason {
         @{ Name = 'recommendations'; Items = @($Record.recommendations); Property = 'recommendationId' }
         @{ Name = 'recommendationRelationships'; Items = @($Record.recommendationRelationships); Property = 'relationshipId' }
     )
+    if ($Record.PSObject.Properties['softwareRecognition']) {
+        $identityCollections += @{
+            Name = 'softwareRecognition'
+            Items = @($Record.softwareRecognition)
+            Property = 'annotationId'
+        }
+    }
     foreach ($collection in $identityCollections) {
         $set = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
         foreach ($item in $collection.Items) {
@@ -275,6 +282,21 @@ function Get-AssessmentReferenceReason {
     foreach ($item in @($Record.recommendationRelationships)) {
         if (-not $identitySets.recommendations.Contains([string] $item.fromRecommendationId) -or
             -not $identitySets.recommendations.Contains([string] $item.toRecommendationId)) {
+            return 'CONTRACT.REFERENCE_INVALID'
+        }
+    }
+    if ($Record.PSObject.Properties['softwareRecognition']) {
+        $applicationSubjects = @($Record.subjects | Where-Object kind -eq 'Application')
+        $applicationSubjectIds = @($applicationSubjects | ForEach-Object { [string]$_.subjectId })
+        $annotationSubjects = @($Record.softwareRecognition | ForEach-Object { [string]$_.subjectId })
+        if ('software-recognition-annotations' -notin @($Record.requiredFeatures) -or
+            $annotationSubjects.Count -ne $applicationSubjects.Count -or
+            @($annotationSubjects | Sort-Object -Unique).Count -ne $annotationSubjects.Count -or
+            @($annotationSubjects | Where-Object {
+                -not $identitySets.subjects.Contains($_) -or
+                $_ -notin $applicationSubjectIds
+            }).Count -gt 0 -or
+            @($applicationSubjectIds | Where-Object { $_ -notin $annotationSubjects }).Count -gt 0) {
             return 'CONTRACT.REFERENCE_INVALID'
         }
     }
@@ -477,7 +499,10 @@ function Get-AssessmentStateReason {
             $postStartRecords = @($Record.subjects).Count + @($Record.provenance).Count +
                 @($Record.observations).Count + @($Record.collectorResults).Count +
                 @($Record.findings).Count + @($Record.recommendations).Count +
-                @($Record.recommendationRelationships).Count
+                @($Record.recommendationRelationships).Count +
+                $(if($Record.PSObject.Properties['softwareRecognition']){
+                    @($Record.softwareRecognition).Count
+                }else{0})
             if ($postStartRecords -gt 0 -or
                 @($Record.coverage | Where-Object state -ne 'NotAttempted').Count -gt 0) {
                 return 'CONTRACT.RUN_STATE_INCONSISTENT'
