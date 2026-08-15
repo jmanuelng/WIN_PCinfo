@@ -87,6 +87,11 @@
       "sourceId": "source:windows.local-security-option-signals",
       "interface": "Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly",
       "limitation": "ConfiguredSignalOnlySourceEnforcementAndFreshnessUnproven"
+    },
+    {
+      "sourceId": "source:windows.mdm-policy-csp-results",
+      "interface": "PredefinedLocalSystemMdmBridgePolicyResultCatalog",
+      "limitation": "VersionedBuildCatalogPolicyCspOnlyNoDynamicClassDumpNoTenantIntent"
     }
   ],
   "auditSubcategories": [
@@ -139,7 +144,11 @@
     { "scopeId": "scope:policy.local-user-rights", "fieldIds": ["field:policy.user-right.catalog-id", "field:policy.user-right.direct-principal-sid", "field:policy.user-right.direct-assignment"] },
     { "scopeId": "scope:policy.security-option.machine-inactivity-limit", "fieldIds": ["field:policy.security-option.machine-inactivity-limit-seconds"] },
     { "scopeId": "scope:policy.security-option.disable-cad", "fieldIds": ["field:policy.security-option.disable-cad"] },
-    { "scopeId": "scope:policy.security-option.lm-compatibility-level", "fieldIds": ["field:policy.security-option.lm-compatibility-level"] }
+    { "scopeId": "scope:policy.security-option.lm-compatibility-level", "fieldIds": ["field:policy.security-option.lm-compatibility-level"] },
+    { "scopeId": "scope:policy.mdm.control-policy-conflict", "fieldIds": ["field:policy.mdm.control-policy-conflict.mdm-wins-over-gp"] },
+    { "scopeId": "scope:policy.mdm.security-option.machine-inactivity-limit", "fieldIds": ["field:policy.mdm.security-option.machine-inactivity-limit-seconds"] },
+    { "scopeId": "scope:policy.mdm.security-option.disable-cad", "fieldIds": ["field:policy.mdm.security-option.disable-cad"] },
+    { "scopeId": "scope:policy.mdm.security-option.lm-compatibility-level", "fieldIds": ["field:policy.mdm.security-option.lm-compatibility-level"] }
   ],
   "rules": [
     {
@@ -165,11 +174,43 @@
       "executable": "NoneInProcess", "dependencies": [], "maximumAttempts": 1, "deadlineMilliseconds": 100,
       "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false,
       "maximumInputObservations": 32, "maximumOutputFindings": 1, "cleanup": "NoArtifacts", "missingEvidenceOutcome": "Indeterminate"
+    },
+    {
+      "findingKind": "mdm-policy-csp-coverage", "ruleId": "rule:policy.mdm-policy-csp-coverage/1.0.0",
+      "operationId": "op:rule.policy.mdm-policy-csp-coverage.evaluate", "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess", "dependencies": [], "maximumAttempts": 1, "deadlineMilliseconds": 100,
+      "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false,
+      "maximumInputObservations": 16, "maximumOutputFindings": 1, "cleanup": "NoArtifacts", "missingEvidenceOutcome": "Indeterminate"
+    },
+    {
+      "findingKind": "policy-csp-gpo-conflict", "ruleId": "rule:policy.policy-csp-gpo-conflict/1.0.0",
+      "operationId": "op:rule.policy.policy-csp-gpo-conflict.evaluate", "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess", "dependencies": [], "maximumAttempts": 1, "deadlineMilliseconds": 100,
+      "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false,
+      "maximumInputObservations": 24, "maximumOutputFindings": 1, "cleanup": "NoArtifacts", "missingEvidenceOutcome": "Indeterminate"
+    }
+  ],
+  "discoveryTasks": [
+    {
+      "definitionId": "task:confirm-mdm-policy-csp-assignment/1.0.0",
+      "kind": "TenantSideDiscoveryTask",
+      "title": "Confirm whether the device is intentionally targeted by the relevant Policy CSP assignments.",
+      "recommendedAudience": "AuthorizedTenantPolicyAdministrator"
+    },
+    {
+      "definitionId": "task:confirm-policy-channel-precedence-intent/1.0.0",
+      "kind": "TenantSideDiscoveryTask",
+      "title": "Confirm whether overlapping Group Policy and Policy CSP settings are expected to coexist, retire, or be remediated.",
+      "recommendedAudience": "AuthorizedTenantPolicyAdministrator"
     }
   ],
   "validationScenarios": [
     "Workgroup", "Domain", "UserAndComputerRsop", "MissingRsop", "StaleRegistry",
     "DeniedAdministrator", "DeniedSystem", "NonEnglish", "AppliedOrderConflict",
-    "AccountLockout", "AuditPolicy", "UserRights", "SecurityOptions", "PartialChannel"
+    "AccountLockout", "AuditPolicy", "UserRights", "SecurityOptions", "PartialChannel",
+    "NonMdm", "UnsupportedMdmBuild", "MissingMdmClass", "MissingMdmProperty",
+    "MdmPolicyConflict", "MdmWinsOverGpScoped"
   ]
 }

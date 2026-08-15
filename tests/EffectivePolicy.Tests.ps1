@@ -25,6 +25,12 @@ $expected = @{
     UserRights = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
     SecurityOptions = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
     PartialChannel = @{ applied='Partial'; configured='Partial'; local='Partial'; policies=8; conflict=$false }
+    NonMdm = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
+    UnsupportedMdmBuild = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
+    MissingMdmClass = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
+    MissingMdmProperty = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
+    MdmPolicyConflict = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
+    MdmWinsOverGpScoped = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
 }
 
 $partial = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario PartialChannel).payload

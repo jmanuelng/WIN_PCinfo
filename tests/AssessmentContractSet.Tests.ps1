@@ -18,16 +18,16 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.9.0' $contractSet.contractVersion `
-    'the additive Microsoft Connectivity contract has an explicit version'
+Assert-Equal '1.10.0' $contractSet.contractVersion `
+    'the additive MDM policy conflict contract has an explicit version'
 Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 185 @($contractSet.fieldDefinitions).Count `
-    'historical fields remain while bounded connectivity fields are admitted'
-Assert-Equal 65 @($contractSet.scopeDefinitions).Count `
-    'historical through connectivity protocol scopes remain distinct'
+Assert-Equal 189 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while bounded Policy CSP result fields are admitted'
+Assert-Equal 69 @($contractSet.scopeDefinitions).Count `
+    'historical through Policy CSP conflict scopes remain distinct'
 $certificateFields = @($contractSet.fieldDefinitions | Where-Object fieldId -like 'field:certificate.*')
 Assert-Equal 12 $certificateFields.Count `
     'presence, purpose, identity, store, dates, validity, chain, trust, and key protection remain explicit fields'
@@ -49,7 +49,7 @@ foreach ($certificateScope in $certificateScopes) {
         'certificate scopes resolve only to the purpose-bound read-only collector'
 }
 $certificateProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness'
-Assert-Equal 55 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
+Assert-Equal 59 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
     'the additive certificate profile inherits every earlier scope and adds six purpose scopes'
 $connectivityFields = @($contractSet.fieldDefinitions | Where-Object {
     $_.fieldId -like 'field:connectivity.*'
@@ -68,7 +68,7 @@ $connectivityScopes = @($contractSet.scopeDefinitions | Where-Object {
 Assert-Equal 8 $connectivityScopes.Count `
     'the eight connectivity observation classes retain independent coverage'
 $connectivityProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness'
-Assert-Equal 60 @($contractSet.scopeDefinitions | Where-Object {
+Assert-Equal 64 @($contractSet.scopeDefinitions | Where-Object {
     $connectivityProfile -in @($_.profileIds)
 }).Count `
     'the implemented connectivity profile inherits prior evidence and replaces three deferred placeholders'

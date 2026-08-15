@@ -45,7 +45,7 @@
     "operation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["operationId", "collectorId", "collectorVersion", "requiredExecutionContext", "administratorSufficient", "source", "authorityProof", "parameters", "intendedScopeIds", "subjectIds", "result"],
+      "required": ["operationId", "collectorId", "collectorVersion", "requiredExecutionContext", "administratorSufficient", "source", "authorityProof", "parameters", "policyResultCatalogs", "intendedScopeIds", "subjectIds", "result"],
       "properties": {
         "operationId": { "const": "op:windows.mdm-bridge.device-manageability" },
         "collectorId": { "const": "collector:windows.mdm-bridge.device-manageability" },
@@ -88,11 +88,17 @@
               "required": ["type", "const", "maximumUtf8Bytes"],
               "properties": {
                 "type": { "const": "string" },
-                "const": { "const": "DeviceManageabilityAvailability" },
+                "const": { "const": "PolicyCspResultCatalogV1" },
                 "maximumUtf8Bytes": { "const": 64 }
               }
             }
           }
+        },
+        "policyResultCatalogs": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/policyResultCatalog" }
         },
         "intendedScopeIds": { "type": "array", "prefixItems": [{ "const": "scope:device.mdm-policy.system" }], "items": false },
         "subjectIds": { "type": "array", "prefixItems": [{ "const": "subject:device:primary" }], "items": false },
@@ -106,6 +112,46 @@
             "maximumObservations": { "const": 1 }
           }
         }
+      }
+    },
+    "policyResultCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalogId", "minimumBuildNumber", "maximumBuildNumber", "resultFields"],
+      "properties": {
+        "catalogId": { "type": "string", "pattern": "^catalog:policy-csp-result\\.windows(?:10|11)/1\\.0\\.0$" },
+        "minimumBuildNumber": { "type": "integer", "minimum": 10240, "maximum": 99999 },
+        "maximumBuildNumber": { "type": "integer", "minimum": 10240, "maximum": 99999 },
+        "resultFields": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/policyResultField" }
+        }
+      }
+    },
+    "policyResultField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fieldId", "scopeId", "className", "propertyName", "valueType"],
+      "properties": {
+        "fieldId": { "type": "string", "pattern": "^field:policy\\.mdm\\." },
+        "scopeId": { "type": "string", "pattern": "^scope:policy\\.mdm\\." },
+        "className": {
+          "enum": [
+            "MDM_Policy_Result01_ControlPolicyConflict02",
+            "MDM_Policy_Result01_LocalPoliciesSecurityOptions02"
+          ]
+        },
+        "propertyName": {
+          "enum": [
+            "MDMWinsOverGP",
+            "InteractiveLogon_MachineInactivityLimit",
+            "Interactivelogon_DoNotRequireCTRLALTDEL",
+            "NetworkSecurity_LANManagerAuthenticationLevel"
+          ]
+        },
+        "valueType": { "enum": ["Boolean", "Integer"] }
       }
     },
     "activation": {

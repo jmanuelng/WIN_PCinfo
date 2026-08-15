@@ -943,6 +943,12 @@ $identityGuidance
         if($null -eq $EffectivePolicyPolicy){throw 'Effective Policy guidance requires its frozen policy definition.'}
         $localFinding=@($Record.findings|Where-Object ruleId -eq 'rule:policy.local-security-policy-coverage/1.0.0')[0]
         $orderFinding=@($Record.findings|Where-Object ruleId -eq 'rule:policy.applied-order-conflict/1.0.0')[0]
+        $mdmCoverageFinding=@($Record.findings|Where-Object ruleId -eq 'rule:policy.mdm-policy-csp-coverage/1.0.0')[0]
+        $channelConflictFinding=@($Record.findings|Where-Object ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0]
+        $policyDiscoveryTaskCount=@(@($Record.recommendations|Where-Object {
+            $_.kind -eq 'TenantSideDiscoveryTask' -and
+            $_.definitionId -in @($EffectivePolicyPolicy.discoveryTasks.definitionId)
+        })).Count
         $layerById=@{};foreach($layer in $EffectivePolicyPolicy.layers){$layerById[[string]$layer.layerId]=$layer}
         $policySubjects=@($Record.subjects|Where-Object kind -eq 'PolicyObject')
         $policyRows=@($policySubjects|ForEach-Object {
@@ -983,7 +989,10 @@ $identityGuidance
 <dt>Current Control State coverage</dt><dd>$([Net.WebUtility]::HtmlEncode((Get-EffectivePolicyLayerState -ScopeStates $Record.coverage -ScopeIds @($layerById.CurrentControlState.scopeIds))))</dd>
 <dt>Applied-policy finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$policyFinding.outcome))</dd>
 <dt>Local-security finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$localFinding.outcome))</dd>
-<dt>Applied-order conflict finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$orderFinding.outcome))</dd></dl>
+<dt>Applied-order conflict finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$orderFinding.outcome))</dd>
+<dt>Policy CSP coverage finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$mdmCoverageFinding.outcome))</dd>
+<dt>Policy CSP versus local signal finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$channelConflictFinding.outcome))</dd>
+<dt>Tenant-side discovery tasks</dt><dd>$policyDiscoveryTaskCount</dd></dl>
 <h3>Cached applied policy objects</h3><ul>$($policyRows -join '')</ul>
 <h3>Current local account and lockout state</h3>
 <dl><dt>Minimum authenticator length</dt><dd>$($values['field:policy.local-sam.minimum-authenticator-length'])</dd>
@@ -998,7 +1007,7 @@ $identityGuidance
 <dl><dt>Machine inactivity limit (seconds)</dt><dd>$($values['field:policy.security-option.machine-inactivity-limit-seconds'])</dd>
 <dt>Disable Ctrl+Alt+Del signal</dt><dd>$($values['field:policy.security-option.disable-cad'])</dd>
 <dt>LAN Manager compatibility signal</dt><dd>$($values['field:policy.security-option.lm-compatibility-level'])</dd></dl>
-<p>RSoP is read only and uses cached locale-neutral classes; WIN-PCInfo does not refresh policy or parse a localized report. Local SAM values apply only to local accounts. User-right entries are direct SID assignments only and do not expand nested groups. Missing, denied, stale, unsupported, malformed, or incomplete sources remain explicit gaps.</p>
+<p>RSoP is read only and uses cached locale-neutral classes; WIN-PCInfo does not refresh policy or parse a localized report. Local SAM values apply only to local accounts. User-right entries are direct SID assignments only and do not expand nested groups. `MDMWinsOverGP` is reported only for its documented Policy CSP scope and is never generalized to every management channel. Missing, denied, stale, unsupported, malformed, or incomplete sources remain explicit gaps, and tenant-side discovery tasks replace a guessed assignment or precedence conclusion.</p>
 "@
     }else{''}
     $resourceFinding=$Record.findings|Where-Object {
@@ -1453,12 +1462,12 @@ function Get-DeviceReadinessSliceSelection {
 
 function Get-CombinedAssessmentContractSetVersion {
     param($ConnectivityCollector,$CertificateCollector,$SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
-    if($null -ne $ConnectivityCollector){'1.9.0'}
-    elseif($null -ne $CertificateCollector){'1.8.0'}
-    elseif($null -ne $SoftwareCollector){'1.8.0'}
-    elseif($null -ne $NetworkCollector){'1.6.0'}
-    elseif($null -ne $ResourceCollector){'1.5.0'}
-    elseif($null -ne $EffectivePolicyCollector){'1.4.0'}
+    if($null -ne $ConnectivityCollector){'1.10.0'}
+    elseif($null -ne $CertificateCollector){'1.10.0'}
+    elseif($null -ne $SoftwareCollector){'1.10.0'}
+    elseif($null -ne $NetworkCollector){'1.10.0'}
+    elseif($null -ne $ResourceCollector){'1.10.0'}
+    elseif($null -ne $EffectivePolicyCollector){'1.10.0'}
     elseif($null -ne $AdministratorCollector){'1.3.0'}
     elseif($null -ne $IdentityCollector){'1.2.0'}else{'1.1.0'}
 }
@@ -1846,6 +1855,11 @@ function Invoke-DeviceReadinessSlice {
                 }elseif([bool]$sliceSelection.usesSyntheticPrerequisites){
                     'SyntheticSuccess'
                 }else{''})
+            if($isEffectivePolicyFixture -and $null -ne $systemResult -and
+                $systemResult.state -in @('Completed','CompletedWithGaps')){
+                $systemResult.PrivatePolicyCspResults =
+                    New-EffectivePolicySyntheticPolicyCspResults -Scenario $effectivePolicyScenario
+            }
             if(-not [bool]$systemResult.cleanup.verified){
                 $exception=[InvalidOperationException]::new(
                     'The predefined SYSTEM enrollment source cleanup was not verified.'
@@ -1987,7 +2001,8 @@ function Invoke-DeviceReadinessSlice {
                 if($null -ne $effectivePolicyCollector){
                     $sliceStage='EFFECTIVE_POLICY_SOURCE'
                     $record=Add-EffectivePolicyEvidenceRecord -Record $record `
-                        -CollectorResult $effectivePolicyCollector -Policy $effectivePolicy
+                        -CollectorResult $effectivePolicyCollector -Policy $effectivePolicy `
+                        -SystemResult $systemResult
                     [byte[]]$effectivePolicySourceBytes=[Text.UTF8Encoding]::new($false).GetBytes(
                         (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
                     )

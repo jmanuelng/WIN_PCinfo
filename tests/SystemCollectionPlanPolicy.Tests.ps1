@@ -30,7 +30,7 @@ Assert-Equal 'LocalSystem' $operation.requiredExecutionContext `
     'the operation cannot run under the administrator identity'
 Assert-Equal $false $operation.administratorSufficient `
     'the release explicitly records that administrator authority is insufficient'
-Assert-Equal 'DeviceManageabilityAvailability' $operation.parameters.queryKind.const `
+Assert-Equal 'PolicyCspResultCatalogV1' $operation.parameters.queryKind.const `
     'the only parameter is a bounded typed selector with one release value'
 Assert-Equal $false $operation.parameters.additionalProperties `
     'scripts, commands, paths, and undeclared parameters cannot enter the plan'
@@ -38,6 +38,16 @@ Assert-Equal 'Root\cimv2\mdm\dmmap' $operation.source.namespace `
     'the fixed Windows source namespace is release-defined'
 Assert-Equal 'MDM_DeviceManageability_Provider01_01' $operation.source.className `
     'the fixed device-level WMI Bridge class is release-defined'
+Assert-Equal 2 @($operation.policyResultCatalogs).Count `
+    'Windows 10 and Windows 11 Policy CSP result catalogs are both frozen'
+Assert-Equal 4 @($operation.policyResultCatalogs[0].resultFields).Count `
+    'each build catalog allowlists exactly four Policy CSP result fields'
+Assert-Equal 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' `
+    $operation.policyResultCatalogs[0].resultFields[0].fieldId `
+    'the fixed catalog includes the documented MDMWinsOverGP Policy CSP field'
+Assert-Equal 'MDM_Policy_Result01_LocalPoliciesSecurityOptions02' `
+    $operation.policyResultCatalogs[0].resultFields[1].className `
+    'the fixed catalog reads only the release-approved LocalPoliciesSecurityOptions result class'
 Assert-Equal 'MicrosoftDocumentation' $operation.authorityProof.kind `
     'the SYSTEM-only decision cites a primary Windows source'
 Assert-Equal $false $policy.channel.assessmentEvidenceAllowed `

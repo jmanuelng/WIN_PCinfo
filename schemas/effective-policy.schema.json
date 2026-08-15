@@ -4,7 +4,7 @@
   "title": "WIN-PCInfo Effective Policy release policy",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "contractVersion", "release", "policyId", "evidenceProfileId", "layers", "collectors", "sourceCatalog", "auditSubcategories", "userRights", "securityOptions", "userRightSemantics", "localAccountPolicySemantics", "scopes", "rules", "validationScenarios"],
+  "required": ["kind", "contractVersion", "release", "policyId", "evidenceProfileId", "layers", "collectors", "sourceCatalog", "auditSubcategories", "userRights", "securityOptions", "userRightSemantics", "localAccountPolicySemantics", "scopes", "rules", "discoveryTasks", "validationScenarios"],
   "properties": {
     "kind": { "const": "win-pcinfo.effective-policy-policy" },
     "contractVersion": { "const": "1.0.0" },
@@ -13,15 +13,16 @@
     "evidenceProfileId": { "const": "profile:device-firmware-identity-administrator-and-policy-readiness" },
     "layers": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/layer" } },
     "collectors": { "type": "array", "minItems": 1, "maxItems": 1, "prefixItems": [{ "$ref": "#/$defs/collector" }], "items": false },
-    "sourceCatalog": { "type": "array", "minItems": 5, "maxItems": 5, "items": { "$ref": "#/$defs/source" } },
+    "sourceCatalog": { "type": "array", "minItems": 6, "maxItems": 6, "items": { "$ref": "#/$defs/source" } },
     "auditSubcategories": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/catalogPair" } },
     "userRights": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/right" } },
     "securityOptions": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/securityOption" } },
     "userRightSemantics": { "const": "DirectAssignmentsOnly" },
     "localAccountPolicySemantics": { "const": "LocalSamAccountsOnly" },
-    "scopes": { "type": "array", "minItems": 15, "maxItems": 15, "items": { "$ref": "#/$defs/scope" } },
-    "rules": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/rule" } },
-    "validationScenarios": { "const": ["Workgroup", "Domain", "UserAndComputerRsop", "MissingRsop", "StaleRegistry", "DeniedAdministrator", "DeniedSystem", "NonEnglish", "AppliedOrderConflict", "AccountLockout", "AuditPolicy", "UserRights", "SecurityOptions", "PartialChannel"] }
+    "scopes": { "type": "array", "minItems": 19, "maxItems": 19, "items": { "$ref": "#/$defs/scope" } },
+    "rules": { "type": "array", "minItems": 5, "maxItems": 5, "items": { "$ref": "#/$defs/rule" } },
+    "discoveryTasks": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/discoveryTask" } },
+    "validationScenarios": { "const": ["Workgroup", "Domain", "UserAndComputerRsop", "MissingRsop", "StaleRegistry", "DeniedAdministrator", "DeniedSystem", "NonEnglish", "AppliedOrderConflict", "AccountLockout", "AuditPolicy", "UserRights", "SecurityOptions", "PartialChannel", "NonMdm", "UnsupportedMdmBuild", "MissingMdmClass", "MissingMdmProperty", "MdmPolicyConflict", "MdmWinsOverGpScoped"] }
   },
   "$defs": {
     "layer": {
@@ -81,6 +82,17 @@
       "properties": {
         "scopeId": { "type": "string", "pattern": "^scope:policy\\." },
         "fieldIds": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "type": "string", "pattern": "^field:policy\\." } }
+      }
+    },
+    "discoveryTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["definitionId", "kind", "title", "recommendedAudience"],
+      "properties": {
+        "definitionId": { "type": "string", "pattern": "^task:confirm-[a-z0-9-]+/1\\.0\\.0$" },
+        "kind": { "const": "TenantSideDiscoveryTask" },
+        "title": { "type": "string", "minLength": 20, "maxLength": 256 },
+        "recommendedAudience": { "const": "AuthorizedTenantPolicyAdministrator" }
       }
     },
     "rule": {

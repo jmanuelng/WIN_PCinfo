@@ -37,7 +37,8 @@ $expectedSources = @(
     'source:windows.local-sam-policy',
     'source:windows.system-audit-policy',
     'source:windows.lsa-user-rights',
-    'source:windows.local-security-option-signals'
+    'source:windows.local-security-option-signals',
+    'source:windows.mdm-policy-csp-results'
 )
 Assert-Equal ($expectedSources -join '|') ($sourceIds -join '|') `
     'the structured source catalog is finite and ordered'
@@ -57,6 +58,8 @@ Assert-Equal 3 @($policy.userRights).Count `
     'the release owns a finite user-right catalog'
 Assert-Equal 3 @($policy.securityOptions).Count `
     'the release owns a finite security-option catalog'
+Assert-Equal 2 @($policy.discoveryTasks).Count `
+    'tenant-side follow-up for incomplete MDM coverage is finite and release-owned'
 Assert-Equal 'DirectAssignmentsOnly' $policy.userRightSemantics `
     'direct SID assignments are never expanded into effective group access'
 Assert-Equal 'LocalSamAccountsOnly' $policy.localAccountPolicySemantics `
@@ -65,19 +68,31 @@ Assert-Equal 'LocalSamAccountsOnly' $policy.localAccountPolicySemantics `
 $layers = @($policy.layers.layerId)
 Assert-Equal 'AppliedPolicyEvidence|ConfiguredPolicySignals|CurrentControlState' `
     ($layers -join '|') 'the three evidence layers remain distinct'
-Assert-Equal 3 @($policy.rules).Count 'three rules each produce one finding'
+Assert-Equal 5 @($policy.rules).Count 'local-policy and MDM conflict rules each produce one finding'
 foreach ($rule in $policy.rules) {
     foreach ($flag in @('mayPrompt','mayInstall','mayDownload','maySelfElevate','writesAllowed')) {
         Assert-Equal $false ([bool]$rule.$flag) `
             "the $($rule.ruleId) operation freezes $flag as false"
     }
 }
-Assert-Equal 15 @($policy.scopes).Count `
-    'field-specific applied and local-policy coverage is release-closed'
+Assert-Equal 19 @($policy.scopes).Count `
+    'field-specific applied, local-policy, and Policy CSP coverage is release-closed'
+$expectedMdmScopes = @(
+    'scope:policy.mdm.control-policy-conflict',
+    'scope:policy.mdm.security-option.machine-inactivity-limit',
+    'scope:policy.mdm.security-option.disable-cad',
+    'scope:policy.mdm.security-option.lm-compatibility-level'
+)
+Assert-Equal ($expectedMdmScopes -join '|') (@($policy.scopes | Where-Object {
+    $_.scopeId -like 'scope:policy.mdm.*'
+} | ForEach-Object scopeId) -join '|') `
+    'the MDM Policy CSP result scopes are explicit and finite'
 $expectedScenarios = @(
     'Workgroup','Domain','UserAndComputerRsop','MissingRsop','StaleRegistry',
     'DeniedAdministrator','DeniedSystem','NonEnglish','AppliedOrderConflict',
-    'AccountLockout','AuditPolicy','UserRights','SecurityOptions','PartialChannel'
+    'AccountLockout','AuditPolicy','UserRights','SecurityOptions','PartialChannel',
+    'NonMdm','UnsupportedMdmBuild','MissingMdmClass','MissingMdmProperty',
+    'MdmPolicyConflict','MdmWinsOverGpScoped'
 )
 Assert-Equal ($expectedScenarios -join '|') (@($policy.validationScenarios) -join '|') `
     'the ticket validation matrix is release-closed'

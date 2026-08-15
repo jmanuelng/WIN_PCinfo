@@ -38,7 +38,7 @@ Assert-Equal 1 @($planResult.Plan.operations).Count `
 Assert-Equal 'op:windows.mdm-bridge.device-manageability' `
     $planResult.Plan.operations[0].operationId `
     'the preparation operation maps to one release-owned SYSTEM operation ID'
-Assert-Equal 'DeviceManageabilityAvailability' `
+Assert-Equal 'PolicyCspResultCatalogV1' `
     $planResult.Plan.operations[0].parameters.queryKind `
     'the frozen plan carries only the closed typed query selector'
 

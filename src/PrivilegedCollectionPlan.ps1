@@ -1799,7 +1799,9 @@ function Invoke-PrivilegedCollectionPlan {
             'None','Live','Workgroup','Domain','UserAndComputerRsop','MissingRsop',
             'StaleRegistry','DeniedAdministrator','DeniedSystem','NonEnglish',
             'AppliedOrderConflict','AccountLockout','AuditPolicy','UserRights',
-            'SecurityOptions','PartialChannel'
+            'SecurityOptions','PartialChannel','NonMdm','UnsupportedMdmBuild',
+            'MissingMdmClass','MissingMdmProperty','MdmPolicyConflict',
+            'MdmWinsOverGpScoped'
         )]
         [string] $EffectivePolicyScenario = 'None',
         [Parameter()] [System.Threading.CancellationToken] $CancellationToken =

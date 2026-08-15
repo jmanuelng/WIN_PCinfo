@@ -26,8 +26,80 @@
         "type": "object",
         "required": ["queryKind"],
         "additionalProperties": false,
-        "queryKind": { "type": "string", "const": "DeviceManageabilityAvailability", "maximumUtf8Bytes": 64 }
+        "queryKind": { "type": "string", "const": "PolicyCspResultCatalogV1", "maximumUtf8Bytes": 64 }
       },
+      "policyResultCatalogs": [
+        {
+          "catalogId": "catalog:policy-csp-result.windows10/1.0.0",
+          "minimumBuildNumber": 17134,
+          "maximumBuildNumber": 21999,
+          "resultFields": [
+            {
+              "fieldId": "field:policy.mdm.control-policy-conflict.mdm-wins-over-gp",
+              "scopeId": "scope:policy.mdm.control-policy-conflict",
+              "className": "MDM_Policy_Result01_ControlPolicyConflict02",
+              "propertyName": "MDMWinsOverGP",
+              "valueType": "Boolean"
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.machine-inactivity-limit-seconds",
+              "scopeId": "scope:policy.mdm.security-option.machine-inactivity-limit",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "propertyName": "InteractiveLogon_MachineInactivityLimit",
+              "valueType": "Integer"
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.disable-cad",
+              "scopeId": "scope:policy.mdm.security-option.disable-cad",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "propertyName": "Interactivelogon_DoNotRequireCTRLALTDEL",
+              "valueType": "Boolean"
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.lm-compatibility-level",
+              "scopeId": "scope:policy.mdm.security-option.lm-compatibility-level",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "propertyName": "NetworkSecurity_LANManagerAuthenticationLevel",
+              "valueType": "Integer"
+            }
+          ]
+        },
+        {
+          "catalogId": "catalog:policy-csp-result.windows11/1.0.0",
+          "minimumBuildNumber": 22000,
+          "maximumBuildNumber": 99999,
+          "resultFields": [
+            {
+              "fieldId": "field:policy.mdm.control-policy-conflict.mdm-wins-over-gp",
+              "scopeId": "scope:policy.mdm.control-policy-conflict",
+              "className": "MDM_Policy_Result01_ControlPolicyConflict02",
+              "propertyName": "MDMWinsOverGP",
+              "valueType": "Boolean"
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.machine-inactivity-limit-seconds",
+              "scopeId": "scope:policy.mdm.security-option.machine-inactivity-limit",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "propertyName": "InteractiveLogon_MachineInactivityLimit",
+              "valueType": "Integer"
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.disable-cad",
+              "scopeId": "scope:policy.mdm.security-option.disable-cad",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "propertyName": "Interactivelogon_DoNotRequireCTRLALTDEL",
+              "valueType": "Boolean"
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.lm-compatibility-level",
+              "scopeId": "scope:policy.mdm.security-option.lm-compatibility-level",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "propertyName": "NetworkSecurity_LANManagerAuthenticationLevel",
+              "valueType": "Integer"
+            }
+          ]
+        }
+      ],
       "intendedScopeIds": ["scope:device.mdm-policy.system"],
       "subjectIds": ["subject:device:primary"],
       "result": {
@@ -49,7 +121,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "EncodedReleaseSource",
-    "payloadSha256": "477285bbcdf337328ffc8fd402e16abc1c2297b27b7bc8ff5dceda6495e6641f"
+    "payloadSha256": "f08395238c96e2dabf5bc292486e7a129aa38f71bf693e9577d97b3f519cac58"
   },
   "channel": {
     "pipeNamePrefix": "WINPCInfo-SystemCollection-v1-",
