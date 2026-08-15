@@ -5,6 +5,7 @@ import { delimiter, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { createCodexAgent } from "./codex-agent.mts";
+import { createLaneRecovery, laneFailure } from "./recovery.mts";
 import {
   AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   DEFAULT_MAX_PARALLEL_ISSUES,
@@ -16,11 +17,59 @@ import {
   isSafelyClaimedIssue,
   parseMaxIterations,
   parseMaxParallel,
+  listEligibleIssues,
+  releaseIssueClaim,
   runCommandAsync,
   selectNextIssue,
   selectNextIssues,
+  type CommandResult,
   type GitHubIssue,
+  type WorkflowCommandAdapter,
 } from "./workflow.mts";
+
+function commandResult(stdout = ""): CommandResult {
+  return { stdout, stderr: "", exitCode: 0 };
+}
+
+function failedCommand(stderr: string): CommandResult {
+  return { stdout: "", stderr, exitCode: 1 };
+}
+
+function recoveryCommands(options: {
+  readonly pullRequest: unknown | null;
+  readonly issue: unknown;
+  readonly localMain: string;
+  readonly remoteMain: string;
+}) {
+  return {
+    run(command: string, args: readonly string[]): CommandResult {
+      if (command === "gh" && args[0] === "pr") {
+        return options.pullRequest === null
+          ? failedCommand("no pull request")
+          : commandResult(JSON.stringify(options.pullRequest));
+      }
+      if (command === "gh" && args[0] === "issue") {
+        return commandResult(JSON.stringify(options.issue));
+      }
+      if (command === "git" && args[0] === "worktree") {
+        return commandResult("");
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        return commandResult("branch-sha refs/heads/test-branch");
+      }
+      if (command === "git" && args[0] === "ls-remote") {
+        return failedCommand("remote branch absent");
+      }
+      if (command === "git" && args.at(-1) === "refs/heads/main") {
+        return commandResult(options.localMain);
+      }
+      if (command === "git" && args.at(-1) === "refs/remotes/origin/main") {
+        return commandResult(options.remoteMain);
+      }
+      throw new Error(`Unexpected recovery command: ${command} ${args.join(" ")}`);
+    },
+  };
+}
 
 function issue(
   number: number,
@@ -33,6 +82,23 @@ function issue(
     labels: [{ name: "ready-for-agent" }],
     assignees: [],
     blockedBy: { nodes: [] },
+    subIssuesSummary: { completed: 0, percentCompleted: 0, total: 0 },
+    ...overrides,
+  };
+}
+
+function frontierNode(
+  number: number,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    number,
+    title: `Issue ${number}`,
+    state: "OPEN",
+    url: `https://example.test/issues/${number}`,
+    labels: { nodes: [{ name: "ready-for-agent" }] },
+    assignees: { nodes: [] },
+    blockedBy: { nodes: [], totalCount: 0 },
     subIssuesSummary: { completed: 0, percentCompleted: 0, total: 0 },
     ...overrides,
   };
@@ -198,6 +264,169 @@ test("verified claims recheck every mutable eligibility condition", () => {
     isSafelyClaimedIssue({ ...claimed, state: "CLOSED" }, "agent"),
     false,
   );
+});
+
+test("frontier discovery paginates until it finds two eligible issues", () => {
+  const cursors: string[] = [];
+  const pages = [
+    {
+      data: {
+        repository: {
+          issues: {
+            nodes: [
+              frontierNode(1, {
+                assignees: { nodes: [{ login: "someone" }] },
+              }),
+            ],
+            pageInfo: { hasNextPage: true, endCursor: "cursor-1" },
+          },
+        },
+      },
+    },
+    {
+      data: {
+        repository: {
+          issues: {
+            nodes: [frontierNode(2), frontierNode(3)],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      },
+    },
+  ];
+  const commands: WorkflowCommandAdapter = {
+    run: () => commandResult("owner/repository"),
+    json<T>(_command: string, args: readonly string[]) {
+      const cursor = args.find((arg) => arg.startsWith("cursor="));
+      if (cursor) cursors.push(cursor);
+      return pages.shift() as T;
+    },
+  };
+
+  const selected = selectNextIssues(listEligibleIssues(2, commands), 2);
+  assert.deepEqual(selected.map(({ number }) => number), [2, 3]);
+  assert.deepEqual(cursors, ["cursor=cursor-1"]);
+  assert.equal(pages.length, 0);
+});
+
+test("frontier discovery fails closed on missing cursors or command errors", () => {
+  const missingCursor: WorkflowCommandAdapter = {
+    run: () => commandResult("owner/repository"),
+    json<T>() {
+      return {
+        data: {
+          repository: {
+            issues: {
+              nodes: [],
+              pageInfo: { hasNextPage: true, endCursor: null },
+            },
+          },
+        },
+      } as T;
+    },
+  };
+  assert.throws(
+    () => listEligibleIssues(2, missingCursor),
+    /omitted its next cursor/,
+  );
+
+  const commandFailure: WorkflowCommandAdapter = {
+    run: () => commandResult("owner/repository"),
+    json<T>(): T {
+      throw new Error("expected GraphQL failure");
+    },
+  };
+  assert.throws(
+    () => listEligibleIssues(2, commandFailure),
+    /expected GraphQL failure/,
+  );
+});
+
+test("claim rollback verifies release and propagates failures", () => {
+  const released: WorkflowCommandAdapter = {
+    run: (_command, args) =>
+      commandResult(args[0] === "api" ? "agent" : ""),
+    json<T>() {
+      return issue(57, { assignees: [] }) as T;
+    },
+  };
+  assert.doesNotThrow(() => releaseIssueClaim(57, released));
+
+  const stillAssigned: WorkflowCommandAdapter = {
+    ...released,
+    json<T>() {
+      return issue(57, { assignees: [{ login: "agent" }] }) as T;
+    },
+  };
+  assert.throws(
+    () => releaseIssueClaim(57, stillAssigned),
+    /rollback could not be verified/,
+  );
+
+  const editFailure: WorkflowCommandAdapter = {
+    ...released,
+    run: (_command, args) => {
+      if (args[0] === "issue") throw new Error("expected edit failure");
+      return commandResult("agent");
+    },
+  };
+  assert.throws(
+    () => releaseIssueClaim(57, editFailure),
+    /expected edit failure/,
+  );
+});
+
+test("stopped delivery reports its exact branch and removed worktree state", () => {
+  const recovery = createLaneRecovery(58, "test-branch");
+  recovery.worktreePath = "C:/worktrees/test-branch";
+  recovery.worktreeDisposition = "removed";
+  const error = laneFailure(
+    "delivery",
+    recovery,
+    new Error("batch stopped"),
+    recoveryCommands({
+      pullRequest: null,
+      issue: {
+        number: 58,
+        state: "OPEN",
+        assignees: [{ login: "agent" }],
+      },
+      localMain: "same-sha",
+      remoteMain: "same-sha",
+    }),
+  );
+
+  assert.match(error.message, /"branch": "test-branch"/);
+  assert.match(error.message, /"worktreeDisposition": "removed"/);
+  assert.match(error.message, /"state": "OPEN"/);
+  assert.match(error.message, /"mainSynced": true/);
+  assert.match(error.message, /no pull request/);
+});
+
+test("post-merge failure reports merged PR, closed issue, and stale local main", () => {
+  const recovery = createLaneRecovery(58, "test-branch");
+  recovery.worktreeDisposition = "removed";
+  const error = laneFailure(
+    "delivery",
+    recovery,
+    new Error("local sync failed"),
+    recoveryCommands({
+      pullRequest: {
+        number: 200,
+        url: "https://example.test/pull/200",
+        state: "MERGED",
+        mergedAt: "2026-08-15T00:00:00Z",
+        headRefOid: "head-sha",
+      },
+      issue: { number: 58, state: "CLOSED", assignees: [] },
+      localMain: "old-sha",
+      remoteMain: "new-sha",
+    }),
+  );
+
+  assert.match(error.message, /"state": "MERGED"/);
+  assert.match(error.message, /"state": "CLOSED"/);
+  assert.match(error.message, /"mainSynced": false/);
 });
 
 test("parseMaxParallel defaults to two and enforces the host-safe cap", () => {

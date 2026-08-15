@@ -83,4 +83,7 @@ Any failure stops new deliveries and prevents another batch from starting. A
 delivery already in progress is allowed to finish its atomic transaction.
 Started issues remain assigned; claims rolled back before work are reported as
 released. Branches, preserved dirty worktrees, and pull requests remain
-available for inspection as reported by the failing lane.
+available for inspection as reported by the failing lane. Each lane failure
+reconciles and prints its exact local branch, worktree disposition, remote
+branch, pull-request/merge state, issue state, and local-versus-remote `main`
+sync state.

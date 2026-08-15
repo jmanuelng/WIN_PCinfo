@@ -152,7 +152,7 @@ export function buildIntegrationPhaseOptions<TAgent>(
   } as const;
 }
 
-interface RunOptions {
+export interface RunOptions {
   readonly cwd?: string;
   readonly stream?: boolean;
   readonly allowFailure?: boolean;
@@ -174,6 +174,19 @@ function commandInvocation(command: string, args: readonly string[]) {
   }
 
   return { command, args: [...args] };
+}
+
+export interface WorkflowCommandAdapter {
+  readonly run: (
+    command: string,
+    args: readonly string[],
+    options?: RunOptions,
+  ) => CommandResult;
+  readonly json: <T>(
+    command: string,
+    args: readonly string[],
+    options?: RunOptions,
+  ) => T;
 }
 
 function finalizeCommandResult(
@@ -338,6 +351,11 @@ function hasReadyLabel(issue: GitHubIssue): boolean {
   return (issue.labels ?? []).some((label) => label.name === READY_LABEL);
 }
 
+const DEFAULT_WORKFLOW_COMMANDS: WorkflowCommandAdapter = {
+  run: runCommand,
+  json: runJson,
+};
+
 function hasNoOpenSubIssues(issue: GitHubIssue): boolean {
   const subIssues = issue.subIssuesSummary;
   return (
@@ -448,12 +466,13 @@ const FRONTIER_QUERY = `
 
 export function listEligibleIssues(
   desiredCount = MAX_ALLOWED_PARALLEL_ISSUES,
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
 ): readonly GitHubIssue[] {
   if (!Number.isInteger(desiredCount) || desiredCount < 1) {
     throw new Error("Desired frontier count must be a positive integer.");
   }
 
-  const repository = runCommand(
+  const repository = commands.run(
     "gh",
     ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
   ).stdout;
@@ -478,7 +497,7 @@ export function listEligibleIssues(
     if (cursor) {
       args.push("-F", `cursor=${cursor}`);
     }
-    const page = runJson<FrontierPage>("gh", args);
+    const page = commands.json<FrontierPage>("gh", args);
     const connection = page.data.repository.issues;
     issues.push(
       ...connection.nodes.map((issue) => ({
@@ -539,19 +558,25 @@ export function claimIssue(issue: GitHubIssue): void {
   }
 }
 
-export function releaseIssueClaim(issueNumber: number): void {
-  const viewer = runCommand("gh", ["api", "user", "--jq", ".login"]).stdout;
+export function releaseIssueClaim(
+  issueNumber: number,
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): void {
+  const viewer = commands.run(
+    "gh",
+    ["api", "user", "--jq", ".login"],
+  ).stdout;
   if (!viewer) {
     throw new Error("GitHub CLI did not return the authenticated login.");
   }
-  runCommand("gh", [
+  commands.run("gh", [
     "issue",
     "edit",
     String(issueNumber),
     "--remove-assignee",
     "@me",
   ]);
-  const released = runJson<GitHubIssue>("gh", [
+  const released = commands.json<GitHubIssue>("gh", [
     "issue",
     "view",
     String(issueNumber),

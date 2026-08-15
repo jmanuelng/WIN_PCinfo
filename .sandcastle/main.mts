@@ -25,6 +25,11 @@ import {
   type GitHubIssue,
 } from "./workflow.mts";
 import { createCodexAgent } from "./codex-agent.mts";
+import {
+  createLaneRecovery,
+  laneFailure,
+  type LaneRecovery,
+} from "./recovery.mts";
 
 const cliArgs = process.argv.slice(2);
 const maxIterations = parseMaxIterations(cliArgs);
@@ -33,12 +38,24 @@ const agent = createCodexAgent();
 
 async function closeSandbox(
   sandbox: Awaited<ReturnType<typeof sandcastle.createSandbox>>,
+  recovery: LaneRecovery,
 ): Promise<void> {
-  const closeResult = await sandbox.close();
+  recovery.worktreePath = sandbox.worktreePath;
+  let closeResult: Awaited<ReturnType<typeof sandbox.close>>;
+  try {
+    closeResult = await sandbox.close();
+  } catch (error) {
+    recovery.worktreeDisposition = "unknown";
+    throw error;
+  }
   if (closeResult.preservedWorktreePath) {
+    recovery.worktreeDisposition = "preserved";
+    recovery.worktreePath = closeResult.preservedWorktreePath;
     console.error(
       `Sandcastle preserved a dirty worktree at ${closeResult.preservedWorktreePath}`,
     );
+  } else {
+    recovery.worktreeDisposition = "removed";
   }
 }
 
@@ -67,13 +84,15 @@ function assertCleanDeliverable(worktreePath: string, branch: string): void {
   }
 }
 
-async function prepareIssue(issue: GitHubIssue) {
-  const branch = `sandcastle/issue-${issue.number}-${Date.now()}`;
+async function prepareIssue(issue: GitHubIssue, recovery: LaneRecovery) {
+  const branch = recovery.branch;
   const sandbox = await sandcastle.createSandbox({
     branch,
     baseBranch: BASE_REF,
     sandbox: noSandbox(),
   });
+  recovery.worktreePath = sandbox.worktreePath;
+  recovery.worktreeDisposition = "active";
 
   try {
     const implementation = await sandbox.run(
@@ -105,9 +124,16 @@ async function prepareIssue(issue: GitHubIssue) {
     );
 
     assertCleanDeliverable(sandbox.worktreePath, branch);
-    return { issue, branch, sandbox, closed: false };
+    return { issue, branch, sandbox, recovery, closed: false };
   } catch (error) {
-    await closeSandbox(sandbox);
+    try {
+      await closeSandbox(sandbox, recovery);
+    } catch (closeError) {
+      throw new AggregateError(
+        [error, closeError],
+        `Issue #${issue.number} preparation and sandbox cleanup both failed.`,
+      );
+    }
     throw error;
   }
 }
@@ -119,7 +145,7 @@ async function closePreparedIssue(
     return;
   }
   prepared.closed = true;
-  await closeSandbox(prepared.sandbox);
+  await closeSandbox(prepared.sandbox, prepared.recovery);
 }
 
 async function integrateLatestBase(
@@ -247,9 +273,10 @@ async function run(): Promise<void> {
     console.log(`\n=== Batch ${batch}; ${attemptedIssues}/${maxIterations} issues attempted ===\n`);
     refreshBase();
     const remaining = maxIterations - attemptedIssues;
+    const desiredBatchSize = Math.min(maxParallel, remaining);
     const issues = selectNextIssues(
-      listEligibleIssues(),
-      Math.min(maxParallel, remaining),
+      listEligibleIssues(desiredBatchSize),
+      desiredBatchSize,
     );
     if (issues.length === 0) {
       console.log("No unassigned, unblocked ready-for-agent issues remain.");
@@ -262,23 +289,31 @@ async function run(): Promise<void> {
     const delivery = createSerializedExecutor();
     const lanes = await Promise.allSettled(
       issues.map(async (issue) => {
+        const recovery = createLaneRecovery(
+          issue.number,
+          `sandcastle/issue-${issue.number}-${Date.now()}`,
+        );
         let prepared: Awaited<ReturnType<typeof prepareIssue>>;
         try {
-          prepared = await prepareIssue(issue);
+          prepared = await prepareIssue(issue, recovery);
         } catch (error) {
           delivery.stop(error);
-          throw new Error(`Issue #${issue.number} preparation failed.`, {
-            cause: error,
-          });
+          throw laneFailure("preparation", recovery, error);
         }
 
         try {
           await delivery.execute(() => deliverIssue(prepared));
         } catch (error) {
-          await closePreparedIssue(prepared);
-          throw new Error(`Issue #${issue.number} delivery failed.`, {
-            cause: error,
-          });
+          let failure = error;
+          try {
+            await closePreparedIssue(prepared);
+          } catch (closeError) {
+            failure = new AggregateError(
+              [error, closeError],
+              `Issue #${issue.number} delivery and sandbox cleanup both failed.`,
+            );
+          }
+          throw laneFailure("delivery", recovery, failure);
         }
       }),
     );
