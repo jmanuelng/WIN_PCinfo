@@ -29,4 +29,4 @@ pwsh -NoLogo -NoProfile -File ./tests/AssessmentContractSet.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1
 ```
 
-The final full-suite count and deterministic artifact digest are recorded in the closing issue comment after validation. This is repository and synthetic-fixture evidence only. It is not live device, tenant, proxy, firewall, Microsoft-service-health, enrollment, registration, Defender-onboarding, compliance, or regional-endpoint validation.
+Final validation completed all 89 test files. The deterministic generated artifact SHA-256 is `b0abca92d496e98a862d008e8c2d6cd0c3efb743d58007bda7b155642071aae8`. This is repository and synthetic-fixture evidence only. It is not live device, tenant, proxy, firewall, Microsoft-service-health, enrollment, registration, Defender-onboarding, compliance, or regional-endpoint validation.
