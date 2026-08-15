@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.9.0",
+  "contractVersion": "1.10.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
@@ -628,6 +628,26 @@
       "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 2, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
     },
     {
+      "fieldId": "field:policy.mdm.control-policy-conflict.mdm-wins-over-gp", "capabilityIds": ["CAP-0008"], "purpose": "Record the documented Policy CSP MDMWinsOverGP flag without generalizing it to every management channel.",
+      "source": { "sourceId": "source:windows.mdm-policy-csp-results", "kind": "StructuredWindowsSource", "authoritativeIdentity": "MDM_Policy_Result01_ControlPolicyConflict02.MDMWinsOverGP" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.mdm.security-option.machine-inactivity-limit-seconds", "capabilityIds": ["CAP-0008"], "purpose": "Record the Policy CSP result for the machine inactivity limit separately from local registry signals.",
+      "source": { "sourceId": "source:windows.mdm-policy-csp-results", "kind": "StructuredWindowsSource", "authoritativeIdentity": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02.InteractiveLogon_MachineInactivityLimit" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.mdm.security-option.disable-cad", "capabilityIds": ["CAP-0008"], "purpose": "Record the Policy CSP result for Ctrl+Alt+Del behavior separately from local registry signals.",
+      "source": { "sourceId": "source:windows.mdm-policy-csp-results", "kind": "StructuredWindowsSource", "authoritativeIdentity": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02.Interactivelogon_DoNotRequireCTRLALTDEL" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.mdm.security-option.lm-compatibility-level", "capabilityIds": ["CAP-0008"], "purpose": "Record the Policy CSP result for LAN Manager authentication compatibility separately from local registry signals.",
+      "source": { "sourceId": "source:windows.mdm-policy-csp-results", "kind": "StructuredWindowsSource", "authoritativeIdentity": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02.NetworkSecurity_LANManagerAuthenticationLevel" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 2, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
       "fieldId":"field:resource.mapped-drive.local-name","capabilityIds":["CAP-0010"],"purpose":"Record the bounded local drive designator for one mapped resource.","source":{"sourceId":"source:windows.local.mapped-resource-correlation","kind":"StructuredWindowsSource","authoritativeIdentity":"Release-owned exact LocalName correlation of CurrentUser Network and Win32_NetworkConnection"},"valueType":"String","sensitivity":"RestrictedDiagnosticEvidence","bounds":{"maximumUtf8Bytes":8,"maximumOccurrencesPerSubject":1},"redaction":{"behavior":"OmitProhibitedMaterial","publicProjection":"DefinitionOnly"},"publicEligibility":{"definition":true,"values":false}
     },
     {
@@ -1088,6 +1108,22 @@
     {
       "scopeId": "scope:policy.security-option.lm-compatibility-level", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific configured-signal coverage for LAN Manager authentication compatibility.", "fieldIds": ["field:policy.security-option.lm-compatibility-level"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.mdm.control-policy-conflict", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific Policy CSP conflict coverage for the documented MDMWinsOverGP scope only.", "fieldIds": ["field:policy.mdm.control-policy-conflict.mdm-wins-over-gp"], "collectorIds": ["collector:windows.mdm-bridge.device-manageability"]
+    },
+    {
+      "scopeId": "scope:policy.mdm.security-option.machine-inactivity-limit", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific Policy CSP coverage for the machine inactivity limit.", "fieldIds": ["field:policy.mdm.security-option.machine-inactivity-limit-seconds"], "collectorIds": ["collector:windows.mdm-bridge.device-manageability"]
+    },
+    {
+      "scopeId": "scope:policy.mdm.security-option.disable-cad", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific Policy CSP coverage for Ctrl+Alt+Del behavior.", "fieldIds": ["field:policy.mdm.security-option.disable-cad"], "collectorIds": ["collector:windows.mdm-bridge.device-manageability"]
+    },
+    {
+      "scopeId": "scope:policy.mdm.security-option.lm-compatibility-level", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific Policy CSP coverage for LAN Manager authentication compatibility.", "fieldIds": ["field:policy.mdm.security-option.lm-compatibility-level"], "collectorIds": ["collector:windows.mdm-bridge.device-manageability"]
     },
     {
       "scopeId":"scope:resource.mapped-drives","profileIds":["profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"],"capabilityIds":["CAP-0010"],"purpose":"Close bounded mapped-drive evidence in the verified Assessment User Context.","fieldIds":["field:resource.mapped-drive.local-name","field:resource.mapped-drive.remote-endpoint","field:resource.mapped-drive.connection-state","field:resource.mapped-drive.provider-name"],"collectorIds":["collector:windows.resource-dependencies"]

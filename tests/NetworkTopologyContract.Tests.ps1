@@ -24,7 +24,7 @@ $record=Complete-ValidatedNetworkTopologyAssessmentRecord $record $networkPolicy
 $validation=Test-CanonicalRecord $record
 Assert-Equal 'CONTRACT.ACCEPTED' $validation.reasonCode 'the combined Network Topology record remains canonical'
 Assert-Equal $networkPolicy.evidenceProfileId $record.run.evidenceProfileId 'the additive profile preserves historical scopes'
-Assert-Equal 41 @($record.coverage).Count 'nine local and three deferred network scopes are independently closed'
+Assert-Equal 45 @($record.coverage).Count 'nine local and three deferred network scopes are independently closed'
 Assert-Equal 3 @($record.coverage|Where-Object {$_.scopeId -in @($networkPolicy.networkDependentScopes.scopeId) -and $_.state -eq 'NotAttempted'}).Count 'Local Only records each network-dependent scope as not attempted'
 Assert-Equal 0 @($record.observations|Where-Object fieldId -like '*.result').Count 'Local Only fabricates no probe observations'
 Assert-Equal 1 @($record.collectorResults|Where-Object collectorId -eq $networkPolicy.collector.collectorId).Count 'one approved offline attempt owns only the nine local scopes'

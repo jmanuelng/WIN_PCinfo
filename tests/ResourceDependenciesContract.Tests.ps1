@@ -51,13 +51,13 @@ $collector=Invoke-ResourceDependenciesCollection -Policy $resourcePolicy -Valida
 $record=Add-ResourceDependenciesEvidenceRecord -Record $record -CollectorResult $collector -Policy $resourcePolicy
 $sourceValidation=Test-CanonicalRecord $record
 Assert-Equal $true $sourceValidation.accepted "resource source evidence crosses the canonical contract before interpretation ($($sourceValidation.reasonCode))"
-Assert-Equal 14 @($record.findings).Count 'source admission cannot fabricate resource findings'
+Assert-Equal 16 @($record.findings).Count 'source admission cannot fabricate resource findings'
 $record=Complete-ValidatedResourceDependenciesAssessmentRecord -Record $record -Policy $resourcePolicy -ContractValidation $sourceValidation
 $validation=Test-CanonicalRecord $record
 Assert-Equal 'CONTRACT.ACCEPTED' $validation.reasonCode 'the combined resource dependency record remains canonical'
 Assert-Equal $resourcePolicy.evidenceProfileId $record.run.evidenceProfileId 'the record selects the additive resource dependency profile'
-Assert-Equal 29 @($record.coverage).Count 'all five resource scopes remain independently closed'
-Assert-Equal 17 @($record.findings).Count 'three resource rules each produce exactly one finding'
+Assert-Equal 33 @($record.coverage).Count 'all five resource scopes remain independently closed'
+Assert-Equal 19 @($record.findings).Count 'three resource rules each produce exactly one finding'
 Assert-Equal 1 @($record.collectorResults|Where-Object collectorId -eq $resourcePolicy.collector.collectorId).Count 'one approved attempt owns the five resource scopes'
 Assert-Equal 'NeedsAttention' @($record.findings|Where-Object ruleId -eq 'rule:resource.user-migration-dependencies/1.0.0')[0].outcome 'observed printer dependencies produce advisory attention'
 Assert-Equal 'subject:assessment-user:primary' @($record.findings|Where-Object ruleId -eq 'rule:resource.user-migration-dependencies/1.0.0')[0].targetSubjectId 'user-resource interpretation stays bound to the verified Assessment User'

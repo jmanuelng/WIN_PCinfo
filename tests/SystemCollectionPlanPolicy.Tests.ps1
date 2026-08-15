@@ -30,7 +30,19 @@ Assert-Equal 'LocalSystem' $operation.requiredExecutionContext `
     'the operation cannot run under the administrator identity'
 Assert-Equal $false $operation.administratorSufficient `
     'the release explicitly records that administrator authority is insufficient'
-Assert-Equal 'DeviceManageabilityAvailability' $operation.parameters.queryKind.const `
+Assert-Equal 'OfflineOnly' $operation.networkBehavior `
+    'the privileged operation cannot initiate network activity'
+Assert-Equal 'ActiveMicrosoftSignedPowerShellHost' $operation.executable `
+    'the operation is bound to the already verified active PowerShell host'
+Assert-Equal 1 $operation.maximumAttempts `
+    'the privileged read cannot be retried outside its one approved attempt'
+Assert-Equal 5000 $operation.deadlineMilliseconds `
+    'the operation carries its own frozen execution bound'
+Assert-Equal 8192 $operation.maximumResultUtf8Bytes `
+    'the restricted result cannot exceed the channel evidence ceiling'
+Assert-Equal 'CoordinatorOwnedJobObjectTaskAndPipeVerifiedAbsent' $operation.cleanup `
+    'the operation freezes the cleanup proof required at every terminal state'
+Assert-Equal 'PolicyCspResultCatalogV1' $operation.parameters.queryKind.const `
     'the only parameter is a bounded typed selector with one release value'
 Assert-Equal $false $operation.parameters.additionalProperties `
     'scripts, commands, paths, and undeclared parameters cannot enter the plan'
@@ -38,10 +50,45 @@ Assert-Equal 'Root\cimv2\mdm\dmmap' $operation.source.namespace `
     'the fixed Windows source namespace is release-defined'
 Assert-Equal 'MDM_DeviceManageability_Provider01_01' $operation.source.className `
     'the fixed device-level WMI Bridge class is release-defined'
+Assert-Equal 3 @($operation.supplementalSources).Count `
+    'the build registry and both Policy Result classes are frozen beside provider discovery'
+Assert-Equal 'source:windows.registry.current-build-number' $operation.supplementalSources[0].sourceId `
+    'OS catalog selection is bound to one read-only registry value'
+Assert-Equal 'MDM_Policy_Result01_ControlPolicyConflict02' $operation.supplementalSources[1].className `
+    'the ControlPolicyConflict result class is an approved privileged source'
+Assert-Equal 'MDM_Policy_Result01_LocalPoliciesSecurityOptions02' $operation.supplementalSources[2].className `
+    'the security-options result class is an approved privileged source'
+Assert-Equal 4 @($operation.privateResultScopeIds).Count `
+    'the operation separately freezes all four restricted Policy CSP result scopes'
+Assert-Equal 2 @($operation.policyResultCatalogs).Count `
+    'Windows 10 and Windows 11 Policy CSP result catalogs are both frozen'
+Assert-Equal 4 @($operation.policyResultCatalogs[0].resultFields).Count `
+    'each build catalog allowlists exactly four Policy CSP result fields'
+Assert-Equal 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' `
+    $operation.policyResultCatalogs[0].resultFields[0].fieldId `
+    'the fixed catalog includes the documented MDMWinsOverGP Policy CSP field'
+Assert-Equal 'MDM_Policy_Result01_LocalPoliciesSecurityOptions02' `
+    $operation.policyResultCatalogs[0].resultFields[1].className `
+    'the fixed catalog reads only the release-approved LocalPoliciesSecurityOptions result class'
+Assert-Equal './Vendor/MSFT/Policy/Result' `
+    $operation.policyResultCatalogs[0].resultFields[0].parentId `
+    'the catalog fixes the documented Policy Result parent node'
+Assert-Equal 'ControlPolicyConflict' `
+    $operation.policyResultCatalogs[0].resultFields[0].instanceId `
+    'the catalog fixes the ControlPolicyConflict result node instead of dumping the class'
+Assert-Equal 'LocalPoliciesSecurityOptions' `
+    $operation.policyResultCatalogs[0].resultFields[1].instanceId `
+    'the catalog fixes the LocalPoliciesSecurityOptions result node instead of dumping the class'
+Assert-Equal 0 $operation.policyResultCatalogs[0].resultFields[1].minimumValue `
+    'machine inactivity accepts no negative or wrapping value'
+Assert-Equal 599940 $operation.policyResultCatalogs[0].resultFields[1].maximumValue `
+    'machine inactivity is bounded to the documented Policy CSP range'
+Assert-Equal 5 $operation.policyResultCatalogs[0].resultFields[3].maximumValue `
+    'LM compatibility accepts only a documented option index'
 Assert-Equal 'MicrosoftDocumentation' $operation.authorityProof.kind `
     'the SYSTEM-only decision cites a primary Windows source'
-Assert-Equal $false $policy.channel.assessmentEvidenceAllowed `
-    'the activation channel cannot transport arbitrary assessment evidence'
+Assert-Equal 'PolicyCspResultCatalogV1' $policy.channel.assessmentEvidenceContract `
+    'the SYSTEM channel admits only the frozen restricted Policy CSP result contract'
 Assert-Equal $false $policy.security.assessmentUserContextAllowed `
     'SYSTEM cannot receive the Assessment User Context'
 Assert-Equal $false $policy.security.localPackageProtectorAllowed `
@@ -62,8 +109,8 @@ $workerDigest = Get-SystemCollectionSha256 -Bytes (
 )
 Assert-Equal $policy.activation.payloadSha256 $workerDigest `
     'the policy binds the exact reviewed SYSTEM worker template'
-Assert-Equal 9 @($policy.validationScenarios).Count `
-    'the allowed, rejection, loss, cancellation, timeout, denial, and cleanup cases are frozen'
+Assert-Equal 20 @($policy.validationScenarios).Count `
+    'the allowed, malformed, rejection, loss, cancellation, timeout, denial, and cleanup cases are frozen'
 
 $requiredScenarios = @(
     'SyntheticSuccess', 'UnknownOperation', 'InvalidParameters', 'ActivationFailure',

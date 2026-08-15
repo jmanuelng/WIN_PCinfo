@@ -24,8 +24,8 @@
     "security": { "$ref": "#/$defs/security" },
     "validationScenarios": {
       "type": "array",
-      "minItems": 9,
-      "maxItems": 9,
+      "minItems": 20,
+      "maxItems": 20,
       "uniqueItems": true,
       "prefixItems": [
         { "const": "SyntheticSuccess" },
@@ -36,7 +36,18 @@
         { "const": "Cancellation" },
         { "const": "Timeout" },
         { "const": "Denied" },
-        { "const": "AbnormalCleanup" }
+        { "const": "AbnormalCleanup" },
+        { "const": "MalformedPolicyResultArray" },
+        { "const": "UnknownPolicyResultCatalog" },
+        { "const": "AmbiguousPolicyResultInstances" },
+        { "const": "MalformedPolicyResultValue" },
+        { "const": "UnsupportedFutureBuild" },
+        { "const": "ProviderQueryFailure" },
+        { "const": "ProviderObservedAbsent" },
+        { "const": "EmptyPolicyResultInstances" },
+        { "const": "PolicyResultQueryFailure" },
+        { "const": "PolicyResultClassUnsupported" },
+        { "const": "ContradictoryPolicyResult" }
       ],
       "items": false
     }
@@ -45,13 +56,31 @@
     "operation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["operationId", "collectorId", "collectorVersion", "requiredExecutionContext", "administratorSufficient", "source", "authorityProof", "parameters", "intendedScopeIds", "subjectIds", "result"],
+      "required": ["operationId", "collectorId", "collectorVersion", "requiredExecutionContext", "administratorSufficient", "privilege", "networkBehavior", "executable", "dependencies", "maximumAttempts", "deadlineMilliseconds", "maximumResultUtf8Bytes", "cleanup", "source", "supplementalSources", "authorityProof", "parameters", "policyResultCatalogs", "intendedScopeIds", "privateResultScopeIds", "subjectIds", "result"],
       "properties": {
         "operationId": { "const": "op:windows.mdm-bridge.device-manageability" },
         "collectorId": { "const": "collector:windows.mdm-bridge.device-manageability" },
         "collectorVersion": { "const": "1.0.0" },
         "requiredExecutionContext": { "const": "LocalSystem" },
         "administratorSufficient": { "const": false },
+        "privilege": { "const": "LocalSystemOnly" },
+        "networkBehavior": { "const": "OfflineOnly" },
+        "executable": { "const": "ActiveMicrosoftSignedPowerShellHost" },
+        "dependencies": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "Microsoft.Win32.Registry" },
+            { "const": "Microsoft.Management.Infrastructure" },
+            { "const": "WindowsTaskSchedulerCom" },
+            { "const": "WindowsNamedPipe" },
+            { "const": "WindowsJobObject" }
+          ],
+          "items": false
+        },
+        "maximumAttempts": { "const": 1 },
+        "deadlineMilliseconds": { "const": 5000 },
+        "maximumResultUtf8Bytes": { "const": 8192 },
+        "cleanup": { "const": "CoordinatorOwnedJobObjectTaskAndPipeVerifiedAbsent" },
         "source": {
           "type": "object",
           "additionalProperties": false,
@@ -63,6 +92,17 @@
             "className": { "const": "MDM_DeviceManageability_Provider01_01" },
             "access": { "const": "ReadOnlyPresence" }
           }
+        },
+        "supplementalSources": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            { "$ref": "#/$defs/buildNumberSource" },
+            { "$ref": "#/$defs/controlPolicyResultSource" },
+            { "$ref": "#/$defs/securityOptionsResultSource" }
+          ],
+          "items": false
         },
         "authorityProof": {
           "type": "object",
@@ -88,13 +128,29 @@
               "required": ["type", "const", "maximumUtf8Bytes"],
               "properties": {
                 "type": { "const": "string" },
-                "const": { "const": "DeviceManageabilityAvailability" },
+                "const": { "const": "PolicyCspResultCatalogV1" },
                 "maximumUtf8Bytes": { "const": 64 }
               }
             }
           }
         },
+        "policyResultCatalogs": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/policyResultCatalog" }
+        },
         "intendedScopeIds": { "type": "array", "prefixItems": [{ "const": "scope:device.mdm-policy.system" }], "items": false },
+        "privateResultScopeIds": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "scope:policy.mdm.control-policy-conflict" },
+            { "const": "scope:policy.mdm.security-option.machine-inactivity-limit" },
+            { "const": "scope:policy.mdm.security-option.disable-cad" },
+            { "const": "scope:policy.mdm.security-option.lm-compatibility-level" }
+          ],
+          "items": false
+        },
         "subjectIds": { "type": "array", "prefixItems": [{ "const": "subject:device:primary" }], "items": false },
         "result": {
           "type": "object",
@@ -106,6 +162,93 @@
             "maximumObservations": { "const": 1 }
           }
         }
+      }
+    },
+    "policyResultCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalogId", "minimumBuildNumber", "maximumBuildNumber", "resultFields"],
+      "properties": {
+        "catalogId": { "type": "string", "pattern": "^catalog:policy-csp-result\\.windows(?:10|11)/1\\.0\\.0$" },
+        "minimumBuildNumber": { "type": "integer", "minimum": 10240, "maximum": 99999 },
+        "maximumBuildNumber": { "type": "integer", "minimum": 10240, "maximum": 99999 },
+        "resultFields": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/policyResultField" }
+        }
+      }
+    },
+    "policyResultField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fieldId", "scopeId", "className", "parentId", "instanceId", "propertyName", "valueType", "minimumValue", "maximumValue"],
+      "properties": {
+        "fieldId": { "type": "string", "pattern": "^field:policy\\.mdm\\." },
+        "scopeId": { "type": "string", "pattern": "^scope:policy\\.mdm\\." },
+        "className": {
+          "enum": [
+            "MDM_Policy_Result01_ControlPolicyConflict02",
+            "MDM_Policy_Result01_LocalPoliciesSecurityOptions02"
+          ]
+        },
+        "parentId": { "const": "./Vendor/MSFT/Policy/Result" },
+        "instanceId": { "enum": ["ControlPolicyConflict", "LocalPoliciesSecurityOptions"] },
+        "propertyName": {
+          "enum": [
+            "MDMWinsOverGP",
+            "InteractiveLogon_MachineInactivityLimit",
+            "Interactivelogon_DoNotRequireCTRLALTDEL",
+            "NetworkSecurity_LANManagerAuthenticationLevel"
+          ]
+        },
+        "valueType": { "enum": ["Boolean", "Integer"] },
+        "minimumValue": { "type": "integer", "minimum": 0, "maximum": 599940 },
+        "maximumValue": { "type": "integer", "minimum": 1, "maximum": 599940 }
+      }
+    },
+    "buildNumberSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "interface", "hive", "keyPath", "valueName", "access"],
+      "properties": {
+        "sourceId": { "const": "source:windows.registry.current-build-number" },
+        "interface": { "const": "WindowsRegistry" },
+        "hive": { "const": "HKEY_LOCAL_MACHINE" },
+        "keyPath": { "const": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" },
+        "valueName": { "const": "CurrentBuildNumber" },
+        "access": { "const": "ReadOnlyValue" }
+      }
+    },
+    "controlPolicyResultSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "interface", "namespace", "className", "parentId", "instanceId", "maximumInstances", "access"],
+      "properties": {
+        "sourceId": { "const": "source:windows.mdm-policy-result.control-policy-conflict" },
+        "interface": { "const": "WindowsMdmBridgeWmiProvider" },
+        "namespace": { "const": "Root\\cimv2\\mdm\\dmmap" },
+        "className": { "const": "MDM_Policy_Result01_ControlPolicyConflict02" },
+        "parentId": { "const": "./Vendor/MSFT/Policy/Result" },
+        "instanceId": { "const": "ControlPolicyConflict" },
+        "maximumInstances": { "const": 1 },
+        "access": { "const": "ReadOnlyProperties" }
+      }
+    },
+    "securityOptionsResultSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "interface", "namespace", "className", "parentId", "instanceId", "maximumInstances", "access"],
+      "properties": {
+        "sourceId": { "const": "source:windows.mdm-policy-result.local-policies-security-options" },
+        "interface": { "const": "WindowsMdmBridgeWmiProvider" },
+        "namespace": { "const": "Root\\cimv2\\mdm\\dmmap" },
+        "className": { "const": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02" },
+        "parentId": { "const": "./Vendor/MSFT/Policy/Result" },
+        "instanceId": { "const": "LocalPoliciesSecurityOptions" },
+        "maximumInstances": { "const": 1 },
+        "access": { "const": "ReadOnlyProperties" }
       }
     },
     "activation": {
@@ -130,7 +273,7 @@
     "channel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pipeNamePrefix", "jobNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireLocalSystemSid", "requireArtifactDigest", "assessmentEvidenceAllowed"],
+      "required": ["pipeNamePrefix", "jobNamePrefix", "maximumServerInstances", "maximumMessageUtf8Bytes", "nonceBytes", "acl", "requirePeerProcessId", "requireLocalSystemSid", "requireArtifactDigest", "assessmentEvidenceContract"],
       "properties": {
         "pipeNamePrefix": { "const": "WINPCInfo-SystemCollection-v1-" },
         "jobNamePrefix": { "const": "Global\\WINPCInfo-SystemCollection-v1-" },
@@ -141,7 +284,7 @@
         "requirePeerProcessId": { "const": true },
         "requireLocalSystemSid": { "const": true },
         "requireArtifactDigest": { "const": true },
-        "assessmentEvidenceAllowed": { "const": false }
+        "assessmentEvidenceContract": { "const": "PolicyCspResultCatalogV1" }
       }
     },
     "treeControl": {

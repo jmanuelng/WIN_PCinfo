@@ -10,6 +10,20 @@
       "collectorVersion": "1.0.0",
       "requiredExecutionContext": "LocalSystem",
       "administratorSufficient": false,
+      "privilege": "LocalSystemOnly",
+      "networkBehavior": "OfflineOnly",
+      "executable": "ActiveMicrosoftSignedPowerShellHost",
+      "dependencies": [
+        "Microsoft.Win32.Registry",
+        "Microsoft.Management.Infrastructure",
+        "WindowsTaskSchedulerCom",
+        "WindowsNamedPipe",
+        "WindowsJobObject"
+      ],
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 5000,
+      "maximumResultUtf8Bytes": 8192,
+      "cleanup": "CoordinatorOwnedJobObjectTaskAndPipeVerifiedAbsent",
       "source": {
         "sourceId": "source:windows.mdm-bridge.device-manageability",
         "interface": "WindowsMdmBridgeWmiProvider",
@@ -17,6 +31,36 @@
         "className": "MDM_DeviceManageability_Provider01_01",
         "access": "ReadOnlyPresence"
       },
+      "supplementalSources": [
+        {
+          "sourceId": "source:windows.registry.current-build-number",
+          "interface": "WindowsRegistry",
+          "hive": "HKEY_LOCAL_MACHINE",
+          "keyPath": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+          "valueName": "CurrentBuildNumber",
+          "access": "ReadOnlyValue"
+        },
+        {
+          "sourceId": "source:windows.mdm-policy-result.control-policy-conflict",
+          "interface": "WindowsMdmBridgeWmiProvider",
+          "namespace": "Root\\cimv2\\mdm\\dmmap",
+          "className": "MDM_Policy_Result01_ControlPolicyConflict02",
+          "parentId": "./Vendor/MSFT/Policy/Result",
+          "instanceId": "ControlPolicyConflict",
+          "maximumInstances": 1,
+          "access": "ReadOnlyProperties"
+        },
+        {
+          "sourceId": "source:windows.mdm-policy-result.local-policies-security-options",
+          "interface": "WindowsMdmBridgeWmiProvider",
+          "namespace": "Root\\cimv2\\mdm\\dmmap",
+          "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+          "parentId": "./Vendor/MSFT/Policy/Result",
+          "instanceId": "LocalPoliciesSecurityOptions",
+          "maximumInstances": 1,
+          "access": "ReadOnlyProperties"
+        }
+      ],
       "authorityProof": {
         "kind": "MicrosoftDocumentation",
         "url": "https://learn.microsoft.com/en-us/windows/client-management/using-powershell-scripting-with-the-wmi-bridge-provider",
@@ -26,9 +70,119 @@
         "type": "object",
         "required": ["queryKind"],
         "additionalProperties": false,
-        "queryKind": { "type": "string", "const": "DeviceManageabilityAvailability", "maximumUtf8Bytes": 64 }
+        "queryKind": { "type": "string", "const": "PolicyCspResultCatalogV1", "maximumUtf8Bytes": 64 }
       },
+      "policyResultCatalogs": [
+        {
+          "catalogId": "catalog:policy-csp-result.windows10/1.0.0",
+          "minimumBuildNumber": 17134,
+          "maximumBuildNumber": 21999,
+          "resultFields": [
+            {
+              "fieldId": "field:policy.mdm.control-policy-conflict.mdm-wins-over-gp",
+              "scopeId": "scope:policy.mdm.control-policy-conflict",
+              "className": "MDM_Policy_Result01_ControlPolicyConflict02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "ControlPolicyConflict",
+              "propertyName": "MDMWinsOverGP",
+              "valueType": "Boolean",
+              "minimumValue": 0,
+              "maximumValue": 1
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.machine-inactivity-limit-seconds",
+              "scopeId": "scope:policy.mdm.security-option.machine-inactivity-limit",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "LocalPoliciesSecurityOptions",
+              "propertyName": "InteractiveLogon_MachineInactivityLimit",
+              "valueType": "Integer",
+              "minimumValue": 0,
+              "maximumValue": 599940
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.disable-cad",
+              "scopeId": "scope:policy.mdm.security-option.disable-cad",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "LocalPoliciesSecurityOptions",
+              "propertyName": "Interactivelogon_DoNotRequireCTRLALTDEL",
+              "valueType": "Boolean",
+              "minimumValue": 0,
+              "maximumValue": 1
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.lm-compatibility-level",
+              "scopeId": "scope:policy.mdm.security-option.lm-compatibility-level",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "LocalPoliciesSecurityOptions",
+              "propertyName": "NetworkSecurity_LANManagerAuthenticationLevel",
+              "valueType": "Integer",
+              "minimumValue": 0,
+              "maximumValue": 5
+            }
+          ]
+        },
+        {
+          "catalogId": "catalog:policy-csp-result.windows11/1.0.0",
+          "minimumBuildNumber": 22000,
+          "maximumBuildNumber": 99999,
+          "resultFields": [
+            {
+              "fieldId": "field:policy.mdm.control-policy-conflict.mdm-wins-over-gp",
+              "scopeId": "scope:policy.mdm.control-policy-conflict",
+              "className": "MDM_Policy_Result01_ControlPolicyConflict02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "ControlPolicyConflict",
+              "propertyName": "MDMWinsOverGP",
+              "valueType": "Boolean",
+              "minimumValue": 0,
+              "maximumValue": 1
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.machine-inactivity-limit-seconds",
+              "scopeId": "scope:policy.mdm.security-option.machine-inactivity-limit",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "LocalPoliciesSecurityOptions",
+              "propertyName": "InteractiveLogon_MachineInactivityLimit",
+              "valueType": "Integer",
+              "minimumValue": 0,
+              "maximumValue": 599940
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.disable-cad",
+              "scopeId": "scope:policy.mdm.security-option.disable-cad",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "LocalPoliciesSecurityOptions",
+              "propertyName": "Interactivelogon_DoNotRequireCTRLALTDEL",
+              "valueType": "Boolean",
+              "minimumValue": 0,
+              "maximumValue": 1
+            },
+            {
+              "fieldId": "field:policy.mdm.security-option.lm-compatibility-level",
+              "scopeId": "scope:policy.mdm.security-option.lm-compatibility-level",
+              "className": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "LocalPoliciesSecurityOptions",
+              "propertyName": "NetworkSecurity_LANManagerAuthenticationLevel",
+              "valueType": "Integer",
+              "minimumValue": 0,
+              "maximumValue": 5
+            }
+          ]
+        }
+      ],
       "intendedScopeIds": ["scope:device.mdm-policy.system"],
+      "privateResultScopeIds": [
+        "scope:policy.mdm.control-policy-conflict",
+        "scope:policy.mdm.security-option.machine-inactivity-limit",
+        "scope:policy.mdm.security-option.disable-cad",
+        "scope:policy.mdm.security-option.lm-compatibility-level"
+      ],
       "subjectIds": ["subject:device:primary"],
       "result": {
         "fieldId": "field:device.mdm-bridge.provider-available",
@@ -49,7 +203,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "EncodedReleaseSource",
-    "payloadSha256": "477285bbcdf337328ffc8fd402e16abc1c2297b27b7bc8ff5dceda6495e6641f"
+    "payloadSha256": "abf73ffaeeb451b8f0ea6a72c495ea9ba69afb5f05300c7e878db5bf1d0ee08c"
   },
   "channel": {
     "pipeNamePrefix": "WINPCInfo-SystemCollection-v1-",
@@ -61,7 +215,7 @@
     "requirePeerProcessId": true,
     "requireLocalSystemSid": true,
     "requireArtifactDigest": true,
-    "assessmentEvidenceAllowed": false
+    "assessmentEvidenceContract": "PolicyCspResultCatalogV1"
   },
   "treeControl": {
     "mode": "WindowsJobObjectRequired",
@@ -95,6 +249,17 @@
     "Cancellation",
     "Timeout",
     "Denied",
-    "AbnormalCleanup"
+    "AbnormalCleanup",
+    "MalformedPolicyResultArray",
+    "UnknownPolicyResultCatalog",
+    "AmbiguousPolicyResultInstances",
+    "MalformedPolicyResultValue",
+    "UnsupportedFutureBuild",
+    "ProviderQueryFailure",
+    "ProviderObservedAbsent",
+    "EmptyPolicyResultInstances",
+    "PolicyResultQueryFailure",
+    "PolicyResultClassUnsupported",
+    "ContradictoryPolicyResult"
   ]
 }

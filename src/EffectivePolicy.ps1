@@ -31,9 +31,10 @@ function Get-EffectivePolicyPolicy {
     if ($policy.kind -ne 'win-pcinfo.effective-policy-policy' -or
         $policy.contractVersion -ne '1.0.0' -or
         $policy.policyId -ne 'win-pcinfo.effective-policy/1.0.0' -or
-        @($policy.layers).Count -ne 3 -or @($policy.scopes).Count -ne 15 -or
-        @($policy.sourceCatalog).Count -ne 5 -or @($policy.rules).Count -ne 3 -or
-        @($policy.validationScenarios).Count -ne 14) {
+        @($policy.layers).Count -ne 3 -or @($policy.scopes).Count -ne 19 -or
+        @($policy.sourceCatalog).Count -ne 6 -or @($policy.rules).Count -ne 5 -or
+        @($policy.discoveryTasks).Count -ne 2 -or
+        @($policy.validationScenarios).Count -ne 20) {
         throw 'The Effective Policy policy is not semantically closed.'
     }
     $policy
@@ -75,6 +76,11 @@ function New-EffectivePolicyScopeState {
     [pscustomobject][ordered]@{scopeId=$ScopeId;state=$State;reasonCode=$ReasonCode}
 }
 
+function Get-EffectivePolicyCollectorScopes {
+    param([Parameter(Mandatory)]$Policy)
+    @($Policy.scopes | Where-Object { [string]$_.scopeId -notlike 'scope:policy.mdm.*' })
+}
+
 function Get-EffectivePolicyLayerState {
     param(
         [Parameter(Mandatory)] [object[]] $ScopeStates,
@@ -93,7 +99,16 @@ function New-EffectivePolicySyntheticPayload {
     if ($Scenario -notin @($Policy.validationScenarios)) {
         throw 'The Effective Policy validation scenario is not release-defined.'
     }
-    $sourceLocale = if ($Scenario -eq 'NonEnglish') { 'fr-FR' } else { 'en-US' }
+    $localScenario = switch ($Scenario) {
+        'NonMdm' { 'Workgroup' }
+        'UnsupportedMdmBuild' { 'Domain' }
+        'MissingMdmClass' { 'Domain' }
+        'MissingMdmProperty' { 'Domain' }
+        'MdmPolicyConflict' { 'Domain' }
+        'MdmWinsOverGpScoped' { 'Domain' }
+        default { $Scenario }
+    }
+    $sourceLocale = if ($localScenario -eq 'NonEnglish') { 'fr-FR' } else { 'en-US' }
     $localObject = 'LocalGPO'
     $domainObject = '6ac1786c-016f-11d2-945f-00c04fb984f9'
     $userObject = '7f7d1f60-8f2a-4ae5-bb3f-0bdc4a0ef111'
@@ -101,13 +116,13 @@ function New-EffectivePolicySyntheticPayload {
         target='Computer';origin='Local';objectId=$localObject;applicable=$true
         linkId=$null;appliedOrder=$null
     })
-    if ($Scenario -in @('Domain','StaleRegistry','DeniedSystem','NonEnglish','AppliedOrderConflict')) {
+    if ($localScenario -in @('Domain','StaleRegistry','DeniedSystem','NonEnglish','AppliedOrderConflict')) {
         $policies = @(
             [pscustomobject][ordered]@{target='Computer';origin='Domain';objectId=$domainObject;applicable=$true;linkId='synthetic-domain-link';appliedOrder=1},
             [pscustomobject][ordered]@{target='Computer';origin='Local';objectId=$localObject;applicable=$false;linkId=$null;appliedOrder=$null}
         )
     }
-    elseif ($Scenario -eq 'UserAndComputerRsop') {
+    elseif ($localScenario -eq 'UserAndComputerRsop') {
         $policies = @(
             [pscustomobject][ordered]@{target='User';origin='Domain';objectId=$userObject;applicable=$true;linkId='synthetic-user-link';appliedOrder=1},
             [pscustomobject][ordered]@{target='Computer';origin='Domain';objectId=$domainObject;applicable=$true;linkId='synthetic-computer-link';appliedOrder=1},
@@ -120,14 +135,14 @@ function New-EffectivePolicySyntheticPayload {
         objectId=$localObject;precedence=1
     })
     $conflict = $false
-    if ($Scenario -eq 'AppliedOrderConflict') {
+    if ($localScenario -eq 'AppliedOrderConflict') {
         $conflict = $true
         $settings = @(
             [pscustomobject][ordered]@{target='Computer';settingId='registry:22222222-2222-4222-8222-222222222222';objectId=$domainObject;precedence=1},
             [pscustomobject][ordered]@{target='Computer';settingId='registry:22222222-2222-4222-8222-222222222222';objectId=$localObject;precedence=2}
         )
     }
-    elseif ($Scenario -eq 'UserAndComputerRsop') {
+    elseif ($localScenario -eq 'UserAndComputerRsop') {
         $settings = @(
             [pscustomobject][ordered]@{target='User';settingId='registry:33333333-3333-4333-8333-333333333333';objectId=$userObject;precedence=1},
             [pscustomobject][ordered]@{target='Computer';settingId='registry:11111111-1111-4111-8111-111111111111';objectId=$domainObject;precedence=1}
@@ -139,19 +154,19 @@ function New-EffectivePolicySyntheticPayload {
         minimumPasswordAgeSeconds=86400;passwordHistoryLength=24
         lockoutDurationSeconds=900;lockoutWindowSeconds=900;lockoutThreshold=10
     }
-    if ($Scenario -eq 'AccountLockout') {
+    if ($localScenario -eq 'AccountLockout') {
         $sam.lockoutDurationSeconds=1800;$sam.lockoutWindowSeconds=1800;$sam.lockoutThreshold=5
     }
     $audits = @($Policy.auditSubcategories | ForEach-Object {
         [pscustomobject][ordered]@{catalogId=[string]$_.catalogId;state='Complete';successEnabled=$true;failureEnabled=$false}
     })
-    if ($Scenario -eq 'AuditPolicy') {
+    if ($localScenario -eq 'AuditPolicy') {
         $audits[0].failureEnabled=$true;$audits[1].successEnabled=$false
     }
     $rights = @($Policy.userRights | ForEach-Object {
         [pscustomobject][ordered]@{catalogId=[string]$_.catalogId;state='Complete';directSids=@()}
     })
-    if ($Scenario -eq 'UserRights') {
+    if ($localScenario -eq 'UserRights') {
         $rights[0].directSids=@('S-1-5-32-544')
         $rights[1].directSids=@('S-1-5-32-546')
         $rights[2].directSids=@('S-1-5-20')
@@ -161,29 +176,29 @@ function New-EffectivePolicySyntheticPayload {
         [pscustomobject][ordered]@{catalogId='security-option:disable-cad';state='Complete';value=$false;sourceAttribution='Unproven'},
         [pscustomobject][ordered]@{catalogId='security-option:lm-compatibility-level';state='Complete';value=5;sourceAttribution='Unproven'}
     )
-    if ($Scenario -eq 'SecurityOptions') {
+    if ($localScenario -eq 'SecurityOptions') {
         $options[0].value=600;$options[1].value=$true;$options[2].value=3
     }
 
-    $states = @($Policy.scopes | ForEach-Object {
+    $states = @(Get-EffectivePolicyCollectorScopes -Policy $Policy | ForEach-Object {
         New-EffectivePolicyScopeState -ScopeId ([string]$_.scopeId) -State Complete
     })
-    if ($Scenario -eq 'MissingRsop') {
+    if ($localScenario -eq 'MissingRsop') {
         $policies=@();$settings=@()
         foreach($state in $states[0..7]){$state.state='Unsupported';$state.reasonCode='POLICY.RSOP_NAMESPACE_UNAVAILABLE'}
     }
-    elseif ($Scenario -eq 'StaleRegistry') {
+    elseif ($localScenario -eq 'StaleRegistry') {
         $states[12].state='Unavailable';$states[12].reasonCode='POLICY.CONFIGURED_SIGNAL_STALE'
         $options[0].state='Stale';$options[0].value=$null
     }
-    elseif ($Scenario -eq 'DeniedAdministrator') {
+    elseif ($localScenario -eq 'DeniedAdministrator') {
         $policies=@();$settings=@();$sam.PSObject.Properties|ForEach-Object {$_.Value=$null}
         $audits|ForEach-Object {$_.state='Denied';$_.successEnabled=$null;$_.failureEnabled=$null}
         $rights|ForEach-Object {$_.state='Denied';$_.directSids=@()}
         $options|ForEach-Object {$_.state='Unavailable';$_.value=$null}
         foreach($state in $states){$state.state='Denied';$state.reasonCode='POLICY.ADMINISTRATOR_SOURCE_DENIED'}
     }
-    elseif ($Scenario -eq 'PartialChannel') {
+    elseif ($localScenario -eq 'PartialChannel') {
         $policies=@(1..8|ForEach-Object {
             $suffix=$_.ToString('00000000')
             [pscustomobject][ordered]@{target='Computer';origin='Domain';objectId="$suffix-0000-4000-8000-$($_.ToString('000000000000'))";applicable=$true;linkId="bounded-link-$_";appliedOrder=$_}
@@ -225,6 +240,74 @@ function New-EffectivePolicySyntheticPayload {
     }
 }
 
+function New-EffectivePolicySyntheticPolicyCspResults {
+    param([Parameter(Mandatory)][string]$Scenario)
+
+    $results = [pscustomobject][ordered]@{
+        catalogId = 'catalog:policy-csp-result.windows10/1.0.0'
+        fields = @(
+            [pscustomobject][ordered]@{
+                fieldId='field:policy.mdm.control-policy-conflict.mdm-wins-over-gp'
+                scopeId='scope:policy.mdm.control-policy-conflict'
+                state='Complete';reasonCode='';valueState='ObservedValue';value=$false
+            },
+            [pscustomobject][ordered]@{
+                fieldId='field:policy.mdm.security-option.machine-inactivity-limit-seconds'
+                scopeId='scope:policy.mdm.security-option.machine-inactivity-limit'
+                state='Complete';reasonCode='';valueState='ObservedValue';value=900
+            },
+            [pscustomobject][ordered]@{
+                fieldId='field:policy.mdm.security-option.disable-cad'
+                scopeId='scope:policy.mdm.security-option.disable-cad'
+                state='Complete';reasonCode='';valueState='ObservedValue';value=$false
+            },
+            [pscustomobject][ordered]@{
+                fieldId='field:policy.mdm.security-option.lm-compatibility-level'
+                scopeId='scope:policy.mdm.security-option.lm-compatibility-level'
+                state='Complete';reasonCode='';valueState='ObservedValue';value=5
+            }
+        )
+    }
+    switch ($Scenario) {
+        'NonMdm' {
+            $results.catalogId = ''
+            foreach ($field in $results.fields) {
+                $field.state='Unsupported';$field.reasonCode='POLICY.MDM_PROVIDER_UNAVAILABLE'
+                $field.valueState='ObservedAbsent';$field.value=$null
+            }
+        }
+        'UnsupportedMdmBuild' {
+            $results.catalogId = ''
+            foreach ($field in $results.fields) {
+                $field.state='Unsupported';$field.reasonCode='POLICY.MDM_BUILD_UNSUPPORTED'
+                $field.valueState='ObservedAbsent';$field.value=$null
+            }
+        }
+        'MissingMdmClass' {
+            foreach ($field in $results.fields) {
+                $field.state='Unsupported';$field.reasonCode='POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
+                $field.valueState='ObservedAbsent';$field.value=$null
+            }
+        }
+        'MissingMdmProperty' {
+            $results.fields[2].state='Unavailable'
+            $results.fields[2].reasonCode='POLICY.MDM_RESULT_PROPERTY_UNAVAILABLE'
+            $results.fields[2].valueState='ObservedAbsent'
+            $results.fields[2].value=$null
+        }
+        'MdmPolicyConflict' {
+            $results.fields[0].value=$true
+            $results.fields[1].value=600
+            $results.fields[2].value=$true
+            $results.fields[3].value=3
+        }
+        'MdmWinsOverGpScoped' {
+            $results.fields[0].value=$true
+        }
+    }
+    $results
+}
+
 function Test-EffectivePolicyCollectorPayload {
     param([Parameter(Mandatory)]$Payload,[Parameter(Mandatory)]$Policy)
     try {
@@ -232,9 +315,9 @@ function Test-EffectivePolicyCollectorPayload {
             ((@($Value.PSObject.Properties.Name|Sort-Object)-join '|') -eq (@($Expected|Sort-Object)-join '|'))
         }
         function Test-BoundedUnsignedInteger($Value,[uint64]$Maximum){
-            if($null -eq $Value -or $Value -is [bool] -or $Value.GetType() -notin @(
-                [byte],[sbyte],[int16],[uint16],[int32],[uint32],[int64],[uint64]
-            )){return $false}
+        if($null -eq $Value -or $Value -is [bool] -or $Value.GetType() -notin @(
+            [byte],[sbyte],[int16],[uint16],[int32],[uint32],[int64],[uint64]
+        )){return $false}
             $number=[decimal]$Value
             ($number -ge 0 -and $number -le [decimal]$Maximum)
         }
@@ -257,11 +340,11 @@ function Test-EffectivePolicyCollectorPayload {
             [string]$Payload.localAccountPolicySemantics -ne 'LocalSamAccountsOnly' -or
             [string]$Payload.userRightSemantics -ne 'DirectAssignmentsOnly' -or
             -not (Test-BoundedString $Payload.sourceLocale 32 '^(?:und|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)$') -or
-            @($Payload.scopeStates).Count -ne 15 -or
+            @($Payload.scopeStates).Count -ne @(Get-EffectivePolicyCollectorScopes -Policy $Policy).Count -or
             @($Payload.appliedPolicies).Count -gt 16 -or @($Payload.policySettings).Count -gt 16 -or
             @($Payload.auditSubcategories).Count -ne 3 -or @($Payload.userRights).Count -ne 3 -or
             @($Payload.securityOptions).Count -ne 3){return $false}
-        $expectedScopeIds=@($Policy.scopes.scopeId)
+        $expectedScopeIds=@((Get-EffectivePolicyCollectorScopes -Policy $Policy).scopeId)
         if((@($Payload.scopeStates.scopeId)-join '|') -ne ($expectedScopeIds-join '|')){return $false}
         if(-not (Test-ExactProperties $Payload.layerStates @('AppliedPolicyEvidence','ConfiguredPolicySignals','CurrentControlState'))){return $false}
         foreach($scope in $Payload.scopeStates){
@@ -428,6 +511,15 @@ function New-EffectivePolicyPublicProjection {
     }
 }
 
+function Get-EffectivePolicyMdmSystemFieldIds {
+    @(
+        'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp',
+        'field:policy.mdm.security-option.machine-inactivity-limit-seconds',
+        'field:policy.mdm.security-option.disable-cad',
+        'field:policy.mdm.security-option.lm-compatibility-level'
+    )
+}
+
 function New-EffectivePolicyPrivilegeGapResult {
     param(
         [Parameter(Mandatory)]$PrivilegeResult,
@@ -458,6 +550,7 @@ function Get-EffectivePolicySourceId {
     elseif($FieldId -like 'field:policy.local-sam.*'){'source:windows.local-sam-policy'}
     elseif($FieldId -like 'field:policy.audit.*'){'source:windows.system-audit-policy'}
     elseif($FieldId -like 'field:policy.user-right.*'){'source:windows.lsa-user-rights'}
+    elseif($FieldId -like 'field:policy.mdm.*'){'source:windows.mdm-policy-csp-results'}
     else{'source:windows.local-security-option-signals'}
 }
 
@@ -490,7 +583,8 @@ function New-EffectivePolicyObservationPair {
 function Add-EffectivePolicyEvidenceRecord {
     param(
         [Parameter(Mandatory)]$Record,[Parameter(Mandatory)]$CollectorResult,
-        [Parameter(Mandatory)]$Policy
+        [Parameter(Mandatory)]$Policy,
+        [Parameter()]$SystemResult
     )
     if([string]$Record.run.evidenceProfileId -ne 'profile:device-firmware-identity-and-administrator-readiness'){
         throw 'Effective Policy evidence requires the accepted administrator-ready evidence profile.'
@@ -511,10 +605,56 @@ function Add-EffectivePolicyEvidenceRecord {
     $null=$envelopeSubjects.Add('subject:device:primary')
     $scopeObservationIds=@{}
     foreach($scope in $Policy.scopes){$scopeObservationIds[[string]$scope.scopeId]=[Collections.Generic.List[string]]::new()}
+    $existingSystemEnvelopes=@($Record.collectorResults|Where-Object {
+        $_.collectorId -eq 'collector:windows.mdm-bridge.device-manageability' -and
+        $_.operationId -eq 'op:windows.mdm-bridge.device-manageability'
+    })
+    if($existingSystemEnvelopes.Count -ne 1){
+        throw 'Effective Policy evidence requires exactly one composed SYSTEM collector attempt.'
+    }
+    $existingSystemEnvelope=$existingSystemEnvelopes[0]
+    $providedSystemEnvelope = if ($null -ne $SystemResult -and
+        $SystemResult.PSObject.Properties['collectorResult'] -and
+        $null -ne $SystemResult.collectorResult -and
+        $SystemResult.collectorResult.PSObject.Properties['Envelope']) {
+        $SystemResult.collectorResult.Envelope
+    }
+    else { $null }
+    $hasPrivateSystemResults=$null -ne $SystemResult -and
+        $SystemResult.PSObject.Properties['PrivatePolicyCspResults'] -and
+        $null -ne $SystemResult.PrivatePolicyCspResults
+    if($hasPrivateSystemResults -and $null -eq $providedSystemEnvelope){
+        throw 'Effective Policy restricted evidence requires its exact SYSTEM attempt envelope.'
+    }
+    if($null -ne $providedSystemEnvelope -and
+        ([string]$providedSystemEnvelope.envelopeId -ne [string]$existingSystemEnvelope.envelopeId -or
+         [string]$providedSystemEnvelope.collectorId -ne [string]$existingSystemEnvelope.collectorId -or
+         [string]$providedSystemEnvelope.collectorVersion -ne [string]$existingSystemEnvelope.collectorVersion -or
+         [string]$providedSystemEnvelope.operationId -ne [string]$existingSystemEnvelope.operationId -or
+         [string]$providedSystemEnvelope.startedAt -ne [string]$existingSystemEnvelope.startedAt -or
+         [string]$providedSystemEnvelope.completedAt -ne [string]$existingSystemEnvelope.completedAt -or
+         [string]$providedSystemEnvelope.executionContext -ne [string]$existingSystemEnvelope.executionContext -or
+         [int]$providedSystemEnvelope.attempts -ne [int]$existingSystemEnvelope.attempts -or
+         (@($providedSystemEnvelope.intendedScopeIds)-join '|') -ne
+            (@($existingSystemEnvelope.intendedScopeIds)-join '|') -or
+         (@($providedSystemEnvelope.subjectIds)-join '|') -ne
+            (@($existingSystemEnvelope.subjectIds)-join '|'))){
+        throw 'Effective Policy evidence cannot attach results from a different SYSTEM attempt.'
+    }
+    $systemEnvelope=$existingSystemEnvelope
 
     function Add-PolicyObservation {
-        param([string]$ScopeId,[string]$Suffix,[string]$FieldId,[string]$SubjectId,$Value,[bool]$Absent=$false)
-        $arguments=@{RunId=$runId;Suffix=$Suffix;FieldId=$FieldId;SubjectId=$SubjectId;Collector=$collector;ObservedExecutionContext=$observedExecutionContext;CollectedAt=$collectedAt;SourceLocale=[string]$payload.sourceLocale;Value=$Value}
+        param(
+            [string]$ScopeId,[string]$Suffix,[string]$FieldId,[string]$SubjectId,$Value,
+            [bool]$Absent=$false,$EvidenceCollector=$null,
+            [string]$EvidenceExecutionContext='',[string]$EvidenceCollectedAt='',
+            [string]$EvidenceSourceLocale=''
+        )
+        if($null -eq $EvidenceCollector){$EvidenceCollector=$collector}
+        if([string]::IsNullOrEmpty($EvidenceExecutionContext)){$EvidenceExecutionContext=$observedExecutionContext}
+        if([string]::IsNullOrEmpty($EvidenceCollectedAt)){$EvidenceCollectedAt=$collectedAt}
+        if([string]::IsNullOrEmpty($EvidenceSourceLocale)){$EvidenceSourceLocale=[string]$payload.sourceLocale}
+        $arguments=@{RunId=$runId;Suffix=$Suffix;FieldId=$FieldId;SubjectId=$SubjectId;Collector=$EvidenceCollector;ObservedExecutionContext=$EvidenceExecutionContext;CollectedAt=$EvidenceCollectedAt;SourceLocale=$EvidenceSourceLocale;Value=$Value}
         if($Absent){$arguments.ObservedAbsent=$true}
         $pair=New-EffectivePolicyObservationPair @arguments
         $observations.Add($pair.observation);$provenance.Add($pair.provenance)
@@ -666,20 +806,108 @@ function Add-EffectivePolicyEvidenceRecord {
         }
         $coverage.Add([pscustomobject]$entry)
     }
+
+    $mdmFields = if ($null -ne $SystemResult -and
+        $SystemResult.PSObject.Properties['PrivatePolicyCspResults'] -and
+        $null -ne $SystemResult.PrivatePolicyCspResults -and
+        $SystemResult.PrivatePolicyCspResults.PSObject.Properties['fields']) {
+        @($SystemResult.PrivatePolicyCspResults.fields)
+    }
+    else {
+        @(Get-EffectivePolicyMdmSystemFieldIds | ForEach-Object {
+            $fieldId=[string]$_
+            $scopeDefinition=@($Policy.scopes|Where-Object {
+                $fieldId -in @($_.fieldIds)
+            })[0]
+            [pscustomobject][ordered]@{
+                fieldId=$fieldId
+                scopeId=[string]$scopeDefinition.scopeId
+                state='Unavailable'
+                reasonCode='POLICY.MDM_SYSTEM_RESULTS_UNAVAILABLE'
+                valueState='ObservedAbsent'
+                value=$null
+            }
+        })
+    }
+    foreach ($field in @($mdmFields)) {
+        $scopeId=[string]$field.scopeId
+        if ($field.state -eq 'Complete') {
+            # These values crossed the separate LocalSystem trust boundary.
+            # Keeping the SYSTEM collector, context, and timestamp prevents a
+            # protected report from falsely attributing them to the elevated
+            # Administrator worker that collected the local GPO signals.
+            $suffix=$scopeId.Substring('scope:policy.'.Length).Replace('.','-')
+            $systemCollector=[pscustomobject]@{
+                collectorId=if($null -ne $systemEnvelope){[string]$systemEnvelope.collectorId}else{'collector:windows.mdm-bridge.device-manageability'}
+                collectorVersion=if($null -ne $systemEnvelope){[string]$systemEnvelope.collectorVersion}else{'1.0.0'}
+            }
+            Add-PolicyObservation $scopeId "mdm-$suffix" ([string]$field.fieldId) 'subject:device:primary' `
+                $(if($field.valueState -eq 'ObservedAbsent'){$null}else{$field.value}) `
+                -Absent:([string]$field.valueState -eq 'ObservedAbsent') `
+                -EvidenceCollector $systemCollector `
+                -EvidenceExecutionContext $(if($null -ne $systemEnvelope){[string]$systemEnvelope.executionContext}else{'Synthetic'}) `
+                -EvidenceCollectedAt $(if($null -ne $systemEnvelope){[string]$systemEnvelope.completedAt}else{$collectedAt}) `
+                -EvidenceSourceLocale 'und'
+        }
+        if (@($coverage | Where-Object scopeId -eq $scopeId).Count -eq 0) {
+            $coverageId="coverage:policy-$($scopeId.Substring('scope:policy.'.Length).Replace('.','-'))`:$runId"
+            $observationIds=@($scopeObservationIds[$scopeId])
+            $diagnosticIds=@()
+            $entry=[ordered]@{
+                coverageId=$coverageId;scopeId=$scopeId;state=[string]$field.state
+                observationIds=$observationIds;diagnosticIds=@()
+            }
+            if ([string]$field.state -ne 'Complete') {
+                $diagnosticId="diagnostic:policy-$($scopeId.Substring('scope:policy.'.Length).Replace('.','-'))`:$runId"
+                $diagnosticIds=@($diagnosticId)
+                $entry.reasonCode=[string]$field.reasonCode
+                $entry.diagnosticIds=$diagnosticIds
+                $diagnostics.Add([pscustomobject][ordered]@{
+                    diagnosticId=$diagnosticId;scopeId=$scopeId;phase='Collection'
+                    reasonCode=[string]$field.reasonCode
+                    operatorMessageId='effective-policy.collection.incomplete'
+                })
+            }
+            $coverage.Add([pscustomobject]$entry)
+        }
+    }
     $Record.subjects=@($Record.subjects)+@($newSubjects)
     $Record.observations=@($Record.observations)+@($observations)
     $Record.provenance=@($Record.provenance)+@($provenance)
     $Record.coverage=@($Record.coverage)+@($coverage)
     $Record.diagnostics=@($Record.diagnostics)+@($diagnostics)
+    $effectiveScopes=@($Policy.scopes.scopeId|Where-Object {$_ -notlike 'scope:policy.mdm.*'})
+    $mdmScopes=@($Policy.scopes.scopeId|Where-Object {$_ -like 'scope:policy.mdm.*'})
+    $effectiveObservations=@($observations|Where-Object fieldId -notlike 'field:policy.mdm.*')
+    $mdmObservations=@($observations|Where-Object fieldId -like 'field:policy.mdm.*')
+    $effectiveCoverage=@($coverage|Where-Object scopeId -notlike 'scope:policy.mdm.*')
+    $mdmCoverageEntries=@($coverage|Where-Object scopeId -like 'scope:policy.mdm.*')
+    $effectiveDiagnostics=@($diagnostics|Where-Object scopeId -notlike 'scope:policy.mdm.*')
+    $mdmDiagnostics=@($diagnostics|Where-Object scopeId -like 'scope:policy.mdm.*')
+    # Collector envelopes are trust statements, not presentation groupings.
+    # The derived policy slice may compare both sources, but it must not merge
+    # their provenance into one Administrator-owned attempt.
     $Record.collectorResults=@($Record.collectorResults)+[pscustomobject][ordered]@{
         envelopeId="envelope:effective-policy:$runId";collectorId=[string]$collector.collectorId
         collectorVersion=[string]$collector.collectorVersion;operationId=[string]$collector.operationId
-        intendedScopeIds=@($Policy.scopes.scopeId);subjectIds=@($envelopeSubjects)
+        intendedScopeIds=$effectiveScopes;subjectIds=@($envelopeSubjects)
         startedAt=[string]$CollectorResult.envelope.startedAt;completedAt=$collectedAt
         executionContext=$observedExecutionContext;attempts=1
-        observationIds=@($observations|ForEach-Object observationId)
-        coverageIds=@($coverage|ForEach-Object coverageId);diagnosticIds=@($diagnostics|ForEach-Object diagnosticId)
+        observationIds=@($effectiveObservations|ForEach-Object observationId)
+        coverageIds=@($effectiveCoverage|ForEach-Object coverageId);diagnosticIds=@($effectiveDiagnostics|ForEach-Object diagnosticId)
     }
+    $existingSystemEnvelope.intendedScopeIds=@(
+        @($existingSystemEnvelope.intendedScopeIds)+$mdmScopes|Select-Object -Unique
+    )
+    $existingSystemEnvelope.observationIds=@(
+        @($existingSystemEnvelope.observationIds)+@($mdmObservations|ForEach-Object observationId)|Select-Object -Unique
+    )
+    $existingSystemEnvelope.coverageIds=@(
+        @($existingSystemEnvelope.coverageIds)+@($mdmCoverageEntries|ForEach-Object coverageId)|Select-Object -Unique
+    )
+    $existingSystemEnvelope.diagnosticIds=@(
+        @($existingSystemEnvelope.diagnosticIds)+@($mdmDiagnostics|ForEach-Object diagnosticId)|Select-Object -Unique
+    )
     $Record.run.evidenceProfileId=[string]$Policy.evidenceProfileId
     $Record.run.outcome=if(@($Record.coverage|Where-Object state -ne Complete).Count -eq 0){'Completed'}else{'CompletedWithGaps'}
     $Record
@@ -705,8 +933,10 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $rules=@{};foreach($rule in $Policy.rules){$rules[[string]$rule.findingKind]=$rule}
     $appliedCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.applied.*'})
     $localCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.local-*' -or $_.scopeId -like 'scope:policy.security-option.*'})
+    $mdmCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.mdm.*'})
     $appliedReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.applied.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $localReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.local-*' -or $_.fieldId -like 'field:policy.audit.*' -or $_.fieldId -like 'field:policy.user-right.*' -or $_.fieldId -like 'field:policy.security-option.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
+    $mdmReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.mdm.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $appliedResult=Invoke-EffectivePolicyRule -Rule $rules['applied-policy-coverage'] -Evaluation {
         if(@($appliedCoverage|Where-Object state -ne Complete).Count -eq 0){[pscustomobject]@{outcome='Informational'}}else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.APPLIED_POLICY_INCOMPLETE'}}
     }
@@ -732,10 +962,58 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
         elseif($duplicateSettingIds.Count -gt 0){[pscustomobject]@{outcome='NeedsAttention'}}
         else{[pscustomobject]@{outcome='ExpectedCondition'}}
     }
+    $observationByField=@{}
+    foreach($observation in @($Record.observations)){
+        if(-not $observationByField.ContainsKey([string]$observation.fieldId)){
+            $observationByField[[string]$observation.fieldId]=$observation
+        }
+    }
+    $providerObservation=$observationByField['field:device.mdm-bridge.provider-available']
+    $providerAbsent=$null -ne $providerObservation -and
+        $providerObservation.valueState -eq 'ObservedValue' -and -not [bool]$providerObservation.value
+    $mdmCoverageResult=Invoke-EffectivePolicyRule -Rule $rules['mdm-policy-csp-coverage'] -Evaluation {
+        if(@($mdmCoverage|Where-Object state -ne Complete).Count -eq 0){[pscustomobject]@{outcome='Informational'}}
+        else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.MDM_POLICY_CSP_INCOMPLETE'}}
+    }
+    $policyMappings=@(
+        @{local='field:policy.security-option.machine-inactivity-limit-seconds';mdm='field:policy.mdm.security-option.machine-inactivity-limit-seconds'},
+        @{local='field:policy.security-option.disable-cad';mdm='field:policy.mdm.security-option.disable-cad'},
+        @{local='field:policy.security-option.lm-compatibility-level';mdm='field:policy.mdm.security-option.lm-compatibility-level'}
+    )
+    $channelConflictDetected=$false
+    $channelConflictReferences=[Collections.Generic.List[object]]::new()
+    foreach($mapping in $policyMappings){
+        $localObservation=$observationByField[[string]$mapping.local]
+        $mdmObservation=$observationByField[[string]$mapping.mdm]
+        foreach($candidate in @($localObservation,$mdmObservation)){
+            if($null -ne $candidate -and $candidate.valueState -eq 'ObservedValue'){
+                $channelConflictReferences.Add([pscustomobject][ordered]@{
+                    observationId=$candidate.observationId;fieldId=$candidate.fieldId;subjectId=$candidate.subjectId
+                })
+            }
+        }
+        if($null -ne $localObservation -and $null -ne $mdmObservation -and
+            $localObservation.valueState -eq 'ObservedValue' -and
+            $mdmObservation.valueState -eq 'ObservedValue' -and
+            [string]$localObservation.value -ne [string]$mdmObservation.value){
+            $channelConflictDetected=$true
+        }
+    }
+    $localSignalCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.security-option.*'})
+    $channelConflictResult=Invoke-EffectivePolicyRule -Rule $rules['policy-csp-gpo-conflict'] -Evaluation {
+        if(@($mdmCoverage|Where-Object state -ne Complete).Count -gt 0 -or
+            @($localSignalCoverage|Where-Object state -ne Complete).Count -gt 0){
+            [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.POLICY_CSP_GPO_CONFLICT_INCOMPLETE'}
+        }
+        elseif($channelConflictDetected){[pscustomobject]@{outcome='NeedsAttention'}}
+        else{[pscustomobject]@{outcome='ExpectedCondition'}}
+    }
     $findingDefinitions=@(
         @{kind='applied-policy-coverage';result=$appliedResult;references=$appliedReferences},
         @{kind='local-security-policy-coverage';result=$localResult;references=$localReferences},
-        @{kind='applied-policy-order-conflict';result=$conflictResult;references=@($settingObservations|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})}
+        @{kind='applied-policy-order-conflict';result=$conflictResult;references=@($settingObservations|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})},
+        @{kind='mdm-policy-csp-coverage';result=$mdmCoverageResult;references=$mdmReferences},
+        @{kind='policy-csp-gpo-conflict';result=$channelConflictResult;references=@($channelConflictReferences|Select-Object -First 16)}
     )
     foreach($definition in $findingDefinitions){
         $rule=$rules[$definition.kind];$finding=[ordered]@{
@@ -745,6 +1023,19 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
         }
         if($definition.result.PSObject.Properties['reasonCode']){$finding.reasonCode=[string]$definition.result.reasonCode}
         $Record.findings=@($Record.findings)+[pscustomobject]$finding
+    }
+    $effectivePolicyFindingIds=@($Record.findings|Where-Object {
+        $_.ruleId -in @('rule:policy.mdm-policy-csp-coverage/1.0.0','rule:policy.policy-csp-gpo-conflict/1.0.0')
+    }|ForEach-Object findingId)
+    if($mdmCoverageResult.outcome -eq 'Indeterminate' -or
+        $channelConflictResult.outcome -in @('Indeterminate','NeedsAttention')){
+        $Record.recommendations=@($Record.recommendations)+@($Policy.discoveryTasks|ForEach-Object {
+            [pscustomobject][ordered]@{
+                recommendationId="recommendation:$(([string]$_.definitionId).Substring(5).Replace('/','-')):$($Record.run.runId)"
+                definitionId=[string]$_.definitionId;kind='TenantSideDiscoveryTask'
+                findingIds=$effectivePolicyFindingIds
+            }
+        })
     }
     $Record.run.outcome=if(@($Record.coverage|Where-Object state -ne Complete).Count -eq 0){'Completed'}else{'CompletedWithGaps'}
     $Record

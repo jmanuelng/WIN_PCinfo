@@ -24,8 +24,29 @@ $cases=@(
     @{scenario='AuditPolicy';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition'},
     @{scenario='UserRights';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition'},
     @{scenario='SecurityOptions';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition'},
-    @{scenario='PartialChannel';exit=10;outcome='CompletedWithGaps';applied='Partial';configured='Partial';control='Partial';count=8;appliedFinding='Indeterminate';localFinding='Indeterminate';orderFinding='Indeterminate'}
+    @{scenario='PartialChannel';exit=10;outcome='CompletedWithGaps';applied='Partial';configured='Partial';control='Partial';count=8;appliedFinding='Indeterminate';localFinding='Indeterminate';orderFinding='Indeterminate';mdmFinding='Informational';channelFinding='ExpectedCondition';tasks=0},
+    @{scenario='NonMdm';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';mdmFinding='Indeterminate';channelFinding='Indeterminate';tasks=2},
+    @{scenario='UnsupportedMdmBuild';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';mdmFinding='Indeterminate';channelFinding='Indeterminate';tasks=2},
+    @{scenario='MissingMdmClass';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';mdmFinding='Indeterminate';channelFinding='Indeterminate';tasks=2},
+    @{scenario='MissingMdmProperty';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';mdmFinding='Indeterminate';channelFinding='Indeterminate';tasks=2},
+    @{scenario='MdmPolicyConflict';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';mdmFinding='Informational';channelFinding='NeedsAttention';tasks=2},
+    @{scenario='MdmWinsOverGpScoped';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';mdmFinding='Informational';channelFinding='ExpectedCondition';tasks=0}
 )
+
+foreach($case in $cases){
+    if(-not $case.ContainsKey('mdmFinding')){
+        $case.mdmFinding='Informational';$case.channelFinding='ExpectedCondition';$case.tasks=0
+    }
+    if($case.scenario -in @('StaleRegistry','DeniedAdministrator','PartialChannel')){
+        $case.channelFinding='Indeterminate';$case.tasks=2
+    }
+    if($case.scenario -eq 'SecurityOptions'){
+        $case.channelFinding='NeedsAttention';$case.tasks=2
+    }
+    if($case.scenario -eq 'DeniedSystem'){
+        $case.mdmFinding='Indeterminate';$case.channelFinding='Indeterminate';$case.tasks=2
+    }
+}
 
 foreach($case in $cases){
     $fixtureName=($case.scenario.ToLowerInvariant())
@@ -52,6 +73,9 @@ foreach($case in $cases){
     Assert-Equal $case.appliedFinding $validation[0].appliedPolicyFinding "$($case.scenario) derives the applied-evidence finding"
     Assert-Equal $case.localFinding $validation[0].localSecurityFinding "$($case.scenario) derives the local-policy finding"
     Assert-Equal $case.orderFinding $validation[0].appliedOrderFinding "$($case.scenario) derives the precedence finding"
+    Assert-Equal $case.mdmFinding $validation[0].mdmPolicyCspFinding "$($case.scenario) derives the MDM coverage finding"
+    Assert-Equal $case.channelFinding $validation[0].policyCspGpoConflictFinding "$($case.scenario) does not guess a winning channel"
+    Assert-Equal $case.tasks $validation[0].policyDiscoveryTaskCount "$($case.scenario) emits only frozen discovery tasks"
     Assert-Equal $true $validation[0].directRightsOnly "$($case.scenario) does not expand assigned groups"
     Assert-Equal $true $validation[0].localSamOnly "$($case.scenario) does not call local SAM state domain policy"
     Assert-Equal $false $validation[0].policyIdentifiersPublished "$($case.scenario) keeps policy identifiers restricted"

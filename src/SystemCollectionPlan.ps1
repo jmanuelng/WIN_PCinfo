@@ -76,6 +76,17 @@ function Get-SystemCollectionValidationScenario {
         }
         Denied = @{ activationDenied = $true }
         AbnormalCleanup = @{ injectCleanupFailure = $true }
+        MalformedPolicyResultArray = @{ workerFault = 'DuplicatePolicyFields' }
+        UnknownPolicyResultCatalog = @{ workerFault = 'UnknownPolicyCatalog' }
+        AmbiguousPolicyResultInstances = @{ workerFault = 'AmbiguousPolicyInstances' }
+        MalformedPolicyResultValue = @{ workerFault = 'MalformedPolicyValue' }
+        UnsupportedFutureBuild = @{ workerFault = 'UnsupportedFutureBuild' }
+        ProviderQueryFailure = @{ workerFault = 'ProviderQueryFailure' }
+        ProviderObservedAbsent = @{ workerFault = 'ProviderObservedAbsent' }
+        EmptyPolicyResultInstances = @{ workerFault = 'EmptyPolicyInstances' }
+        PolicyResultQueryFailure = @{ workerFault = 'PolicyQueryFailure' }
+        PolicyResultClassUnsupported = @{ workerFault = 'PolicyClassUnsupported' }
+        ContradictoryPolicyResult = @{ workerFault = 'ContradictoryPolicyResult' }
     }
     if (-not $scenarios.ContainsKey($Name)) {
         throw 'The SYSTEM collection validation scenario is not release-defined.'
@@ -257,7 +268,7 @@ try {
             $operation.GetProperty('operationId').GetString() -ne 'op:windows.mdm-bridge.device-manageability' -or
             $parameters.ValueKind -ne [System.Text.Json.JsonValueKind]::Object -or
             $parameterNames.Count -ne 1 -or @($parameterNames | Sort-Object -Unique).Count -ne 1 -or
-            $parameters.GetProperty('queryKind').GetString() -ne 'DeviceManageabilityAvailability') {
+            $parameters.GetProperty('queryKind').GetString() -ne 'PolicyCspResultCatalogV1') {
             throw 'The SYSTEM operation or parameters are not release-defined.'
         }
     }
@@ -269,15 +280,291 @@ try {
         exit 0
     }
 
+    function New-PolicyFieldResult {
+        param(
+            [string] $FieldId,
+            [string] $ScopeId,
+            [string] $State,
+            [string] $ReasonCode,
+            [string] $ValueState,
+            $Value
+        )
+        [pscustomobject][ordered]@{
+            fieldId = $FieldId
+            scopeId = $ScopeId
+            state = $State
+            reasonCode = $ReasonCode
+            valueState = $ValueState
+            value = $Value
+        }
+    }
+
+    function Read-MdmPolicyCatalog {
+        param($ProviderAvailable, [string] $ProviderState)
+
+        function New-PolicyCatalogGap {
+            param([string] $CatalogId, [string] $State, [string] $ReasonCode)
+            [pscustomobject][ordered]@{
+                catalogId = $CatalogId
+                fields = @(
+                    (New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' $State $ReasonCode 'ObservedAbsent' $null),
+                    (New-PolicyFieldResult 'field:policy.mdm.security-option.machine-inactivity-limit-seconds' 'scope:policy.mdm.security-option.machine-inactivity-limit' $State $ReasonCode 'ObservedAbsent' $null),
+                    (New-PolicyFieldResult 'field:policy.mdm.security-option.disable-cad' 'scope:policy.mdm.security-option.disable-cad' $State $ReasonCode 'ObservedAbsent' $null),
+                    (New-PolicyFieldResult 'field:policy.mdm.security-option.lm-compatibility-level' 'scope:policy.mdm.security-option.lm-compatibility-level' $State $ReasonCode 'ObservedAbsent' $null)
+                )
+            }
+        }
+
+        function Test-WorkerIntegralValue {
+            param($Value, [decimal] $Minimum, [decimal] $Maximum)
+            if ($null -eq $Value -or $Value -is [bool] -or $Value.GetType() -notin @(
+                    [byte], [sbyte], [int16], [uint16], [int32], [uint32], [int64], [uint64]
+                )) { return $false }
+            $number = [decimal] $Value
+            $number -ge $Minimum -and $number -le $Maximum
+        }
+
+        function Get-PolicyQueryFailureClassification {
+            param([Exception] $Exception)
+            if ($Exception -is [Microsoft.Management.Infrastructure.CimException] -and
+                $Exception.NativeErrorCode -in @(
+                    [Microsoft.Management.Infrastructure.NativeErrorCode]::InvalidNamespace,
+                    [Microsoft.Management.Infrastructure.NativeErrorCode]::InvalidClass,
+                    [Microsoft.Management.Infrastructure.NativeErrorCode]::NotSupported
+                )) {
+                return @{ State = 'Unsupported'; ReasonCode = 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED' }
+            }
+            @{ State = 'Unavailable'; ReasonCode = 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE' }
+        }
+
+        if ($ProviderState -ne 'Complete') {
+            return New-PolicyCatalogGap '' 'Unavailable' 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE'
+        }
+        if (-not [bool]$ProviderAvailable) {
+            return New-PolicyCatalogGap '' 'Unsupported' 'POLICY.MDM_PROVIDER_UNAVAILABLE'
+        }
+
+        $buildValue = if ([bool] $configuration.validationFixture) {
+            if ([string] $configuration.workerFault -eq 'UnsupportedFutureBuild') { '100000' }
+            else { '19045' }
+        }
+        else {
+            $buildKey = $null
+            try {
+                $buildKey = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey(
+                    'SOFTWARE\Microsoft\Windows NT\CurrentVersion', $false
+                )
+                if ($null -eq $buildKey) { $null } else { $buildKey.GetValue('CurrentBuildNumber') }
+            }
+            catch { $null }
+            finally { if ($null -ne $buildKey) { $buildKey.Dispose() } }
+        }
+        $parsedBuildNumber = 0
+        if ($buildValue -isnot [string] -or -not [int]::TryParse($buildValue, [ref]$parsedBuildNumber)) {
+            return New-PolicyCatalogGap '' 'Unsupported' 'POLICY.MDM_BUILD_UNSUPPORTED'
+        }
+        $buildNumber = $parsedBuildNumber
+        # A future build is not assumed compatible. Each release catalog owns
+        # both ends of its build interval so an OS update cannot silently widen
+        # this privileged collection surface.
+        $catalogId = if ($buildNumber -ge 22000 -and $buildNumber -le 99999) {
+            'catalog:policy-csp-result.windows11/1.0.0'
+        }
+        elseif ($buildNumber -ge 17134 -and $buildNumber -le 21999) {
+            'catalog:policy-csp-result.windows10/1.0.0'
+        }
+        else { '' }
+        if ([string]::IsNullOrEmpty($catalogId)) {
+            return New-PolicyCatalogGap '' 'Unsupported' 'POLICY.MDM_BUILD_UNSUPPORTED'
+        }
+
+        $controlFailureState = ''
+        $controlFailureReason = ''
+        $securityFailureState = ''
+        $securityFailureReason = ''
+        if ([bool] $configuration.validationFixture) {
+            $controlItem = [pscustomobject]@{
+                InstanceID='ControlPolicyConflict';ParentID='./Vendor/MSFT/Policy/Result';MDMWinsOverGP=0
+            }
+            $securityItem = [pscustomobject]@{
+                InstanceID='LocalPoliciesSecurityOptions';ParentID='./Vendor/MSFT/Policy/Result'
+                InteractiveLogon_MachineInactivityLimit=900
+                Interactivelogon_DoNotRequireCTRLALTDEL=0
+                NetworkSecurity_LANManagerAuthenticationLevel=5
+            }
+            $control = @($controlItem)
+            $security = @($securityItem)
+            if ([string] $configuration.workerFault -eq 'AmbiguousPolicyInstances') {
+                $control = @($controlItem, $controlItem)
+                $security = @($securityItem, $securityItem)
+            }
+            elseif ([string] $configuration.workerFault -eq 'MalformedPolicyValue') {
+                $controlItem.MDMWinsOverGP = 2
+                $securityItem.Interactivelogon_DoNotRequireCTRLALTDEL = 2
+                $securityItem.InteractiveLogon_MachineInactivityLimit = [uint64]::MaxValue
+                $securityItem.NetworkSecurity_LANManagerAuthenticationLevel = -1
+            }
+            elseif ([string] $configuration.workerFault -eq 'EmptyPolicyInstances') {
+                $control = @()
+                $security = @()
+            }
+            elseif ([string] $configuration.workerFault -eq 'PolicyQueryFailure') {
+                $control = @(); $security = @()
+                $controlFailureState = 'Unavailable'; $securityFailureState = 'Unavailable'
+                $controlFailureReason = 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
+                $securityFailureReason = 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
+            }
+            elseif ([string] $configuration.workerFault -eq 'PolicyClassUnsupported') {
+                $control = @(); $security = @()
+                $controlFailureState = 'Unsupported'; $securityFailureState = 'Unsupported'
+                $controlFailureReason = 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
+                $securityFailureReason = 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
+            }
+        }
+        else {
+            # InstanceID and ParentID are WMI key properties. Supplying both
+            # fixed keys keeps this read on the two documented Policy/Result
+            # device nodes instead of turning a class read into a node dump.
+            try {
+                $control = @(Get-CimInstance -Namespace 'Root\cimv2\mdm\dmmap' `
+                    -ClassName 'MDM_Policy_Result01_ControlPolicyConflict02' `
+                    -Filter "ParentID='./Vendor/MSFT/Policy/Result' AND InstanceID='ControlPolicyConflict'" `
+                    -Property @('InstanceID','ParentID','MDMWinsOverGP') -ErrorAction Stop)
+            }
+            catch {
+                $failure = Get-PolicyQueryFailureClassification -Exception $_.Exception
+                $control=@();$controlFailureState=$failure.State;$controlFailureReason=$failure.ReasonCode
+            }
+            try {
+                $security = @(Get-CimInstance -Namespace 'Root\cimv2\mdm\dmmap' `
+                    -ClassName 'MDM_Policy_Result01_LocalPoliciesSecurityOptions02' `
+                    -Filter "ParentID='./Vendor/MSFT/Policy/Result' AND InstanceID='LocalPoliciesSecurityOptions'" `
+                    -Property @(
+                        'InstanceID','ParentID','InteractiveLogon_MachineInactivityLimit',
+                        'Interactivelogon_DoNotRequireCTRLALTDEL',
+                        'NetworkSecurity_LANManagerAuthenticationLevel'
+                    ) -ErrorAction Stop)
+            }
+            catch {
+                $failure = Get-PolicyQueryFailureClassification -Exception $_.Exception
+                $security=@();$securityFailureState=$failure.State;$securityFailureReason=$failure.ReasonCode
+            }
+        }
+
+        $fields = [Collections.Generic.List[object]]::new()
+        if ($controlFailureState) {
+            $fields.Add((New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' $controlFailureState $controlFailureReason 'ObservedAbsent' $null))
+        }
+        elseif ($control.Count -eq 0) {
+            $fields.Add((New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' 'Unavailable' 'POLICY.MDM_RESULT_NODE_UNAVAILABLE' 'ObservedAbsent' $null))
+        }
+        elseif ($control.Count -gt 1) {
+            $fields.Add((New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' 'Unavailable' 'POLICY.MDM_RESULT_INSTANCE_AMBIGUOUS' 'ObservedAbsent' $null))
+        }
+        elseif ([string]$control[0].InstanceID -ne 'ControlPolicyConflict' -or
+            [string]$control[0].ParentID -ne './Vendor/MSFT/Policy/Result') {
+            $fields.Add((New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' 'Unavailable' 'POLICY.MDM_RESULT_NODE_UNAVAILABLE' 'ObservedAbsent' $null))
+        }
+        elseif (-not $control[0].PSObject.Properties['MDMWinsOverGP']) {
+            $fields.Add((New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' 'Unavailable' 'POLICY.MDM_RESULT_PROPERTY_UNAVAILABLE' 'ObservedAbsent' $null))
+        }
+        else {
+            $value = $control[0].MDMWinsOverGP
+            if ($null -eq $value) {
+                $fields.Add((New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' 'Complete' '' 'ObservedAbsent' $null))
+            }
+            elseif (-not (Test-WorkerIntegralValue $value 0 1)) {
+                $fields.Add((New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' 'Unavailable' 'POLICY.MDM_RESULT_VALUE_MALFORMED' 'ObservedAbsent' $null))
+            }
+            else {
+                $fields.Add((New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' 'Complete' '' 'ObservedValue' ([int64]$value -eq 1)))
+            }
+        }
+        foreach ($definition in @(
+            @{ fieldId = 'field:policy.mdm.security-option.machine-inactivity-limit-seconds'; scopeId = 'scope:policy.mdm.security-option.machine-inactivity-limit'; propertyName = 'InteractiveLogon_MachineInactivityLimit'; valueType = 'Integer'; minimumValue = 0; maximumValue = 599940 },
+            @{ fieldId = 'field:policy.mdm.security-option.disable-cad'; scopeId = 'scope:policy.mdm.security-option.disable-cad'; propertyName = 'Interactivelogon_DoNotRequireCTRLALTDEL'; valueType = 'Boolean'; minimumValue = 0; maximumValue = 1 },
+            @{ fieldId = 'field:policy.mdm.security-option.lm-compatibility-level'; scopeId = 'scope:policy.mdm.security-option.lm-compatibility-level'; propertyName = 'NetworkSecurity_LANManagerAuthenticationLevel'; valueType = 'Integer'; minimumValue = 0; maximumValue = 5 }
+        )) {
+            if ($securityFailureState) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId $securityFailureState $securityFailureReason 'ObservedAbsent' $null))
+                continue
+            }
+            if ($security.Count -eq 0) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_NODE_UNAVAILABLE' 'ObservedAbsent' $null))
+                continue
+            }
+            if ($security.Count -gt 1) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_INSTANCE_AMBIGUOUS' 'ObservedAbsent' $null))
+                continue
+            }
+            $securityItem = $security[0]
+            if ([string]$securityItem.InstanceID -ne 'LocalPoliciesSecurityOptions' -or
+                [string]$securityItem.ParentID -ne './Vendor/MSFT/Policy/Result') {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_NODE_UNAVAILABLE' 'ObservedAbsent' $null))
+                continue
+            }
+            if (-not $securityItem.PSObject.Properties[$definition.propertyName]) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_PROPERTY_UNAVAILABLE' 'ObservedAbsent' $null))
+                continue
+            }
+            $value = $securityItem.($definition.propertyName)
+            if ($null -eq $value) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Complete' '' 'ObservedAbsent' $null))
+            }
+            elseif (-not (Test-WorkerIntegralValue $value $definition.minimumValue $definition.maximumValue)) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_VALUE_MALFORMED' 'ObservedAbsent' $null))
+            }
+            elseif ($definition.valueType -eq 'Boolean') {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Complete' '' 'ObservedValue' ([int64]$value -eq 1)))
+            }
+            else {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Complete' '' 'ObservedValue' ([int]$value)))
+            }
+        }
+        [pscustomobject][ordered]@{
+            catalogId = $catalogId
+            fields = @($fields)
+        }
+    }
+
+    $providerState = 'Complete'
+    $providerReasonCode = ''
     $providerAvailable = if ([bool] $configuration.validationFixture) {
-        $true
+        if ([string]$configuration.workerFault -eq 'ProviderQueryFailure') {
+            $providerState='Unavailable';$providerReasonCode='POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE'
+            $null
+        }
+        elseif ([string]$configuration.workerFault -eq 'ProviderObservedAbsent') { $false }
+        else { $true }
     }
     else {
-        # The live operation is deliberately read-only and fixed to one class.
-        # It records provider presence only; it neither reads policy values nor
-        # invokes a method, so SYSTEM cannot become a general WMI query surface.
-        @(Get-CimInstance -Namespace 'Root\cimv2\mdm\dmmap' `
-            -ClassName 'MDM_DeviceManageability_Provider01_01' -ErrorAction Stop).Count -gt 0
+        # Provider discovery is evidence too. A missing class/provider is an
+        # Unsupported source, not a worker crash and never proof that policy is
+        # unconfigured. The query remains read-only and fixed to one class.
+        try {
+            @(Get-CimInstance -Namespace 'Root\cimv2\mdm\dmmap' `
+                -ClassName 'MDM_DeviceManageability_Provider01_01' -ErrorAction Stop).Count -gt 0
+        }
+        catch {
+            $providerState='Unavailable';$providerReasonCode='POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE'
+            $null
+        }
+    }
+    $policyResults = Read-MdmPolicyCatalog -ProviderAvailable $providerAvailable `
+        -ProviderState $providerState
+    if ([string] $configuration.workerFault -eq 'DuplicatePolicyFields') {
+        $policyResults.fields = @(
+            $policyResults.fields[0], $policyResults.fields[0],
+            $policyResults.fields[0], $policyResults.fields[0]
+        )
+    }
+    elseif ([string] $configuration.workerFault -eq 'UnknownPolicyCatalog') {
+        $policyResults.catalogId = 'catalog:policy-csp-result.unapproved/1.0.0'
+    }
+    elseif ([string] $configuration.workerFault -eq 'ContradictoryPolicyResult') {
+        # The hostile fixture preserves an otherwise valid catalog while
+        # claiming that provider discovery observed absence.
+        $providerAvailable = $false
     }
     $result = [pscustomobject][ordered]@{
         kind = 'SystemPlanResult'
@@ -289,7 +576,11 @@ try {
         operations = @([pscustomobject][ordered]@{
             operationId = 'op:windows.mdm-bridge.device-manageability'
             state = 'Completed'
-            providerAvailable = [bool] $providerAvailable
+            providerState = $providerState
+            providerReasonCode = $providerReasonCode
+            providerAvailable = $providerAvailable
+            policyCatalogId = [string] $policyResults.catalogId
+            fields = @($policyResults.fields)
         })
     }
     Write-SystemFrame -Stream $pipe -Json ($result | ConvertTo-Json -Compress -Depth 5) `
@@ -377,6 +668,77 @@ function Get-SystemCollectionPlanValidationReason {
     ''
 }
 
+function Get-SystemPolicyResultFieldDefinitions {
+    param([Parameter(Mandatory)] $Policy)
+
+    $definitions = [Collections.Generic.List[object]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($catalog in @($Policy.operations[0].policyResultCatalogs)) {
+        foreach ($field in @($catalog.resultFields)) {
+            if (-not $seen.Add([string] $field.fieldId)) { continue }
+            $definitions.Add([pscustomobject][ordered]@{
+                catalogId = [string] $catalog.catalogId
+                minimumBuildNumber = [int] $catalog.minimumBuildNumber
+                maximumBuildNumber = [int] $catalog.maximumBuildNumber
+                fieldId = [string] $field.fieldId
+                scopeId = [string] $field.scopeId
+                className = [string] $field.className
+                parentId = [string] $field.parentId
+                instanceId = [string] $field.instanceId
+                propertyName = [string] $field.propertyName
+                valueType = [string] $field.valueType
+                minimumValue = [int] $field.minimumValue
+                maximumValue = [int] $field.maximumValue
+            })
+        }
+    }
+    @($definitions)
+}
+
+function New-SystemPrivatePolicyCspResults {
+    param(
+        [Parameter(Mandatory)] $Policy,
+        [Parameter()] [string] $CatalogId = '',
+        [Parameter()] [string] $State = 'Unavailable',
+        [Parameter()] [string] $ReasonCode = 'SYSTEM.PRIVATE_POLICY_CSP_UNAVAILABLE'
+    )
+
+    [pscustomobject][ordered]@{
+        catalogId = $CatalogId
+        fields = @(Get-SystemPolicyResultFieldDefinitions -Policy $Policy | ForEach-Object {
+            [pscustomobject][ordered]@{
+                fieldId = [string] $_.fieldId
+                scopeId = [string] $_.scopeId
+                state = $State
+                reasonCode = $ReasonCode
+                valueState = 'ObservedAbsent'
+                value = $null
+            }
+        })
+    }
+}
+
+function Copy-SystemCollectionPublicResult {
+    param([Parameter(Mandatory)] $SystemResult)
+
+    $public = $SystemResult | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+    if ($public.PSObject.Properties['PrivatePolicyCspResults']) {
+        $public.PSObject.Properties.Remove('PrivatePolicyCspResults')
+    }
+    $public
+}
+
+function Test-SystemPolicyIntegralValue {
+    param([Parameter()] $Value, [int] $Minimum, [int] $Maximum)
+
+    if ($null -eq $Value -or $Value -is [bool]) { return $false }
+    if ($Value.GetType() -notin @(
+            [byte], [sbyte], [int16], [uint16], [int32], [uint32], [int64], [uint64]
+        )) { return $false }
+    $number = [decimal] $Value
+    $number -ge $Minimum -and $number -le $Maximum
+}
+
 function New-SystemCollectorResult {
     param(
         [Parameter(Mandatory)] $Policy,
@@ -392,6 +754,8 @@ function New-SystemCollectorResult {
         [Parameter(Mandatory)] [bool] $PipeAbsent,
         [Parameter(Mandatory)] [bool] $WorkerTreeAbsent,
         [Parameter()] [AllowNull()] [Nullable[bool]] $ProviderAvailable,
+        [Parameter()] $PrivatePolicyCspResults,
+        [Parameter()] [bool] $AssessmentEvidenceCrossed = $false,
         [Parameter()] [int] $CleanupRetries = 0,
         [Parameter()] [bool] $RunIntegrityCompromised = $false,
         [Parameter()] [Nullable[System.DateTimeOffset]] $StartedAt,
@@ -500,10 +864,10 @@ function New-SystemCollectorResult {
         channel = [pscustomobject][ordered]@{
             oneInstance = $true
             aclProtected = $true
-            peerProcessVerified = $State -eq 'Completed'
-            peerArtifactVerified = $State -eq 'Completed'
-            planSchemaValidated = $State -eq 'Completed'
-            assessmentEvidenceCrossed = $false
+            peerProcessVerified = $AssessmentEvidenceCrossed
+            peerArtifactVerified = $AssessmentEvidenceCrossed
+            planSchemaValidated = $AssessmentEvidenceCrossed
+            assessmentEvidenceCrossed = $AssessmentEvidenceCrossed
         }
         cleanup = [pscustomobject][ordered]@{
             verified = $CleanupVerified
@@ -524,6 +888,12 @@ function New-SystemCollectorResult {
                 }
             }
             else { $null }
+        }
+        PrivatePolicyCspResults = if ($null -ne $PrivatePolicyCspResults) {
+            $PrivatePolicyCspResults
+        }
+        else {
+            New-SystemPrivatePolicyCspResults -Policy $Policy -State $CoverageState -ReasonCode $ReasonCode
         }
     }
 }
@@ -981,7 +1351,11 @@ function Invoke-SystemCollectionPlan {
         [Parameter()] [ValidateSet(
             '', 'SyntheticSuccess', 'UnknownOperation', 'InvalidParameters',
             'ActivationFailure', 'WorkerLost', 'Cancellation', 'Timeout',
-            'Denied', 'AbnormalCleanup'
+            'Denied', 'AbnormalCleanup', 'MalformedPolicyResultArray',
+            'UnknownPolicyResultCatalog', 'AmbiguousPolicyResultInstances', 'MalformedPolicyResultValue',
+            'UnsupportedFutureBuild', 'ProviderQueryFailure', 'ProviderObservedAbsent',
+            'EmptyPolicyResultInstances', 'PolicyResultQueryFailure', 'PolicyResultClassUnsupported',
+            'ContradictoryPolicyResult'
         )] [string] $ValidationScenario = '',
         [Parameter()] [System.Threading.CancellationToken] $CancellationToken =
             [System.Threading.CancellationToken]::None
@@ -1092,6 +1466,8 @@ function Invoke-SystemCollectionPlan {
     $cleanupRetries = 0
     $syntheticCleanupAbsent = $true
     $providerAvailable = $null
+    $privatePolicyCspResults = New-SystemPrivatePolicyCspResults `
+        -Policy $policy -State 'Unavailable' -ReasonCode 'SYSTEM.PRIVATE_POLICY_CSP_UNAVAILABLE'
     $attemptCompletedAt = $null
     $observationCollectedAt = $null
     $state = 'IntegrityFailed'
@@ -1101,6 +1477,7 @@ function Invoke-SystemCollectionPlan {
     $activationCleanupUnverified = $false
     $failureStage = 'SETUP'
     $peerVerified = $false
+    $assessmentEvidenceCrossed = $false
     try {
         $ownedJob = [WinPCInfo.PrivilegedCollectionPlan.OwnedJob]::Create(
             $jobName, "D:P(A;;GA;;;$initiatingSid)(A;;GA;;;SY)"
@@ -1227,17 +1604,139 @@ function Invoke-SystemCollectionPlan {
             $result.phaseId -ne $Plan.phaseId -or
             $result.executionContext -ne $(if ($validationFixture) { 'Synthetic' } else { 'LocalSystem' }) -or
             @($result.operations).Count -ne 1 -or
-            @($resultOperation.PSObject.Properties.Name).Count -ne 3 -or
+            @($resultOperation.PSObject.Properties.Name).Count -ne 7 -or
             $resultOperation.operationId -ne $policy.operations[0].operationId -or
-            $resultOperation.state -ne 'Completed' -or $resultOperation.providerAvailable -isnot [bool]) {
+            $resultOperation.state -ne 'Completed' -or
+            [string]$resultOperation.providerState -notin @('Complete','Unavailable') -or
+            ([string]$resultOperation.providerState -eq 'Complete' -and
+                ($resultOperation.providerAvailable -isnot [bool] -or
+                 -not [string]::IsNullOrEmpty([string]$resultOperation.providerReasonCode))) -or
+            ([string]$resultOperation.providerState -eq 'Unavailable' -and
+                ($null -ne $resultOperation.providerAvailable -or
+                 [string]$resultOperation.providerReasonCode -ne 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE')) -or
+            $resultOperation.policyCatalogId -isnot [string] -or @($resultOperation.fields).Count -ne 4) {
             throw 'The SYSTEM result failed its closed schema.'
         }
-        $providerAvailable = [bool] $resultOperation.providerAvailable
+        $providerAvailable = if([string]$resultOperation.providerState -eq 'Complete'){
+            [bool]$resultOperation.providerAvailable
+        }else{$null}
+        $knownCatalogIds = @($policy.operations[0].policyResultCatalogs | ForEach-Object catalogId)
+        if ([string] $resultOperation.policyCatalogId -notin (@('') + $knownCatalogIds)) {
+            throw 'The SYSTEM result selected an unknown Policy CSP catalog.'
+        }
+        $fieldDefinitions = @{}
+        foreach ($fieldDefinition in @(Get-SystemPolicyResultFieldDefinitions -Policy $policy)) {
+            $fieldDefinitions[[string] $fieldDefinition.fieldId] = $fieldDefinition
+        }
+        $parsedFields = [Collections.Generic.List[object]]::new()
+        $seenFieldIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($fieldResult in @($resultOperation.fields)) {
+            $names = @($fieldResult.PSObject.Properties.Name | Sort-Object)
+            if (($names -join '|') -ne 'fieldId|reasonCode|scopeId|state|value|valueState') {
+                throw 'The SYSTEM result field failed its closed schema.'
+            }
+            $fieldId = [string] $fieldResult.fieldId
+            if (-not $fieldDefinitions.ContainsKey($fieldId) -or -not $seenFieldIds.Add($fieldId)) {
+                throw 'The SYSTEM result field is not allowlisted.'
+            }
+            $definition = $fieldDefinitions[$fieldId]
+            $allowedGapReasons = if ([string]$fieldResult.state -eq 'Unsupported') {
+                @(
+                    'POLICY.MDM_PROVIDER_UNAVAILABLE',
+                    'POLICY.MDM_BUILD_UNSUPPORTED',
+                    'POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
+                )
+            }
+            elseif ([string]$fieldResult.state -eq 'Unavailable') {
+                @(
+                    'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE',
+                    'POLICY.MDM_RESULT_INSTANCE_AMBIGUOUS',
+                    'POLICY.MDM_RESULT_NODE_UNAVAILABLE',
+                    'POLICY.MDM_RESULT_PROPERTY_UNAVAILABLE',
+                    'POLICY.MDM_RESULT_VALUE_MALFORMED',
+                    'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
+                )
+            }
+            else { @() }
+            if ([string] $fieldResult.scopeId -ne [string] $definition.scopeId -or
+                [string] $fieldResult.state -notin @('Complete', 'Unsupported', 'Unavailable') -or
+                [string] $fieldResult.valueState -notin @('ObservedValue', 'ObservedAbsent') -or
+                ([string] $fieldResult.state -eq 'Complete' -and
+                    -not [string]::IsNullOrEmpty([string] $fieldResult.reasonCode)) -or
+                ([string] $fieldResult.state -ne 'Complete' -and
+                    ([string] $fieldResult.valueState -ne 'ObservedAbsent' -or
+                     [string]$fieldResult.reasonCode -notin $allowedGapReasons)) -or
+                ([string] $fieldResult.state -eq 'Complete' -and
+                    [string] $fieldResult.valueState -eq 'ObservedValue' -and
+                    (($definition.valueType -eq 'Boolean' -and $fieldResult.value -isnot [bool]) -or
+                     ($definition.valueType -eq 'Integer' -and -not (
+                        Test-SystemPolicyIntegralValue $fieldResult.value `
+                            $definition.minimumValue $definition.maximumValue
+                     )))) -or
+                ([string] $fieldResult.valueState -eq 'ObservedAbsent' -and $null -ne $fieldResult.value)) {
+                throw 'The SYSTEM result field value is outside the release contract.'
+            }
+            $parsedFields.Add([pscustomobject][ordered]@{
+                fieldId = $fieldId
+                scopeId = [string] $fieldResult.scopeId
+                state = [string] $fieldResult.state
+                reasonCode = [string] $fieldResult.reasonCode
+                valueState = [string] $fieldResult.valueState
+                value = if ($definition.valueType -eq 'Integer' -and
+                    [string] $fieldResult.valueState -eq 'ObservedValue') {
+                    [int] $fieldResult.value
+                }
+                else { $fieldResult.value }
+            })
+        }
+        $catalogId=[string]$resultOperation.policyCatalogId
+        $providerState=[string]$resultOperation.providerState
+        $allFieldsMatch={
+            param([string]$ExpectedState,[string]$ExpectedReason)
+            @($parsedFields|Where-Object {
+                [string]$_.state -ne $ExpectedState -or
+                [string]$_.reasonCode -ne $ExpectedReason -or
+                [string]$_.valueState -ne 'ObservedAbsent' -or
+                $null -ne $_.value
+            }).Count -eq 0
+        }
+        $stateMachineAccepted = if($providerState -eq 'Unavailable'){
+            [string]::IsNullOrEmpty($catalogId) -and
+                (& $allFieldsMatch 'Unavailable' 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE')
+        }
+        elseif(-not [bool]$providerAvailable){
+            [string]::IsNullOrEmpty($catalogId) -and
+                (& $allFieldsMatch 'Unsupported' 'POLICY.MDM_PROVIDER_UNAVAILABLE')
+        }
+        elseif([string]::IsNullOrEmpty($catalogId)){
+            & $allFieldsMatch 'Unsupported' 'POLICY.MDM_BUILD_UNSUPPORTED'
+        }
+        else{
+            @($parsedFields|Where-Object {
+                [string]$_.reasonCode -in @(
+                    'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE',
+                    'POLICY.MDM_PROVIDER_UNAVAILABLE',
+                    'POLICY.MDM_BUILD_UNSUPPORTED'
+                )
+            }).Count -eq 0
+        }
+        if(-not $stateMachineAccepted){
+            throw 'The SYSTEM result contains a contradictory provider, catalog, or field state.'
+        }
+        $privatePolicyCspResults = [pscustomobject][ordered]@{
+            catalogId = $catalogId
+            fields = @($parsedFields)
+        }
+        $assessmentEvidenceCrossed = $true
         $observationCollectedAt = [System.DateTimeOffset]::UtcNow
         $attemptCompletedAt = $observationCollectedAt
-        $state = 'Completed'
-        $reasonCode = 'SYSTEM.COMPLETED'
-        $coverageState = 'Complete'
+        if([string]$resultOperation.providerState -eq 'Complete'){
+            $state = 'Completed';$reasonCode = 'SYSTEM.COMPLETED';$coverageState = 'Complete'
+        }
+        else{
+            $state='CompletedWithGaps';$reasonCode=[string]$resultOperation.providerReasonCode
+            $coverageState='Unavailable'
+        }
     }
     catch [System.OperationCanceledException] {
         $attemptCompletedAt = [System.DateTimeOffset]::UtcNow
@@ -1323,6 +1822,8 @@ function Invoke-SystemCollectionPlan {
         -LocalSystemIdentityVerified ($resultContext.ObservedExecutionContext -eq 'LocalSystem') `
         -CleanupVerified $cleanupVerified -TaskAbsent $taskAbsent -PipeAbsent $pipeAbsent `
         -WorkerTreeAbsent $workerTreeAbsent -ProviderAvailable $providerAvailable `
+        -PrivatePolicyCspResults $privatePolicyCspResults `
+        -AssessmentEvidenceCrossed $assessmentEvidenceCrossed `
         -CleanupRetries $cleanupRetries -RunIntegrityCompromised $runIntegrityCompromised `
         -StartedAt $attemptStartedAt -CompletedAt $attemptCompletedAt `
         -CollectedAt $observationCollectedAt
@@ -1457,7 +1958,8 @@ function Invoke-SystemCollectionPlanFixture {
             throw "The SYSTEM Assessment Record failed validation: $assessmentReason"
         }
     }
-    Write-ContractRecord $systemResult -ConvertToJsonCommand $ConvertToJsonCommand
+    Write-ContractRecord (Copy-SystemCollectionPublicResult -SystemResult $systemResult) `
+        -ConvertToJsonCommand $ConvertToJsonCommand
     if ($null -ne $assessmentRecord) {
         Write-ContractRecord $assessmentRecord -ConvertToJsonCommand $ConvertToJsonCommand
     }
