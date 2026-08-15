@@ -58,5 +58,15 @@ foreach($probe in @($policy.collector)+@($policy.operations)){
         throw 'Every collector or probe must freeze output and evidence bounds.'
     }
 }
+$proxyOperation = @($policy.operations | Where-Object operationId -eq `
+    'op:microsoft-connectivity.proxy.observe')[0]
+Assert-Equal 2048 $proxyOperation.maximumProxyServerUtf8Bytes `
+    'static proxy input has a frozen UTF-8 bound'
+Assert-Equal 4096 $proxyOperation.maximumProxyOverrideUtf8Bytes `
+    'proxy bypass input has a frozen UTF-8 bound'
+Assert-Equal 32 $proxyOperation.maximumProxyOverrideEntries `
+    'proxy bypass evaluation has a frozen entry bound'
+Assert-Equal $true $proxyOperation.cleanup.Contains('fail closed for PAC or WPAD') `
+    'automatic proxy discovery cannot widen the endpoint catalog'
 
 Write-Output 'PASS: the Microsoft Connectivity policy freezes exact endpoints, operations, bounds, and prohibitions.'

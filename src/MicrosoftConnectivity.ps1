@@ -249,7 +249,7 @@ function New-MicrosoftConnectivitySyntheticPayload {
             'scope:connectivity.tls'=@($results.tlsState),@('Succeeded')
             'scope:connectivity.certificate-chain'=@($results.certificateChainState),@('Trusted','Invalid')
             'scope:connectivity.negotiation'=@($results|ForEach-Object {if($_.negotiatedProtocol){'Succeeded'}else{'NotAttempted'}}),@('Succeeded')
-            'scope:connectivity.proxy'=@($results.proxyState),@('Used','Bypassed','Evaluated')
+            'scope:connectivity.proxy'=@($results.proxyState),@('Used','Bypassed')
             'scope:connectivity.http'=@($results.httpState),@('Succeeded')
             'scope:connectivity.enrollment-dns'=@($results|Where-Object enrollmentDnsState -ne 'NotApplicable'|ForEach-Object enrollmentDnsState),@('Succeeded')
         }
@@ -335,7 +335,7 @@ function Test-MicrosoftConnectivityPayload {
             $definition = @($Policy.endpoints | Where-Object endpointId -eq $item.endpointId)
             if ($definition.Count -ne 1 -or [string] $item.service -cne [string] $definition[0].service -or
                 [string] $item.catalogState -notin @('Active', 'Retired') -or
-                [string] $item.transportMode -notin @('Direct', 'WindowsProxy') -or
+                [string] $item.transportMode -notin @('Direct', 'WindowsProxy', 'Indeterminate') -or
                 $item.addressCount -isnot [int] -or [int] $item.addressCount -lt 0 -or
                 [int] $item.addressCount -gt [int] $Policy.collector.maximumAddressesPerEndpoint -or
                 $item.port -isnot [int] -or [int] $item.port -ne 443 -or
@@ -346,7 +346,7 @@ function Test-MicrosoftConnectivityPayload {
             $states = @('Succeeded', 'Failed', 'Blocked', 'TimedOut', 'Unavailable', 'NotAttempted')
             if ([string] $item.dnsState -notin $states -or [string] $item.tcpState -notin $states -or
                 [string] $item.tlsState -notin $states -or
-                [string] $item.proxyState -notin @($states + @('Used', 'Bypassed', 'Evaluated')) -or
+                [string] $item.proxyState -notin @($states + @('Used', 'Bypassed')) -or
                 [string] $item.httpState -notin @($states + @('RedirectRejected')) -or
                 [string] $item.enrollmentDnsState -notin @($states + @('NotApplicable')) -or
                 [string] $item.certificateChainState -notin @(
@@ -556,6 +556,62 @@ function Get-MicrosoftConnectivityCertificateSha256 {
     ).ToLowerInvariant()
 }
 
+function Initialize-MicrosoftConnectivityCertificateCaptureType {
+    if ('WinPCInfo.MicrosoftConnectivity.CertificateCapture' -as [type]) { return }
+    # TLS callbacks execute on .NET transport threads, where a PowerShell
+    # scriptblock has no guaranteed runspace. This tiny release-owned helper
+    # performs only bounded state capture and the original platform trust
+    # decision; it cannot weaken validation or start another operation.
+    Add-Type -Language CSharp -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+
+namespace WinPCInfo.MicrosoftConnectivity {
+    public sealed class CertificateCapture {
+        private readonly int maximumElements;
+        public byte[] RawData { get; private set; }
+        public string ChainState { get; private set; } = "Unavailable";
+        public int ChainElementCount { get; private set; }
+        public string ChainStatusCodes { get; private set; }
+
+        public CertificateCapture(int maximumElements) {
+            this.maximumElements = Math.Max(0, maximumElements);
+        }
+
+        public bool Validate(object sender, X509Certificate certificate,
+            X509Chain chain, SslPolicyErrors policyErrors) {
+            if (certificate != null) RawData = certificate.GetRawCertData();
+            if (chain != null) {
+                ChainElementCount = Math.Min(chain.ChainElements.Count, maximumElements);
+                bool chainError = (policyErrors & SslPolicyErrors.RemoteCertificateChainErrors) != 0;
+                ChainState = chainError ? "Invalid" : "Trusted";
+                var codes = chain.ChainStatus.Select(value => value.Status.ToString())
+                    .Where(value => !String.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal)
+                    .Take(8).ToArray();
+                string joined = codes.Length == 0 ? "NoError" : String.Join(",", codes);
+                ChainStatusCodes = Encoding.UTF8.GetByteCount(joined) <= 256
+                    ? joined : "StatusSetTruncated";
+            }
+            return policyErrors == SslPolicyErrors.None;
+        }
+    }
+}
+'@ | Out-Null
+}
+
+function New-MicrosoftConnectivityCertificateCapture {
+    param([Parameter(Mandatory)] $Policy)
+    Initialize-MicrosoftConnectivityCertificateCaptureType
+    [WinPCInfo.MicrosoftConnectivity.CertificateCapture]::new(
+        [int] $Policy.collector.maximumCertificateChainElements
+    )
+}
+
 function New-MicrosoftConnectivityOfflineChainPolicy {
     # Platform TLS validation can otherwise retrieve missing intermediates from
     # certificate AIA URLs before our callback runs. That would be an undeclared
@@ -577,22 +633,6 @@ function Get-MicrosoftConnectivityBoundedChainStatusCodes {
         Sort-Object -Unique | Select-Object -First 8)
     $value = if($codes.Count -eq 0){'NoError'}else{$codes -join ','}
     if([Text.Encoding]::UTF8.GetByteCount($value) -gt 256){'StatusSetTruncated'}else{$value}
-}
-
-function Get-MicrosoftConnectivityCallbackChainResult {
-    param($Chain, $PolicyErrors, [Parameter(Mandatory)] $Policy)
-    $chainError = ($PolicyErrors -band
-        [Net.Security.SslPolicyErrors]::RemoteCertificateChainErrors) -ne 0
-    [pscustomobject][ordered]@{
-        state = if($null -eq $Chain){'Unavailable'}elseif($chainError){'Invalid'}else{'Trusted'}
-        elementCount = if($null -eq $Chain){0}else{[Math]::Min(
-            $Chain.ChainElements.Count,
-            [int]$Policy.collector.maximumCertificateChainElements
-        )}
-        statusCodes = if($null -eq $Chain){$null}else{
-            Get-MicrosoftConnectivityBoundedChainStatusCodes -Statuses @($Chain.ChainStatus)
-        }
-    }
 }
 
 function Invoke-MicrosoftConnectivityDnsPhase {
@@ -629,35 +669,19 @@ function Invoke-MicrosoftConnectivityTlsPhase {
     $client = [Net.Sockets.TcpClient]::new()
     $stream = $null; $certificate = $null
     $cts = [Threading.CancellationTokenSource]::new($DeadlineMilliseconds)
-    $capture = [pscustomobject]@{
-        RawData=$null;ChainState='Unavailable';ChainElementCount=0;ChainStatusCodes=$null
-    }
+    $capture = New-MicrosoftConnectivityCertificateCapture -Policy $Policy
     try {
         $client.ConnectAsync(
             [string] $Endpoint.dnsName, [int] $Endpoint.port, $cts.Token
         ).GetAwaiter().GetResult()
-        $callback = [Net.Security.RemoteCertificateValidationCallback] {
-            param($Sender, $RemoteCertificate, $Chain, $PolicyErrors)
-            if ($null -ne $RemoteCertificate) {
-                $capture.RawData = [byte[]] $RemoteCertificate.GetRawCertData()
-            }
-            $chainResult=Get-MicrosoftConnectivityCallbackChainResult `
-                -Chain $Chain -PolicyErrors $PolicyErrors -Policy $Policy
-            $capture.ChainState=[string]$chainResult.state
-            $capture.ChainElementCount=[int]$chainResult.elementCount
-            $capture.ChainStatusCodes=$chainResult.statusCodes
-            # Trust errors are observed, never bypassed. Returning false lets
-            # SslStream enforce the Windows trust decision and prevents this
-            # assessment from turning an invalid chain into usable transport.
-            $PolicyErrors -eq [Net.Security.SslPolicyErrors]::None
-        }
+        $callback = [Delegate]::CreateDelegate(
+            [Net.Security.RemoteCertificateValidationCallback], $capture, 'Validate'
+        )
         $stream = [Net.Security.SslStream]::new(
             $client.GetStream(), $false, $callback
         )
         $options = [Net.Security.SslClientAuthenticationOptions]::new()
         $options.TargetHost = [string] $Endpoint.dnsName
-        $options.CertificateRevocationCheckMode =
-            [Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck
         $options.CertificateChainPolicy = New-MicrosoftConnectivityOfflineChainPolicy
         $stream.AuthenticateAsClientAsync($options, $cts.Token).GetAwaiter().GetResult()
         if ($null -eq $capture.RawData) { throw 'TLS completed without a remote certificate.' }
@@ -701,24 +725,167 @@ function Invoke-MicrosoftConnectivityTlsPhase {
     }
 }
 
+function Resolve-MicrosoftConnectivityProxySelection {
+    param(
+        [Parameter(Mandatory)] [Uri] $EndpointUri,
+        [Parameter(Mandatory)] [bool] $ProxyEnabled,
+        [AllowNull()] [string] $ProxyServer,
+        [AllowNull()] [string] $ProxyOverride,
+        [Parameter(Mandatory)] [bool] $AutomaticConfigurationPresent
+    )
+    $unavailable = {
+        [pscustomobject]@{
+            supported = $false; transportMode = 'Indeterminate'
+            proxyState = 'Unavailable'; proxy = $null
+        }
+    }
+    # PAC and WPAD are deliberately unsupported: evaluating either can resolve
+    # or download an undeclared destination. An honest partial result is safer
+    # than silently widening the immutable endpoint catalog.
+    if ($AutomaticConfigurationPresent) { return & $unavailable }
+    if (-not $ProxyEnabled) {
+        return [pscustomobject]@{
+            supported = $true; transportMode = 'Direct'
+            proxyState = 'Bypassed'; proxy = $null
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($ProxyServer) -or
+        [Text.Encoding]::UTF8.GetByteCount($ProxyServer) -gt 2048 -or
+        [Text.Encoding]::UTF8.GetByteCount([string] $ProxyOverride) -gt 4096) {
+        return & $unavailable
+    }
+
+    $selected = $null
+    $parts = @($ProxyServer -split ';' | Where-Object { $_ } | Select-Object -First 9)
+    if ($parts.Count -gt 8) { return & $unavailable }
+    if ($ProxyServer.Contains('=')) {
+        foreach ($part in $parts) {
+            $pair = @($part -split '=', 2)
+            if ($pair.Count -ne 2) { return & $unavailable }
+            if ($pair[0].Trim() -ieq 'https') { $selected = $pair[1].Trim() }
+        }
+        # A protocol-specific list with no HTTPS proxy means this HTTPS target
+        # is explicitly direct; no default proxy discovery is permitted.
+        if ([string]::IsNullOrWhiteSpace($selected)) {
+            return [pscustomobject]@{
+                supported = $true; transportMode = 'Direct'
+                proxyState = 'Bypassed'; proxy = $null
+            }
+        }
+    }
+    else { $selected = $ProxyServer.Trim() }
+
+    $bypassed = $false
+    $overrides = @([string] $ProxyOverride -split ';' | Where-Object { $_ })
+    if ($overrides.Count -gt 32) { return & $unavailable }
+    foreach ($entryValue in $overrides) {
+        $entry = $entryValue.Trim()
+        if ($entry -ieq '<local>') {
+            if (-not $EndpointUri.DnsSafeHost.Contains('.')) { $bypassed = $true }
+            continue
+        }
+        if ($entry -notmatch '^[A-Za-z0-9*._-]{1,256}$') { return & $unavailable }
+        $pattern = '^' + [Text.RegularExpressions.Regex]::Escape($entry).
+            Replace('\*', '.*') + '$'
+        if ([Text.RegularExpressions.Regex]::IsMatch(
+            $EndpointUri.DnsSafeHost, $pattern,
+            [Text.RegularExpressions.RegexOptions]::IgnoreCase,
+            [TimeSpan]::FromMilliseconds(50)
+        )) { $bypassed = $true }
+    }
+    if ($bypassed) {
+        return [pscustomobject]@{
+            supported = $true; transportMode = 'Direct'
+            proxyState = 'Bypassed'; proxy = $null
+        }
+    }
+
+    try {
+        $text = if ($selected -match '^https?://') { $selected } else { "http://$selected" }
+        $proxyUri = [Uri]::new($text, [UriKind]::Absolute)
+        if ($proxyUri.Scheme -notin @('http', 'https') -or
+            [string]::IsNullOrWhiteSpace($proxyUri.Host) -or $proxyUri.Port -le 0 -or
+            $proxyUri.UserInfo -or $proxyUri.Query -or $proxyUri.Fragment -or
+            $proxyUri.AbsolutePath -ne '/') { return & $unavailable }
+        $proxy = [Net.WebProxy]::new($proxyUri, $false)
+        $proxy.Credentials = $null
+        [pscustomobject]@{
+            supported = $true; transportMode = 'WindowsProxy'
+            proxyState = 'Used'; proxy = $proxy
+        }
+    }
+    catch { & $unavailable }
+}
+
+function Get-MicrosoftConnectivityProxySelection {
+    param([Parameter(Mandatory)] [Uri] $EndpointUri)
+    $settings = $null; $connections = $null
+    try {
+        $settings = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
+            'Software\Microsoft\Windows\CurrentVersion\Internet Settings', $false
+        )
+        $connections = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
+            'Software\Microsoft\Windows\CurrentVersion\Internet Settings\Connections', $false
+        )
+        if ($null -eq $settings) { throw 'Current-user proxy settings are unavailable.' }
+        $autoUrl = [string] $settings.GetValue('AutoConfigURL', $null)
+        $blob = if ($null -eq $connections) { $null } else {
+            $connections.GetValue('DefaultConnectionSettings', $null)
+        }
+        $automatic = -not [string]::IsNullOrWhiteSpace($autoUrl)
+        if ($blob -is [byte[]] -and $blob.Length -gt 8) {
+            # INTERNET_PER_CONN_OPTION flags are stored at byte offset eight;
+            # bits 0x04 and 0x08 request PAC URL or automatic discovery.
+            $automatic = $automatic -or (($blob[8] -band 0x0c) -ne 0)
+        }
+        Resolve-MicrosoftConnectivityProxySelection -EndpointUri $EndpointUri `
+            -ProxyEnabled ([int] $settings.GetValue('ProxyEnable', 0) -eq 1) `
+            -ProxyServer ([string] $settings.GetValue('ProxyServer', $null)) `
+            -ProxyOverride ([string] $settings.GetValue('ProxyOverride', $null)) `
+            -AutomaticConfigurationPresent $automatic
+    }
+    catch {
+        [pscustomobject]@{
+            supported = $false; transportMode = 'Indeterminate'
+            proxyState = 'Unavailable'; proxy = $null
+        }
+    }
+    finally {
+        if ($null -ne $connections) { $connections.Dispose() }
+        if ($null -ne $settings) { $settings.Dispose() }
+    }
+}
+
 function Invoke-MicrosoftConnectivityHttpPhase {
-    param([Parameter(Mandatory)] $Endpoint, [int] $DeadlineMilliseconds, [Parameter(Mandatory)] $Policy)
+    param(
+        [Parameter(Mandatory)] $Endpoint, [int] $DeadlineMilliseconds,
+        [Parameter(Mandatory)] $Policy, [Parameter()] $ProxySelection
+    )
     $handler = [Net.Http.SocketsHttpHandler]::new()
     $client = $null; $request = $null; $response = $null; $certificate = $null
     $cts = [Threading.CancellationTokenSource]::new($DeadlineMilliseconds)
-    $capture = [pscustomobject]@{ RawData = $null }
-    # SocketsHttpHandler evaluates the Windows system proxy inside SendAsync's
-    # cancellation boundary. We deliberately do not call IWebProxy.GetProxy or
-    # IsBypassed: PAC/WPAD evaluation there is synchronous and could outlive the
-    # frozen deadline. "Evaluated" means the system policy participated; no
-    # proxy URI or credential is retained and no route attribution is guessed.
-    $transportMode = 'WindowsProxy'; $proxyState = 'Evaluated'
+    $capture = New-MicrosoftConnectivityCertificateCapture -Policy $Policy
+    $uri = [Uri]::new([string] $Endpoint.uri)
+    if ($null -eq $ProxySelection) {
+        $ProxySelection = Get-MicrosoftConnectivityProxySelection -EndpointUri $uri
+    }
+    $transportMode = [string] $ProxySelection.transportMode
+    $proxyState = [string] $ProxySelection.proxyState
     try {
-        # HttpClient uses the Windows system proxy but is explicitly forbidden
+        if (-not [bool] $ProxySelection.supported) {
+            return [pscustomobject][ordered]@{
+                state = 'NotAttempted'; statusCode = $null
+                redirectState = 'NotObserved'; headerCount = 0
+                transportMode = $transportMode; proxyState = $proxyState
+                leafSha256 = $null
+            }
+        }
+        # HttpClient uses the already selected direct or static proxy route and is forbidden
         # from sending user or proxy credentials, cookies, a request body, or a
         # redirected second request. A 407 is therefore useful proxy evidence,
         # not an invitation to request credentials after preparation approval.
-        $handler.UseProxy = $true
+        $handler.UseProxy = $transportMode -eq 'WindowsProxy'
+        $handler.Proxy = $ProxySelection.proxy
         $handler.Credentials = $null
         $handler.DefaultProxyCredentials = $null
         $handler.UseCookies = $false
@@ -727,18 +894,11 @@ function Invoke-MicrosoftConnectivityHttpPhase {
             1, [int] ([int] $Endpoint.http.maximumHeaderBytes / 1024)
         )
         $sslOptions = [Net.Security.SslClientAuthenticationOptions]::new()
-        $sslOptions.CertificateRevocationCheckMode =
-            [Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck
         $sslOptions.CertificateChainPolicy = New-MicrosoftConnectivityOfflineChainPolicy
-        $sslOptions.RemoteCertificateValidationCallback = {
-            param($Message, $RemoteCertificate, $Chain, $PolicyErrors)
-            if ($null -ne $RemoteCertificate) {
-                $capture.RawData = [byte[]] $RemoteCertificate.RawData.Clone()
-            }
-            $PolicyErrors -eq [Net.Security.SslPolicyErrors]::None
-        }
+        $sslOptions.RemoteCertificateValidationCallback = [Delegate]::CreateDelegate(
+            [Net.Security.RemoteCertificateValidationCallback], $capture, 'Validate'
+        )
         $handler.SslOptions = $sslOptions
-        $uri = [Uri]::new([string] $Endpoint.uri)
         $client = [Net.Http.HttpClient]::new($handler, $false)
         $client.Timeout = [Threading.Timeout]::InfiniteTimeSpan
         $request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Head, $uri)
@@ -769,8 +929,18 @@ function Invoke-MicrosoftConnectivityHttpPhase {
         }
     }
     catch {
+        $leaf = $null
+        if ($null -ne $capture.RawData) {
+            try {
+                $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+                    [byte[]] $capture.RawData
+                )
+                $leaf = Get-MicrosoftConnectivityCertificateSha256 -Certificate $certificate
+            }
+            catch { $leaf = $null }
+        }
         New-MicrosoftConnectivityHttpFailureResult -Exception $_.Exception `
-            -TransportMode $transportMode -ProxyState $proxyState
+            -TransportMode $transportMode -ProxyState $proxyState -LeafSha256 $leaf
     }
     finally {
         if ($null -ne $certificate) { $certificate.Dispose() }
@@ -785,15 +955,16 @@ function New-MicrosoftConnectivityHttpFailureResult {
     param(
         [Parameter(Mandatory)] [Exception] $Exception,
         [Parameter(Mandatory)] [string] $TransportMode,
-        [Parameter(Mandatory)] [string] $ProxyState
+        [Parameter(Mandatory)] [string] $ProxyState,
+        [Parameter()] [AllowNull()] [string] $LeafSha256
     )
     # The selected transport policy is evidence in its own right. Preserve it
-    # when the send fails so a proxy refusal or PAC timeout cannot be reported
+    # when the send fails so a proxy refusal or send timeout cannot be reported
     # as a direct-transport failure merely because no response arrived.
     [pscustomobject][ordered]@{
         state = Get-MicrosoftConnectivityFailureState $Exception
         statusCode = $null; redirectState = 'NotObserved'; headerCount = 0
-        transportMode = $TransportMode; proxyState = $ProxyState; leafSha256 = $null
+        transportMode = $TransportMode; proxyState = $ProxyState; leafSha256 = $LeafSha256
     }
 }
 
@@ -861,23 +1032,29 @@ function Invoke-MicrosoftConnectivityLiveProbe {
 
         $remaining = [int] $Policy.collector.deadlineMilliseconds - [int] $watch.ElapsedMilliseconds
         if ($remaining -gt 0) {
-            $requestCount++
-            $http = Invoke-MicrosoftConnectivityHttpPhase -Endpoint $endpoint `
-                -DeadlineMilliseconds ([Math]::Min(5000, $remaining)) -Policy $Policy
-            $item.transportMode = [string] $http.transportMode
-            $item.proxyState = [string] $http.proxyState
-            $item.httpState = [string] $http.state
-            $item.httpStatusCode = $http.statusCode
-            $item.redirectState = [string] $http.redirectState
-            $item.httpHeaderCount = [int] $http.headerCount
-            $item.httpLeafSha256 = $http.leafSha256
+            $uri = [Uri]::new([string] $endpoint.uri)
+            $selection = Get-MicrosoftConnectivityProxySelection -EndpointUri $uri
+            $item.transportMode = [string] $selection.transportMode
+            $item.proxyState = [string] $selection.proxyState
+            if ([bool] $selection.supported) {
+                $requestCount++
+                $http = Invoke-MicrosoftConnectivityHttpPhase -Endpoint $endpoint `
+                    -DeadlineMilliseconds ([Math]::Min(5000, $remaining)) `
+                    -Policy $Policy -ProxySelection $selection
+                $item.httpState = [string] $http.state
+                $item.httpStatusCode = $http.statusCode
+                $item.redirectState = [string] $http.redirectState
+                $item.httpHeaderCount = [int] $http.headerCount
+                $item.httpLeafSha256 = $http.leafSha256
+            }
         }
 
         # A certificate-path difference is only suspicion. Confirmation is
         # reserved for a release-owned fixture with independent proxy-policy
         # evidence; the live collector has no authority to inspect enterprise
         # configuration deeply enough to make that attribution.
-        if ($null -ne $item.directLeafSha256 -and $null -ne $item.httpLeafSha256) {
+        if ($item.tlsState -eq 'Succeeded' -and $item.httpState -eq 'Succeeded' -and
+            $null -ne $item.directLeafSha256 -and $null -ne $item.httpLeafSha256) {
             if ($item.directLeafSha256 -ceq $item.httpLeafSha256) {
                 $item.tlsInspectionOutcome = 'NotObservedWithinCompletedTests'
                 $item.tlsInspectionCorroboration = 'MatchingCompletedPaths'
@@ -896,7 +1073,7 @@ function Invoke-MicrosoftConnectivityLiveProbe {
         'scope:connectivity.tls' = @($results.tlsState), @('Succeeded')
         'scope:connectivity.certificate-chain' = @($results.certificateChainState), @('Trusted', 'Invalid')
         'scope:connectivity.negotiation' = @($results | ForEach-Object { if ($_.negotiatedProtocol) { 'Succeeded' } else { 'Unavailable' } }), @('Succeeded')
-        'scope:connectivity.proxy' = @($results.proxyState), @('Used', 'Bypassed', 'Evaluated')
+        'scope:connectivity.proxy' = @($results.proxyState), @('Used', 'Bypassed')
         'scope:connectivity.http' = @($results.httpState), @('Succeeded')
         'scope:connectivity.enrollment-dns' = @($results | Where-Object enrollmentDnsState -ne 'NotApplicable' | ForEach-Object enrollmentDnsState), @('Succeeded')
     }

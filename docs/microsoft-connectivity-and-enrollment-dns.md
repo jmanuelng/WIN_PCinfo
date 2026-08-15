@@ -29,7 +29,7 @@ TLS inspection has four deliberately narrow outcomes:
 
 ## Privacy and safety boundary
 
-The collector uses in-process .NET APIs and the Windows system proxy without default credentials. It sends no credential, tenant identifier, cookie, collected evidence, or request body; follows no redirect; downloads no certificate-chain material; performs no packet capture; and changes no adapter, resolver, route, proxy, firewall, certificate store, trust setting, enrollment state, or other device configuration. Each release-owned phase and rule has a finite operation ID, input/output bound, and deadline.
+The collector uses in-process .NET APIs and reads only bounded current-user static proxy settings. It uses either an explicit credential-free proxy or an explicit direct handler; PAC and WPAD fail closed as unavailable because they could contact an undeclared destination. It sends no credential, tenant identifier, cookie, collected evidence, or request body; follows no redirect; downloads no certificate-chain material; performs no packet capture; and changes no adapter, resolver, route, proxy, firewall, certificate store, trust setting, enrollment state, or other device configuration. Each release-owned phase and rule has a finite operation ID, input/output bound, and deadline.
 
 Failed, blocked, redirected, or timed-out endpoint attempts are evidence gaps, not a reason to discard other successful scopes. The app still validates the canonical record, creates the beginner report, protects and reopens the package, and returns `CompletedWithGaps` where appropriate. Cleanup uncertainty takes precedence over a normal diagnostic result.
 
