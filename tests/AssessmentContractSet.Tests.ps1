@@ -18,16 +18,16 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.10.0' $contractSet.contractVersion `
-    'the additive MDM policy conflict contract has an explicit version'
+Assert-Equal '1.11.0' $contractSet.contractVersion `
+    'the additive Defender and Windows security-control contract has an explicit version'
 Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 189 @($contractSet.fieldDefinitions).Count `
-    'historical fields remain while bounded Policy CSP result fields are admitted'
-Assert-Equal 69 @($contractSet.scopeDefinitions).Count `
-    'historical through Policy CSP conflict scopes remain distinct'
+Assert-Equal 204 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while bounded Defender and security-control fields are admitted'
+Assert-Equal 79 @($contractSet.scopeDefinitions).Count `
+    'historical through Defender and firewall scopes remain distinct'
 $certificateFields = @($contractSet.fieldDefinitions | Where-Object fieldId -like 'field:certificate.*')
 Assert-Equal 12 $certificateFields.Count `
     'presence, purpose, identity, store, dates, validity, chain, trust, and key protection remain explicit fields'
@@ -49,8 +49,8 @@ foreach ($certificateScope in $certificateScopes) {
         'certificate scopes resolve only to the purpose-bound read-only collector'
 }
 $certificateProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness'
-Assert-Equal 59 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
-    'the additive certificate profile inherits every earlier scope and adds six purpose scopes'
+Assert-Equal 69 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
+    'the additive certificate profile inherits every earlier scope and the ten security-control scopes'
 $connectivityFields = @($contractSet.fieldDefinitions | Where-Object {
     $_.fieldId -like 'field:connectivity.*'
 })
@@ -68,10 +68,10 @@ $connectivityScopes = @($contractSet.scopeDefinitions | Where-Object {
 Assert-Equal 8 $connectivityScopes.Count `
     'the eight connectivity observation classes retain independent coverage'
 $connectivityProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness'
-Assert-Equal 64 @($contractSet.scopeDefinitions | Where-Object {
+Assert-Equal 74 @($contractSet.scopeDefinitions | Where-Object {
     $connectivityProfile -in @($_.profileIds)
 }).Count `
-    'the implemented connectivity profile inherits prior evidence and replaces three deferred placeholders'
+    'the implemented connectivity profile inherits prior evidence, adds security controls, and replaces three deferred placeholders'
 Assert-Equal 0 @($contractSet.scopeDefinitions | Where-Object {
     $_.scopeId -in @('scope:network.microsoft-connectivity', 'scope:network.enrollment-dns',
         'scope:network.tls-trust') -and $connectivityProfile -in @($_.profileIds)
@@ -176,6 +176,20 @@ foreach ($schemaResource in @($contractSet.schemas)) {
 $recordSchema = Get-Content -LiteralPath $assessmentRecordSchemaPath -Raw | ConvertFrom-Json -Depth 50
 Assert-Equal 'https://json-schema.org/draft/2020-12/schema' $recordSchema.'$schema' `
     'the canonical Assessment Record schema declares Draft 2020-12'
+$maximumProfileScopes = @(
+    $contractSet.scopeDefinitions |
+        Group-Object { @($_.profileIds) -join '|' } |
+        ForEach-Object Count |
+        Measure-Object -Maximum
+).Maximum
+Assert-Equal 96 $recordSchema.properties.coverage.maxItems `
+    'coverage admits the full additive release profile plus bounded future cleanup headroom'
+Assert-Equal $true ($recordSchema.properties.coverage.maxItems -ge $maximumProfileScopes) `
+    'the Assessment Record schema can admit every release-defined scope in one combined record'
+Assert-Equal 96 $recordSchema.properties.diagnostics.maxItems `
+    'diagnostics stay finite while leaving room for one gap marker per admitted scope'
+Assert-Equal $true ($recordSchema.properties.diagnostics.maxItems -ge $maximumProfileScopes) `
+    'the Assessment Record schema can admit a bounded diagnostic for each release-defined scope'
 $positiveJson = [System.IO.File]::ReadAllText($positiveFixturePath)
 Assert-Equal $true (Test-Json -Json $positiveJson -SchemaFile $assessmentRecordSchemaPath) `
     'the public positive fixture validates using the actual release schema'
@@ -190,4 +204,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.9 binds historical through Microsoft Connectivity scopes and Software Recognition annotations to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.11 binds historical through Defender security-control scopes and Microsoft Connectivity annotations to Draft 2020-12 contracts.'

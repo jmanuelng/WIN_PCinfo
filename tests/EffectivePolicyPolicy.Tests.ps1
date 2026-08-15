@@ -37,7 +37,11 @@ $expectedSources = @(
     'source:windows.local-sam-policy',
     'source:windows.system-audit-policy',
     'source:windows.lsa-user-rights',
-    'source:windows.local-security-option-signals',
+    'source:windows.local-configured-signals',
+    'source:windows.security-center.providers',
+    'source:windows.defender.runtime-status',
+    'source:windows.defender.preferences',
+    'source:windows.firewall.activestore-profiles',
     'source:windows.mdm-policy-csp-results'
 )
 Assert-Equal ($expectedSources -join '|') ($sourceIds -join '|') `
@@ -57,7 +61,7 @@ Assert-Equal 3 @($policy.auditSubcategories).Count `
 Assert-Equal 3 @($policy.userRights).Count `
     'the release owns a finite user-right catalog'
 Assert-Equal 3 @($policy.securityOptions).Count `
-    'the release owns a finite security-option catalog'
+    'the release owns a finite local security-option catalog'
 Assert-Equal 2 @($policy.discoveryTasks).Count `
     'tenant-side follow-up for incomplete MDM coverage is finite and release-owned'
 Assert-Equal 'DirectAssignmentsOnly' $policy.userRightSemantics `
@@ -68,15 +72,15 @@ Assert-Equal 'LocalSamAccountsOnly' $policy.localAccountPolicySemantics `
 $layers = @($policy.layers.layerId)
 Assert-Equal 'AppliedPolicyEvidence|ConfiguredPolicySignals|CurrentControlState' `
     ($layers -join '|') 'the three evidence layers remain distinct'
-Assert-Equal 5 @($policy.rules).Count 'local-policy and MDM conflict rules each produce one finding'
+Assert-Equal 7 @($policy.rules).Count 'local policy, MDM conflict, and security-control rules each produce one finding'
 foreach ($rule in $policy.rules) {
     foreach ($flag in @('mayPrompt','mayInstall','mayDownload','maySelfElevate','writesAllowed')) {
         Assert-Equal $false ([bool]$rule.$flag) `
             "the $($rule.ruleId) operation freezes $flag as false"
     }
 }
-Assert-Equal 19 @($policy.scopes).Count `
-    'field-specific applied, local-policy, and Policy CSP coverage is release-closed'
+Assert-Equal 29 @($policy.scopes).Count `
+    'field-specific applied, local-policy, security-control, and Policy CSP coverage is release-closed'
 $expectedMdmScopes = @(
     'scope:policy.mdm.control-policy-conflict',
     'scope:policy.mdm.security-option.machine-inactivity-limit',
@@ -92,7 +96,9 @@ $expectedScenarios = @(
     'DeniedAdministrator','DeniedSystem','NonEnglish','AppliedOrderConflict',
     'AccountLockout','AuditPolicy','UserRights','SecurityOptions','PartialChannel',
     'NonMdm','UnsupportedMdmBuild','MissingMdmClass','MissingMdmProperty',
-    'MdmPolicyConflict','MdmWinsOverGpScoped'
+    'MdmPolicyConflict','MdmWinsOverGpScoped','ThirdPartyRegistration',
+    'DefenderDisabled','DefenderUnavailable','AmbiguousSecurityCenter',
+    'TamperProtected','MissingDefenderProperty','FirewallProfiles','AsrRulePairs'
 )
 Assert-Equal ($expectedScenarios -join '|') (@($policy.validationScenarios) -join '|') `
     'the ticket validation matrix is release-closed'

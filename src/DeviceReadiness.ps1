@@ -1462,12 +1462,12 @@ function Get-DeviceReadinessSliceSelection {
 
 function Get-CombinedAssessmentContractSetVersion {
     param($ConnectivityCollector,$CertificateCollector,$SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
-    if($null -ne $ConnectivityCollector){'1.10.0'}
-    elseif($null -ne $CertificateCollector){'1.10.0'}
-    elseif($null -ne $SoftwareCollector){'1.10.0'}
-    elseif($null -ne $NetworkCollector){'1.10.0'}
-    elseif($null -ne $ResourceCollector){'1.10.0'}
-    elseif($null -ne $EffectivePolicyCollector){'1.10.0'}
+    if($null -ne $ConnectivityCollector){'1.11.0'}
+    elseif($null -ne $CertificateCollector){'1.11.0'}
+    elseif($null -ne $SoftwareCollector){'1.11.0'}
+    elseif($null -ne $NetworkCollector){'1.11.0'}
+    elseif($null -ne $ResourceCollector){'1.11.0'}
+    elseif($null -ne $EffectivePolicyCollector){'1.11.0'}
     elseif($null -ne $AdministratorCollector){'1.3.0'}
     elseif($null -ne $IdentityCollector){'1.2.0'}else{'1.1.0'}
 }
@@ -1553,6 +1553,8 @@ function Invoke-DeviceReadinessSlice {
     $currentControlCoverage='NotAttempted';$appliedPolicyCount=0
     $appliedPolicyFinding='Indeterminate';$localSecurityFinding='Indeterminate'
     $appliedOrderFinding='Indeterminate'
+    $securityControlFinding='Indeterminate';$securityControlConstraintFinding='Indeterminate'
+    $antivirusProviderCount=0;$firewallProfileCount=0;$asrRuleCount=0
     $mdmPolicyCspFinding='Indeterminate';$policyCspGpoConflictFinding='Indeterminate'
     $policyDiscoveryTaskCount=0
     $resourceScenario=if($isResourceDependenciesFixture){''}else{'Live'}
@@ -2224,6 +2226,11 @@ function Invoke-DeviceReadinessSlice {
                     $appliedPolicyFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-policy-coverage/1.0.0')[0].outcome
                     $localSecurityFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.local-security-policy-coverage/1.0.0')[0].outcome
                     $appliedOrderFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-order-conflict/1.0.0')[0].outcome
+                    $securityControlFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.security-control-coverage/1.0.0')[0].outcome
+                    $securityControlConstraintFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.security-control-constraint/1.0.0')[0].outcome
+                    $antivirusProviderCount=@($effectivePolicyCollector.payload.antivirusProviders).Count
+                    $firewallProfileCount=@($effectivePolicyCollector.payload.firewallProfiles.PSObject.Properties).Count
+                    $asrRuleCount=@($effectivePolicyCollector.payload.defenderAsrRules).Count
                     $mdmPolicyCspFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.mdm-policy-csp-coverage/1.0.0')[0].outcome
                     $policyCspGpoConflictFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome
                     $policyDiscoveryTaskCount=@($record.recommendations|Where-Object {
@@ -2597,6 +2604,11 @@ function Invoke-DeviceReadinessSlice {
             appliedPolicyFinding=$appliedPolicyFinding
             localSecurityFinding=$localSecurityFinding
             appliedOrderFinding=$appliedOrderFinding
+            securityControlFinding=$securityControlFinding
+            securityControlConstraintFinding=$securityControlConstraintFinding
+            antivirusProviderCount=$antivirusProviderCount
+            firewallProfileCount=$firewallProfileCount
+            asrRuleCount=$asrRuleCount
             mdmPolicyCspFinding=$mdmPolicyCspFinding
             policyCspGpoConflictFinding=$policyCspGpoConflictFinding
             policyDiscoveryTaskCount=$policyDiscoveryTaskCount

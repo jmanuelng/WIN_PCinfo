@@ -4,7 +4,28 @@
   "title": "WIN-PCInfo Effective Policy release policy",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "contractVersion", "release", "policyId", "evidenceProfileId", "layers", "collectors", "sourceCatalog", "auditSubcategories", "userRights", "securityOptions", "userRightSemantics", "localAccountPolicySemantics", "scopes", "rules", "discoveryTasks", "validationScenarios"],
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "evidenceProfileId",
+    "layers",
+    "collectors",
+    "sourceCatalog",
+    "auditSubcategories",
+    "userRights",
+    "securityOptions",
+    "defenderPreferences",
+    "smartScreenSignals",
+    "firewallProfiles",
+    "userRightSemantics",
+    "localAccountPolicySemantics",
+    "scopes",
+    "rules",
+    "discoveryTasks",
+    "validationScenarios"
+  ],
   "properties": {
     "kind": { "const": "win-pcinfo.effective-policy-policy" },
     "contractVersion": { "const": "1.0.0" },
@@ -13,47 +34,133 @@
     "evidenceProfileId": { "const": "profile:device-firmware-identity-administrator-and-policy-readiness" },
     "layers": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/layer" } },
     "collectors": { "type": "array", "minItems": 1, "maxItems": 1, "prefixItems": [{ "$ref": "#/$defs/collector" }], "items": false },
-    "sourceCatalog": { "type": "array", "minItems": 6, "maxItems": 6, "items": { "$ref": "#/$defs/source" } },
+    "sourceCatalog": { "type": "array", "minItems": 10, "maxItems": 10, "items": { "$ref": "#/$defs/source" } },
     "auditSubcategories": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/catalogPair" } },
     "userRights": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/right" } },
-    "securityOptions": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/securityOption" } },
+    "securityOptions": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/registrySignal" } },
+    "defenderPreferences": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/commandSignal" } },
+    "smartScreenSignals": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/registrySignal" } },
+    "firewallProfiles": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/firewallProfile" } },
     "userRightSemantics": { "const": "DirectAssignmentsOnly" },
     "localAccountPolicySemantics": { "const": "LocalSamAccountsOnly" },
-    "scopes": { "type": "array", "minItems": 19, "maxItems": 19, "items": { "$ref": "#/$defs/scope" } },
-    "rules": { "type": "array", "minItems": 5, "maxItems": 5, "items": { "$ref": "#/$defs/rule" } },
+    "scopes": { "type": "array", "minItems": 29, "maxItems": 29, "items": { "$ref": "#/$defs/scope" } },
+    "rules": { "type": "array", "minItems": 7, "maxItems": 7, "items": { "$ref": "#/$defs/rule" } },
     "discoveryTasks": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/discoveryTask" } },
-    "validationScenarios": { "const": ["Workgroup", "Domain", "UserAndComputerRsop", "MissingRsop", "StaleRegistry", "DeniedAdministrator", "DeniedSystem", "NonEnglish", "AppliedOrderConflict", "AccountLockout", "AuditPolicy", "UserRights", "SecurityOptions", "PartialChannel", "NonMdm", "UnsupportedMdmBuild", "MissingMdmClass", "MissingMdmProperty", "MdmPolicyConflict", "MdmWinsOverGpScoped"] }
+    "validationScenarios": {
+      "const": [
+        "Workgroup",
+        "Domain",
+        "UserAndComputerRsop",
+        "MissingRsop",
+        "StaleRegistry",
+        "DeniedAdministrator",
+        "DeniedSystem",
+        "NonEnglish",
+        "AppliedOrderConflict",
+        "AccountLockout",
+        "AuditPolicy",
+        "UserRights",
+        "SecurityOptions",
+        "PartialChannel",
+        "NonMdm",
+        "UnsupportedMdmBuild",
+        "MissingMdmClass",
+        "MissingMdmProperty",
+        "MdmPolicyConflict",
+        "MdmWinsOverGpScoped",
+        "ThirdPartyRegistration",
+        "DefenderDisabled",
+        "DefenderUnavailable",
+        "AmbiguousSecurityCenter",
+        "TamperProtected",
+        "MissingDefenderProperty",
+        "FirewallProfiles",
+        "AsrRulePairs"
+      ]
+    }
   },
   "$defs": {
     "layer": {
-      "type": "object", "additionalProperties": false, "required": ["layerId", "purpose", "scopeIds"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layerId", "purpose", "scopeIds"],
       "properties": {
         "layerId": { "enum": ["AppliedPolicyEvidence", "ConfiguredPolicySignals", "CurrentControlState"] },
         "purpose": { "type": "string", "minLength": 20, "maxLength": 512 },
-        "scopeIds": { "type": "array", "minItems": 3, "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "pattern": "^scope:policy\\." } }
+        "scopeIds": { "type": "array", "minItems": 3, "maxItems": 10, "uniqueItems": true, "items": { "type": "string", "pattern": "^scope:policy\\." } }
       }
     },
     "collector": {
-      "type": "object", "additionalProperties": false,
-      "required": ["collectorId", "collectorVersion", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "resultMaximumUtf8Bytes", "maximumAppliedPoliciesPerTarget", "maximumPolicySettingsPerTarget", "maximumPrincipalsPerRight", "cleanup"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "collectorId",
+        "collectorVersion",
+        "operationId",
+        "source",
+        "executionContext",
+        "privilege",
+        "networkBehavior",
+        "executable",
+        "dependencies",
+        "mayPrompt",
+        "mayInstall",
+        "mayDownload",
+        "maySelfElevate",
+        "writesAllowed",
+        "maximumAttempts",
+        "deadlineMilliseconds",
+        "resultMaximumUtf8Bytes",
+        "maximumAppliedPoliciesPerTarget",
+        "maximumPolicySettingsPerTarget",
+        "maximumPrincipalsPerRight",
+        "maximumSecurityProvidersPerCategory",
+        "maximumAsrRules",
+        "cleanup"
+      ],
       "properties": {
-        "collectorId": { "const": "collector:windows.effective-policy" }, "collectorVersion": { "const": "1.0.0" },
+        "collectorId": { "const": "collector:windows.effective-policy" },
+        "collectorVersion": { "const": "1.0.0" },
         "operationId": { "const": "observe-effective-policy" },
-        "source": { "const": "Release-owned projection of cached RSoP WMI, local NetAPI, Audit Policy, LSA Policy, and exact local registry values" },
-        "executionContext": { "const": "Administrator" }, "privilege": { "const": "RequiresAdministrator" },
-        "networkBehavior": { "const": "OfflineOnly" }, "executable": { "const": "ActiveMicrosoftSignedPowerShellHost" },
-        "dependencies": { "const": ["Windows RSoP WMI provider", "Netapi32.dll", "Advapi32.dll", "Microsoft.Win32.Registry"] },
-        "mayPrompt": { "const": false }, "mayInstall": { "const": false }, "mayDownload": { "const": false },
-        "maySelfElevate": { "const": false }, "writesAllowed": { "const": false }, "maximumAttempts": { "const": 1 },
-        "deadlineMilliseconds": { "const": 5000 }, "resultMaximumUtf8Bytes": { "const": 16384 },
-        "maximumAppliedPoliciesPerTarget": { "const": 8 }, "maximumPolicySettingsPerTarget": { "const": 8 },
-        "maximumPrincipalsPerRight": { "const": 8 }, "cleanup": { "const": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent" }
+        "source": { "const": "Release-owned projection of cached RSoP WMI, local NetAPI, Audit Policy, LSA Policy, Windows Security Center, approved Defender cmdlets, ActiveStore firewall state, and exact local registry values" },
+        "executionContext": { "const": "Administrator" },
+        "privilege": { "const": "RequiresAdministrator" },
+        "networkBehavior": { "const": "OfflineOnly" },
+        "executable": { "const": "ActiveMicrosoftSignedPowerShellHost" },
+        "dependencies": {
+          "const": [
+            "Windows RSoP WMI provider",
+            "Netapi32.dll",
+            "Advapi32.dll",
+            "Wscapi.dll",
+            "Defender PowerShell module",
+            "NetSecurity PowerShell module",
+            "Microsoft.Win32.Registry"
+          ]
+        },
+        "mayPrompt": { "const": false },
+        "mayInstall": { "const": false },
+        "mayDownload": { "const": false },
+        "maySelfElevate": { "const": false },
+        "writesAllowed": { "const": false },
+        "maximumAttempts": { "const": 1 },
+        "deadlineMilliseconds": { "const": 5000 },
+        "resultMaximumUtf8Bytes": { "const": 16384 },
+        "maximumAppliedPoliciesPerTarget": { "const": 8 },
+        "maximumPolicySettingsPerTarget": { "const": 8 },
+        "maximumPrincipalsPerRight": { "const": 8 },
+        "maximumSecurityProvidersPerCategory": { "const": 4 },
+        "maximumAsrRules": { "const": 16 },
+        "cleanup": { "const": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent" }
       }
     },
     "source": {
-      "type": "object", "additionalProperties": false, "required": ["sourceId", "interface", "limitation"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "interface", "limitation"],
       "properties": {
-        "sourceId": { "type": "string", "pattern": "^source:windows\\." }, "interface": { "type": "string", "minLength": 8, "maxLength": 128 },
+        "sourceId": { "type": "string", "pattern": "^source:windows\\." },
+        "interface": { "type": "string", "minLength": 8, "maxLength": 128 },
         "namespaces": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "string" } },
         "classes": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "string" } },
         "supportedSettingClasses": { "const": ["RSOP_RegistryPolicySetting"] },
@@ -62,23 +169,60 @@
       }
     },
     "catalogPair": {
-      "type": "object", "additionalProperties": false, "required": ["catalogId", "guid"],
-      "properties": { "catalogId": { "type": "string", "pattern": "^audit:" }, "guid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalogId", "guid"],
+      "properties": {
+        "catalogId": { "type": "string", "pattern": "^audit:" },
+        "guid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+      }
     },
     "right": {
-      "type": "object", "additionalProperties": false, "required": ["catalogId", "nativeName"],
-      "properties": { "catalogId": { "type": "string", "pattern": "^right:" }, "nativeName": { "type": "string", "pattern": "^Se[A-Za-z]+Right$" } }
-    },
-    "securityOption": {
-      "type": "object", "additionalProperties": false, "required": ["catalogId", "registryPath", "valueName", "valueType", "fieldId"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalogId", "nativeName"],
       "properties": {
-        "catalogId": { "type": "string", "pattern": "^security-option:" }, "registryPath": { "type": "string", "minLength": 8, "maxLength": 256 },
-        "valueName": { "type": "string", "minLength": 1, "maxLength": 64 }, "valueType": { "enum": ["Boolean", "Integer"] },
-        "fieldId": { "type": "string", "pattern": "^field:policy\\.security-option\\." }
+        "catalogId": { "type": "string", "pattern": "^right:" },
+        "nativeName": { "type": "string", "pattern": "^Se[A-Za-z]+Right$" }
+      }
+    },
+    "registrySignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalogId", "registryPath", "valueName", "valueType", "fieldId"],
+      "properties": {
+        "catalogId": { "type": "string", "minLength": 1, "maxLength": 96 },
+        "registryPath": { "type": "string", "minLength": 8, "maxLength": 256 },
+        "valueName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "valueType": { "enum": ["Boolean", "Integer"] },
+        "fieldId": { "type": "string", "pattern": "^field:policy\\." }
+      }
+    },
+    "commandSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalogId", "commandProperty", "valueType", "fieldId"],
+      "properties": {
+        "catalogId": { "type": "string", "pattern": "^defender-preference:" },
+        "commandProperty": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "valueType": { "const": "String" },
+        "fieldId": { "type": "string", "pattern": "^field:policy\\.defender\\." }
+      }
+    },
+    "firewallProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalogId", "profileName", "scopeId"],
+      "properties": {
+        "catalogId": { "type": "string", "pattern": "^firewall-profile:" },
+        "profileName": { "enum": ["Domain", "Private", "Public"] },
+        "scopeId": { "type": "string", "pattern": "^scope:policy\\.firewall\\." }
       }
     },
     "scope": {
-      "type": "object", "additionalProperties": false, "required": ["scopeId", "fieldIds"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scopeId", "fieldIds"],
       "properties": {
         "scopeId": { "type": "string", "pattern": "^scope:policy\\." },
         "fieldIds": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "type": "string", "pattern": "^field:policy\\." } }
@@ -96,18 +240,51 @@
       }
     },
     "rule": {
-      "type": "object", "additionalProperties": false,
-      "required": ["findingKind", "ruleId", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "maximumInputObservations", "maximumOutputFindings", "cleanup", "missingEvidenceOutcome"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "findingKind",
+        "ruleId",
+        "operationId",
+        "source",
+        "executionContext",
+        "privilege",
+        "networkBehavior",
+        "executable",
+        "dependencies",
+        "mayPrompt",
+        "mayInstall",
+        "mayDownload",
+        "maySelfElevate",
+        "writesAllowed",
+        "maximumAttempts",
+        "deadlineMilliseconds",
+        "maximumInputObservations",
+        "maximumOutputFindings",
+        "cleanup",
+        "missingEvidenceOutcome"
+      ],
       "properties": {
-        "findingKind": { "type": "string", "pattern": "^[a-z0-9-]+$" }, "ruleId": { "type": "string", "pattern": "^rule:policy\\." },
-        "operationId": { "type": "string", "pattern": "^op:rule\\.policy\\." }, "source": { "const": "ReleaseEmbeddedValidatedObservationRule" },
-        "executionContext": { "const": "InProcessValidatedAssessmentRecord" }, "privilege": { "const": "NoElevation" },
-        "networkBehavior": { "const": "OfflineOnly" }, "executable": { "const": "NoneInProcess" }, "dependencies": { "const": [] },
-        "mayPrompt": { "const": false }, "mayInstall": { "const": false }, "mayDownload": { "const": false },
-        "maySelfElevate": { "const": false }, "writesAllowed": { "const": false },
-        "maximumAttempts": { "const": 1 }, "deadlineMilliseconds": { "const": 100 },
-        "maximumInputObservations": { "type": "integer", "minimum": 1, "maximum": 96 }, "maximumOutputFindings": { "const": 1 },
-        "cleanup": { "const": "NoArtifacts" }, "missingEvidenceOutcome": { "const": "Indeterminate" }
+        "findingKind": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "ruleId": { "type": "string", "pattern": "^rule:policy\\." },
+        "operationId": { "type": "string", "pattern": "^op:rule\\.policy\\." },
+        "source": { "const": "ReleaseEmbeddedValidatedObservationRule" },
+        "executionContext": { "const": "InProcessValidatedAssessmentRecord" },
+        "privilege": { "const": "NoElevation" },
+        "networkBehavior": { "const": "OfflineOnly" },
+        "executable": { "const": "NoneInProcess" },
+        "dependencies": { "const": [] },
+        "mayPrompt": { "const": false },
+        "mayInstall": { "const": false },
+        "mayDownload": { "const": false },
+        "maySelfElevate": { "const": false },
+        "writesAllowed": { "const": false },
+        "maximumAttempts": { "const": 1 },
+        "deadlineMilliseconds": { "const": 100 },
+        "maximumInputObservations": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "maximumOutputFindings": { "const": 1 },
+        "cleanup": { "const": "NoArtifacts" },
+        "missingEvidenceOutcome": { "const": "Indeterminate" }
       }
     }
   }

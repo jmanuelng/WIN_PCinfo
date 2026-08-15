@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.10.0",
+  "contractVersion": "1.11.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
@@ -614,18 +614,93 @@
     },
     {
       "fieldId": "field:policy.security-option.machine-inactivity-limit-seconds", "capabilityIds": ["CAP-0008"], "purpose": "Record the exact local registry signal for the machine inactivity limit without claiming source or enforcement.",
-      "source": { "sourceId": "source:windows.local-security-option-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies System InactivityTimeoutSecs read-only value" },
+      "source": { "sourceId": "source:windows.local-configured-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies System InactivityTimeoutSecs read-only value" },
       "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 10, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
     },
     {
       "fieldId": "field:policy.security-option.disable-cad", "capabilityIds": ["CAP-0008"], "purpose": "Record the exact local registry signal for Ctrl+Alt+Del behavior without claiming source or enforcement.",
-      "source": { "sourceId": "source:windows.local-security-option-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies System DisableCAD read-only value" },
+      "source": { "sourceId": "source:windows.local-configured-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies System DisableCAD read-only value" },
       "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
     },
     {
       "fieldId": "field:policy.security-option.lm-compatibility-level", "capabilityIds": ["CAP-0008"], "purpose": "Record the exact local registry signal for LAN Manager authentication compatibility without claiming source or current network use.",
-      "source": { "sourceId": "source:windows.local-security-option-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Lsa LmCompatibilityLevel read-only value" },
+      "source": { "sourceId": "source:windows.local-configured-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Lsa LmCompatibilityLevel read-only value" },
       "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 2, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.security-provider.name", "capabilityIds": ["CAP-0008"], "purpose": "Record one Windows Security Center provider identity without inferring supportability or trust from its name alone.",
+      "source": { "sourceId": "source:windows.security-center.providers", "kind": "StructuredWindowsSource", "authoritativeIdentity": "IWscProduct::get_ProductName" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 256, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.security-provider.health", "capabilityIds": ["CAP-0008"], "purpose": "Record the bounded Windows Security Center health classification for one provider category.",
+      "source": { "sourceId": "source:windows.security-center.providers", "kind": "StructuredWindowsSource", "authoritativeIdentity": "WscGetSecurityProviderHealth and release-owned category projection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.defender.running-mode", "capabilityIds": ["CAP-0008"], "purpose": "Record the bounded Microsoft Defender Antivirus running mode separately from provider registration and configured preferences.",
+      "source": { "sourceId": "source:windows.defender.runtime-status", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-MpComputerStatus AMRunningMode" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 64, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.defender.antivirus-enabled", "capabilityIds": ["CAP-0008"], "purpose": "Record whether Microsoft Defender Antivirus reports itself enabled at assessment time.",
+      "source": { "sourceId": "source:windows.defender.runtime-status", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-MpComputerStatus AntivirusEnabled" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.defender.real-time-protection-enabled", "capabilityIds": ["CAP-0008"], "purpose": "Record whether Microsoft Defender Antivirus reports real-time protection enabled at assessment time.",
+      "source": { "sourceId": "source:windows.defender.runtime-status", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-MpComputerStatus RealTimeProtectionEnabled" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.defender.tamper-protected", "capabilityIds": ["CAP-0008"], "purpose": "Record whether Microsoft Defender reports tamper protection enabled as an explicit security control constraint.",
+      "source": { "sourceId": "source:windows.defender.runtime-status", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-MpComputerStatus IsTamperProtected" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.defender.asr.rule-id", "capabilityIds": ["CAP-0008"], "purpose": "Record one bounded attack-surface-reduction rule GUID from approved Defender preference sources.",
+      "source": { "sourceId": "source:windows.defender.preferences", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-MpPreference AttackSurfaceReductionRules_Ids" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 64, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.defender.asr.action", "capabilityIds": ["CAP-0008"], "purpose": "Record one bounded attack-surface-reduction action paired with a specific rule GUID.",
+      "source": { "sourceId": "source:windows.defender.preferences", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-MpPreference AttackSurfaceReductionRules_Actions" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.defender.network-protection", "capabilityIds": ["CAP-0008"], "purpose": "Record the bounded Defender network protection preference separately from runtime provider state.",
+      "source": { "sourceId": "source:windows.defender.preferences", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-MpPreference EnableNetworkProtection" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.smartscreen.shell-enabled", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SmartScreen-in-shell configured signal separately from current provider state.",
+      "source": { "sourceId": "source:windows.local-configured-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies System EnableSmartScreen read-only value" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.smartscreen.shell-prevent-override", "capabilityIds": ["CAP-0008"], "purpose": "Record the local SmartScreen override-prevention signal separately from enforcement claims.",
+      "source": { "sourceId": "source:windows.local-configured-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies System PreventOverrideForFilesInShell read-only value" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.smartscreen.app-install-control", "capabilityIds": ["CAP-0008"], "purpose": "Record the bounded SmartScreen app-install control configured signal without inferring tenant intent.",
+      "source": { "sourceId": "source:windows.local-configured-signals", "kind": "StructuredWindowsSource", "authoritativeIdentity": "HKLM Policies Windows Defender SmartScreen ConfigureAppInstallControlEnabled read-only value" },
+      "valueType": "Integer", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 2, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.firewall.enabled", "capabilityIds": ["CAP-0008"], "purpose": "Record whether one ActiveStore firewall profile reports enabled at assessment time.",
+      "source": { "sourceId": "source:windows.firewall.activestore-profiles", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-NetFirewallProfile Enabled" },
+      "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.firewall.default-inbound-action", "capabilityIds": ["CAP-0008"], "purpose": "Record the bounded ActiveStore default inbound action for one firewall profile.",
+      "source": { "sourceId": "source:windows.firewall.activestore-profiles", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-NetFirewallProfile DefaultInboundAction" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.firewall.default-outbound-action", "capabilityIds": ["CAP-0008"], "purpose": "Record the bounded ActiveStore default outbound action for one firewall profile.",
+      "source": { "sourceId": "source:windows.firewall.activestore-profiles", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Get-NetFirewallProfile DefaultOutboundAction" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
     },
     {
       "fieldId": "field:policy.mdm.control-policy-conflict.mdm-wins-over-gp", "capabilityIds": ["CAP-0008"], "purpose": "Record the documented Policy CSP MDMWinsOverGP flag without generalizing it to every management channel.",
@@ -1108,6 +1183,46 @@
     {
       "scopeId": "scope:policy.security-option.lm-compatibility-level", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
       "purpose": "Close field-specific configured-signal coverage for LAN Manager authentication compatibility.", "fieldIds": ["field:policy.security-option.lm-compatibility-level"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.defender.asr", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close bounded Defender attack-surface-reduction GUID and action coverage.", "fieldIds": ["field:policy.defender.asr.rule-id", "field:policy.defender.asr.action"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.defender.network-protection", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific Defender network protection preference coverage.", "fieldIds": ["field:policy.defender.network-protection"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.smartscreen.shell", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific SmartScreen shell configuration coverage.", "fieldIds": ["field:policy.smartscreen.shell-enabled", "field:policy.smartscreen.shell-prevent-override"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.smartscreen.app-install-control", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close field-specific SmartScreen app-install control coverage.", "fieldIds": ["field:policy.smartscreen.app-install-control"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.security-center.antivirus-providers", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close bounded Windows Security Center antivirus provider identity and health coverage.", "fieldIds": ["field:policy.security-provider.name", "field:policy.security-provider.health"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.security-center.firewall-providers", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close bounded Windows Security Center firewall provider identity and health coverage.", "fieldIds": ["field:policy.security-provider.name", "field:policy.security-provider.health"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.defender.runtime", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close bounded Defender runtime-mode, protection-state, and tamper constraint coverage.", "fieldIds": ["field:policy.defender.running-mode", "field:policy.defender.antivirus-enabled", "field:policy.defender.real-time-protection-enabled", "field:policy.defender.tamper-protected"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.firewall.domain-profile", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close bounded ActiveStore Domain profile firewall state coverage.", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.firewall.private-profile", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close bounded ActiveStore Private profile firewall state coverage.", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"], "collectorIds": ["collector:windows.effective-policy"]
+    },
+    {
+      "scopeId": "scope:policy.firewall.public-profile", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
+      "purpose": "Close bounded ActiveStore Public profile firewall state coverage.", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
       "scopeId": "scope:policy.mdm.control-policy-conflict", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],

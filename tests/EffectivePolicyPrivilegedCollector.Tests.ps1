@@ -33,7 +33,12 @@ foreach($fragment in @(
     'OpenSubKey(',"'root/RSOP/Computer'",'assessmentUserSid',
     'RSOP_RegistryPolicySetting','POLICY.RSOP_EXTENSION_UNSUPPORTED',
     'POLICY.RSOP_LINK_AMBIGUOUS','POLICY.RSOP_EVIDENCE_BOUND_EXCEEDED','Count -gt 8',
-    'Test-PrivilegedCollectionSid $root.GetProperty(''assessmentUserSid'').GetString()'
+    'Test-PrivilegedCollectionSid $root.GetProperty(''assessmentUserSid'').GetString()',
+    'WscGetSecurityProviderHealth(','New-Object -ComObject ''WSCProductList''',
+    'Get-MpComputerStatus','Get-MpPreference',
+    'Get-Command Get-NetFirewallProfile','-PolicyStore ActiveStore',
+    'AttackSurfaceReductionRules_Ids','AttackSurfaceReductionRules_Actions',
+    'EnableNetworkProtection','IsTamperProtected'
 )){
     if(-not $workerSource.Contains($fragment)){throw "The live structured policy collector is missing: $fragment"}
 }

@@ -31,10 +31,10 @@ function Get-EffectivePolicyPolicy {
     if ($policy.kind -ne 'win-pcinfo.effective-policy-policy' -or
         $policy.contractVersion -ne '1.0.0' -or
         $policy.policyId -ne 'win-pcinfo.effective-policy/1.0.0' -or
-        @($policy.layers).Count -ne 3 -or @($policy.scopes).Count -ne 19 -or
-        @($policy.sourceCatalog).Count -ne 6 -or @($policy.rules).Count -ne 5 -or
+        @($policy.layers).Count -ne 3 -or @($policy.scopes).Count -ne 29 -or
+        @($policy.sourceCatalog).Count -ne 10 -or @($policy.rules).Count -ne 7 -or
         @($policy.discoveryTasks).Count -ne 2 -or
-        @($policy.validationScenarios).Count -ne 20) {
+        @($policy.validationScenarios).Count -ne 28) {
         throw 'The Effective Policy policy is not semantically closed.'
     }
     $policy
@@ -179,16 +179,45 @@ function New-EffectivePolicySyntheticPayload {
     if ($localScenario -eq 'SecurityOptions') {
         $options[0].value=600;$options[1].value=$true;$options[2].value=3
     }
+    $antivirusProviders = @(
+        [pscustomobject][ordered]@{name='Microsoft Defender Antivirus';health='Good'}
+    )
+    $firewallProviders = @(
+        [pscustomobject][ordered]@{name='Microsoft Defender Firewall';health='Good'}
+    )
+    $defenderRuntime = [pscustomobject][ordered]@{
+        runningMode='Normal';antivirusEnabled=$true;realTimeProtectionEnabled=$true
+        tamperProtected=$false
+    }
+    $defenderNetworkProtection = [pscustomobject][ordered]@{
+        state='Complete';value='Enabled';sourceAttribution='Unproven'
+    }
+    $defenderAsrRules = @()
+    $smartScreenSignals = @(
+        [pscustomobject][ordered]@{catalogId='smartscreen:enable-in-shell';state='Complete';value=$true;sourceAttribution='Unproven'},
+        [pscustomobject][ordered]@{catalogId='smartscreen:prevent-override-for-files';state='Complete';value=$false;sourceAttribution='Unproven'},
+        [pscustomobject][ordered]@{catalogId='smartscreen:app-install-control';state='Complete';value=0;sourceAttribution='Unproven'}
+    )
+    $firewallProfiles = [pscustomobject][ordered]@{
+        domain=[pscustomobject][ordered]@{state='Complete';enabled=$true;defaultInboundAction='Block';defaultOutboundAction='Allow'}
+        private=[pscustomobject][ordered]@{state='Complete';enabled=$true;defaultInboundAction='Block';defaultOutboundAction='Allow'}
+        public=[pscustomobject][ordered]@{state='Complete';enabled=$true;defaultInboundAction='Block';defaultOutboundAction='Allow'}
+    }
 
     $states = @(Get-EffectivePolicyCollectorScopes -Policy $Policy | ForEach-Object {
         New-EffectivePolicyScopeState -ScopeId ([string]$_.scopeId) -State Complete
     })
+    function Set-ScopeState([string]$ScopeId,[string]$State,[string]$ReasonCode){
+        $scope=@($states|Where-Object scopeId -eq $ScopeId)[0]
+        $scope.state=$State
+        $scope.reasonCode=if($State -eq 'Complete'){''}else{$ReasonCode}
+    }
     if ($localScenario -eq 'MissingRsop') {
         $policies=@();$settings=@()
-        foreach($state in $states[0..7]){$state.state='Unsupported';$state.reasonCode='POLICY.RSOP_NAMESPACE_UNAVAILABLE'}
+        foreach($scopeId in @($Policy.layers[0].scopeIds)){Set-ScopeState $scopeId 'Unsupported' 'POLICY.RSOP_NAMESPACE_UNAVAILABLE'}
     }
     elseif ($localScenario -eq 'StaleRegistry') {
-        $states[12].state='Unavailable';$states[12].reasonCode='POLICY.CONFIGURED_SIGNAL_STALE'
+        Set-ScopeState 'scope:policy.security-option.machine-inactivity-limit' 'Unavailable' 'POLICY.CONFIGURED_SIGNAL_STALE'
         $options[0].state='Stale';$options[0].value=$null
     }
     elseif ($localScenario -eq 'DeniedAdministrator') {
@@ -196,6 +225,14 @@ function New-EffectivePolicySyntheticPayload {
         $audits|ForEach-Object {$_.state='Denied';$_.successEnabled=$null;$_.failureEnabled=$null}
         $rights|ForEach-Object {$_.state='Denied';$_.directSids=@()}
         $options|ForEach-Object {$_.state='Unavailable';$_.value=$null}
+        $antivirusProviders=@();$firewallProviders=@()
+        $defenderRuntime.runningMode=$null;$defenderRuntime.antivirusEnabled=$null
+        $defenderRuntime.realTimeProtectionEnabled=$null;$defenderRuntime.tamperProtected=$null
+        $defenderNetworkProtection.state='Unavailable';$defenderNetworkProtection.value=$null
+        $smartScreenSignals|ForEach-Object {$_.state='Unavailable';$_.value=$null}
+        $firewallProfiles.domain.state='Denied';$firewallProfiles.domain.enabled=$null;$firewallProfiles.domain.defaultInboundAction=$null;$firewallProfiles.domain.defaultOutboundAction=$null
+        $firewallProfiles.private.state='Denied';$firewallProfiles.private.enabled=$null;$firewallProfiles.private.defaultInboundAction=$null;$firewallProfiles.private.defaultOutboundAction=$null
+        $firewallProfiles.public.state='Denied';$firewallProfiles.public.enabled=$null;$firewallProfiles.public.defaultInboundAction=$null;$firewallProfiles.public.defaultOutboundAction=$null
         foreach($state in $states){$state.state='Denied';$state.reasonCode='POLICY.ADMINISTRATOR_SOURCE_DENIED'}
     }
     elseif ($localScenario -eq 'PartialChannel') {
@@ -207,17 +244,72 @@ function New-EffectivePolicySyntheticPayload {
             $suffix=$_.ToString('00000000')
             [pscustomobject][ordered]@{target='Computer';settingId="registry:bounded-setting-$_";objectId="$suffix-0000-4000-8000-$($_.ToString('000000000000'))";precedence=$_}
         })
-        $states[3].state='Unsupported';$states[3].reasonCode='POLICY.RSOP_EXTENSION_UNSUPPORTED'
-        $states[6].state='Partial';$states[6].reasonCode='POLICY.RSOP_LINK_AMBIGUOUS'
-        $states[7].state='Partial';$states[7].reasonCode='POLICY.RSOP_EVIDENCE_BOUND_EXCEEDED'
-        $states[9].state='Failed';$states[9].reasonCode='POLICY.LOCAL_SAM_LOCKOUT_FAILED'
-        $states[10].state='Failed';$states[10].reasonCode='POLICY.AUDIT_FAILED'
-        $states[11].state='Unsupported';$states[11].reasonCode='POLICY.USER_RIGHTS_UNSUPPORTED'
-        $states[14].state='Unavailable';$states[14].reasonCode='POLICY.SECURITY_OPTION_UNAVAILABLE'
+        Set-ScopeState 'scope:policy.applied.user.precedence' 'Unsupported' 'POLICY.RSOP_EXTENSION_UNSUPPORTED'
+        Set-ScopeState 'scope:policy.applied.computer.link' 'Partial' 'POLICY.RSOP_LINK_AMBIGUOUS'
+        Set-ScopeState 'scope:policy.applied.computer.precedence' 'Partial' 'POLICY.RSOP_EVIDENCE_BOUND_EXCEEDED'
+        Set-ScopeState 'scope:policy.local-sam.lockout' 'Failed' 'POLICY.LOCAL_SAM_LOCKOUT_FAILED'
+        Set-ScopeState 'scope:policy.local-audit' 'Failed' 'POLICY.AUDIT_FAILED'
+        Set-ScopeState 'scope:policy.local-user-rights' 'Unsupported' 'POLICY.USER_RIGHTS_UNSUPPORTED'
+        Set-ScopeState 'scope:policy.security-option.lm-compatibility-level' 'Unavailable' 'POLICY.SECURITY_OPTION_UNAVAILABLE'
+        Set-ScopeState 'scope:policy.defender.asr' 'Unsupported' 'POLICY.DEFENDER_ASR_UNSUPPORTED'
+        Set-ScopeState 'scope:policy.defender.runtime' 'Partial' 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
+        Set-ScopeState 'scope:policy.firewall.public-profile' 'Failed' 'POLICY.FIREWALL_PROFILE_FAILED'
         $sam.lockoutDurationSeconds=$null;$sam.lockoutWindowSeconds=$null;$sam.lockoutThreshold=$null
         $audits|ForEach-Object {$_.state='Failed';$_.successEnabled=$null;$_.failureEnabled=$null}
         $rights|ForEach-Object {$_.state='Unsupported';$_.directSids=@()}
         $options[2].state='Unavailable';$options[2].value=$null
+        $defenderRuntime.tamperProtected=$null
+        $firewallProfiles.public.state='Failed';$firewallProfiles.public.enabled=$null;$firewallProfiles.public.defaultInboundAction=$null;$firewallProfiles.public.defaultOutboundAction=$null
+    }
+
+    switch ($localScenario) {
+        'ThirdPartyRegistration' {
+            $antivirusProviders=@([pscustomobject][ordered]@{name='Contoso Endpoint Protection';health='Good'})
+            $defenderRuntime.runningMode='Passive';$defenderRuntime.antivirusEnabled=$false
+            $defenderRuntime.realTimeProtectionEnabled=$false
+        }
+        'DefenderDisabled' {
+            $antivirusProviders=@()
+            $defenderRuntime.runningMode='Disabled';$defenderRuntime.antivirusEnabled=$false
+            $defenderRuntime.realTimeProtectionEnabled=$false
+        }
+        'DefenderUnavailable' {
+            Set-ScopeState 'scope:policy.defender.asr' 'Unsupported' 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
+            Set-ScopeState 'scope:policy.defender.network-protection' 'Unsupported' 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
+            Set-ScopeState 'scope:policy.defender.runtime' 'Unsupported' 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
+            $defenderRuntime.runningMode=$null;$defenderRuntime.antivirusEnabled=$null
+            $defenderRuntime.realTimeProtectionEnabled=$null;$defenderRuntime.tamperProtected=$null
+            $defenderNetworkProtection.state='Unsupported';$defenderNetworkProtection.value=$null
+        }
+        'AmbiguousSecurityCenter' {
+            $antivirusProviders=@(
+                [pscustomobject][ordered]@{name='Microsoft Defender Antivirus';health='Good'},
+                [pscustomobject][ordered]@{name='Contoso Endpoint Protection';health='Good'}
+            )
+            Set-ScopeState 'scope:policy.security-center.antivirus-providers' 'Partial' 'POLICY.SECURITY_PROVIDER_MULTIPLE_REGISTRATIONS'
+        }
+        'TamperProtected' {
+            $defenderRuntime.tamperProtected=$true
+        }
+        'MissingDefenderProperty' {
+            Set-ScopeState 'scope:policy.defender.runtime' 'Partial' 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
+            $defenderRuntime.tamperProtected=$null
+        }
+        'FirewallProfiles' {
+            $firewallProfiles.domain.defaultInboundAction='Allow'
+            $firewallProfiles.private.enabled=$false
+            $firewallProfiles.public.defaultOutboundAction='Block'
+        }
+        'AsrRulePairs' {
+            $defenderAsrRules=@(
+                [pscustomobject][ordered]@{ruleId='26190899-1602-49e8-8b27-eb1d0a1ce869';action='Block'},
+                [pscustomobject][ordered]@{ruleId='3b576869-a4ec-4529-8536-b80a7769e899';action='Audit'}
+            )
+        }
+        'NonEnglish' {
+            $antivirusProviders=@([pscustomobject][ordered]@{name='Antivirus Microsoft Defender';health='Good'})
+            $firewallProviders=@([pscustomobject][ordered]@{name='Pare-feu Microsoft Defender';health='Good'})
+        }
     }
 
     $layers=@{}
@@ -235,6 +327,10 @@ function New-EffectivePolicySyntheticPayload {
         }
         scopeStates=@($states);appliedPolicies=@($policies);policySettings=@($settings)
         localSam=$sam;auditSubcategories=@($audits);userRights=@($rights);securityOptions=@($options)
+        antivirusProviders=@($antivirusProviders);firewallProviders=@($firewallProviders)
+        defenderRuntime=$defenderRuntime;defenderNetworkProtection=$defenderNetworkProtection
+        defenderAsrRules=@($defenderAsrRules);smartScreenSignals=@($smartScreenSignals)
+        firewallProfiles=$firewallProfiles
         appliedOrderConflict=[bool]$conflict
         localAccountPolicySemantics='LocalSamAccountsOnly';userRightSemantics='DirectAssignmentsOnly'
     }
@@ -333,8 +429,17 @@ function Test-EffectivePolicyCollectorPayload {
                 $sid.Value -ceq $Value
             }catch{return $false}
         }
+        function Test-NullableBoundedString($Value,[int]$MaximumUtf8Bytes,[string]$Pattern=''){
+            ($null -eq $Value) -or (Test-BoundedString $Value $MaximumUtf8Bytes $Pattern)
+        }
         $names=@($Payload.PSObject.Properties.Name|Sort-Object)
-        $expected=@('appliedOrderConflict','appliedPolicies','auditSubcategories','layerStates','localAccountPolicySemantics','localSam','policySettings','scopeStates','securityOptions','sourceLocale','userRights','userRightSemantics')|Sort-Object
+        $expected=@(
+            'antivirusProviders','appliedOrderConflict','appliedPolicies','auditSubcategories',
+            'defenderAsrRules','defenderNetworkProtection','defenderRuntime','firewallProfiles',
+            'firewallProviders','layerStates','localAccountPolicySemantics','localSam',
+            'policySettings','scopeStates','securityOptions','smartScreenSignals',
+            'sourceLocale','userRights','userRightSemantics'
+        )|Sort-Object
         if(($names -join '|') -ne ($expected -join '|') -or
             $Payload.localAccountPolicySemantics -isnot [string] -or $Payload.userRightSemantics -isnot [string] -or
             [string]$Payload.localAccountPolicySemantics -ne 'LocalSamAccountsOnly' -or
@@ -343,7 +448,11 @@ function Test-EffectivePolicyCollectorPayload {
             @($Payload.scopeStates).Count -ne @(Get-EffectivePolicyCollectorScopes -Policy $Policy).Count -or
             @($Payload.appliedPolicies).Count -gt 16 -or @($Payload.policySettings).Count -gt 16 -or
             @($Payload.auditSubcategories).Count -ne 3 -or @($Payload.userRights).Count -ne 3 -or
-            @($Payload.securityOptions).Count -ne 3){return $false}
+            @($Payload.securityOptions).Count -ne 3 -or
+            @($Payload.antivirusProviders).Count -gt [int]$Policy.collectors[0].maximumSecurityProvidersPerCategory -or
+            @($Payload.firewallProviders).Count -gt [int]$Policy.collectors[0].maximumSecurityProvidersPerCategory -or
+            @($Payload.defenderAsrRules).Count -gt [int]$Policy.collectors[0].maximumAsrRules -or
+            @($Payload.smartScreenSignals).Count -ne 3){return $false}
         $expectedScopeIds=@((Get-EffectivePolicyCollectorScopes -Policy $Policy).scopeId)
         if((@($Payload.scopeStates.scopeId)-join '|') -ne ($expectedScopeIds-join '|')){return $false}
         if(-not (Test-ExactProperties $Payload.layerStates @('AppliedPolicyEvidence','ConfiguredPolicySignals','CurrentControlState'))){return $false}
@@ -428,6 +537,66 @@ function Test-EffectivePolicyCollectorPayload {
                     ([string]$definition.valueType -eq 'Integer' -and -not (Test-BoundedUnsignedInteger $option.value ([uint64]4294967295)) )){return $false}
             }
         }
+        foreach($provider in @($Payload.antivirusProviders)+@($Payload.firewallProviders)){
+            if(-not (Test-ExactProperties $provider @('name','health')) -or
+                -not (Test-BoundedString $provider.name 256) -or
+                [string]$provider.health -notin @('Good','Poor','Snooze','NotMonitored')){return $false}
+        }
+        if(-not (Test-ExactProperties $Payload.defenderRuntime @(
+            'runningMode','antivirusEnabled','realTimeProtectionEnabled','tamperProtected'
+        ))){return $false}
+        $runtimeScopeState=@($Payload.scopeStates|Where-Object scopeId -eq 'scope:policy.defender.runtime')[0].state
+        if($runtimeScopeState -eq 'Complete'){
+            if(-not (Test-BoundedString $Payload.defenderRuntime.runningMode 64 '^[A-Za-z ]+$') -or
+                $Payload.defenderRuntime.antivirusEnabled -isnot [bool] -or
+                $Payload.defenderRuntime.realTimeProtectionEnabled -isnot [bool] -or
+                $Payload.defenderRuntime.tamperProtected -isnot [bool]){return $false}
+        } elseif($runtimeScopeState -eq 'Partial'){
+            if(-not (Test-NullableBoundedString $Payload.defenderRuntime.runningMode 64 '^[A-Za-z ]+$') -or
+                ($null -ne $Payload.defenderRuntime.antivirusEnabled -and $Payload.defenderRuntime.antivirusEnabled -isnot [bool]) -or
+                ($null -ne $Payload.defenderRuntime.realTimeProtectionEnabled -and $Payload.defenderRuntime.realTimeProtectionEnabled -isnot [bool]) -or
+                ($null -ne $Payload.defenderRuntime.tamperProtected -and $Payload.defenderRuntime.tamperProtected -isnot [bool])){return $false}
+        } elseif($null -ne $Payload.defenderRuntime.runningMode -or $null -ne $Payload.defenderRuntime.antivirusEnabled -or
+            $null -ne $Payload.defenderRuntime.realTimeProtectionEnabled -or $null -ne $Payload.defenderRuntime.tamperProtected){return $false}
+        if(-not (Test-ExactProperties $Payload.defenderNetworkProtection @('state','value','sourceAttribution')) -or
+            [string]$Payload.defenderNetworkProtection.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed') -or
+            [string]$Payload.defenderNetworkProtection.sourceAttribution -ne 'Unproven'){return $false}
+        if([string]$Payload.defenderNetworkProtection.state -eq 'Complete'){
+            if(-not (Test-BoundedString $Payload.defenderNetworkProtection.value 32 '^(?:Disabled|Enabled|AuditMode|NotConfigured)$')){return $false}
+        } elseif($null -ne $Payload.defenderNetworkProtection.value){return $false}
+        foreach($rule in $Payload.defenderAsrRules){
+            if(-not (Test-ExactProperties $rule @('ruleId','action')) -or
+                -not (Test-BoundedString $rule.ruleId 64 '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') -or
+                [string]$rule.action -notin @('Disabled','Block','Audit','NotConfigured','Warn')){return $false}
+        }
+        $smartScreenIds=@($Policy.smartScreenSignals.catalogId)
+        if((@($Payload.smartScreenSignals.catalogId)-join '|') -ne ($smartScreenIds-join '|')){return $false}
+        foreach($signal in $Payload.smartScreenSignals){
+            if(-not (Test-ExactProperties $signal @('catalogId','state','value','sourceAttribution')) -or
+                [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed') -or
+                [string]$signal.sourceAttribution -ne 'Unproven'){return $false}
+            if([string]$signal.state -eq 'Complete'){
+                switch ([string]$signal.catalogId) {
+                    'smartscreen:app-install-control' {
+                        if(-not (Test-BoundedUnsignedInteger $signal.value ([uint64]3))){return $false}
+                    }
+                    default {
+                        if($signal.value -isnot [bool]){return $false}
+                    }
+                }
+            } elseif($null -ne $signal.value){return $false}
+        }
+        if(-not (Test-ExactProperties $Payload.firewallProfiles @('domain','private','public'))){return $false}
+        foreach($profileName in @('domain','private','public')){
+            $profile=$Payload.firewallProfiles.$profileName
+            if(-not (Test-ExactProperties $profile @('state','enabled','defaultInboundAction','defaultOutboundAction')) -or
+                [string]$profile.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed')){return $false}
+            if([string]$profile.state -eq 'Complete'){
+                if($profile.enabled -isnot [bool] -or
+                    [string]$profile.defaultInboundAction -notin @('Allow','Block','NotConfigured') -or
+                    [string]$profile.defaultOutboundAction -notin @('Allow','Block','NotConfigured')){return $false}
+            } elseif($null -ne $profile.enabled -or $null -ne $profile.defaultInboundAction -or $null -ne $profile.defaultOutboundAction){return $false}
+        }
         $computedConflict=@($Payload.policySettings|Group-Object target,settingId|Where-Object {
             @($_.Group.objectId|Select-Object -Unique).Count -gt 1
         }).Count -gt 0
@@ -468,6 +637,55 @@ function Copy-EffectivePolicyCollectorPayload {
             $value=if($null -eq $_.value){$null}elseif([string]$definition.valueType -eq 'Boolean'){[bool]$_.value}else{[long]$_.value}
             [pscustomobject][ordered]@{catalogId=[string]$_.catalogId;state=[string]$_.state;value=$value;sourceAttribution=[string]$_.sourceAttribution}
         })
+        antivirusProviders=@($Payload.antivirusProviders|ForEach-Object {
+            [pscustomobject][ordered]@{name=[string]$_.name;health=[string]$_.health}
+        })
+        firewallProviders=@($Payload.firewallProviders|ForEach-Object {
+            [pscustomobject][ordered]@{name=[string]$_.name;health=[string]$_.health}
+        })
+        defenderRuntime=[pscustomobject][ordered]@{
+            runningMode=$(if($null -eq $Payload.defenderRuntime.runningMode){$null}else{[string]$Payload.defenderRuntime.runningMode})
+            antivirusEnabled=$Payload.defenderRuntime.antivirusEnabled
+            realTimeProtectionEnabled=$Payload.defenderRuntime.realTimeProtectionEnabled
+            tamperProtected=$Payload.defenderRuntime.tamperProtected
+        }
+        defenderNetworkProtection=[pscustomobject][ordered]@{
+            state=[string]$Payload.defenderNetworkProtection.state
+            value=$(if($null -eq $Payload.defenderNetworkProtection.value){$null}else{[string]$Payload.defenderNetworkProtection.value})
+            sourceAttribution=[string]$Payload.defenderNetworkProtection.sourceAttribution
+        }
+        defenderAsrRules=@($Payload.defenderAsrRules|ForEach-Object {
+            [pscustomobject][ordered]@{ruleId=[string]$_.ruleId;action=[string]$_.action}
+        })
+        smartScreenSignals=@($Payload.smartScreenSignals|ForEach-Object {
+            $value = if ($null -eq $_.value) { $null }
+            elseif ([string]$_.catalogId -eq 'smartscreen:app-install-control') { [long]$_.value }
+            else { [bool]$_.value }
+            [pscustomobject][ordered]@{
+                catalogId=[string]$_.catalogId;state=[string]$_.state
+                value=$value;sourceAttribution=[string]$_.sourceAttribution
+            }
+        })
+        firewallProfiles=[pscustomobject][ordered]@{
+            domain=[pscustomobject][ordered]@{
+                state=[string]$Payload.firewallProfiles.domain.state
+                enabled=$Payload.firewallProfiles.domain.enabled
+                defaultInboundAction=$(if($null -eq $Payload.firewallProfiles.domain.defaultInboundAction){$null}else{[string]$Payload.firewallProfiles.domain.defaultInboundAction})
+                defaultOutboundAction=$(if($null -eq $Payload.firewallProfiles.domain.defaultOutboundAction){$null}else{[string]$Payload.firewallProfiles.domain.defaultOutboundAction})
+            }
+            private=[pscustomobject][ordered]@{
+                state=[string]$Payload.firewallProfiles.private.state
+                enabled=$Payload.firewallProfiles.private.enabled
+                defaultInboundAction=$(if($null -eq $Payload.firewallProfiles.private.defaultInboundAction){$null}else{[string]$Payload.firewallProfiles.private.defaultInboundAction})
+                defaultOutboundAction=$(if($null -eq $Payload.firewallProfiles.private.defaultOutboundAction){$null}else{[string]$Payload.firewallProfiles.private.defaultOutboundAction})
+            }
+            public=[pscustomobject][ordered]@{
+                state=[string]$Payload.firewallProfiles.public.state
+                enabled=$Payload.firewallProfiles.public.enabled
+                defaultInboundAction=$(if($null -eq $Payload.firewallProfiles.public.defaultInboundAction){$null}else{[string]$Payload.firewallProfiles.public.defaultInboundAction})
+                defaultOutboundAction=$(if($null -eq $Payload.firewallProfiles.public.defaultOutboundAction){$null}else{[string]$Payload.firewallProfiles.public.defaultOutboundAction})
+            }
+        }
         appliedOrderConflict=[bool]$Payload.appliedOrderConflict
         localAccountPolicySemantics=[string]$Payload.localAccountPolicySemantics
         userRightSemantics=[string]$Payload.userRightSemantics
@@ -506,6 +724,9 @@ function New-EffectivePolicyPublicProjection {
         auditCatalogCount=@($payload.auditSubcategories).Count
         userRightCatalogCount=@($payload.userRights).Count
         securityOptionCatalogCount=@($payload.securityOptions).Count
+        antivirusProviderCount=@($payload.antivirusProviders).Count
+        firewallProfileCount=3
+        asrRuleCount=@($payload.defenderAsrRules).Count
         directRightsOnly=([string]$payload.userRightSemantics -eq 'DirectAssignmentsOnly')
         localSamOnly=([string]$payload.localAccountPolicySemantics -eq 'LocalSamAccountsOnly')
     }
@@ -550,8 +771,16 @@ function Get-EffectivePolicySourceId {
     elseif($FieldId -like 'field:policy.local-sam.*'){'source:windows.local-sam-policy'}
     elseif($FieldId -like 'field:policy.audit.*'){'source:windows.system-audit-policy'}
     elseif($FieldId -like 'field:policy.user-right.*'){'source:windows.lsa-user-rights'}
+    elseif($FieldId -like 'field:policy.security-provider.*'){'source:windows.security-center.providers'}
+    elseif($FieldId -like 'field:policy.defender.running-mode' -or
+        $FieldId -like 'field:policy.defender.antivirus-enabled' -or
+        $FieldId -like 'field:policy.defender.real-time-protection-enabled' -or
+        $FieldId -like 'field:policy.defender.tamper-protected'){'source:windows.defender.runtime-status'}
+    elseif($FieldId -like 'field:policy.defender.asr.*' -or
+        $FieldId -eq 'field:policy.defender.network-protection'){'source:windows.defender.preferences'}
+    elseif($FieldId -like 'field:policy.firewall.*'){'source:windows.firewall.activestore-profiles'}
     elseif($FieldId -like 'field:policy.mdm.*'){'source:windows.mdm-policy-csp-results'}
-    else{'source:windows.local-security-option-signals'}
+    else{'source:windows.local-configured-signals'}
 }
 
 function New-EffectivePolicyObservationPair {
@@ -793,6 +1022,97 @@ function Add-EffectivePolicyEvidenceRecord {
         }
         $optionIndex++
     }
+    $providerIndex=0
+    foreach($provider in @($payload.antivirusProviders)){
+        $subjectId="subject:policy-antivirus-provider:$providerIndex"
+        $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
+        Add-PolicyObservation 'scope:policy.security-center.antivirus-providers' "antivirus-provider-$providerIndex-name" 'field:policy.security-provider.name' $subjectId ([string]$provider.name)
+        Add-PolicyObservation 'scope:policy.security-center.antivirus-providers' "antivirus-provider-$providerIndex-health" 'field:policy.security-provider.health' $subjectId ([string]$provider.health)
+        $providerIndex++
+    }
+    $providerIndex=0
+    foreach($provider in @($payload.firewallProviders)){
+        $subjectId="subject:policy-firewall-provider:$providerIndex"
+        $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
+        Add-PolicyObservation 'scope:policy.security-center.firewall-providers' "firewall-provider-$providerIndex-name" 'field:policy.security-provider.name' $subjectId ([string]$provider.name)
+        Add-PolicyObservation 'scope:policy.security-center.firewall-providers' "firewall-provider-$providerIndex-health" 'field:policy.security-provider.health' $subjectId ([string]$provider.health)
+        $providerIndex++
+    }
+    if(@($payload.antivirusProviders).Count -eq 0 -and
+        @($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.security-center.antivirus-providers')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.security-center.antivirus-providers' 'antivirus-provider-name-absent' 'field:policy.security-provider.name' 'subject:device:primary' $null $true
+        Add-PolicyObservation 'scope:policy.security-center.antivirus-providers' 'antivirus-provider-health-absent' 'field:policy.security-provider.health' 'subject:device:primary' $null $true
+    }
+    if(@($payload.firewallProviders).Count -eq 0 -and
+        @($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.security-center.firewall-providers')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.security-center.firewall-providers' 'firewall-provider-name-absent' 'field:policy.security-provider.name' 'subject:device:primary' $null $true
+        Add-PolicyObservation 'scope:policy.security-center.firewall-providers' 'firewall-provider-health-absent' 'field:policy.security-provider.health' 'subject:device:primary' $null $true
+    }
+    $runtimeScope=@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.defender.runtime')[0]
+    if($runtimeScope.state -in @('Complete','Partial')){
+        if($null -ne $payload.defenderRuntime.runningMode){
+            Add-PolicyObservation 'scope:policy.defender.runtime' 'defender-runtime-mode' 'field:policy.defender.running-mode' 'subject:device:primary' ([string]$payload.defenderRuntime.runningMode)
+        }
+        foreach($property in @(
+            @{name='antivirusEnabled';fieldId='field:policy.defender.antivirus-enabled'},
+            @{name='realTimeProtectionEnabled';fieldId='field:policy.defender.real-time-protection-enabled'},
+            @{name='tamperProtected';fieldId='field:policy.defender.tamper-protected'}
+        )){
+            $value=$payload.defenderRuntime.([string]$property.name)
+            if($null -ne $value){
+                Add-PolicyObservation 'scope:policy.defender.runtime' "defender-runtime-$($property.name)" ([string]$property.fieldId) 'subject:device:primary' ([bool]$value)
+            }
+        }
+    }
+    if($payload.defenderNetworkProtection.state -eq 'Complete'){
+        if($null -eq $payload.defenderNetworkProtection.value){
+            Add-PolicyObservation 'scope:policy.defender.network-protection' 'defender-network-protection' 'field:policy.defender.network-protection' 'subject:device:primary' $null $true
+        } else {
+            Add-PolicyObservation 'scope:policy.defender.network-protection' 'defender-network-protection' 'field:policy.defender.network-protection' 'subject:device:primary' ([string]$payload.defenderNetworkProtection.value)
+        }
+    }
+    $asrIndex=0
+    foreach($rule in @($payload.defenderAsrRules)){
+        $subjectId="subject:policy-defender-asr:$asrIndex"
+        $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
+        Add-PolicyObservation 'scope:policy.defender.asr' "defender-asr-$asrIndex-id" 'field:policy.defender.asr.rule-id' $subjectId ([string]$rule.ruleId)
+        Add-PolicyObservation 'scope:policy.defender.asr' "defender-asr-$asrIndex-action" 'field:policy.defender.asr.action' $subjectId ([string]$rule.action)
+        $asrIndex++
+    }
+    if(@($payload.defenderAsrRules).Count -eq 0 -and
+        @($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.defender.asr')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.defender.asr' 'defender-asr-id-absent' 'field:policy.defender.asr.rule-id' 'subject:device:primary' $null $true
+        Add-PolicyObservation 'scope:policy.defender.asr' 'defender-asr-action-absent' 'field:policy.defender.asr.action' 'subject:device:primary' $null $true
+    }
+    $smartScreenScope=@{
+        'smartscreen:enable-in-shell'='scope:policy.smartscreen.shell'
+        'smartscreen:prevent-override-for-files'='scope:policy.smartscreen.shell'
+        'smartscreen:app-install-control'='scope:policy.smartscreen.app-install-control'
+    }
+    $smartScreenField=@{}
+    foreach($definition in $Policy.smartScreenSignals){$smartScreenField[[string]$definition.catalogId]=[string]$definition.fieldId}
+    $smartScreenIndex=0
+    foreach($signal in @($payload.smartScreenSignals)){
+        if($signal.state -eq 'Complete'){
+            if($null -eq $signal.value){
+                Add-PolicyObservation $smartScreenScope[[string]$signal.catalogId] "smartscreen-$smartScreenIndex" $smartScreenField[[string]$signal.catalogId] 'subject:device:primary' $null $true
+            } else {
+                Add-PolicyObservation $smartScreenScope[[string]$signal.catalogId] "smartscreen-$smartScreenIndex" $smartScreenField[[string]$signal.catalogId] 'subject:device:primary' $signal.value
+            }
+        }
+        $smartScreenIndex++
+    }
+    foreach($profileName in @('domain','private','public')){
+        $profile=$payload.firewallProfiles.$profileName
+        $scopeId="scope:policy.firewall.$profileName-profile"
+        $subjectId="subject:policy-firewall-profile:$profileName"
+        $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
+        if($profile.state -eq 'Complete'){
+            Add-PolicyObservation $scopeId "firewall-$profileName-enabled" 'field:policy.firewall.enabled' $subjectId ([bool]$profile.enabled)
+            Add-PolicyObservation $scopeId "firewall-$profileName-inbound" 'field:policy.firewall.default-inbound-action' $subjectId ([string]$profile.defaultInboundAction)
+            Add-PolicyObservation $scopeId "firewall-$profileName-outbound" 'field:policy.firewall.default-outbound-action' $subjectId ([string]$profile.defaultOutboundAction)
+        }
+    }
 
     $coverage=[Collections.Generic.List[object]]::new();$diagnostics=[Collections.Generic.List[object]]::new()
     foreach($scopeState in $payload.scopeStates){
@@ -933,15 +1253,30 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $rules=@{};foreach($rule in $Policy.rules){$rules[[string]$rule.findingKind]=$rule}
     $appliedCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.applied.*'})
     $localCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.local-*' -or $_.scopeId -like 'scope:policy.security-option.*'})
+    $securityCoverage=@($Record.coverage|Where-Object {
+        $_.scopeId -like 'scope:policy.defender.*' -or
+        $_.scopeId -like 'scope:policy.smartscreen.*' -or
+        $_.scopeId -like 'scope:policy.security-center.*' -or
+        $_.scopeId -like 'scope:policy.firewall.*'
+    })
     $mdmCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.mdm.*'})
     $appliedReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.applied.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $localReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.local-*' -or $_.fieldId -like 'field:policy.audit.*' -or $_.fieldId -like 'field:policy.user-right.*' -or $_.fieldId -like 'field:policy.security-option.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
+    $securityReferences=@($Record.observations|Where-Object {
+        $_.fieldId -like 'field:policy.security-provider.*' -or
+        $_.fieldId -like 'field:policy.defender.*' -or
+        $_.fieldId -like 'field:policy.smartscreen.*' -or
+        $_.fieldId -like 'field:policy.firewall.*'
+    }|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $mdmReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.mdm.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $appliedResult=Invoke-EffectivePolicyRule -Rule $rules['applied-policy-coverage'] -Evaluation {
         if(@($appliedCoverage|Where-Object state -ne Complete).Count -eq 0){[pscustomobject]@{outcome='Informational'}}else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.APPLIED_POLICY_INCOMPLETE'}}
     }
     $localResult=Invoke-EffectivePolicyRule -Rule $rules['local-security-policy-coverage'] -Evaluation {
         if(@($localCoverage|Where-Object state -ne Complete).Count -eq 0){[pscustomobject]@{outcome='Informational'}}else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.LOCAL_SECURITY_POLICY_INCOMPLETE'}}
+    }
+    $securityCoverageResult=Invoke-EffectivePolicyRule -Rule $rules['security-control-coverage'] -Evaluation {
+        if(@($securityCoverage|Where-Object state -ne Complete).Count -eq 0){[pscustomobject]@{outcome='Informational'}}else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.SECURITY_CONTROL_INCOMPLETE'}}
     }
     $settingObservations=@($Record.observations|Where-Object {
         $_.fieldId -eq 'field:policy.applied.setting-id' -and $_.valueState -eq 'ObservedValue'
@@ -971,6 +1306,29 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $providerObservation=$observationByField['field:device.mdm-bridge.provider-available']
     $providerAbsent=$null -ne $providerObservation -and
         $providerObservation.valueState -eq 'ObservedValue' -and -not [bool]$providerObservation.value
+    $constraintResult=Invoke-EffectivePolicyRule -Rule $rules['security-control-constraint'] -Evaluation {
+        if(@($securityCoverage|Where-Object state -ne Complete).Count -gt 0){
+            [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.SECURITY_CONTROL_CONSTRAINT_INCOMPLETE'}
+        } else {
+            $passive=$false;$tamperProtected=$false
+            foreach($observation in @($Record.observations)){
+                if($observation.fieldId -eq 'field:policy.defender.running-mode' -and
+                    $observation.valueState -eq 'ObservedValue' -and
+                    [string]$observation.value -eq 'Passive'){
+                    $passive=$true
+                }
+                elseif($observation.fieldId -eq 'field:policy.defender.tamper-protected' -and
+                    $observation.valueState -eq 'ObservedValue' -and [bool]$observation.value){
+                    $tamperProtected=$true
+                }
+            }
+            if($passive -or $tamperProtected){
+                [pscustomobject]@{outcome='ExpectedCondition'}
+            } else {
+                [pscustomobject]@{outcome='Informational'}
+            }
+        }
+    }
     $mdmCoverageResult=Invoke-EffectivePolicyRule -Rule $rules['mdm-policy-csp-coverage'] -Evaluation {
         if(@($mdmCoverage|Where-Object state -ne Complete).Count -eq 0){[pscustomobject]@{outcome='Informational'}}
         else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.MDM_POLICY_CSP_INCOMPLETE'}}
@@ -1012,6 +1370,8 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
         @{kind='applied-policy-coverage';result=$appliedResult;references=$appliedReferences},
         @{kind='local-security-policy-coverage';result=$localResult;references=$localReferences},
         @{kind='applied-policy-order-conflict';result=$conflictResult;references=@($settingObservations|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})},
+        @{kind='security-control-coverage';result=$securityCoverageResult;references=$securityReferences},
+        @{kind='security-control-constraint';result=$constraintResult;references=$securityReferences},
         @{kind='mdm-policy-csp-coverage';result=$mdmCoverageResult;references=$mdmReferences},
         @{kind='policy-csp-gpo-conflict';result=$channelConflictResult;references=@($channelConflictReferences|Select-Object -First 16)}
     )
