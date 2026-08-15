@@ -34,7 +34,8 @@ foreach($fragment in @(
     'RSOP_RegistryPolicySetting','POLICY.RSOP_EXTENSION_UNSUPPORTED',
     'POLICY.RSOP_LINK_AMBIGUOUS','POLICY.RSOP_EVIDENCE_BOUND_EXCEEDED','Count -gt 8',
     'Test-PrivilegedCollectionSid $root.GetProperty(''assessmentUserSid'').GetString()',
-    'WscGetSecurityProviderHealth(','New-Object -ComObject ''WSCProductList''',
+    'WscGetSecurityProviderHealth(','ReadSecurityProviderHealth([uint32]$providerDefinition.providerValue)',
+    '[DllImport("Wscapi.dll")]','New-Object -ComObject ''WSCProductList''',
     'Get-MpComputerStatus','Get-MpPreference',
     'Get-Command Get-NetFirewallProfile','-PolicyStore ActiveStore',
     'AttackSurfaceReductionRules_Ids','AttackSurfaceReductionRules_Actions',
@@ -101,6 +102,13 @@ $invalidBooleanOption=New-EffectivePolicySyntheticPayload -Policy $policy -Scena
 $invalidBooleanOption.securityOptions[1].value=[pscustomobject]@{credential='ForbiddenSecret123!'}
 Assert-Equal $false (Test-EffectivePolicyCollectorPayload -Payload $invalidBooleanOption -Policy $policy) `
     'an object cannot cross a Boolean security-option catalog entry'
+if(-not $workerSource.Contains('function Convert-EffectivePolicyRegistryBooleanValue') -or
+    -not $workerSource.Contains('function Convert-EffectivePolicyRegistryUnsignedIntegerValue')){
+    throw 'The reviewed worker must carry explicit configured-signal normalization helpers.'
+}
+if($workerSource.Contains('[bool]([int]$value)') -or $workerSource.Contains('[bool]([int]$rawValue)')){
+    throw 'The reviewed worker must not coerce registry integers into Boolean configured signals implicitly.'
+}
 
 $absentOptions=New-EffectivePolicySyntheticPayload -Policy $policy -Scenario Workgroup
 $absentOptions.securityOptions[0].value=$null

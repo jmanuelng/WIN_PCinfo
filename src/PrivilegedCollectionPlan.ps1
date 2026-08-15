@@ -388,6 +388,16 @@ public static class WinPCInfoEffectivePolicyNativeSource
     private const uint POLICY_LOOKUP_NAMES = 0x00000800;
     private const int STATUS_SUCCESS = 0;
     private const int STATUS_NO_MORE_ENTRIES = unchecked((int)0x8000001A);
+    private const uint WSC_SECURITY_PROVIDER_FIREWALL = 0x1;
+    private const uint WSC_SECURITY_PROVIDER_ANTIVIRUS = 0x4;
+
+    private enum WSC_SECURITY_PROVIDER_HEALTH : int
+    {
+        GOOD = 0,
+        NOTMONITORED = 1,
+        POOR = 2,
+        SNOOZE = 3
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct USER_MODALS_INFO_0
@@ -446,6 +456,9 @@ public static class WinPCInfoEffectivePolicyNativeSource
     private static extern int LsaFreeMemory(IntPtr buffer);
     [DllImport("Advapi32.dll")]
     private static extern int LsaClose(IntPtr handle);
+    [DllImport("Wscapi.dll")]
+    private static extern int WscGetSecurityProviderHealth(
+        uint providers, out WSC_SECURITY_PROVIDER_HEALTH health);
 
     private static void ThrowStatus(int status, string source)
     {
@@ -560,6 +573,25 @@ public static class WinPCInfoEffectivePolicyNativeSource
             }
         }
         finally { LsaClose(policy); }
+    }
+
+    public static string ReadSecurityProviderHealth(uint provider)
+    {
+        if (provider != WSC_SECURITY_PROVIDER_FIREWALL &&
+            provider != WSC_SECURITY_PROVIDER_ANTIVIRUS)
+            throw new InvalidOperationException("The WSC provider category is not release-cataloged.");
+        WSC_SECURITY_PROVIDER_HEALTH health;
+        int hr = WscGetSecurityProviderHealth(provider, out health);
+        if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+        switch (health)
+        {
+            case WSC_SECURITY_PROVIDER_HEALTH.GOOD: return "Good";
+            case WSC_SECURITY_PROVIDER_HEALTH.NOTMONITORED: return "NotMonitored";
+            case WSC_SECURITY_PROVIDER_HEALTH.POOR: return "Poor";
+            case WSC_SECURITY_PROVIDER_HEALTH.SNOOZE: return "Snooze";
+            default:
+                throw new InvalidOperationException("Windows Security Center returned an unknown provider health.");
+        }
     }
 }
 "@
@@ -959,14 +991,53 @@ function New-SyntheticEffectivePolicyResult {
     [ordered]@{validationScenario=$Scenario}
 }
 
-function Convert-EffectivePolicyWscProductHealth {
-    param($ProductState)
-    switch -Regex ([string]$ProductState) {
-        '^(?:0|On)$' { 'Good'; break }
-        '^(?:1|Off|3|Expired)$' { 'Poor'; break }
-        '^(?:2|Snoozed)$' { 'Snooze'; break }
-        default { $null }
+function Convert-EffectivePolicyRegistryUnsignedIntegerValue {
+    param(
+        [Parameter(Mandatory)]$Value,
+        [Parameter()][UInt64]$Maximum = [uint64]4294967295
+    )
+
+    if ($null -eq $Value -or $Value -is [bool]) { return $null }
+    $normalized = switch ($Value.GetType().FullName) {
+        'System.Byte' { [uint64][byte]$Value; break }
+        'System.UInt16' { [uint64][uint16]$Value; break }
+        'System.UInt32' { [uint64][uint32]$Value; break }
+        'System.UInt64' { [uint64]$Value; break }
+        'System.SByte' {
+            if ([sbyte]$Value -lt 0) { return $null }
+            [uint64][sbyte]$Value
+            break
+        }
+        'System.Int16' {
+            if ([int16]$Value -lt 0) { return $null }
+            [uint64][int16]$Value
+            break
+        }
+        'System.Int32' {
+            if ([int32]$Value -lt 0) { return $null }
+            [uint64][int32]$Value
+            break
+        }
+        'System.Int64' {
+            if ([int64]$Value -lt 0) { return $null }
+            [uint64][int64]$Value
+            break
+        }
+        default { return $null }
     }
+    if ($normalized -gt $Maximum -or $normalized -gt [uint64][long]::MaxValue) {
+        return $null
+    }
+    [long]$normalized
+}
+
+function Convert-EffectivePolicyRegistryBooleanValue {
+    param([Parameter(Mandatory)]$Value)
+
+    if ($Value -is [bool]) { return [bool]$Value }
+    $normalized = Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $Value -Maximum 1
+    if ($null -eq $normalized) { return $null }
+    [bool]$normalized
 }
 
 function Convert-EffectivePolicyDefenderActionValue {
@@ -1159,10 +1230,17 @@ function Get-LiveEffectivePolicyResult {
     for($index=0;$index -lt $optionDefinitions.Count;$index++){
         try {
             $definition=$optionDefinitions[$index];$key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($definition[1],$false)
-            try {$value=if($null -eq $key){$null}else{$key.GetValue($definition[2],$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
-            if($null -ne $value){$value=if($definition[3] -eq 'Boolean'){[bool]([int]$value)}else{[int]$value}}
-            $result.securityOptions[$index].state='Complete';$result.securityOptions[$index].value=$value
-            Set-EffectivePolicyScopeState $result @(12+$index) Complete ''
+            try {$rawValue=if($null -eq $key){$null}else{$key.GetValue($definition[2],$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
+            $value = if ($null -eq $rawValue) { $null }
+            elseif ($definition[3] -eq 'Boolean') { Convert-EffectivePolicyRegistryBooleanValue -Value $rawValue }
+            else { Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $rawValue }
+            if ($null -ne $rawValue -and $null -eq $value) {
+                $result.securityOptions[$index].state='Malformed'
+                Set-EffectivePolicyScopeState $result @(12+$index) Malformed 'POLICY.SECURITY_OPTION_MALFORMED'
+            } else {
+                $result.securityOptions[$index].state='Complete';$result.securityOptions[$index].value=$value
+                Set-EffectivePolicyScopeState $result @(12+$index) Complete ''
+            }
         } catch {$state=Get-WorkerAccessState $_;$result.securityOptions[$index].state=$state;Set-EffectivePolicyScopeState $result @(12+$index) $state "POLICY.SECURITY_OPTION_$($state.ToUpperInvariant())"}
     }
     $preferenceCommand=Get-Command Get-MpPreference -CommandType Cmdlet -ErrorAction SilentlyContinue
@@ -1240,13 +1318,22 @@ function Get-LiveEffectivePolicyResult {
     foreach($definition in $smartScreenDefinitions){
         try {
             $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey([string]$definition.path,$false)
-            try {$value=if($null -eq $key){$null}else{$key.GetValue([string]$definition.valueName,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
-            if($null -eq $value){
+            try {$rawValue=if($null -eq $key){$null}else{$key.GetValue([string]$definition.valueName,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
+            if($null -eq $rawValue){
                 $result.smartScreenSignals[$definition.signalIndex].state='Unavailable'
                 $smartScreenScopeState[$definition.scopeIndex]+=,[ordered]@{state='Unavailable';reasonCode="$($definition.reasonPrefix)_UNAVAILABLE"}
                 continue
             }
-            $normalizedValue=if([string]$definition.valueType -eq 'Boolean'){[bool]([int]$value)}else{[int]$value}
+            $normalizedValue = if([string]$definition.valueType -eq 'Boolean'){
+                Convert-EffectivePolicyRegistryBooleanValue -Value $rawValue
+            } else {
+                Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $rawValue -Maximum 3
+            }
+            if($null -eq $normalizedValue){
+                $result.smartScreenSignals[$definition.signalIndex].state='Malformed'
+                $smartScreenScopeState[$definition.scopeIndex]+=,[ordered]@{state='Malformed';reasonCode="$($definition.reasonPrefix)_MALFORMED"}
+                continue
+            }
             $result.smartScreenSignals[$definition.signalIndex].state='Complete'
             $result.smartScreenSignals[$definition.signalIndex].value=$normalizedValue
             $smartScreenScopeState[$definition.scopeIndex]+=,[ordered]@{state='Complete';reasonCode=''}
@@ -1269,24 +1356,26 @@ function Get-LiveEffectivePolicyResult {
     # Windows Security Center is the supported provider-registration seam.
     # Names alone are not trusted because an installed product can remain
     # registered after removal or coexist with Defender in passive mode. The
-    # worker therefore uses the WSC product list plus WscGetSecurityProviderHealth
-    # provenance (WscGetSecurityProviderHealth() category health) to read the
-    # to read the registered antivirus and firewall categories, then projects
-    # only bounded name and health values. Multiple registrations stay visible
-    # as a constraint instead of being flattened into a single winner.
+    # worker therefore reads product names from the WSC registration list and
+    # category health from WscGetSecurityProviderHealth(). Windows exposes
+    # those as separate seams: one says which providers are registered, the
+    # other says how the category is doing overall. The worker keeps them
+    # separate and repeats only the category health onto each bounded provider
+    # subject so the protected record can compare names and category state
+    # without inventing a per-product winner from ambiguous registrations.
     foreach($providerDefinition in @(
         [ordered]@{providerValue=4;scopeIndex=19;reasonPrefix='POLICY.SECURITY_CENTER_ANTIVIRUS';property='antivirusProviders'},
         [ordered]@{providerValue=1;scopeIndex=20;reasonPrefix='POLICY.SECURITY_CENTER_FIREWALL';property='firewallProviders'}
     )){
         try {
+            $health=[WinPCInfoEffectivePolicyNativeSource]::ReadSecurityProviderHealth([uint32]$providerDefinition.providerValue)
             $productList=New-Object -ComObject 'WSCProductList'
             $null=$productList.Initialize([int]$providerDefinition.providerValue)
             $providers=@()
             for($index=0;$index -lt [Math]::Min([int]$productList.Count,4);$index++){
                 $product=$productList.Item($index)
-                $health=Convert-EffectivePolicyWscProductHealth $product.ProductState
                 $name=[string]$product.ProductName
-                if([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace([string]$health)){
+                if([string]::IsNullOrWhiteSpace($name)){
                     throw 'A Security Center provider property was missing or malformed.'
                 }
                 $providers+=,[ordered]@{name=$name;health=[string]$health}
