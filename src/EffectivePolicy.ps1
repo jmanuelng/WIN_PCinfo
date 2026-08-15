@@ -605,10 +605,56 @@ function Add-EffectivePolicyEvidenceRecord {
     $null=$envelopeSubjects.Add('subject:device:primary')
     $scopeObservationIds=@{}
     foreach($scope in $Policy.scopes){$scopeObservationIds[[string]$scope.scopeId]=[Collections.Generic.List[string]]::new()}
+    $existingSystemEnvelopes=@($Record.collectorResults|Where-Object {
+        $_.collectorId -eq 'collector:windows.mdm-bridge.device-manageability' -and
+        $_.operationId -eq 'op:windows.mdm-bridge.device-manageability'
+    })
+    if($existingSystemEnvelopes.Count -ne 1){
+        throw 'Effective Policy evidence requires exactly one composed SYSTEM collector attempt.'
+    }
+    $existingSystemEnvelope=$existingSystemEnvelopes[0]
+    $providedSystemEnvelope = if ($null -ne $SystemResult -and
+        $SystemResult.PSObject.Properties['collectorResult'] -and
+        $null -ne $SystemResult.collectorResult -and
+        $SystemResult.collectorResult.PSObject.Properties['Envelope']) {
+        $SystemResult.collectorResult.Envelope
+    }
+    else { $null }
+    $hasPrivateSystemResults=$null -ne $SystemResult -and
+        $SystemResult.PSObject.Properties['PrivatePolicyCspResults'] -and
+        $null -ne $SystemResult.PrivatePolicyCspResults
+    if($hasPrivateSystemResults -and $null -eq $providedSystemEnvelope){
+        throw 'Effective Policy restricted evidence requires its exact SYSTEM attempt envelope.'
+    }
+    if($null -ne $providedSystemEnvelope -and
+        ([string]$providedSystemEnvelope.envelopeId -ne [string]$existingSystemEnvelope.envelopeId -or
+         [string]$providedSystemEnvelope.collectorId -ne [string]$existingSystemEnvelope.collectorId -or
+         [string]$providedSystemEnvelope.collectorVersion -ne [string]$existingSystemEnvelope.collectorVersion -or
+         [string]$providedSystemEnvelope.operationId -ne [string]$existingSystemEnvelope.operationId -or
+         [string]$providedSystemEnvelope.startedAt -ne [string]$existingSystemEnvelope.startedAt -or
+         [string]$providedSystemEnvelope.completedAt -ne [string]$existingSystemEnvelope.completedAt -or
+         [string]$providedSystemEnvelope.executionContext -ne [string]$existingSystemEnvelope.executionContext -or
+         [int]$providedSystemEnvelope.attempts -ne [int]$existingSystemEnvelope.attempts -or
+         (@($providedSystemEnvelope.intendedScopeIds)-join '|') -ne
+            (@($existingSystemEnvelope.intendedScopeIds)-join '|') -or
+         (@($providedSystemEnvelope.subjectIds)-join '|') -ne
+            (@($existingSystemEnvelope.subjectIds)-join '|'))){
+        throw 'Effective Policy evidence cannot attach results from a different SYSTEM attempt.'
+    }
+    $systemEnvelope=$existingSystemEnvelope
 
     function Add-PolicyObservation {
-        param([string]$ScopeId,[string]$Suffix,[string]$FieldId,[string]$SubjectId,$Value,[bool]$Absent=$false)
-        $arguments=@{RunId=$runId;Suffix=$Suffix;FieldId=$FieldId;SubjectId=$SubjectId;Collector=$collector;ObservedExecutionContext=$observedExecutionContext;CollectedAt=$collectedAt;SourceLocale=[string]$payload.sourceLocale;Value=$Value}
+        param(
+            [string]$ScopeId,[string]$Suffix,[string]$FieldId,[string]$SubjectId,$Value,
+            [bool]$Absent=$false,$EvidenceCollector=$null,
+            [string]$EvidenceExecutionContext='',[string]$EvidenceCollectedAt='',
+            [string]$EvidenceSourceLocale=''
+        )
+        if($null -eq $EvidenceCollector){$EvidenceCollector=$collector}
+        if([string]::IsNullOrEmpty($EvidenceExecutionContext)){$EvidenceExecutionContext=$observedExecutionContext}
+        if([string]::IsNullOrEmpty($EvidenceCollectedAt)){$EvidenceCollectedAt=$collectedAt}
+        if([string]::IsNullOrEmpty($EvidenceSourceLocale)){$EvidenceSourceLocale=[string]$payload.sourceLocale}
+        $arguments=@{RunId=$runId;Suffix=$Suffix;FieldId=$FieldId;SubjectId=$SubjectId;Collector=$EvidenceCollector;ObservedExecutionContext=$EvidenceExecutionContext;CollectedAt=$EvidenceCollectedAt;SourceLocale=$EvidenceSourceLocale;Value=$Value}
         if($Absent){$arguments.ObservedAbsent=$true}
         $pair=New-EffectivePolicyObservationPair @arguments
         $observations.Add($pair.observation);$provenance.Add($pair.provenance)
@@ -786,10 +832,22 @@ function Add-EffectivePolicyEvidenceRecord {
     foreach ($field in @($mdmFields)) {
         $scopeId=[string]$field.scopeId
         if ($field.state -eq 'Complete') {
+            # These values crossed the separate LocalSystem trust boundary.
+            # Keeping the SYSTEM collector, context, and timestamp prevents a
+            # protected report from falsely attributing them to the elevated
+            # Administrator worker that collected the local GPO signals.
             $suffix=$scopeId.Substring('scope:policy.'.Length).Replace('.','-')
+            $systemCollector=[pscustomobject]@{
+                collectorId=if($null -ne $systemEnvelope){[string]$systemEnvelope.collectorId}else{'collector:windows.mdm-bridge.device-manageability'}
+                collectorVersion=if($null -ne $systemEnvelope){[string]$systemEnvelope.collectorVersion}else{'1.0.0'}
+            }
             Add-PolicyObservation $scopeId "mdm-$suffix" ([string]$field.fieldId) 'subject:device:primary' `
                 $(if($field.valueState -eq 'ObservedAbsent'){$null}else{$field.value}) `
-                -Absent:([string]$field.valueState -eq 'ObservedAbsent')
+                -Absent:([string]$field.valueState -eq 'ObservedAbsent') `
+                -EvidenceCollector $systemCollector `
+                -EvidenceExecutionContext $(if($null -ne $systemEnvelope){[string]$systemEnvelope.executionContext}else{'Synthetic'}) `
+                -EvidenceCollectedAt $(if($null -ne $systemEnvelope){[string]$systemEnvelope.completedAt}else{$collectedAt}) `
+                -EvidenceSourceLocale 'und'
         }
         if (@($coverage | Where-Object scopeId -eq $scopeId).Count -eq 0) {
             $coverageId="coverage:policy-$($scopeId.Substring('scope:policy.'.Length).Replace('.','-'))`:$runId"
@@ -818,15 +876,38 @@ function Add-EffectivePolicyEvidenceRecord {
     $Record.provenance=@($Record.provenance)+@($provenance)
     $Record.coverage=@($Record.coverage)+@($coverage)
     $Record.diagnostics=@($Record.diagnostics)+@($diagnostics)
+    $effectiveScopes=@($Policy.scopes.scopeId|Where-Object {$_ -notlike 'scope:policy.mdm.*'})
+    $mdmScopes=@($Policy.scopes.scopeId|Where-Object {$_ -like 'scope:policy.mdm.*'})
+    $effectiveObservations=@($observations|Where-Object fieldId -notlike 'field:policy.mdm.*')
+    $mdmObservations=@($observations|Where-Object fieldId -like 'field:policy.mdm.*')
+    $effectiveCoverage=@($coverage|Where-Object scopeId -notlike 'scope:policy.mdm.*')
+    $mdmCoverageEntries=@($coverage|Where-Object scopeId -like 'scope:policy.mdm.*')
+    $effectiveDiagnostics=@($diagnostics|Where-Object scopeId -notlike 'scope:policy.mdm.*')
+    $mdmDiagnostics=@($diagnostics|Where-Object scopeId -like 'scope:policy.mdm.*')
+    # Collector envelopes are trust statements, not presentation groupings.
+    # The derived policy slice may compare both sources, but it must not merge
+    # their provenance into one Administrator-owned attempt.
     $Record.collectorResults=@($Record.collectorResults)+[pscustomobject][ordered]@{
         envelopeId="envelope:effective-policy:$runId";collectorId=[string]$collector.collectorId
         collectorVersion=[string]$collector.collectorVersion;operationId=[string]$collector.operationId
-        intendedScopeIds=@($Policy.scopes.scopeId);subjectIds=@($envelopeSubjects)
+        intendedScopeIds=$effectiveScopes;subjectIds=@($envelopeSubjects)
         startedAt=[string]$CollectorResult.envelope.startedAt;completedAt=$collectedAt
         executionContext=$observedExecutionContext;attempts=1
-        observationIds=@($observations|ForEach-Object observationId)
-        coverageIds=@($coverage|ForEach-Object coverageId);diagnosticIds=@($diagnostics|ForEach-Object diagnosticId)
+        observationIds=@($effectiveObservations|ForEach-Object observationId)
+        coverageIds=@($effectiveCoverage|ForEach-Object coverageId);diagnosticIds=@($effectiveDiagnostics|ForEach-Object diagnosticId)
     }
+    $existingSystemEnvelope.intendedScopeIds=@(
+        @($existingSystemEnvelope.intendedScopeIds)+$mdmScopes|Select-Object -Unique
+    )
+    $existingSystemEnvelope.observationIds=@(
+        @($existingSystemEnvelope.observationIds)+@($mdmObservations|ForEach-Object observationId)|Select-Object -Unique
+    )
+    $existingSystemEnvelope.coverageIds=@(
+        @($existingSystemEnvelope.coverageIds)+@($mdmCoverageEntries|ForEach-Object coverageId)|Select-Object -Unique
+    )
+    $existingSystemEnvelope.diagnosticIds=@(
+        @($existingSystemEnvelope.diagnosticIds)+@($mdmDiagnostics|ForEach-Object diagnosticId)|Select-Object -Unique
+    )
     $Record.run.evidenceProfileId=[string]$Policy.evidenceProfileId
     $Record.run.outcome=if(@($Record.coverage|Where-Object state -ne Complete).Count -eq 0){'Completed'}else{'CompletedWithGaps'}
     $Record
@@ -891,8 +972,7 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $providerAbsent=$null -ne $providerObservation -and
         $providerObservation.valueState -eq 'ObservedValue' -and -not [bool]$providerObservation.value
     $mdmCoverageResult=Invoke-EffectivePolicyRule -Rule $rules['mdm-policy-csp-coverage'] -Evaluation {
-        if($providerAbsent){[pscustomobject]@{outcome='Informational'}}
-        elseif(@($mdmCoverage|Where-Object state -ne Complete).Count -eq 0){[pscustomobject]@{outcome='Informational'}}
+        if(@($mdmCoverage|Where-Object state -ne Complete).Count -eq 0){[pscustomobject]@{outcome='Informational'}}
         else{[pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.MDM_POLICY_CSP_INCOMPLETE'}}
     }
     $policyMappings=@(
@@ -921,8 +1001,7 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     }
     $localSignalCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.security-option.*'})
     $channelConflictResult=Invoke-EffectivePolicyRule -Rule $rules['policy-csp-gpo-conflict'] -Evaluation {
-        if($providerAbsent){[pscustomobject]@{outcome='Informational'}}
-        elseif(@($mdmCoverage|Where-Object state -ne Complete).Count -gt 0 -or
+        if(@($mdmCoverage|Where-Object state -ne Complete).Count -gt 0 -or
             @($localSignalCoverage|Where-Object state -ne Complete).Count -gt 0){
             [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.POLICY_CSP_GPO_CONFLICT_INCOMPLETE'}
         }

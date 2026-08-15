@@ -14,6 +14,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $convertToJsonCommand = $ExecutionContext.InvokeCommand.GetCommand(
     'ConvertTo-Json', [System.Management.Automation.CommandTypes]::Cmdlet
 )
+$systemPolicy = Get-SystemCollectionPlanPolicy
 $preparationPlan = [pscustomobject][ordered]@{
     recordType = 'win-pcinfo.preparation-plan'
     contractVersion = '1.0.0'
@@ -70,6 +71,8 @@ Assert-Equal $true $accepted.cleanup.taskAbsent `
     'no scheduled task survives the synthetic terminal path'
 Assert-Equal $true $accepted.cleanup.pipeAbsent `
     'the one-use SYSTEM channel is disposed before return'
+Assert-Equal $true $accepted.channel.assessmentEvidenceCrossed `
+    'the result honestly records that restricted Policy CSP evidence crossed the channel'
 Assert-Equal 'SyntheticUnelevated' $accepted.validation.mode `
     'the exported result identifies the controlled-client validation limitation'
 Assert-Equal 'SYSTEM.LIVE_ACTIVATION_VALIDATION_UNAVAILABLE' `
@@ -91,6 +94,99 @@ if ($attemptStarted -gt $observationCollected -or
     $observationCollected -gt $attemptCompleted) {
     throw 'SYSTEM timing does not enclose the actual accepted observation.'
 }
+
+$duplicateFields = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'MalformedPolicyResultArray'
+Assert-Equal 'IntegrityFailed' $duplicateFields.state `
+    'duplicate Policy CSP field identities fail the authenticated result protocol'
+Assert-Equal 'SYSTEM.CHANNEL_INTEGRITY_FAILED' $duplicateFields.reasonCode `
+    'a malformed result array cannot become ordinary incomplete coverage'
+
+$unknownCatalog = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'UnknownPolicyResultCatalog'
+Assert-Equal 'IntegrityFailed' $unknownCatalog.state `
+    'an authenticated worker cannot select a catalog outside the release'
+Assert-Equal 'SYSTEM.CHANNEL_INTEGRITY_FAILED' $unknownCatalog.reasonCode `
+    'an unknown catalog ID closes the result protocol'
+
+$ambiguousInstances = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'AmbiguousPolicyResultInstances'
+Assert-Equal 'Completed' $ambiguousInstances.state `
+    'ambiguous live-style CIM cardinality remains a typed field-level gap'
+Assert-Equal 4 @($ambiguousInstances.PrivatePolicyCspResults.fields|Where-Object {
+    $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_INSTANCE_AMBIGUOUS'
+}).Count 'multiple Policy Result nodes never select an arbitrary first instance'
+
+$malformedValues = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'MalformedPolicyResultValue'
+Assert-Equal 'Completed' $malformedValues.state `
+    'malformed WMI values remain bounded field-level gaps'
+Assert-Equal 4 @($malformedValues.PrivatePolicyCspResults.fields|Where-Object {
+    $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_VALUE_MALFORMED'
+}).Count 'Boolean, negative, and overflowing values are never coerced into successful observations'
+
+$emptyInstances = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'EmptyPolicyResultInstances'
+Assert-Equal 4 @($emptyInstances.PrivatePolicyCspResults.fields|Where-Object {
+    $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_NODE_UNAVAILABLE'
+}).Count 'a successful empty query is distinct from duplicate instances and query failure'
+
+$queryFailure = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'PolicyResultQueryFailure'
+Assert-Equal 4 @($queryFailure.PrivatePolicyCspResults.fields|Where-Object {
+    $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
+}).Count 'an operational query failure is not misreported as an unsupported class'
+
+$unsupportedClass = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'PolicyResultClassUnsupported'
+Assert-Equal 4 @($unsupportedClass.PrivatePolicyCspResults.fields|Where-Object {
+    $_.state -eq 'Unsupported' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
+}).Count 'an invalid-class result remains distinct from an access or transport failure'
+
+$contradictoryResult = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'ContradictoryPolicyResult'
+Assert-Equal 'IntegrityFailed' $contradictoryResult.state `
+    'provider absence cannot coexist with a successful Policy CSP catalog and values'
+Assert-Equal 'SYSTEM.CHANNEL_INTEGRITY_FAILED' $contradictoryResult.reasonCode `
+    'contradictory authenticated result states fail the closed channel protocol'
+
+$futureBuild = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'UnsupportedFutureBuild'
+Assert-Equal '' $futureBuild.PrivatePolicyCspResults.catalogId `
+    'a build above the frozen catalog ceiling selects no catalog'
+Assert-Equal 4 @($futureBuild.PrivatePolicyCspResults.fields|Where-Object {
+    $_.state -eq 'Unsupported' -and $_.reasonCode -eq 'POLICY.MDM_BUILD_UNSUPPORTED'
+}).Count 'future builds fail closed until a release-owned catalog admits them'
+
+$providerFailure = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'ProviderQueryFailure'
+Assert-Equal 'CompletedWithGaps' $providerFailure.state `
+    'an MDM provider query failure is not a successful negative observation'
+Assert-Equal 0 @($providerFailure.collectorResult.Observations).Count `
+    'a failed provider query fabricates no provider-availability Boolean'
+Assert-Equal 'Unavailable' $providerFailure.collectorResult.Coverage[0].state `
+    'provider failure remains explicit unavailable coverage'
+Assert-Equal 4 @($providerFailure.PrivatePolicyCspResults.fields|Where-Object {
+    $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE'
+}).Count 'provider query failure keeps all dependent Policy CSP fields unavailable'
+Assert-Equal $true $providerFailure.channel.assessmentEvidenceCrossed `
+    'the accepted restricted gap response is recorded even when collection has gaps'
+
+$providerAbsent = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
+    -PlanDigest $planResult.Digest -ValidationScenario 'ProviderObservedAbsent'
+Assert-Equal 'Completed' $providerAbsent.state `
+    'a successful zero-result provider query is a bounded observed negative'
+Assert-Equal $false $providerAbsent.collectorResult.Observations[0].value `
+    'only a successful zero-result query emits providerAvailable false'
+
+$cleanupAfterEvidence = New-SystemCollectorResult -Policy $systemPolicy `
+    -Plan $planResult.Plan -PlanDigest $planResult.Digest -State 'CleanupIncomplete' `
+    -ReasonCode 'SYSTEM.CLEANUP_INCOMPLETE' -CoverageState 'Complete' `
+    -ObservedExecutionContext 'Synthetic' -LocalSystemIdentityVerified $false `
+    -CleanupVerified $false -TaskAbsent $false -PipeAbsent $true `
+    -WorkerTreeAbsent $false -ProviderAvailable $true -AssessmentEvidenceCrossed $true
+Assert-Equal $true $cleanupAfterEvidence.channel.assessmentEvidenceCrossed `
+    'cleanup failure cannot erase the historical fact that accepted evidence crossed'
 
 $systemAssessment = New-SystemAssessmentRecord -SystemResult $accepted
 $testJsonCommand = $ExecutionContext.InvokeCommand.GetCommand(
@@ -347,4 +443,4 @@ finally {
     $script:systemCleanupEngine.Dispose()
 }
 
-Write-Output 'PASS: all nine SYSTEM sub-plan cases enforce catalog, parameters, provenance, confinement, lifecycle, and cleanup contracts.'
+Write-Output 'PASS: all twenty SYSTEM sub-plan cases enforce catalog, parameters, provenance, confinement, lifecycle, and cleanup contracts.'

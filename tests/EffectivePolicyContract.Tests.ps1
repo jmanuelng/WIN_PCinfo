@@ -147,6 +147,100 @@ Assert-Equal 'Indeterminate' (@($missing.findings|Where-Object ruleId -eq 'rule:
 Assert-Equal 0 @($missing.observations|Where-Object fieldId -like 'field:policy.applied.*').Count `
     'source-wide RSoP failure fabricates no applied-policy observations'
 
+$systemProvenanceRecord=New-AdministratorReadyRecord
+$systemProvenanceCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy `
+    -ValidationScenario MdmWinsOverGpScoped
+$systemEnvelope=@($systemProvenanceRecord.collectorResults|Where-Object {
+    $_.collectorId -eq 'collector:windows.mdm-bridge.device-manageability'
+})[0]
+$missingEnvelopeRejected=$false
+try {
+    Add-EffectivePolicyEvidenceRecord -Record $systemProvenanceRecord `
+        -CollectorResult $systemProvenanceCollector -Policy $effectivePolicy `
+        -SystemResult ([pscustomobject]@{
+            PrivatePolicyCspResults=New-EffectivePolicySyntheticPolicyCspResults `
+                -Scenario MdmWinsOverGpScoped
+        }) | Out-Null
+}
+catch {$missingEnvelopeRejected=$_.Exception.Message -match 'exact SYSTEM attempt'}
+Assert-Equal $true $missingEnvelopeRejected `
+    'restricted Policy CSP results cannot fall back to an unrelated record envelope'
+
+foreach($identityMutation in @(
+    @{property='envelopeId';value='envelope:system:different'},
+    @{property='collectorVersion';value='9.9.9'},
+    @{property='attempts';value=2}
+)) {
+    $mismatchedEnvelope=$systemEnvelope|ConvertTo-Json -Depth 10|ConvertFrom-Json -Depth 10
+    $mismatchedEnvelope.($identityMutation.property)=$identityMutation.value
+    $mismatchRejected=$false
+    try {
+        Add-EffectivePolicyEvidenceRecord -Record $systemProvenanceRecord `
+            -CollectorResult $systemProvenanceCollector -Policy $effectivePolicy `
+            -SystemResult ([pscustomobject]@{
+                PrivatePolicyCspResults=New-EffectivePolicySyntheticPolicyCspResults `
+                    -Scenario MdmWinsOverGpScoped
+                collectorResult=[pscustomobject]@{Envelope=$mismatchedEnvelope}
+            }) | Out-Null
+    }
+    catch {$mismatchRejected=$_.Exception.Message -match 'different SYSTEM attempt'}
+    Assert-Equal $true $mismatchRejected `
+        "SYSTEM attempt identity includes $($identityMutation.property)"
+}
+$systemProvenanceResult=[pscustomobject]@{
+    PrivatePolicyCspResults=New-EffectivePolicySyntheticPolicyCspResults `
+        -Scenario MdmWinsOverGpScoped
+    collectorResult=[pscustomobject]@{Envelope=$systemEnvelope}
+}
+$systemProvenanceRecord=Add-EffectivePolicyEvidenceRecord -Record $systemProvenanceRecord `
+    -CollectorResult $systemProvenanceCollector -Policy $effectivePolicy `
+    -SystemResult $systemProvenanceResult
+$mdmObservation=@($systemProvenanceRecord.observations|Where-Object `
+    fieldId -eq 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp')[0]
+$mdmProvenance=@($systemProvenanceRecord.provenance|Where-Object `
+    provenanceId -eq $mdmObservation.provenanceId)[0]
+Assert-Equal 'collector:windows.mdm-bridge.device-manageability' $mdmProvenance.collectorId `
+    'Policy CSP values retain their originating SYSTEM collector provenance'
+Assert-Equal 'Synthetic' $mdmProvenance.executionContext `
+    'synthetic SYSTEM evidence never claims Administrator or live LocalSystem execution'
+$mdmEnvelope=@($systemProvenanceRecord.collectorResults|Where-Object {
+    $_.operationId -eq 'op:windows.mdm-bridge.device-manageability' -and
+    $mdmObservation.observationId -in @($_.observationIds)
+})
+Assert-Equal 1 $mdmEnvelope.Count `
+    'the SYSTEM Policy CSP observation is owned by one matching collector envelope'
+Assert-Equal 0 @($systemProvenanceRecord.collectorResults|Where-Object {
+    $_.collectorId -eq 'collector:windows.effective-policy' -and
+    $mdmObservation.observationId -in @($_.observationIds)
+}).Count 'the Administrator Effective Policy envelope cannot claim SYSTEM observations'
+Assert-Equal 1 @($systemProvenanceRecord.collectorResults|Where-Object {
+    $_.collectorId -eq 'collector:windows.mdm-bridge.device-manageability'
+}).Count 'one approved SYSTEM attempt remains one collector envelope after policy composition'
+
+$nonMdm=New-AdministratorReadyRecord
+@($nonMdm.observations|Where-Object `
+    fieldId -eq 'field:device.mdm-bridge.provider-available')[0].value=$false
+$nonMdmCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario NonMdm
+$nonMdmEnvelope=@($nonMdm.collectorResults|Where-Object {
+    $_.collectorId -eq 'collector:windows.mdm-bridge.device-manageability'
+})[0]
+$nonMdmSystem=[pscustomobject]@{
+    PrivatePolicyCspResults=New-EffectivePolicySyntheticPolicyCspResults -Scenario NonMdm
+    collectorResult=[pscustomobject]@{Envelope=$nonMdmEnvelope}
+}
+$nonMdm=Add-EffectivePolicyEvidenceRecord -Record $nonMdm `
+    -CollectorResult $nonMdmCollector -Policy $effectivePolicy -SystemResult $nonMdmSystem
+$nonMdm=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $nonMdm `
+    -Policy $effectivePolicy -ContractValidation (Test-CanonicalRecord $nonMdm)
+Assert-Equal 'Indeterminate' (@($nonMdm.findings|Where-Object `
+    ruleId -eq 'rule:policy.mdm-policy-csp-coverage/1.0.0')[0].outcome) `
+    'an absent MDM provider remains incomplete source coverage'
+Assert-Equal 2 @($nonMdm.recommendations|Where-Object {
+    $_.kind -eq 'TenantSideDiscoveryTask' -and
+    $_.definitionId -in @($effectivePolicy.discoveryTasks.definitionId)
+}).Count `
+    'an absent MDM provider emits the two frozen tenant-side discovery tasks'
+
 $partialRecord=New-AdministratorReadyRecord
 $partialCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario PartialChannel
 $partialRecord=Add-EffectivePolicyEvidenceRecord -Record $partialRecord -CollectorResult $partialCollector -Policy $effectivePolicy

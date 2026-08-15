@@ -1553,6 +1553,8 @@ function Invoke-DeviceReadinessSlice {
     $currentControlCoverage='NotAttempted';$appliedPolicyCount=0
     $appliedPolicyFinding='Indeterminate';$localSecurityFinding='Indeterminate'
     $appliedOrderFinding='Indeterminate'
+    $mdmPolicyCspFinding='Indeterminate';$policyCspGpoConflictFinding='Indeterminate'
+    $policyDiscoveryTaskCount=0
     $resourceScenario=if($isResourceDependenciesFixture){''}else{'Live'}
     $userResourceCoverage='NotAttempted';$peripheralCoverage='NotAttempted'
     $mappedDriveCount=0;$uncConnectionCount=0;$printerCount=0
@@ -2222,6 +2224,12 @@ function Invoke-DeviceReadinessSlice {
                     $appliedPolicyFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-policy-coverage/1.0.0')[0].outcome
                     $localSecurityFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.local-security-policy-coverage/1.0.0')[0].outcome
                     $appliedOrderFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-order-conflict/1.0.0')[0].outcome
+                    $mdmPolicyCspFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.mdm-policy-csp-coverage/1.0.0')[0].outcome
+                    $policyCspGpoConflictFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome
+                    $policyDiscoveryTaskCount=@($record.recommendations|Where-Object {
+                        $_.kind -eq 'TenantSideDiscoveryTask' -and
+                        $_.definitionId -in @($effectivePolicy.discoveryTasks.definitionId)
+                    }).Count
                 }
                 if($null -ne $resourceCollector){
                     $sliceStage='RESOURCE_DEPENDENCIES_METRICS'
@@ -2589,6 +2597,9 @@ function Invoke-DeviceReadinessSlice {
             appliedPolicyFinding=$appliedPolicyFinding
             localSecurityFinding=$localSecurityFinding
             appliedOrderFinding=$appliedOrderFinding
+            mdmPolicyCspFinding=$mdmPolicyCspFinding
+            policyCspGpoConflictFinding=$policyCspGpoConflictFinding
+            policyDiscoveryTaskCount=$policyDiscoveryTaskCount
             directRightsOnly=$null -ne $effectivePolicyCollector -and
                 $effectivePolicyCollector.payload.userRightSemantics -eq 'DirectAssignmentsOnly'
             localSamOnly=$null -ne $effectivePolicyCollector -and
