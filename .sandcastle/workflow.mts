@@ -124,16 +124,25 @@ export function runJson<T>(
   }
 }
 
-function relationshipCount(
+function activeOrUnknownRelationshipCount(
   relationship: RelationshipConnection | readonly unknown[] | null | undefined,
 ): number {
-  if (Array.isArray(relationship)) {
-    return relationship.length;
-  }
-  if (relationship && "nodes" in relationship && Array.isArray(relationship.nodes)) {
-    return relationship.nodes.length;
-  }
-  return 0;
+  const nodes = Array.isArray(relationship)
+    ? relationship
+    : relationship &&
+        "nodes" in relationship &&
+        Array.isArray(relationship.nodes)
+      ? relationship.nodes
+      : [];
+
+  return nodes.filter((node) => {
+    if (!node || typeof node !== "object" || !("state" in node)) {
+      return true;
+    }
+
+    const state = node.state;
+    return typeof state !== "string" || state.toUpperCase() !== "CLOSED";
+  }).length;
 }
 
 export function isEligibleIssue(issue: GitHubIssue): boolean {
@@ -150,7 +159,7 @@ export function isEligibleIssue(issue: GitHubIssue): boolean {
     issue.state.toUpperCase() === "OPEN" &&
     labelNames.has(READY_LABEL) &&
     (issue.assignees ?? []).length === 0 &&
-    relationshipCount(issue.blockedBy) === 0 &&
+    activeOrUnknownRelationshipCount(issue.blockedBy) === 0 &&
     hasNoOpenSubIssues
   );
 }
@@ -204,7 +213,7 @@ export function claimIssue(issue: GitHubIssue): void {
   const assignees = claimed.assignees ?? [];
   const safelyClaimed =
     claimed.state.toUpperCase() === "OPEN" &&
-    relationshipCount(claimed.blockedBy) === 0 &&
+    activeOrUnknownRelationshipCount(claimed.blockedBy) === 0 &&
     claimed.subIssuesSummary !== null &&
     claimed.subIssuesSummary !== undefined &&
     claimed.subIssuesSummary.completed === claimed.subIssuesSummary.total &&

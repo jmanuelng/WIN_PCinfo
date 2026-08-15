@@ -27,6 +27,10 @@ Sandcastle considers only open issues that:
 - have no assignee; and
 - have no open blocker.
 
+GitHub may retain closed historical dependencies in `blockedBy.nodes`; those
+entries do not block selection. A dependency with a missing or unrecognized
+state fails closed and remains blocking.
+
 It assigns the selected issue to the authenticated GitHub user before creating
 a branch. Selection is deterministic: the lowest eligible issue number wins.
 
