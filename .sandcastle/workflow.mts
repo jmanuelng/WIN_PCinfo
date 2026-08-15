@@ -50,6 +50,43 @@ export interface CheckSummary {
   readonly passed: readonly string[];
 }
 
+export function buildImplementationPhaseOptions<TAgent>(
+  agent: TAgent,
+  issueNumber: number,
+  issueTitle: string,
+) {
+  return {
+    name: `issue-${issueNumber}-implementer`,
+    maxIterations: 1,
+    idleTimeoutSeconds: AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
+    agent,
+    promptFile: "./.sandcastle/implement-prompt.md",
+    promptArgs: {
+      ISSUE_NUMBER: issueNumber,
+      ISSUE_TITLE: issueTitle,
+    },
+  } as const;
+}
+
+export function buildReviewPhaseOptions<TAgent>(
+  agent: TAgent,
+  issueNumber: number,
+  branch: string,
+) {
+  return {
+    name: `issue-${issueNumber}-reviewer`,
+    maxIterations: 1,
+    idleTimeoutSeconds: AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
+    agent,
+    promptFile: "./.sandcastle/review-prompt.md",
+    promptArgs: {
+      ISSUE_NUMBER: issueNumber,
+      BRANCH: branch,
+      BASE_BRANCH: BASE_REF,
+    },
+  } as const;
+}
+
 interface RunOptions {
   readonly cwd?: string;
   readonly stream?: boolean;
