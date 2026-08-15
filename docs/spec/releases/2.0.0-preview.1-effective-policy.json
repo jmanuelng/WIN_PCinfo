@@ -9,27 +9,43 @@
       "layerId": "AppliedPolicyEvidence",
       "purpose": "Locally cached RSoP identity, applicability, link, and precedence reported for the assessed device and Assessment User Context.",
       "scopeIds": [
-        "scope:policy.applied.user.identity", "scope:policy.applied.user.applicability",
-        "scope:policy.applied.user.link", "scope:policy.applied.user.precedence",
-        "scope:policy.applied.computer.identity", "scope:policy.applied.computer.applicability",
-        "scope:policy.applied.computer.link", "scope:policy.applied.computer.precedence"
+        "scope:policy.applied.user.identity",
+        "scope:policy.applied.user.applicability",
+        "scope:policy.applied.user.link",
+        "scope:policy.applied.user.precedence",
+        "scope:policy.applied.computer.identity",
+        "scope:policy.applied.computer.applicability",
+        "scope:policy.applied.computer.link",
+        "scope:policy.applied.computer.precedence"
       ]
     },
     {
       "layerId": "ConfiguredPolicySignals",
-      "purpose": "Release-cataloged local registry values that may be policy-backed but do not prove source, intent, or current enforcement.",
+      "purpose": "Release-cataloged local registry values and Defender preferences that may be policy-backed but do not prove tenant intent, winning channel, or current enforcement.",
       "scopeIds": [
         "scope:policy.security-option.machine-inactivity-limit",
         "scope:policy.security-option.disable-cad",
-        "scope:policy.security-option.lm-compatibility-level"
+        "scope:policy.security-option.lm-compatibility-level",
+        "scope:policy.defender.asr",
+        "scope:policy.defender.network-protection",
+        "scope:policy.smartscreen.shell",
+        "scope:policy.smartscreen.app-install-control"
       ]
     },
     {
       "layerId": "CurrentControlState",
-      "purpose": "Current local SAM, audit-policy, and direct LSA user-right state reported by Windows at assessment time.",
+      "purpose": "Current local SAM, audit-policy, direct user-right, Windows Security Center, Defender runtime, and ActiveStore firewall state reported by Windows at assessment time.",
       "scopeIds": [
-        "scope:policy.local-sam.password", "scope:policy.local-sam.lockout",
-        "scope:policy.local-audit", "scope:policy.local-user-rights"
+        "scope:policy.local-sam.password",
+        "scope:policy.local-sam.lockout",
+        "scope:policy.local-audit",
+        "scope:policy.local-user-rights",
+        "scope:policy.security-center.antivirus-providers",
+        "scope:policy.security-center.firewall-providers",
+        "scope:policy.defender.runtime",
+        "scope:policy.firewall.domain-profile",
+        "scope:policy.firewall.private-profile",
+        "scope:policy.firewall.public-profile"
       ]
     }
   ],
@@ -38,12 +54,20 @@
       "collectorId": "collector:windows.effective-policy",
       "collectorVersion": "1.0.0",
       "operationId": "observe-effective-policy",
-      "source": "Release-owned projection of cached RSoP WMI, local NetAPI, Audit Policy, LSA Policy, and exact local registry values",
+      "source": "Release-owned projection of cached RSoP WMI, local NetAPI, Audit Policy, LSA Policy, Windows Security Center, approved Defender cmdlets, ActiveStore firewall state, and exact local registry values",
       "executionContext": "Administrator",
       "privilege": "RequiresAdministrator",
       "networkBehavior": "OfflineOnly",
       "executable": "ActiveMicrosoftSignedPowerShellHost",
-      "dependencies": ["Windows RSoP WMI provider", "Netapi32.dll", "Advapi32.dll", "Microsoft.Win32.Registry"],
+      "dependencies": [
+        "Windows RSoP WMI provider",
+        "Netapi32.dll",
+        "Advapi32.dll",
+        "Wscapi.dll",
+        "Defender PowerShell module",
+        "NetSecurity PowerShell module",
+        "Microsoft.Win32.Registry"
+      ],
       "mayPrompt": false,
       "mayInstall": false,
       "mayDownload": false,
@@ -55,6 +79,8 @@
       "maximumAppliedPoliciesPerTarget": 8,
       "maximumPolicySettingsPerTarget": 8,
       "maximumPrincipalsPerRight": 8,
+      "maximumSecurityProvidersPerCategory": 4,
+      "maximumAsrRules": 16,
       "cleanup": "CoordinatorOwnedJobObjectAndWorkerVerifiedAbsent"
     }
   ],
@@ -84,9 +110,29 @@
       "limitation": "DirectAssignmentsOnlyNoGroupExpansion"
     },
     {
-      "sourceId": "source:windows.local-security-option-signals",
+      "sourceId": "source:windows.local-configured-signals",
       "interface": "Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly",
       "limitation": "ConfiguredSignalOnlySourceEnforcementAndFreshnessUnproven"
+    },
+    {
+      "sourceId": "source:windows.security-center.providers",
+      "interface": "IWSCProductList,IWscProduct,WscGetSecurityProviderHealth",
+      "limitation": "AntivirusAndFirewallProvidersOnlyNoTrustOrRemediationClaims"
+    },
+    {
+      "sourceId": "source:windows.defender.runtime-status",
+      "interface": "Get-MpComputerStatus",
+      "limitation": "DefenderRuntimeOnlyNoPreferenceIntentNoExclusionProjection"
+    },
+    {
+      "sourceId": "source:windows.defender.preferences",
+      "interface": "Get-MpPreference",
+      "limitation": "ReleaseCatalogedPreferenceFieldsOnlyNoExclusionProjectionNoMutation"
+    },
+    {
+      "sourceId": "source:windows.firewall.activestore-profiles",
+      "interface": "Get-NetFirewallProfile -PolicyStore ActiveStore",
+      "limitation": "DomainPrivatePublicProfilesOnlyNoRuleEnumeration"
     },
     {
       "sourceId": "source:windows.mdm-policy-csp-results",
@@ -127,6 +173,42 @@
       "fieldId": "field:policy.security-option.lm-compatibility-level"
     }
   ],
+  "defenderPreferences": [
+    {
+      "catalogId": "defender-preference:network-protection",
+      "commandProperty": "EnableNetworkProtection",
+      "valueType": "String",
+      "fieldId": "field:policy.defender.network-protection"
+    }
+  ],
+  "smartScreenSignals": [
+    {
+      "catalogId": "smartscreen:enable-in-shell",
+      "registryPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\System",
+      "valueName": "EnableSmartScreen",
+      "valueType": "Boolean",
+      "fieldId": "field:policy.smartscreen.shell-enabled"
+    },
+    {
+      "catalogId": "smartscreen:prevent-override-for-files",
+      "registryPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\System",
+      "valueName": "PreventOverrideForFilesInShell",
+      "valueType": "Boolean",
+      "fieldId": "field:policy.smartscreen.shell-prevent-override"
+    },
+    {
+      "catalogId": "smartscreen:app-install-control",
+      "registryPath": "SOFTWARE\\Policies\\Microsoft\\Windows Defender\\SmartScreen",
+      "valueName": "ConfigureAppInstallControlEnabled",
+      "valueType": "Integer",
+      "fieldId": "field:policy.smartscreen.app-install-control"
+    }
+  ],
+  "firewallProfiles": [
+    { "catalogId": "firewall-profile:domain", "profileName": "Domain", "scopeId": "scope:policy.firewall.domain-profile" },
+    { "catalogId": "firewall-profile:private", "profileName": "Private", "scopeId": "scope:policy.firewall.private-profile" },
+    { "catalogId": "firewall-profile:public", "profileName": "Public", "scopeId": "scope:policy.firewall.public-profile" }
+  ],
   "userRightSemantics": "DirectAssignmentsOnly",
   "localAccountPolicySemantics": "LocalSamAccountsOnly",
   "scopes": [
@@ -145,6 +227,16 @@
     { "scopeId": "scope:policy.security-option.machine-inactivity-limit", "fieldIds": ["field:policy.security-option.machine-inactivity-limit-seconds"] },
     { "scopeId": "scope:policy.security-option.disable-cad", "fieldIds": ["field:policy.security-option.disable-cad"] },
     { "scopeId": "scope:policy.security-option.lm-compatibility-level", "fieldIds": ["field:policy.security-option.lm-compatibility-level"] },
+    { "scopeId": "scope:policy.defender.asr", "fieldIds": ["field:policy.defender.asr.rule-id", "field:policy.defender.asr.action"] },
+    { "scopeId": "scope:policy.defender.network-protection", "fieldIds": ["field:policy.defender.network-protection"] },
+    { "scopeId": "scope:policy.smartscreen.shell", "fieldIds": ["field:policy.smartscreen.shell-enabled", "field:policy.smartscreen.shell-prevent-override"] },
+    { "scopeId": "scope:policy.smartscreen.app-install-control", "fieldIds": ["field:policy.smartscreen.app-install-control"] },
+    { "scopeId": "scope:policy.security-center.antivirus-providers", "fieldIds": ["field:policy.security-provider.name", "field:policy.security-provider.health"] },
+    { "scopeId": "scope:policy.security-center.firewall-providers", "fieldIds": ["field:policy.security-provider.name", "field:policy.security-provider.health"] },
+    { "scopeId": "scope:policy.defender.runtime", "fieldIds": ["field:policy.defender.running-mode", "field:policy.defender.antivirus-enabled", "field:policy.defender.real-time-protection-enabled", "field:policy.defender.tamper-protected"] },
+    { "scopeId": "scope:policy.firewall.domain-profile", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"] },
+    { "scopeId": "scope:policy.firewall.private-profile", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"] },
+    { "scopeId": "scope:policy.firewall.public-profile", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"] },
     { "scopeId": "scope:policy.mdm.control-policy-conflict", "fieldIds": ["field:policy.mdm.control-policy-conflict.mdm-wins-over-gp"] },
     { "scopeId": "scope:policy.mdm.security-option.machine-inactivity-limit", "fieldIds": ["field:policy.mdm.security-option.machine-inactivity-limit-seconds"] },
     { "scopeId": "scope:policy.mdm.security-option.disable-cad", "fieldIds": ["field:policy.mdm.security-option.disable-cad"] },
@@ -152,44 +244,158 @@
   ],
   "rules": [
     {
-      "findingKind": "applied-policy-coverage", "ruleId": "rule:policy.applied-policy-coverage/1.0.0",
-      "operationId": "op:rule.policy.applied-policy-coverage.evaluate", "source": "ReleaseEmbeddedValidatedObservationRule",
-      "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "OfflineOnly",
-      "executable": "NoneInProcess", "dependencies": [], "maximumAttempts": 1, "deadlineMilliseconds": 100,
-      "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false,
-      "maximumInputObservations": 96, "maximumOutputFindings": 1, "cleanup": "NoArtifacts", "missingEvidenceOutcome": "Indeterminate"
+      "findingKind": "applied-policy-coverage",
+      "ruleId": "rule:policy.applied-policy-coverage/1.0.0",
+      "operationId": "op:rule.policy.applied-policy-coverage.evaluate",
+      "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumInputObservations": 96,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate"
     },
     {
-      "findingKind": "local-security-policy-coverage", "ruleId": "rule:policy.local-security-policy-coverage/1.0.0",
-      "operationId": "op:rule.policy.local-security-policy-coverage.evaluate", "source": "ReleaseEmbeddedValidatedObservationRule",
-      "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "OfflineOnly",
-      "executable": "NoneInProcess", "dependencies": [], "maximumAttempts": 1, "deadlineMilliseconds": 100,
-      "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false,
-      "maximumInputObservations": 96, "maximumOutputFindings": 1, "cleanup": "NoArtifacts", "missingEvidenceOutcome": "Indeterminate"
+      "findingKind": "local-security-policy-coverage",
+      "ruleId": "rule:policy.local-security-policy-coverage/1.0.0",
+      "operationId": "op:rule.policy.local-security-policy-coverage.evaluate",
+      "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumInputObservations": 96,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate"
     },
     {
-      "findingKind": "applied-policy-order-conflict", "ruleId": "rule:policy.applied-order-conflict/1.0.0",
-      "operationId": "op:rule.policy.applied-order-conflict.evaluate", "source": "ReleaseEmbeddedValidatedObservationRule",
-      "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "OfflineOnly",
-      "executable": "NoneInProcess", "dependencies": [], "maximumAttempts": 1, "deadlineMilliseconds": 100,
-      "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false,
-      "maximumInputObservations": 32, "maximumOutputFindings": 1, "cleanup": "NoArtifacts", "missingEvidenceOutcome": "Indeterminate"
+      "findingKind": "applied-policy-order-conflict",
+      "ruleId": "rule:policy.applied-order-conflict/1.0.0",
+      "operationId": "op:rule.policy.applied-order-conflict.evaluate",
+      "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumInputObservations": 32,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate"
     },
     {
-      "findingKind": "mdm-policy-csp-coverage", "ruleId": "rule:policy.mdm-policy-csp-coverage/1.0.0",
-      "operationId": "op:rule.policy.mdm-policy-csp-coverage.evaluate", "source": "ReleaseEmbeddedValidatedObservationRule",
-      "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "OfflineOnly",
-      "executable": "NoneInProcess", "dependencies": [], "maximumAttempts": 1, "deadlineMilliseconds": 100,
-      "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false,
-      "maximumInputObservations": 16, "maximumOutputFindings": 1, "cleanup": "NoArtifacts", "missingEvidenceOutcome": "Indeterminate"
+      "findingKind": "security-control-coverage",
+      "ruleId": "rule:policy.security-control-coverage/1.0.0",
+      "operationId": "op:rule.policy.security-control-coverage.evaluate",
+      "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumInputObservations": 128,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate"
     },
     {
-      "findingKind": "policy-csp-gpo-conflict", "ruleId": "rule:policy.policy-csp-gpo-conflict/1.0.0",
-      "operationId": "op:rule.policy.policy-csp-gpo-conflict.evaluate", "source": "ReleaseEmbeddedValidatedObservationRule",
-      "executionContext": "InProcessValidatedAssessmentRecord", "privilege": "NoElevation", "networkBehavior": "OfflineOnly",
-      "executable": "NoneInProcess", "dependencies": [], "maximumAttempts": 1, "deadlineMilliseconds": 100,
-      "mayPrompt": false, "mayInstall": false, "mayDownload": false, "maySelfElevate": false, "writesAllowed": false,
-      "maximumInputObservations": 24, "maximumOutputFindings": 1, "cleanup": "NoArtifacts", "missingEvidenceOutcome": "Indeterminate"
+      "findingKind": "security-control-constraint",
+      "ruleId": "rule:policy.security-control-constraint/1.0.0",
+      "operationId": "op:rule.policy.security-control-constraint.evaluate",
+      "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumInputObservations": 48,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate"
+    },
+    {
+      "findingKind": "mdm-policy-csp-coverage",
+      "ruleId": "rule:policy.mdm-policy-csp-coverage/1.0.0",
+      "operationId": "op:rule.policy.mdm-policy-csp-coverage.evaluate",
+      "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumInputObservations": 16,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate"
+    },
+    {
+      "findingKind": "policy-csp-gpo-conflict",
+      "ruleId": "rule:policy.policy-csp-gpo-conflict/1.0.0",
+      "operationId": "op:rule.policy.policy-csp-gpo-conflict.evaluate",
+      "source": "ReleaseEmbeddedValidatedObservationRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumInputObservations": 24,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate"
     }
   ],
   "discoveryTasks": [
@@ -207,10 +413,33 @@
     }
   ],
   "validationScenarios": [
-    "Workgroup", "Domain", "UserAndComputerRsop", "MissingRsop", "StaleRegistry",
-    "DeniedAdministrator", "DeniedSystem", "NonEnglish", "AppliedOrderConflict",
-    "AccountLockout", "AuditPolicy", "UserRights", "SecurityOptions", "PartialChannel",
-    "NonMdm", "UnsupportedMdmBuild", "MissingMdmClass", "MissingMdmProperty",
-    "MdmPolicyConflict", "MdmWinsOverGpScoped"
+    "Workgroup",
+    "Domain",
+    "UserAndComputerRsop",
+    "MissingRsop",
+    "StaleRegistry",
+    "DeniedAdministrator",
+    "DeniedSystem",
+    "NonEnglish",
+    "AppliedOrderConflict",
+    "AccountLockout",
+    "AuditPolicy",
+    "UserRights",
+    "SecurityOptions",
+    "PartialChannel",
+    "NonMdm",
+    "UnsupportedMdmBuild",
+    "MissingMdmClass",
+    "MissingMdmProperty",
+    "MdmPolicyConflict",
+    "MdmWinsOverGpScoped",
+    "ThirdPartyRegistration",
+    "DefenderDisabled",
+    "DefenderUnavailable",
+    "AmbiguousSecurityCenter",
+    "TamperProtected",
+    "MissingDefenderProperty",
+    "FirewallProfiles",
+    "AsrRulePairs"
   ]
 }

@@ -75,8 +75,8 @@ Assert-Equal '1.0.0' $record.contractVersion `
     'the record shape remains backward-compatible while Contract Set 1.4 adds policy definitions'
 Assert-Equal 'profile:device-firmware-identity-administrator-and-policy-readiness' $record.run.evidenceProfileId `
     'the record selects the exact additive policy evidence profile'
-Assert-Equal 28 @($record.coverage).Count 'all nineteen policy scopes remain independently closed'
-Assert-Equal 16 @($record.findings).Count 'five bounded rules each produce one finding'
+Assert-Equal 38 @($record.coverage).Count 'all twenty-nine policy scopes remain independently closed'
+Assert-Equal 18 @($record.findings).Count 'seven bounded rules each produce one finding'
 Assert-Equal 1 @($record.collectorResults|Where-Object collectorId -eq 'collector:windows.effective-policy').Count `
     'one approved attempt owns all policy source coverage'
 Assert-Equal 'Informational' (@($record.findings|Where-Object ruleId -eq 'rule:policy.applied-policy-coverage/1.0.0')[0].outcome) `
@@ -247,5 +247,14 @@ $partialRecord=Add-EffectivePolicyEvidenceRecord -Record $partialRecord -Collect
 $partialValidation=Test-CanonicalRecord $partialRecord
 Assert-Equal $true $partialValidation.accepted `
     "field-specific failures and bounded overflow remain canonical ($($partialValidation.reasonCode))"
+
+$tamperRecord=New-AdministratorReadyRecord
+$tamperCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario TamperProtected
+$tamperRecord=Add-EffectivePolicyEvidenceRecord -Record $tamperRecord -CollectorResult $tamperCollector -Policy $effectivePolicy
+$tamperRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $tamperRecord -Policy $effectivePolicy `
+    -ContractValidation (Test-CanonicalRecord $tamperRecord)
+Assert-Equal 'ExpectedCondition' (@($tamperRecord.findings|Where-Object `
+    ruleId -eq 'rule:policy.security-control-constraint/1.0.0')[0].outcome) `
+    'tamper protection is reported as a bounded security-control constraint'
 
 Write-Output 'PASS: Effective Policy composes canonical three-layer evidence, closed coverage, and bounded findings.'

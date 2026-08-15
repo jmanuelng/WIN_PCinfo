@@ -7,7 +7,7 @@
   "required": ["kind", "contractVersion", "release", "schemaDraft", "requiredFeatures", "limits", "schemas", "fieldDefinitions", "scopeDefinitions", "vocabularies"],
   "properties": {
     "kind": { "const": "win-pcinfo.assessment-contract-set" },
-    "contractVersion": { "const": "1.10.0" },
+    "contractVersion": { "const": "1.11.0" },
     "release": { "const": "2.0.0-preview.1" },
     "schemaDraft": { "const": "2020-12" },
     "requiredFeatures": { "const": ["closed-scope-coverage", "evidence-references", "prohibited-material-omission", "software-recognition-annotations"] },
@@ -40,13 +40,13 @@
     "fieldDefinitions": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 192,
+      "maxItems": 204,
       "items": { "$ref": "#/$defs/fieldDefinition" }
     },
     "scopeDefinitions": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 80,
+      "maxItems": 79,
       "items": { "$ref": "#/$defs/scopeDefinition" }
     },
     "vocabularies": {

@@ -11,26 +11,34 @@ $policy = Get-EffectivePolicyPolicy -ConvertFromJsonCommand (
     Get-Command ConvertFrom-Json -CommandType Cmdlet
 )
 $expected = @{
-    Workgroup = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
-    Domain = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
-    UserAndComputerRsop = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=3; conflict=$false }
-    MissingRsop = @{ applied='Unsupported'; configured='Complete'; local='Complete'; policies=0; conflict=$false }
-    StaleRegistry = @{ applied='Complete'; configured='Partial'; local='Complete'; policies=2; conflict=$false }
-    DeniedAdministrator = @{ applied='Denied'; configured='Denied'; local='Denied'; policies=0; conflict=$false }
-    DeniedSystem = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
-    NonEnglish = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
-    AppliedOrderConflict = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$true }
-    AccountLockout = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
-    AuditPolicy = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
-    UserRights = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
-    SecurityOptions = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
-    PartialChannel = @{ applied='Partial'; configured='Partial'; local='Partial'; policies=8; conflict=$false }
-    NonMdm = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false }
-    UnsupportedMdmBuild = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
-    MissingMdmClass = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
-    MissingMdmProperty = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
-    MdmPolicyConflict = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
-    MdmWinsOverGpScoped = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false }
+    Workgroup = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    Domain = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    UserAndComputerRsop = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=3; conflict=$false; firewalls=1 }
+    MissingRsop = @{ applied='Unsupported'; configured='Complete'; local='Complete'; policies=0; conflict=$false; firewalls=1 }
+    StaleRegistry = @{ applied='Complete'; configured='Partial'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    DeniedAdministrator = @{ applied='Denied'; configured='Denied'; local='Denied'; policies=0; conflict=$false; firewalls=0 }
+    DeniedSystem = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    NonEnglish = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    AppliedOrderConflict = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$true; firewalls=1 }
+    AccountLockout = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    AuditPolicy = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    UserRights = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    SecurityOptions = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    PartialChannel = @{ applied='Partial'; configured='Partial'; local='Partial'; policies=8; conflict=$false; firewalls=1 }
+    NonMdm = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    UnsupportedMdmBuild = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    MissingMdmClass = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    MissingMdmProperty = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    MdmPolicyConflict = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    MdmWinsOverGpScoped = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    ThirdPartyRegistration = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    DefenderDisabled = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    DefenderUnavailable = @{ applied='Complete'; configured='Partial'; local='Partial'; policies=1; conflict=$false; firewalls=1 }
+    AmbiguousSecurityCenter = @{ applied='Complete'; configured='Complete'; local='Partial'; policies=1; conflict=$false; firewalls=1 }
+    TamperProtected = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    MissingDefenderProperty = @{ applied='Complete'; configured='Complete'; local='Partial'; policies=1; conflict=$false; firewalls=1 }
+    FirewallProfiles = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    AsrRulePairs = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
 }
 
 $partial = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario PartialChannel).payload
@@ -78,11 +86,24 @@ foreach ($scenario in $policy.validationScenarios) {
         "$scenario retains the exact direct-rights catalog"
     Assert-Equal 3 @($result.payload.securityOptions).Count `
         "$scenario retains the exact security-option catalog"
+    Assert-Equal $expected[$scenario].firewalls @($result.payload.firewallProviders).Count `
+        "$scenario retains the expected firewall-provider evidence volume"
+    Assert-Equal 3 @($result.payload.smartScreenSignals).Count `
+        "$scenario retains the exact SmartScreen signal catalog"
+    Assert-Equal 3 @($result.payload.firewallProfiles.PSObject.Properties).Count `
+        "$scenario retains the exact firewall ActiveStore profile catalog"
     Assert-Equal 'LocalSamAccountsOnly' $result.payload.localAccountPolicySemantics `
         "$scenario never labels local SAM policy as domain policy"
     Assert-Equal 'DirectAssignmentsOnly' $result.payload.userRightSemantics `
         "$scenario never expands SID rights through group membership"
 }
+
+Assert-Equal 2 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario AmbiguousSecurityCenter).payload.antivirusProviders.Count `
+    'ambiguous Security Center registration preserves both bounded provider identities privately'
+Assert-Equal $true (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario TamperProtected).payload.defenderRuntime.tamperProtected `
+    'tamper protection remains a typed constraint signal instead of a generic failure'
+Assert-Equal 2 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario AsrRulePairs).payload.defenderAsrRules.Count `
+    'ASR rule GUID-action pairs remain bounded and distinct'
 
 $invalid = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario Workgroup).payload
 $invalid.appliedPolicies[0].objectId = 'localized display name'
