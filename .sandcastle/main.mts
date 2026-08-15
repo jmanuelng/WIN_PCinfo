@@ -1,6 +1,7 @@
 import * as sandcastle from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
 import {
+  AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   BASE_REF,
   assertAuthentication,
   assertHostReady,
@@ -50,6 +51,7 @@ async function run(): Promise<void> {
       const implementation = await sandbox.run({
         name: `issue-${issue.number}-implementer`,
         maxIterations: 1,
+        idleTimeoutSeconds: AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
         agent,
         promptFile: "./.sandcastle/implement-prompt.md",
         promptArgs: {
@@ -71,6 +73,7 @@ async function run(): Promise<void> {
       const review = await sandbox.run({
         name: `issue-${issue.number}-reviewer`,
         maxIterations: 1,
+        idleTimeoutSeconds: AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
         agent,
         promptFile: "./.sandcastle/review-prompt.md",
         promptArgs: {

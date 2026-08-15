@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 export const READY_LABEL = "ready-for-agent";
 export const BASE_REF = "origin/main";
 export const MAX_ALLOWED_ITERATIONS = 10;
+export const AGENT_PHASE_IDLE_TIMEOUT_SECONDS = 2 * 60 * 60;
 
 export interface GitHubActor {
   readonly login: string;

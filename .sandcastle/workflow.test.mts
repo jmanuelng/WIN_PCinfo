@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { createCodexAgent } from "./codex-agent.mts";
 import {
+  AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   analyzeChecks,
   parseMaxIterations,
   selectNextIssue,
@@ -141,6 +142,10 @@ test("parseMaxIterations defaults to one and caps autonomous runs", () => {
     () => parseMaxIterations(["--max-iterations", "11"]),
     /integer from 1 through 10/,
   );
+});
+
+test("agent phases tolerate the repository's long full-suite silence", () => {
+  assert.equal(AGENT_PHASE_IDLE_TIMEOUT_SECONDS, 2 * 60 * 60);
 });
 
 test("Codex provider uses the current automatic-review CLI flag", () => {
