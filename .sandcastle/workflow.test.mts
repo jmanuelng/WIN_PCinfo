@@ -13,6 +13,7 @@ import {
   buildIntegrationPhaseOptions,
   buildReviewPhaseOptions,
   createSerializedExecutor,
+  isSafelyClaimedIssue,
   parseMaxIterations,
   parseMaxParallel,
   runCommandAsync,
@@ -110,6 +111,17 @@ test("selectNextIssue treats open or unrecognized dependencies as blockers", () 
     ]),
     undefined,
   );
+  assert.equal(
+    selectNextIssue([
+      issue(55, {
+        blockedBy: {
+          nodes: [{ number: 54, state: "CLOSED" }],
+          totalCount: 2,
+        },
+      }),
+    ]),
+    undefined,
+  );
 });
 
 test("selectNextIssue excludes parent specifications with open child issues", () => {
@@ -156,12 +168,35 @@ test("analyzeChecks fails closed and separates terminal states", () => {
   assert.deepEqual(summary.pending, ["policy"]);
 });
 
-test("parseMaxIterations defaults to one and caps autonomous runs", () => {
-  assert.equal(parseMaxIterations([]), 1);
+test("parseMaxIterations defaults to the AFK run and caps autonomy", () => {
+  assert.equal(parseMaxIterations([]), 10);
   assert.equal(parseMaxIterations(["--max-iterations", "10"]), 10);
   assert.throws(
     () => parseMaxIterations(["--max-iterations", "11"]),
     /integer from 1 through 10/,
+  );
+});
+
+test("verified claims recheck every mutable eligibility condition", () => {
+  const claimed = issue(57, { assignees: [{ login: "agent" }] });
+  assert.equal(isSafelyClaimedIssue(claimed, "agent"), true);
+  assert.equal(
+    isSafelyClaimedIssue(
+      { ...claimed, labels: [{ name: "needs-triage" }] },
+      "agent",
+    ),
+    false,
+  );
+  assert.equal(
+    isSafelyClaimedIssue(
+      { ...claimed, blockedBy: { nodes: [{ state: "OPEN" }] } },
+      "agent",
+    ),
+    false,
+  );
+  assert.equal(
+    isSafelyClaimedIssue({ ...claimed, state: "CLOSED" }, "agent"),
+    false,
   );
 });
 
@@ -200,29 +235,24 @@ test("async command execution permits two long-running lanes to overlap", async 
   }
 });
 
-test("serialized executor delivers one lane at a time and survives failures", async () => {
-  const execute = createSerializedExecutor();
+test("serialized executor stops queued deliveries after the first failure", async () => {
+  const executor = createSerializedExecutor();
   const events: string[] = [];
-  const first = execute(async () => {
+  const first = executor.execute(async () => {
     events.push("first:start");
     await new Promise((resolve) => setTimeout(resolve, 20));
     events.push("first:fail");
     throw new Error("expected failure");
   });
-  const second = execute(async () => {
+  const second = executor.execute(async () => {
     events.push("second:start");
     events.push("second:done");
     return 2;
   });
 
   await assert.rejects(first, /expected failure/);
-  assert.equal(await second, 2);
-  assert.deepEqual(events, [
-    "first:start",
-    "first:fail",
-    "second:start",
-    "second:done",
-  ]);
+  await assert.rejects(second, /stopped before this operation/);
+  assert.deepEqual(events, ["first:start", "first:fail"]);
 });
 
 test("all agent phases tolerate the repository's long full-suite silence", () => {

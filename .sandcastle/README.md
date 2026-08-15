@@ -38,9 +38,10 @@ state fails closed and remains blocking.
 
 It assigns every selected issue to the authenticated GitHub user before
 creating branches. Selection is deterministic: the lowest eligible issue
-numbers fill the available frontier slots first. The claim is verified before
-work begins, so a ticket that changes concurrently is released and fails
-closed.
+numbers fill the available frontier slots first. Each claim rechecks state,
+label, blockers, child completion, and sole ownership before work begins. If a
+later claim fails, every earlier claim in that not-yet-started batch is released
+and verified; an unverifiable rollback stops with an exact per-issue error.
 
 ## Safe first run
 
@@ -62,6 +63,9 @@ at most two independent tickets active at once:
 npm run sandcastle -- --max-iterations 10
 ```
 
+`npm run sandcastle` uses the same ten-issue default. The named
+`sandcastle:canary` script explicitly limits execution to one issue.
+
 Use `--max-parallel 1` to force sequential execution. The default and maximum
 are both two because this no-sandbox Windows host must retain enough capacity
 for two complete PowerShell suites.
@@ -75,5 +79,8 @@ agent for semantic merge conflicts, and reruns the complete PowerShell suite.
 It then creates the pull request, waits for checks, squash-merges, and verifies
 issue closure.
 
-Any failure stops the loop. The issue remains assigned, and any branch,
-worktree, or pull request already created remains available for inspection.
+Any failure stops new deliveries and prevents another batch from starting. A
+delivery already in progress is allowed to finish its atomic transaction.
+Started issues remain assigned; claims rolled back before work are reported as
+released. Branches, preserved dirty worktrees, and pull requests remain
+available for inspection as reported by the failing lane.

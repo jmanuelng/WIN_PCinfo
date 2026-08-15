@@ -105,11 +105,21 @@ async function prepareIssue(issue: GitHubIssue) {
     );
 
     assertCleanDeliverable(sandbox.worktreePath, branch);
-    return { issue, branch, sandbox };
+    return { issue, branch, sandbox, closed: false };
   } catch (error) {
     await closeSandbox(sandbox);
     throw error;
   }
+}
+
+async function closePreparedIssue(
+  prepared: Awaited<ReturnType<typeof prepareIssue>>,
+): Promise<void> {
+  if (prepared.closed) {
+    return;
+  }
+  prepared.closed = true;
+  await closeSandbox(prepared.sandbox);
 }
 
 async function integrateLatestBase(
@@ -175,12 +185,12 @@ async function integrateLatestBase(
 async function deliverIssue(
   prepared: Awaited<ReturnType<typeof prepareIssue>>,
 ): Promise<void> {
-  const { issue, branch, sandbox } = prepared;
+  const { issue, branch } = prepared;
   let headSha = "";
   try {
     headSha = await integrateLatestBase(prepared);
   } finally {
-    await closeSandbox(sandbox);
+    await closePreparedIssue(prepared);
   }
 
   const pullRequest = pushAndCreatePullRequest(issue, branch);
@@ -201,8 +211,24 @@ async function claimBatch(issues: readonly GitHubIssue[]): Promise<void> {
       claimed.push(issue);
     }
   } catch (error) {
+    const rollbackFailures: unknown[] = [];
     for (const issue of claimed) {
-      releaseIssueClaim(issue.number);
+      try {
+        releaseIssueClaim(issue.number);
+        console.error(`Released verified claim for #${issue.number}.`);
+      } catch (rollbackError) {
+        rollbackFailures.push(
+          new Error(`Issue #${issue.number} claim rollback failed.`, {
+            cause: rollbackError,
+          }),
+        );
+      }
+    }
+    if (rollbackFailures.length > 0) {
+      throw new AggregateError(
+        [error, ...rollbackFailures],
+        "Batch claim failed and one or more earlier claim rollbacks could not be verified.",
+      );
     }
     throw error;
   }
@@ -233,21 +259,23 @@ async function run(): Promise<void> {
     await claimBatch(issues);
     attemptedIssues += issues.length;
 
-    const deliverSerially = createSerializedExecutor();
+    const delivery = createSerializedExecutor();
     const lanes = await Promise.allSettled(
       issues.map(async (issue) => {
         let prepared: Awaited<ReturnType<typeof prepareIssue>>;
         try {
           prepared = await prepareIssue(issue);
         } catch (error) {
+          delivery.stop(error);
           throw new Error(`Issue #${issue.number} preparation failed.`, {
             cause: error,
           });
         }
 
         try {
-          await deliverSerially(() => deliverIssue(prepared));
+          await delivery.execute(() => deliverIssue(prepared));
         } catch (error) {
+          await closePreparedIssue(prepared);
           throw new Error(`Issue #${issue.number} delivery failed.`, {
             cause: error,
           });
@@ -286,7 +314,7 @@ run().catch((error: unknown) => {
   const message = formatError(error);
   console.error(`\nSandcastle stopped safely:\n${message}`);
   console.error(
-    "Affected issues remain assigned. Any created branch, worktree, or pull request is preserved for inspection.",
+    "Inspect the per-lane errors above for exact claim and artifact recovery state.",
   );
   process.exitCode = 1;
 });
