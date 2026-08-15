@@ -34,7 +34,7 @@
     "evidenceProfileId": { "const": "profile:device-firmware-identity-administrator-and-policy-readiness" },
     "layers": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/layer" } },
     "collectors": { "type": "array", "minItems": 1, "maxItems": 1, "prefixItems": [{ "$ref": "#/$defs/collector" }], "items": false },
-    "sourceCatalog": { "type": "array", "minItems": 10, "maxItems": 10, "items": { "$ref": "#/$defs/source" } },
+    "sourceCatalog": { "type": "array", "minItems": 15, "maxItems": 15, "items": { "$ref": "#/$defs/source" } },
     "auditSubcategories": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/catalogPair" } },
     "userRights": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/right" } },
     "securityOptions": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/registrySignal" } },
@@ -43,7 +43,7 @@
     "firewallProfiles": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/firewallProfile" } },
     "userRightSemantics": { "const": "DirectAssignmentsOnly" },
     "localAccountPolicySemantics": { "const": "LocalSamAccountsOnly" },
-    "scopes": { "type": "array", "minItems": 29, "maxItems": 29, "items": { "$ref": "#/$defs/scope" } },
+    "scopes": { "type": "array", "minItems": 35, "maxItems": 35, "items": { "$ref": "#/$defs/scope" } },
     "rules": { "type": "array", "minItems": 7, "maxItems": 7, "items": { "$ref": "#/$defs/rule" } },
     "discoveryTasks": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/discoveryTask" } },
     "validationScenarios": {
@@ -75,7 +75,19 @@
         "TamperProtected",
         "MissingDefenderProperty",
         "FirewallProfiles",
-        "AsrRulePairs"
+        "AsrRulePairs",
+        "BitLockerEncrypted",
+        "BitLockerUnencrypted",
+        "BitLockerUnknown",
+        "VbsCredentialGuardRunning",
+        "VbsConfiguredNotRunning",
+        "WdacWindows11Policies",
+        "WdacWindows10Unsupported",
+        "AppLockerGpOnly",
+        "AppLockerCspOnly",
+        "AppLockerGpCspConflict",
+        "AppLockerChannelIncomplete",
+        "VirtualMachineSecurity"
       ]
     }
   },
@@ -87,7 +99,7 @@
       "properties": {
         "layerId": { "enum": ["AppliedPolicyEvidence", "ConfiguredPolicySignals", "CurrentControlState"] },
         "purpose": { "type": "string", "minLength": 20, "maxLength": 512 },
-        "scopeIds": { "type": "array", "minItems": 3, "maxItems": 10, "uniqueItems": true, "items": { "type": "string", "pattern": "^scope:policy\\." } }
+        "scopeIds": { "type": "array", "minItems": 3, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "pattern": "^scope:policy\\." } }
       }
     },
     "collector": {
@@ -122,7 +134,7 @@
         "collectorId": { "const": "collector:windows.effective-policy" },
         "collectorVersion": { "const": "1.0.0" },
         "operationId": { "const": "observe-effective-policy" },
-        "source": { "const": "Release-owned projection of cached RSoP WMI, local NetAPI, Audit Policy, LSA Policy, Windows Security Center, approved Defender cmdlets, ActiveStore firewall state, and exact local registry values" },
+        "source": { "const": "Release-owned projection of cached RSoP WMI, local NetAPI, Audit Policy, LSA Policy, Windows Security Center, approved Defender cmdlets, ActiveStore firewall state, BitLocker status, Win32_DeviceGuard state, structured WDAC inventory, separate AppLocker GP and CSP channels, and exact local registry values" },
         "executionContext": { "const": "Administrator" },
         "privilege": { "const": "RequiresAdministrator" },
         "networkBehavior": { "const": "OfflineOnly" },
@@ -135,6 +147,9 @@
             "Wscapi.dll",
             "Defender PowerShell module",
             "NetSecurity PowerShell module",
+            "BitLocker PowerShell module",
+            "AppLocker PowerShell module",
+            "CiTool.exe",
             "Microsoft.Win32.Registry"
           ]
         },

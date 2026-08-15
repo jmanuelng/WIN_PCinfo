@@ -39,6 +39,18 @@ $expected = @{
     MissingDefenderProperty = @{ applied='Complete'; configured='Complete'; local='Partial'; policies=1; conflict=$false; firewalls=1 }
     FirewallProfiles = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
     AsrRulePairs = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    BitLockerEncrypted = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    BitLockerUnencrypted = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    BitLockerUnknown = @{ applied='Complete'; configured='Complete'; local='Partial'; policies=1; conflict=$false; firewalls=1 }
+    VbsCredentialGuardRunning = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    VbsConfiguredNotRunning = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    WdacWindows11Policies = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    WdacWindows10Unsupported = @{ applied='Complete'; configured='Partial'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    AppLockerGpOnly = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    AppLockerCspOnly = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    AppLockerGpCspConflict = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    AppLockerChannelIncomplete = @{ applied='Complete'; configured='Partial'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
+    VirtualMachineSecurity = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
 }
 
 $partial = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario PartialChannel).payload
@@ -88,6 +100,18 @@ foreach ($scenario in $policy.validationScenarios) {
         "$scenario retains the exact security-option catalog"
     Assert-Equal $expected[$scenario].firewalls @($result.payload.firewallProviders).Count `
         "$scenario retains the expected firewall-provider evidence volume"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('bitLockerSystemVolume') `
+        "$scenario includes the bounded BitLocker system-volume projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('bitLockerProtectors') `
+        "$scenario includes the bounded BitLocker protector-type projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('deviceGuard') `
+        "$scenario includes the bounded VBS and Credential Guard projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('wdacPolicies') `
+        "$scenario includes the bounded WDAC inventory projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('appLockerGpCollections') `
+        "$scenario includes the separate AppLocker GP projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('appLockerCspCollections') `
+        "$scenario includes the separate AppLocker CSP projection"
     Assert-Equal 3 @($result.payload.smartScreenSignals).Count `
         "$scenario retains the exact SmartScreen signal catalog"
     Assert-Equal 3 @($result.payload.firewallProfiles.PSObject.Properties).Count `
@@ -104,6 +128,18 @@ Assert-Equal $true (Invoke-EffectivePolicyCollection -Policy $policy -Validation
     'tamper protection remains a typed constraint signal instead of a generic failure'
 Assert-Equal 2 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario AsrRulePairs).payload.defenderAsrRules.Count `
     'ASR rule GUID-action pairs remain bounded and distinct'
+Assert-Equal 'On' (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario BitLockerEncrypted).payload.bitLockerSystemVolume.protectionStatus `
+    'encrypted BitLocker state preserves bounded protection status only'
+Assert-Equal 'Off' (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario BitLockerUnencrypted).payload.bitLockerSystemVolume.protectionStatus `
+    'unencrypted BitLocker state remains explicit instead of inferred from protectors'
+Assert-Equal 0 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario WdacWindows10Unsupported).payload.wdacPolicies.Count `
+    'unsupported WDAC inventory publishes no fabricated policy rows'
+Assert-Equal 1 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario AppLockerGpOnly).payload.appLockerGpCollections.Count `
+    'AppLocker GP-only evidence stays in the GP channel only'
+Assert-Equal 1 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario AppLockerCspOnly).payload.appLockerCspCollections.Count `
+    'AppLocker CSP-only evidence stays in the CSP channel only'
+Assert-Equal 'EnabledAndRunning' (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario VbsCredentialGuardRunning).payload.deviceGuard.virtualizationBasedSecurityStatus `
+    'VBS running state uses the device-reported structured value'
 
 $invalid = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario Workgroup).payload
 $invalid.appliedPolicies[0].objectId = 'localized display name'
@@ -113,6 +149,14 @@ $smuggled = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenari
 $smuggled.appliedPolicies[0] | Add-Member -NotePropertyName credential -NotePropertyValue 'must-not-cross'
 Assert-Equal $false (Test-EffectivePolicyCollectorPayload -Payload $smuggled -Policy $policy) `
     'undeclared nested worker properties fail the closed collector contract'
+$bitlockerSecrets = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario BitLockerEncrypted).payload
+$bitlockerSecrets.bitLockerSystemVolume | Add-Member -NotePropertyName recoveryPassword -NotePropertyValue '123456-123456-123456-123456-123456-123456-123456-123456'
+Assert-Equal $false (Test-EffectivePolicyCollectorPayload -Payload $bitlockerSecrets -Policy $policy) `
+    'BitLocker recovery material cannot enter the collector payload'
+$bitlockerProtectorIdentifier = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario BitLockerEncrypted).payload
+$bitlockerProtectorIdentifier.bitLockerProtectors[0] | Add-Member -NotePropertyName protectorId -NotePropertyValue '{synthetic-protector-guid}'
+Assert-Equal $false (Test-EffectivePolicyCollectorPayload -Payload $bitlockerProtectorIdentifier -Policy $policy) `
+    'BitLocker protector identifiers cannot cross the bounded payload'
 
 $failedSources = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario Workgroup).payload
 $failedSources.auditSubcategories[0].state = 'Failed'
@@ -138,6 +182,14 @@ $projection = New-EffectivePolicyPublicProjection -CollectorResult (
 Assert-Equal 'win-pcinfo.effective-policy-validation' $projection.recordType `
     'the public validation projection is explicitly synthetic'
 Assert-Equal 2 $projection.appliedPolicyCount 'the public projection carries only a safe count'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('bitLockerProtectorTypeCount') `
+    'the public projection carries only a safe BitLocker protector count'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('wdacPolicyCount') `
+    'the public projection carries only a safe WDAC policy count'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('appLockerGpCollectionCount') `
+    'the public projection carries only a safe AppLocker GP count'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('appLockerCspCollectionCount') `
+    'the public projection carries only a safe AppLocker CSP count'
 if (($projection | ConvertTo-Json -Depth 10) -match '(?i)SYNTHETIC-DOMAIN|ÉQUIPE|[0-9a-f]{8}-[0-9a-f]{4}-') {
     throw 'Restricted policy identity or localized evidence entered the public projection.'
 }

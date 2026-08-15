@@ -580,7 +580,7 @@ function Get-AssessmentRecordSemanticReason {
     # graph is closed over the selected release-owned field and scope profile.
     # Keeping it generic lets narrow collector slices validate a normal
     # Assessment Record without weakening the earlier tracer-bullet profile.
-    $prohibitedFieldPattern = '(?i)(?:^|[.:/_-])(?:password|passphrase|credential|token|private[-_]?key|recovery[-_]?key|license[-_]?key|pfx|secret)(?:$|[.:/_-])'
+    $prohibitedFieldPattern = '(?i)(?:^|[.:/_-])(?:password|passphrase|credential(?!-guard)|token|private[-_]?key|recovery[-_]?key|license[-_]?key|pfx|secret)(?:$|[.:/_-])'
     if (@($Record.observations | Where-Object {
         [string] $_.fieldId -match $prohibitedFieldPattern
     }).Count -gt 0) {

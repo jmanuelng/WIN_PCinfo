@@ -2214,7 +2214,12 @@ function Invoke-PrivilegedCollectionPlan {
             'MissingMdmClass','MissingMdmProperty','MdmPolicyConflict',
             'MdmWinsOverGpScoped','ThirdPartyRegistration','DefenderDisabled',
             'DefenderUnavailable','AmbiguousSecurityCenter','TamperProtected',
-            'MissingDefenderProperty','FirewallProfiles','AsrRulePairs'
+            'MissingDefenderProperty','FirewallProfiles','AsrRulePairs',
+            'BitLockerEncrypted','BitLockerUnencrypted','BitLockerUnknown',
+            'VbsCredentialGuardRunning','VbsConfiguredNotRunning',
+            'WdacWindows11Policies','WdacWindows10Unsupported',
+            'AppLockerGpOnly','AppLockerCspOnly','AppLockerGpCspConflict',
+            'AppLockerChannelIncomplete','VirtualMachineSecurity'
         )]
         [string] $EffectivePolicyScenario = 'None',
         [Parameter()] [System.Threading.CancellationToken] $CancellationToken =

@@ -29,12 +29,15 @@
         "scope:policy.defender.asr",
         "scope:policy.defender.network-protection",
         "scope:policy.smartscreen.shell",
-        "scope:policy.smartscreen.app-install-control"
+        "scope:policy.smartscreen.app-install-control",
+        "scope:policy.wdac.inventory",
+        "scope:policy.applocker.gp-channel",
+        "scope:policy.applocker.csp-channel"
       ]
     },
     {
       "layerId": "CurrentControlState",
-      "purpose": "Current local SAM, audit-policy, direct user-right, Windows Security Center, Defender runtime, and ActiveStore firewall state reported by Windows at assessment time.",
+      "purpose": "Current local SAM, audit-policy, direct user-right, Windows Security Center, Defender runtime, ActiveStore firewall, BitLocker, and device-reported VBS state reported by Windows at assessment time.",
       "scopeIds": [
         "scope:policy.local-sam.password",
         "scope:policy.local-sam.lockout",
@@ -45,7 +48,10 @@
         "scope:policy.defender.runtime",
         "scope:policy.firewall.domain-profile",
         "scope:policy.firewall.private-profile",
-        "scope:policy.firewall.public-profile"
+        "scope:policy.firewall.public-profile",
+        "scope:policy.bitlocker.operating-system-volume",
+        "scope:policy.bitlocker.protectors",
+        "scope:policy.vbs.runtime"
       ]
     }
   ],
@@ -54,7 +60,7 @@
       "collectorId": "collector:windows.effective-policy",
       "collectorVersion": "1.0.0",
       "operationId": "observe-effective-policy",
-      "source": "Release-owned projection of cached RSoP WMI, local NetAPI, Audit Policy, LSA Policy, Windows Security Center, approved Defender cmdlets, ActiveStore firewall state, and exact local registry values",
+      "source": "Release-owned projection of cached RSoP WMI, local NetAPI, Audit Policy, LSA Policy, Windows Security Center, approved Defender cmdlets, ActiveStore firewall state, BitLocker status, Win32_DeviceGuard state, structured WDAC inventory, separate AppLocker GP and CSP channels, and exact local registry values",
       "executionContext": "Administrator",
       "privilege": "RequiresAdministrator",
       "networkBehavior": "OfflineOnly",
@@ -66,6 +72,9 @@
         "Wscapi.dll",
         "Defender PowerShell module",
         "NetSecurity PowerShell module",
+        "BitLocker PowerShell module",
+        "AppLocker PowerShell module",
+        "CiTool.exe",
         "Microsoft.Win32.Registry"
       ],
       "mayPrompt": false,
@@ -138,6 +147,31 @@
       "sourceId": "source:windows.mdm-policy-csp-results",
       "interface": "PredefinedLocalSystemMdmBridgePolicyResultCatalog",
       "limitation": "VersionedBuildCatalogPolicyCspOnlyNoDynamicClassDumpNoTenantIntent"
+    },
+    {
+      "sourceId": "source:windows.bitlocker.volume-status",
+      "interface": "Get-BitLockerVolume",
+      "limitation": "OperatingSystemVolumeOnlyNoRecoveryMaterialNoProtectorIdentifiersNoEscrowClaim"
+    },
+    {
+      "sourceId": "source:windows.device-guard.status",
+      "interface": "Get-CimInstance Win32_DeviceGuard",
+      "limitation": "StructuredRuntimeStateOnlyNoPolicyProvenance"
+    },
+    {
+      "sourceId": "source:windows.app-control.citool",
+      "interface": "CiTool -lp -json",
+      "limitation": "Windows11_22H2OrLaterStructuredInventoryOnlyNoLegacyTextParsing"
+    },
+    {
+      "sourceId": "source:windows.applocker.gp-effective-policy",
+      "interface": "Get-AppLockerPolicy -Effective",
+      "limitation": "GroupPolicyOnlyNoCspInferenceNoRuleXmlPublication"
+    },
+    {
+      "sourceId": "source:windows.applocker.csp-policy",
+      "interface": "Get-CimInstance MDM_AppLocker_*",
+      "limitation": "DevicePartitionCspOnlyNoGpInferenceNoRuleXmlPublication"
     }
   ],
   "auditSubcategories": [
@@ -231,6 +265,12 @@
     { "scopeId": "scope:policy.defender.network-protection", "fieldIds": ["field:policy.defender.network-protection"] },
     { "scopeId": "scope:policy.smartscreen.shell", "fieldIds": ["field:policy.smartscreen.shell-enabled", "field:policy.smartscreen.shell-prevent-override"] },
     { "scopeId": "scope:policy.smartscreen.app-install-control", "fieldIds": ["field:policy.smartscreen.app-install-control"] },
+    { "scopeId": "scope:policy.bitlocker.operating-system-volume", "fieldIds": ["field:policy.bitlocker.conversion-status", "field:policy.bitlocker.protection-status", "field:policy.bitlocker.encryption-method", "field:policy.bitlocker.lock-status"] },
+    { "scopeId": "scope:policy.bitlocker.protectors", "fieldIds": ["field:policy.bitlocker.protector-type", "field:policy.bitlocker.protector-count"] },
+    { "scopeId": "scope:policy.vbs.runtime", "fieldIds": ["field:policy.vbs.status", "field:policy.credential-guard.state", "field:policy.memory-integrity.state", "field:policy.user-mode-code-integrity.state"] },
+    { "scopeId": "scope:policy.wdac.inventory", "fieldIds": ["field:policy.wdac.deployment-channel", "field:policy.wdac.enforcement-state", "field:policy.wdac.platform-policy", "field:policy.wdac.signed-policy"] },
+    { "scopeId": "scope:policy.applocker.gp-channel", "fieldIds": ["field:policy.applocker.rule-collection", "field:policy.applocker.enforcement-mode"] },
+    { "scopeId": "scope:policy.applocker.csp-channel", "fieldIds": ["field:policy.applocker.rule-collection", "field:policy.applocker.enforcement-mode"] },
     { "scopeId": "scope:policy.security-center.antivirus-providers", "fieldIds": ["field:policy.security-provider.name", "field:policy.security-provider.health"] },
     { "scopeId": "scope:policy.security-center.firewall-providers", "fieldIds": ["field:policy.security-provider.name", "field:policy.security-provider.health"] },
     { "scopeId": "scope:policy.defender.runtime", "fieldIds": ["field:policy.defender.running-mode", "field:policy.defender.antivirus-enabled", "field:policy.defender.real-time-protection-enabled", "field:policy.defender.tamper-protected"] },
@@ -440,6 +480,18 @@
     "TamperProtected",
     "MissingDefenderProperty",
     "FirewallProfiles",
-    "AsrRulePairs"
+    "AsrRulePairs",
+    "BitLockerEncrypted",
+    "BitLockerUnencrypted",
+    "BitLockerUnknown",
+    "VbsCredentialGuardRunning",
+    "VbsConfiguredNotRunning",
+    "WdacWindows11Policies",
+    "WdacWindows10Unsupported",
+    "AppLockerGpOnly",
+    "AppLockerCspOnly",
+    "AppLockerGpCspConflict",
+    "AppLockerChannelIncomplete",
+    "VirtualMachineSecurity"
   ]
 }

@@ -31,10 +31,10 @@ function Get-EffectivePolicyPolicy {
     if ($policy.kind -ne 'win-pcinfo.effective-policy-policy' -or
         $policy.contractVersion -ne '1.0.0' -or
         $policy.policyId -ne 'win-pcinfo.effective-policy/1.0.0' -or
-        @($policy.layers).Count -ne 3 -or @($policy.scopes).Count -ne 29 -or
-        @($policy.sourceCatalog).Count -ne 10 -or @($policy.rules).Count -ne 7 -or
+        @($policy.layers).Count -ne 3 -or @($policy.scopes).Count -ne 35 -or
+        @($policy.sourceCatalog).Count -ne 15 -or @($policy.rules).Count -ne 7 -or
         @($policy.discoveryTasks).Count -ne 2 -or
-        @($policy.validationScenarios).Count -ne 28) {
+        @($policy.validationScenarios).Count -ne 40) {
         throw 'The Effective Policy policy is not semantically closed.'
     }
     $policy
@@ -203,6 +203,17 @@ function New-EffectivePolicySyntheticPayload {
         private=[pscustomobject][ordered]@{state='Complete';enabled=$true;defaultInboundAction='Block';defaultOutboundAction='Allow'}
         public=[pscustomobject][ordered]@{state='Complete';enabled=$true;defaultInboundAction='Block';defaultOutboundAction='Allow'}
     }
+    $bitLockerSystemVolume = [pscustomobject][ordered]@{
+        conversionStatus='FullyDecrypted';protectionStatus='Off';encryptionMethod='None';lockStatus='Unlocked'
+    }
+    $bitLockerProtectors = @()
+    $deviceGuard = [pscustomobject][ordered]@{
+        virtualizationBasedSecurityStatus='Disabled';credentialGuardState='Disabled'
+        memoryIntegrityState='Disabled';userModeCodeIntegrityState='Off'
+    }
+    $wdacPolicies = @()
+    $appLockerGpCollections = @()
+    $appLockerCspCollections = @()
 
     $states = @(Get-EffectivePolicyCollectorScopes -Policy $Policy | ForEach-Object {
         New-EffectivePolicyScopeState -ScopeId ([string]$_.scopeId) -State Complete
@@ -233,6 +244,12 @@ function New-EffectivePolicySyntheticPayload {
         $firewallProfiles.domain.state='Denied';$firewallProfiles.domain.enabled=$null;$firewallProfiles.domain.defaultInboundAction=$null;$firewallProfiles.domain.defaultOutboundAction=$null
         $firewallProfiles.private.state='Denied';$firewallProfiles.private.enabled=$null;$firewallProfiles.private.defaultInboundAction=$null;$firewallProfiles.private.defaultOutboundAction=$null
         $firewallProfiles.public.state='Denied';$firewallProfiles.public.enabled=$null;$firewallProfiles.public.defaultInboundAction=$null;$firewallProfiles.public.defaultOutboundAction=$null
+        $bitLockerSystemVolume.conversionStatus=$null;$bitLockerSystemVolume.protectionStatus=$null
+        $bitLockerSystemVolume.encryptionMethod=$null;$bitLockerSystemVolume.lockStatus=$null
+        $bitLockerProtectors=@()
+        $deviceGuard.virtualizationBasedSecurityStatus=$null;$deviceGuard.credentialGuardState=$null
+        $deviceGuard.memoryIntegrityState=$null;$deviceGuard.userModeCodeIntegrityState=$null
+        $wdacPolicies=@();$appLockerGpCollections=@();$appLockerCspCollections=@()
         foreach($state in $states){$state.state='Denied';$state.reasonCode='POLICY.ADMINISTRATOR_SOURCE_DENIED'}
     }
     elseif ($localScenario -eq 'PartialChannel') {
@@ -310,6 +327,85 @@ function New-EffectivePolicySyntheticPayload {
             $antivirusProviders=@([pscustomobject][ordered]@{name='Antivirus Microsoft Defender';health='Good'})
             $firewallProviders=@([pscustomobject][ordered]@{name='Pare-feu Microsoft Defender';health='Good'})
         }
+        'BitLockerEncrypted' {
+            $bitLockerSystemVolume.conversionStatus='FullyEncrypted'
+            $bitLockerSystemVolume.protectionStatus='On'
+            $bitLockerSystemVolume.encryptionMethod='XtsAes256'
+            $bitLockerSystemVolume.lockStatus='Unlocked'
+            $bitLockerProtectors=@(
+                [pscustomobject][ordered]@{protectorType='Tpm';count=1},
+                [pscustomobject][ordered]@{protectorType='RecoveryPassword';count=1}
+            )
+        }
+        'BitLockerUnknown' {
+            Set-ScopeState 'scope:policy.bitlocker.operating-system-volume' 'Unavailable' 'POLICY.BITLOCKER_VOLUME_UNAVAILABLE'
+            Set-ScopeState 'scope:policy.bitlocker.protectors' 'Unavailable' 'POLICY.BITLOCKER_PROTECTORS_UNAVAILABLE'
+            $bitLockerSystemVolume.conversionStatus=$null
+            $bitLockerSystemVolume.protectionStatus=$null
+            $bitLockerSystemVolume.encryptionMethod=$null
+            $bitLockerSystemVolume.lockStatus=$null
+            $bitLockerProtectors=@()
+        }
+        'VbsCredentialGuardRunning' {
+            $deviceGuard.virtualizationBasedSecurityStatus='EnabledAndRunning'
+            $deviceGuard.credentialGuardState='Running'
+            $deviceGuard.memoryIntegrityState='Running'
+            $deviceGuard.userModeCodeIntegrityState='Enforced'
+        }
+        'VbsConfiguredNotRunning' {
+            $deviceGuard.virtualizationBasedSecurityStatus='EnabledNotRunning'
+            $deviceGuard.credentialGuardState='Configured'
+            $deviceGuard.memoryIntegrityState='Configured'
+            $deviceGuard.userModeCodeIntegrityState='Audit'
+        }
+        'WdacWindows11Policies' {
+            $wdacPolicies=@(
+                [pscustomobject][ordered]@{deploymentChannel='ApplicationControlCsp';enforcementState='Enforced';platformPolicy=$false;signedPolicy=$true},
+                [pscustomobject][ordered]@{deploymentChannel='Platform';enforcementState='Enforced';platformPolicy=$true;signedPolicy=$true}
+            )
+        }
+        'WdacWindows10Unsupported' {
+            Set-ScopeState 'scope:policy.wdac.inventory' 'Unsupported' 'POLICY.WDAC_WINDOWS10_JSON_UNSUPPORTED'
+            $wdacPolicies=@()
+        }
+        'AppLockerGpOnly' {
+            $appLockerGpCollections=@(
+                [pscustomobject][ordered]@{ruleCollection='EXE';enforcementMode='Enabled'}
+            )
+        }
+        'AppLockerCspOnly' {
+            $appLockerCspCollections=@(
+                [pscustomobject][ordered]@{ruleCollection='EXE';enforcementMode='Enabled'}
+            )
+        }
+        'AppLockerGpCspConflict' {
+            $appLockerGpCollections=@(
+                [pscustomobject][ordered]@{ruleCollection='EXE';enforcementMode='AuditOnly'}
+            )
+            $appLockerCspCollections=@(
+                [pscustomobject][ordered]@{ruleCollection='EXE';enforcementMode='Enabled'}
+            )
+        }
+        'AppLockerChannelIncomplete' {
+            Set-ScopeState 'scope:policy.applocker.csp-channel' 'Unavailable' 'POLICY.APPLOCKER_CSP_UNAVAILABLE'
+            $appLockerGpCollections=@(
+                [pscustomobject][ordered]@{ruleCollection='EXE';enforcementMode='Enabled'}
+            )
+            $appLockerCspCollections=@()
+        }
+        'VirtualMachineSecurity' {
+            $bitLockerSystemVolume.conversionStatus='FullyEncrypted'
+            $bitLockerSystemVolume.protectionStatus='On'
+            $bitLockerSystemVolume.encryptionMethod='XtsAes128'
+            $bitLockerSystemVolume.lockStatus='Unlocked'
+            $bitLockerProtectors=@(
+                [pscustomobject][ordered]@{protectorType='Tpm';count=1}
+            )
+            $deviceGuard.virtualizationBasedSecurityStatus='EnabledAndRunningInVirtualMachine'
+            $deviceGuard.credentialGuardState='Running'
+            $deviceGuard.memoryIntegrityState='Running'
+            $deviceGuard.userModeCodeIntegrityState='Enforced'
+        }
     }
 
     $layers=@{}
@@ -331,6 +427,9 @@ function New-EffectivePolicySyntheticPayload {
         defenderRuntime=$defenderRuntime;defenderNetworkProtection=$defenderNetworkProtection
         defenderAsrRules=@($defenderAsrRules);smartScreenSignals=@($smartScreenSignals)
         firewallProfiles=$firewallProfiles
+        bitLockerSystemVolume=$bitLockerSystemVolume;bitLockerProtectors=@($bitLockerProtectors)
+        deviceGuard=$deviceGuard;wdacPolicies=@($wdacPolicies)
+        appLockerGpCollections=@($appLockerGpCollections);appLockerCspCollections=@($appLockerCspCollections)
         appliedOrderConflict=[bool]$conflict
         localAccountPolicySemantics='LocalSamAccountsOnly';userRightSemantics='DirectAssignmentsOnly'
     }
@@ -434,11 +533,13 @@ function Test-EffectivePolicyCollectorPayload {
         }
         $names=@($Payload.PSObject.Properties.Name|Sort-Object)
         $expected=@(
-            'antivirusProviders','appliedOrderConflict','appliedPolicies','auditSubcategories',
-            'defenderAsrRules','defenderNetworkProtection','defenderRuntime','firewallProfiles',
+            'antivirusProviders','appLockerCspCollections','appLockerGpCollections',
+            'appliedOrderConflict','appliedPolicies','auditSubcategories',
+            'bitLockerProtectors','bitLockerSystemVolume','defenderAsrRules',
+            'defenderNetworkProtection','defenderRuntime','deviceGuard','firewallProfiles',
             'firewallProviders','layerStates','localAccountPolicySemantics','localSam',
             'policySettings','scopeStates','securityOptions','smartScreenSignals',
-            'sourceLocale','userRights','userRightSemantics'
+            'sourceLocale','userRights','userRightSemantics','wdacPolicies'
         )|Sort-Object
         if(($names -join '|') -ne ($expected -join '|') -or
             $Payload.localAccountPolicySemantics -isnot [string] -or $Payload.userRightSemantics -isnot [string] -or
@@ -452,6 +553,9 @@ function Test-EffectivePolicyCollectorPayload {
             @($Payload.antivirusProviders).Count -gt [int]$Policy.collectors[0].maximumSecurityProvidersPerCategory -or
             @($Payload.firewallProviders).Count -gt [int]$Policy.collectors[0].maximumSecurityProvidersPerCategory -or
             @($Payload.defenderAsrRules).Count -gt [int]$Policy.collectors[0].maximumAsrRules -or
+            @($Payload.bitLockerProtectors).Count -gt 8 -or @($Payload.wdacPolicies).Count -gt 8 -or
+            @($Payload.appLockerGpCollections).Count -gt 8 -or
+            @($Payload.appLockerCspCollections).Count -gt 8 -or
             @($Payload.smartScreenSignals).Count -ne 3){return $false}
         $expectedScopeIds=@((Get-EffectivePolicyCollectorScopes -Policy $Policy).scopeId)
         if((@($Payload.scopeStates.scopeId)-join '|') -ne ($expectedScopeIds-join '|')){return $false}
@@ -597,6 +701,74 @@ function Test-EffectivePolicyCollectorPayload {
                     [string]$profile.defaultOutboundAction -notin @('Allow','Block','NotConfigured')){return $false}
             } elseif($null -ne $profile.enabled -or $null -ne $profile.defaultInboundAction -or $null -ne $profile.defaultOutboundAction){return $false}
         }
+        if(-not (Test-ExactProperties $Payload.bitLockerSystemVolume @(
+            'conversionStatus','protectionStatus','encryptionMethod','lockStatus'
+        ))){return $false}
+        $bitLockerVolumeScopeState=@($Payload.scopeStates|Where-Object scopeId -eq 'scope:policy.bitlocker.operating-system-volume')[0].state
+        if($bitLockerVolumeScopeState -eq 'Complete'){
+            if(-not (Test-BoundedString $Payload.bitLockerSystemVolume.conversionStatus 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-BoundedString $Payload.bitLockerSystemVolume.protectionStatus 32 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-BoundedString $Payload.bitLockerSystemVolume.encryptionMethod 32 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-BoundedString $Payload.bitLockerSystemVolume.lockStatus 32 '^[A-Za-z][A-Za-z0-9]+$')){return $false}
+        } elseif($bitLockerVolumeScopeState -eq 'Partial'){
+            if(-not (Test-NullableBoundedString $Payload.bitLockerSystemVolume.conversionStatus 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-NullableBoundedString $Payload.bitLockerSystemVolume.protectionStatus 32 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-NullableBoundedString $Payload.bitLockerSystemVolume.encryptionMethod 32 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-NullableBoundedString $Payload.bitLockerSystemVolume.lockStatus 32 '^[A-Za-z][A-Za-z0-9]+$')){return $false}
+        } elseif($null -ne $Payload.bitLockerSystemVolume.conversionStatus -or
+            $null -ne $Payload.bitLockerSystemVolume.protectionStatus -or
+            $null -ne $Payload.bitLockerSystemVolume.encryptionMethod -or
+            $null -ne $Payload.bitLockerSystemVolume.lockStatus){return $false}
+        $bitLockerProtectorScopeState=@($Payload.scopeStates|Where-Object scopeId -eq 'scope:policy.bitlocker.protectors')[0].state
+        foreach($protector in @($Payload.bitLockerProtectors)){
+            if(-not (Test-ExactProperties $protector @('protectorType','count')) -or
+                -not (Test-BoundedString $protector.protectorType 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-BoundedUnsignedInteger $protector.count ([uint64]32)) -or
+                [decimal]$protector.count -lt 1){return $false}
+        }
+        if($bitLockerProtectorScopeState -notin @('Complete','Partial') -and @($Payload.bitLockerProtectors).Count -ne 0){return $false}
+        if(-not (Test-ExactProperties $Payload.deviceGuard @(
+            'virtualizationBasedSecurityStatus','credentialGuardState',
+            'memoryIntegrityState','userModeCodeIntegrityState'
+        ))){return $false}
+        $deviceGuardScopeState=@($Payload.scopeStates|Where-Object scopeId -eq 'scope:policy.vbs.runtime')[0].state
+        if($deviceGuardScopeState -eq 'Complete'){
+            if(-not (Test-BoundedString $Payload.deviceGuard.virtualizationBasedSecurityStatus 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-BoundedString $Payload.deviceGuard.credentialGuardState 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-BoundedString $Payload.deviceGuard.memoryIntegrityState 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-BoundedString $Payload.deviceGuard.userModeCodeIntegrityState 64 '^[A-Za-z][A-Za-z0-9]+$')){return $false}
+        } elseif($deviceGuardScopeState -eq 'Partial'){
+            if(-not (Test-NullableBoundedString $Payload.deviceGuard.virtualizationBasedSecurityStatus 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-NullableBoundedString $Payload.deviceGuard.credentialGuardState 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-NullableBoundedString $Payload.deviceGuard.memoryIntegrityState 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-NullableBoundedString $Payload.deviceGuard.userModeCodeIntegrityState 64 '^[A-Za-z][A-Za-z0-9]+$')){return $false}
+        } elseif($null -ne $Payload.deviceGuard.virtualizationBasedSecurityStatus -or
+            $null -ne $Payload.deviceGuard.credentialGuardState -or
+            $null -ne $Payload.deviceGuard.memoryIntegrityState -or
+            $null -ne $Payload.deviceGuard.userModeCodeIntegrityState){return $false}
+        $wdacScopeState=@($Payload.scopeStates|Where-Object scopeId -eq 'scope:policy.wdac.inventory')[0].state
+        foreach($policyItem in @($Payload.wdacPolicies)){
+            if(-not (Test-ExactProperties $policyItem @(
+                'deploymentChannel','enforcementState','platformPolicy','signedPolicy'
+            )) -or
+                -not (Test-BoundedString $policyItem.deploymentChannel 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                -not (Test-BoundedString $policyItem.enforcementState 64 '^[A-Za-z][A-Za-z0-9]+$') -or
+                $policyItem.platformPolicy -isnot [bool] -or
+                $policyItem.signedPolicy -isnot [bool]){return $false}
+        }
+        if($wdacScopeState -notin @('Complete','Partial') -and @($Payload.wdacPolicies).Count -ne 0){return $false}
+        foreach($collectionSet in @(
+            @{scopeId='scope:policy.applocker.gp-channel';items=@($Payload.appLockerGpCollections)},
+            @{scopeId='scope:policy.applocker.csp-channel';items=@($Payload.appLockerCspCollections)}
+        )){
+            foreach($collection in @($collectionSet.items)){
+                if(-not (Test-ExactProperties $collection @('ruleCollection','enforcementMode')) -or
+                    -not (Test-BoundedString $collection.ruleCollection 32 '^[A-Za-z]+$') -or
+                    -not (Test-BoundedString $collection.enforcementMode 32 '^[A-Za-z]+$')){return $false}
+            }
+            $collectionScopeState=@($Payload.scopeStates|Where-Object scopeId -eq $collectionSet.scopeId)[0].state
+            if($collectionScopeState -notin @('Complete','Partial') -and @($collectionSet.items).Count -ne 0){return $false}
+        }
         $computedConflict=@($Payload.policySettings|Group-Object target,settingId|Where-Object {
             @($_.Group.objectId|Select-Object -Unique).Count -gt 1
         }).Count -gt 0
@@ -686,6 +858,44 @@ function Copy-EffectivePolicyCollectorPayload {
                 defaultOutboundAction=$(if($null -eq $Payload.firewallProfiles.public.defaultOutboundAction){$null}else{[string]$Payload.firewallProfiles.public.defaultOutboundAction})
             }
         }
+        bitLockerSystemVolume=[pscustomobject][ordered]@{
+            conversionStatus=$(if($null -eq $Payload.bitLockerSystemVolume.conversionStatus){$null}else{[string]$Payload.bitLockerSystemVolume.conversionStatus})
+            protectionStatus=$(if($null -eq $Payload.bitLockerSystemVolume.protectionStatus){$null}else{[string]$Payload.bitLockerSystemVolume.protectionStatus})
+            encryptionMethod=$(if($null -eq $Payload.bitLockerSystemVolume.encryptionMethod){$null}else{[string]$Payload.bitLockerSystemVolume.encryptionMethod})
+            lockStatus=$(if($null -eq $Payload.bitLockerSystemVolume.lockStatus){$null}else{[string]$Payload.bitLockerSystemVolume.lockStatus})
+        }
+        bitLockerProtectors=@($Payload.bitLockerProtectors|ForEach-Object {
+            [pscustomobject][ordered]@{
+                protectorType=[string]$_.protectorType
+                count=[long]$_.count
+            }
+        })
+        deviceGuard=[pscustomobject][ordered]@{
+            virtualizationBasedSecurityStatus=$(if($null -eq $Payload.deviceGuard.virtualizationBasedSecurityStatus){$null}else{[string]$Payload.deviceGuard.virtualizationBasedSecurityStatus})
+            credentialGuardState=$(if($null -eq $Payload.deviceGuard.credentialGuardState){$null}else{[string]$Payload.deviceGuard.credentialGuardState})
+            memoryIntegrityState=$(if($null -eq $Payload.deviceGuard.memoryIntegrityState){$null}else{[string]$Payload.deviceGuard.memoryIntegrityState})
+            userModeCodeIntegrityState=$(if($null -eq $Payload.deviceGuard.userModeCodeIntegrityState){$null}else{[string]$Payload.deviceGuard.userModeCodeIntegrityState})
+        }
+        wdacPolicies=@($Payload.wdacPolicies|ForEach-Object {
+            [pscustomobject][ordered]@{
+                deploymentChannel=[string]$_.deploymentChannel
+                enforcementState=[string]$_.enforcementState
+                platformPolicy=[bool]$_.platformPolicy
+                signedPolicy=[bool]$_.signedPolicy
+            }
+        })
+        appLockerGpCollections=@($Payload.appLockerGpCollections|ForEach-Object {
+            [pscustomobject][ordered]@{
+                ruleCollection=[string]$_.ruleCollection
+                enforcementMode=[string]$_.enforcementMode
+            }
+        })
+        appLockerCspCollections=@($Payload.appLockerCspCollections|ForEach-Object {
+            [pscustomobject][ordered]@{
+                ruleCollection=[string]$_.ruleCollection
+                enforcementMode=[string]$_.enforcementMode
+            }
+        })
         appliedOrderConflict=[bool]$Payload.appliedOrderConflict
         localAccountPolicySemantics=[string]$Payload.localAccountPolicySemantics
         userRightSemantics=[string]$Payload.userRightSemantics
@@ -727,6 +937,10 @@ function New-EffectivePolicyPublicProjection {
         antivirusProviderCount=@($payload.antivirusProviders).Count
         firewallProfileCount=3
         asrRuleCount=@($payload.defenderAsrRules).Count
+        bitLockerProtectorTypeCount=@($payload.bitLockerProtectors).Count
+        wdacPolicyCount=@($payload.wdacPolicies).Count
+        appLockerGpCollectionCount=@($payload.appLockerGpCollections).Count
+        appLockerCspCollectionCount=@($payload.appLockerCspCollections).Count
         directRightsOnly=([string]$payload.userRightSemantics -eq 'DirectAssignmentsOnly')
         localSamOnly=([string]$payload.localAccountPolicySemantics -eq 'LocalSamAccountsOnly')
     }
@@ -779,6 +993,13 @@ function Get-EffectivePolicySourceId {
     elseif($FieldId -like 'field:policy.defender.asr.*' -or
         $FieldId -eq 'field:policy.defender.network-protection'){'source:windows.defender.preferences'}
     elseif($FieldId -like 'field:policy.firewall.*'){'source:windows.firewall.activestore-profiles'}
+    elseif($FieldId -like 'field:policy.bitlocker.*'){'source:windows.bitlocker.volume-status'}
+    elseif($FieldId -like 'field:policy.vbs.*' -or
+        $FieldId -like 'field:policy.credential-guard.*' -or
+        $FieldId -like 'field:policy.memory-integrity.*' -or
+        $FieldId -like 'field:policy.user-mode-code-integrity.*'){'source:windows.device-guard.status'}
+    elseif($FieldId -like 'field:policy.wdac.*'){'source:windows.app-control.citool'}
+    elseif($FieldId -like 'field:policy.applocker.*'){'source:windows.applocker.gp-effective-policy'}
     elseif($FieldId -like 'field:policy.mdm.*'){'source:windows.mdm-policy-csp-results'}
     else{'source:windows.local-configured-signals'}
 }
@@ -789,7 +1010,7 @@ function New-EffectivePolicyObservationPair {
         [Parameter(Mandatory)][string]$FieldId,[Parameter(Mandatory)][string]$SubjectId,
         [Parameter(Mandatory)]$Collector,[Parameter(Mandatory)][string]$ObservedExecutionContext,
         [Parameter(Mandatory)][string]$CollectedAt,[Parameter(Mandatory)][string]$SourceLocale,
-        [Parameter()]$Value,[Parameter()][switch]$ObservedAbsent
+        [Parameter()]$Value,[Parameter()][string]$SourceId,[Parameter()][switch]$ObservedAbsent
     )
     $observationId="observation:policy-$Suffix`:$RunId"
     $provenanceId="provenance:policy-$Suffix`:$RunId"
@@ -802,7 +1023,7 @@ function New-EffectivePolicyObservationPair {
         observation=[pscustomobject]$observation
         provenance=[pscustomobject][ordered]@{
             provenanceId=$provenanceId;fieldId=$FieldId;subjectId=$SubjectId
-            sourceId=Get-EffectivePolicySourceId -FieldId $FieldId
+            sourceId=$(if([string]::IsNullOrEmpty($SourceId)){Get-EffectivePolicySourceId -FieldId $FieldId}else{$SourceId})
             collectorId=[string]$Collector.collectorId;collectorVersion=[string]$Collector.collectorVersion
             executionContext=$ObservedExecutionContext;collectedAt=$CollectedAt;sourceLocale=$SourceLocale
         }
@@ -877,13 +1098,13 @@ function Add-EffectivePolicyEvidenceRecord {
             [string]$ScopeId,[string]$Suffix,[string]$FieldId,[string]$SubjectId,$Value,
             [bool]$Absent=$false,$EvidenceCollector=$null,
             [string]$EvidenceExecutionContext='',[string]$EvidenceCollectedAt='',
-            [string]$EvidenceSourceLocale=''
+            [string]$EvidenceSourceLocale='',[string]$EvidenceSourceId=''
         )
         if($null -eq $EvidenceCollector){$EvidenceCollector=$collector}
         if([string]::IsNullOrEmpty($EvidenceExecutionContext)){$EvidenceExecutionContext=$observedExecutionContext}
         if([string]::IsNullOrEmpty($EvidenceCollectedAt)){$EvidenceCollectedAt=$collectedAt}
         if([string]::IsNullOrEmpty($EvidenceSourceLocale)){$EvidenceSourceLocale=[string]$payload.sourceLocale}
-        $arguments=@{RunId=$runId;Suffix=$Suffix;FieldId=$FieldId;SubjectId=$SubjectId;Collector=$EvidenceCollector;ObservedExecutionContext=$EvidenceExecutionContext;CollectedAt=$EvidenceCollectedAt;SourceLocale=$EvidenceSourceLocale;Value=$Value}
+        $arguments=@{RunId=$runId;Suffix=$Suffix;FieldId=$FieldId;SubjectId=$SubjectId;Collector=$EvidenceCollector;ObservedExecutionContext=$EvidenceExecutionContext;CollectedAt=$EvidenceCollectedAt;SourceLocale=$EvidenceSourceLocale;SourceId=$EvidenceSourceId;Value=$Value}
         if($Absent){$arguments.ObservedAbsent=$true}
         $pair=New-EffectivePolicyObservationPair @arguments
         $observations.Add($pair.observation);$provenance.Add($pair.provenance)
@@ -1113,6 +1334,90 @@ function Add-EffectivePolicyEvidenceRecord {
             Add-PolicyObservation $scopeId "firewall-$profileName-outbound" 'field:policy.firewall.default-outbound-action' $subjectId ([string]$profile.defaultOutboundAction)
         }
     }
+    $bitLockerVolumeScope=@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.bitlocker.operating-system-volume')[0]
+    if($bitLockerVolumeScope.state -in @('Complete','Partial')){
+        foreach($field in @(
+            @{property='conversionStatus';fieldId='field:policy.bitlocker.conversion-status'},
+            @{property='protectionStatus';fieldId='field:policy.bitlocker.protection-status'},
+            @{property='encryptionMethod';fieldId='field:policy.bitlocker.encryption-method'},
+            @{property='lockStatus';fieldId='field:policy.bitlocker.lock-status'}
+        )){
+            $value=$payload.bitLockerSystemVolume.([string]$field.property)
+            if($null -eq $value){
+                Add-PolicyObservation 'scope:policy.bitlocker.operating-system-volume' "bitlocker-volume-$($field.property)" ([string]$field.fieldId) 'subject:device:primary' $null $true
+            } else {
+                Add-PolicyObservation 'scope:policy.bitlocker.operating-system-volume' "bitlocker-volume-$($field.property)" ([string]$field.fieldId) 'subject:device:primary' ([string]$value)
+            }
+        }
+    }
+    $protectorIndex=0
+    foreach($protector in @($payload.bitLockerProtectors)){
+        $subjectId="subject:policy-bitlocker-protector:$protectorIndex"
+        $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
+        Add-PolicyObservation 'scope:policy.bitlocker.protectors' "bitlocker-protector-$protectorIndex-type" 'field:policy.bitlocker.protector-type' $subjectId ([string]$protector.protectorType)
+        Add-PolicyObservation 'scope:policy.bitlocker.protectors' "bitlocker-protector-$protectorIndex-count" 'field:policy.bitlocker.protector-count' $subjectId ([int]$protector.count)
+        $protectorIndex++
+    }
+    if(@($payload.bitLockerProtectors).Count -eq 0 -and
+        @($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.bitlocker.protectors')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.bitlocker.protectors' 'bitlocker-protector-type-absent' 'field:policy.bitlocker.protector-type' 'subject:device:primary' $null $true
+        Add-PolicyObservation 'scope:policy.bitlocker.protectors' 'bitlocker-protector-count-absent' 'field:policy.bitlocker.protector-count' 'subject:device:primary' $null $true
+    }
+    $deviceGuardScope=@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.vbs.runtime')[0]
+    if($deviceGuardScope.state -in @('Complete','Partial')){
+        foreach($field in @(
+            @{property='virtualizationBasedSecurityStatus';fieldId='field:policy.vbs.status'},
+            @{property='credentialGuardState';fieldId='field:policy.credential-guard.state'},
+            @{property='memoryIntegrityState';fieldId='field:policy.memory-integrity.state'},
+            @{property='userModeCodeIntegrityState';fieldId='field:policy.user-mode-code-integrity.state'}
+        )){
+            $value=$payload.deviceGuard.([string]$field.property)
+            if($null -eq $value){
+                Add-PolicyObservation 'scope:policy.vbs.runtime' "vbs-$($field.property)" ([string]$field.fieldId) 'subject:device:primary' $null $true
+            } else {
+                Add-PolicyObservation 'scope:policy.vbs.runtime' "vbs-$($field.property)" ([string]$field.fieldId) 'subject:device:primary' ([string]$value)
+            }
+        }
+    }
+    $wdacIndex=0
+    foreach($policyItem in @($payload.wdacPolicies)){
+        $subjectId="subject:policy-wdac:$wdacIndex"
+        $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
+        Add-PolicyObservation 'scope:policy.wdac.inventory' "wdac-$wdacIndex-channel" 'field:policy.wdac.deployment-channel' $subjectId ([string]$policyItem.deploymentChannel)
+        Add-PolicyObservation 'scope:policy.wdac.inventory' "wdac-$wdacIndex-enforcement" 'field:policy.wdac.enforcement-state' $subjectId ([string]$policyItem.enforcementState)
+        Add-PolicyObservation 'scope:policy.wdac.inventory' "wdac-$wdacIndex-platform" 'field:policy.wdac.platform-policy' $subjectId ([bool]$policyItem.platformPolicy)
+        Add-PolicyObservation 'scope:policy.wdac.inventory' "wdac-$wdacIndex-signed" 'field:policy.wdac.signed-policy' $subjectId ([bool]$policyItem.signedPolicy)
+        $wdacIndex++
+    }
+    if(@($payload.wdacPolicies).Count -eq 0 -and
+        @($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.wdac.inventory')[0].state -eq 'Complete'){
+        foreach($fieldId in @(
+            'field:policy.wdac.deployment-channel','field:policy.wdac.enforcement-state',
+            'field:policy.wdac.platform-policy','field:policy.wdac.signed-policy'
+        )){
+            Add-PolicyObservation 'scope:policy.wdac.inventory' "wdac-absent-$($fieldId.Split('.')[-1])" $fieldId 'subject:device:primary' $null $true
+        }
+    }
+    foreach($channel in @(
+        @{scopeId='scope:policy.applocker.gp-channel';items=@($payload.appLockerGpCollections);prefix='gp'},
+        @{scopeId='scope:policy.applocker.csp-channel';items=@($payload.appLockerCspCollections);prefix='csp'}
+    )){
+        $collectionIndex=0
+        foreach($collection in @($channel.items)){
+            $subjectId="subject:policy-applocker-$($channel.prefix):$collectionIndex"
+            $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
+            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-$collectionIndex-collection" 'field:policy.applocker.rule-collection' $subjectId ([string]$collection.ruleCollection)
+            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-$collectionIndex-mode" 'field:policy.applocker.enforcement-mode' $subjectId ([string]$collection.enforcementMode)
+            $collectionIndex++
+        }
+        if(@($channel.items).Count -eq 0 -and
+            @($payload.scopeStates|Where-Object scopeId -eq ([string]$channel.scopeId))[0].state -eq 'Complete'){
+            $subjectId="subject:policy-applocker-$($channel.prefix):none"
+            $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
+            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-collection-absent" 'field:policy.applocker.rule-collection' $subjectId $null $true
+            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-mode-absent" 'field:policy.applocker.enforcement-mode' $subjectId $null $true
+        }
+    }
 
     $coverage=[Collections.Generic.List[object]]::new();$diagnostics=[Collections.Generic.List[object]]::new()
     foreach($scopeState in $payload.scopeStates){
@@ -1257,16 +1562,33 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
         $_.scopeId -like 'scope:policy.defender.*' -or
         $_.scopeId -like 'scope:policy.smartscreen.*' -or
         $_.scopeId -like 'scope:policy.security-center.*' -or
-        $_.scopeId -like 'scope:policy.firewall.*'
+        $_.scopeId -like 'scope:policy.firewall.*' -or
+        $_.scopeId -like 'scope:policy.bitlocker.*' -or
+        $_.scopeId -like 'scope:policy.vbs.*' -or
+        $_.scopeId -like 'scope:policy.wdac.*' -or
+        $_.scopeId -like 'scope:policy.applocker.*'
     })
     $mdmCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.mdm.*'})
+    $constraintCoverage=@($Record.coverage|Where-Object {
+        $_.scopeId -eq 'scope:policy.security-center.antivirus-providers' -or
+        $_.scopeId -eq 'scope:policy.defender.runtime' -or
+        $_.scopeId -like 'scope:policy.bitlocker.*' -or
+        $_.scopeId -eq 'scope:policy.vbs.runtime'
+    })
     $appliedReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.applied.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $localReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.local-*' -or $_.fieldId -like 'field:policy.audit.*' -or $_.fieldId -like 'field:policy.user-right.*' -or $_.fieldId -like 'field:policy.security-option.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $securityReferences=@($Record.observations|Where-Object {
         $_.fieldId -like 'field:policy.security-provider.*' -or
         $_.fieldId -like 'field:policy.defender.*' -or
         $_.fieldId -like 'field:policy.smartscreen.*' -or
-        $_.fieldId -like 'field:policy.firewall.*'
+        $_.fieldId -like 'field:policy.firewall.*' -or
+        $_.fieldId -like 'field:policy.bitlocker.*' -or
+        $_.fieldId -like 'field:policy.vbs.*' -or
+        $_.fieldId -like 'field:policy.credential-guard.*' -or
+        $_.fieldId -like 'field:policy.memory-integrity.*' -or
+        $_.fieldId -like 'field:policy.user-mode-code-integrity.*' -or
+        $_.fieldId -like 'field:policy.wdac.*' -or
+        $_.fieldId -like 'field:policy.applocker.*'
     }|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $mdmReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.mdm.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $appliedResult=Invoke-EffectivePolicyRule -Rule $rules['applied-policy-coverage'] -Evaluation {
@@ -1307,10 +1629,11 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $providerAbsent=$null -ne $providerObservation -and
         $providerObservation.valueState -eq 'ObservedValue' -and -not [bool]$providerObservation.value
     $constraintResult=Invoke-EffectivePolicyRule -Rule $rules['security-control-constraint'] -Evaluation {
-        if(@($securityCoverage|Where-Object state -ne Complete).Count -gt 0){
+        if(@($constraintCoverage|Where-Object state -ne Complete).Count -gt 0){
             [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.SECURITY_CONTROL_CONSTRAINT_INCOMPLETE'}
         } else {
             $passive=$false;$tamperProtected=$false
+            $bitLockerProtected=$false;$virtualizedVbs=$false
             foreach($observation in @($Record.observations)){
                 if($observation.fieldId -eq 'field:policy.defender.running-mode' -and
                     $observation.valueState -eq 'ObservedValue' -and
@@ -1321,8 +1644,17 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
                     $observation.valueState -eq 'ObservedValue' -and [bool]$observation.value){
                     $tamperProtected=$true
                 }
+                elseif($observation.fieldId -eq 'field:policy.bitlocker.protection-status' -and
+                    $observation.valueState -eq 'ObservedValue' -and [string]$observation.value -eq 'On'){
+                    $bitLockerProtected=$true
+                }
+                elseif($observation.fieldId -eq 'field:policy.vbs.status' -and
+                    $observation.valueState -eq 'ObservedValue' -and
+                    [string]$observation.value -eq 'EnabledAndRunningInVirtualMachine'){
+                    $virtualizedVbs=$true
+                }
             }
-            if($passive -or $tamperProtected){
+            if($passive -or $tamperProtected -or $bitLockerProtected -or $virtualizedVbs){
                 [pscustomobject]@{outcome='ExpectedCondition'}
             } else {
                 [pscustomobject]@{outcome='Informational'}
@@ -1358,12 +1690,52 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
         }
     }
     $localSignalCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.security-option.*'})
+    $appLockerGpCoverage=@($Record.coverage|Where-Object {$_.scopeId -eq 'scope:policy.applocker.gp-channel'})
+    $appLockerCspCoverage=@($Record.coverage|Where-Object {$_.scopeId -eq 'scope:policy.applocker.csp-channel'})
+    $appLockerByChannel=@{gp=@{};csp=@{}}
+    foreach($observation in @($Record.observations|Where-Object {
+        $_.fieldId -in @('field:policy.applocker.rule-collection','field:policy.applocker.enforcement-mode') -and
+        $_.valueState -eq 'ObservedValue'
+    })){
+        $channel=if([string]$observation.subjectId -like 'subject:policy-applocker-gp:*'){'gp'}
+            elseif([string]$observation.subjectId -like 'subject:policy-applocker-csp:*'){'csp'}
+            else{''}
+        if([string]::IsNullOrEmpty($channel)){continue}
+        $subjectId=[string]$observation.subjectId
+        if(-not $appLockerByChannel[$channel].ContainsKey($subjectId)){
+            $appLockerByChannel[$channel][$subjectId]=[ordered]@{}
+        }
+        $appLockerByChannel[$channel][$subjectId][[string]$observation.fieldId]=$observation
+        $channelConflictReferences.Add([pscustomobject][ordered]@{
+            observationId=$observation.observationId;fieldId=$observation.fieldId;subjectId=$observation.subjectId
+        })
+    }
+    $gpCollections=@{}
+    foreach($entry in @($appLockerByChannel.gp.Values)){
+        if($entry.Contains('field:policy.applocker.rule-collection') -and
+            $entry.Contains('field:policy.applocker.enforcement-mode')){
+            $gpCollections[[string]$entry['field:policy.applocker.rule-collection'].value]=[string]$entry['field:policy.applocker.enforcement-mode'].value
+        }
+    }
+    foreach($entry in @($appLockerByChannel.csp.Values)){
+        if($entry.Contains('field:policy.applocker.rule-collection') -and
+            $entry.Contains('field:policy.applocker.enforcement-mode')){
+            $collectionName=[string]$entry['field:policy.applocker.rule-collection'].value
+            if($gpCollections.ContainsKey($collectionName) -and
+                [string]$gpCollections[$collectionName] -ne [string]$entry['field:policy.applocker.enforcement-mode'].value){
+                $channelConflictDetected=$true
+            }
+        }
+    }
     $channelConflictResult=Invoke-EffectivePolicyRule -Rule $rules['policy-csp-gpo-conflict'] -Evaluation {
-        if(@($mdmCoverage|Where-Object state -ne Complete).Count -gt 0 -or
-            @($localSignalCoverage|Where-Object state -ne Complete).Count -gt 0){
+        $mdmChannelIncomplete=@($mdmCoverage|Where-Object state -ne Complete).Count -gt 0 -or
+            @($localSignalCoverage|Where-Object state -ne Complete).Count -gt 0
+        $appLockerChannelIncomplete=@($appLockerGpCoverage|Where-Object state -ne Complete).Count -gt 0 -or
+            @($appLockerCspCoverage|Where-Object state -ne Complete).Count -gt 0
+        if($channelConflictDetected){[pscustomobject]@{outcome='NeedsAttention'}}
+        elseif($mdmChannelIncomplete -or $appLockerChannelIncomplete){
             [pscustomobject]@{outcome='Indeterminate';reasonCode='FINDING.POLICY_CSP_GPO_CONFLICT_INCOMPLETE'}
         }
-        elseif($channelConflictDetected){[pscustomobject]@{outcome='NeedsAttention'}}
         else{[pscustomobject]@{outcome='ExpectedCondition'}}
     }
     $findingDefinitions=@(
