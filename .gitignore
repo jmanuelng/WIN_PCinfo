@@ -17,3 +17,6 @@
 # are recreated by build/Build.ps1 and tests/Run-Tests.ps1.
 /artifacts/
 /.test-output/
+
+# Local Node dependencies used only by the Sandcastle orchestrator.
+/node_modules/

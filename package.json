@@ -1,0 +1,34 @@
+{
+  "name": "win_pcinfo",
+  "version": "1.0.0",
+  "description": "WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. The current v2 tracer bullets provide a generated launch path, verify the active PowerShell host, present one complete Preparation Summary **before any assessment collection or device change can begin**, collect narrow Device, Windows, firmware-security, domain/Entra registration, Assessment User Context, work-or-school, enrollment, direct local-administrator, three-layer applied/local-policy, user-resource/peripheral migration-dependency, offline local-network-topology, safe software-registration, and purpose-bound local certificate/trust context after approval, validate typed evidence, supervise approved work, exercise one frozen administrator plan and one separate SYSTEM Collection Sub-plan, protect an assessment package for the local user and optionally one preapproved recipient, reopen one requested artifact safely, exercise warned restricted HTML export, and drive each validation path to one honest terminal outcome.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "pwsh -NoLogo -NoProfile -File ./build/Build.ps1",
+    "test": "pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1",
+    "sandcastle": "tsx .sandcastle/main.mts",
+    "sandcastle:canary": "tsx .sandcastle/main.mts --max-iterations 1",
+    "sandcastle:preflight": "tsx .sandcastle/preflight.mts",
+    "sandcastle:test": "node --import tsx --test .sandcastle/workflow.test.mts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmanuelng/WIN_PCinfo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jmanuelng/WIN_PCinfo/issues"
+  },
+  "homepage": "https://github.com/jmanuelng/WIN_PCinfo#readme",
+  "devDependencies": {
+    "@ai-hero/sandcastle": "^0.12.0",
+    "tsx": "^4.23.12"
+  }
+}
