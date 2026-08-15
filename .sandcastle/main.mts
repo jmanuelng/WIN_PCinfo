@@ -4,6 +4,8 @@ import {
   BASE_REF,
   assertAuthentication,
   assertHostReady,
+  buildImplementationPhaseOptions,
+  buildReviewPhaseOptions,
   claimIssue,
   ensureIssueClosed,
   listEligibleIssues,
@@ -47,16 +49,9 @@ async function run(): Promise<void> {
 
     let headSha = "";
     try {
-      const implementation = await sandbox.run({
-        name: `issue-${issue.number}-implementer`,
-        maxIterations: 1,
-        agent,
-        promptFile: "./.sandcastle/implement-prompt.md",
-        promptArgs: {
-          ISSUE_NUMBER: issue.number,
-          ISSUE_TITLE: issue.title,
-        },
-      });
+      const implementation = await sandbox.run(
+        buildImplementationPhaseOptions(agent, issue.number, issue.title),
+      );
       if (implementation.commits.length === 0) {
         throw new Error(
           `Issue #${issue.number} produced no implementation commit.`,
@@ -68,17 +63,9 @@ async function run(): Promise<void> {
         );
       }
 
-      const review = await sandbox.run({
-        name: `issue-${issue.number}-reviewer`,
-        maxIterations: 1,
-        agent,
-        promptFile: "./.sandcastle/review-prompt.md",
-        promptArgs: {
-          ISSUE_NUMBER: issue.number,
-          BRANCH: branch,
-          BASE_BRANCH: BASE_REF,
-        },
-      });
+      const review = await sandbox.run(
+        buildReviewPhaseOptions(agent, issue.number, branch),
+      );
       if (!review.completionSignal) {
         throw new Error(
           `Issue #${issue.number} review did not emit its completion signal.`,

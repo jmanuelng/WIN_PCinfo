@@ -6,7 +6,10 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { createCodexAgent } from "./codex-agent.mts";
 import {
+  AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   analyzeChecks,
+  buildImplementationPhaseOptions,
+  buildReviewPhaseOptions,
   parseMaxIterations,
   selectNextIssue,
   type GitHubIssue,
@@ -141,6 +144,21 @@ test("parseMaxIterations defaults to one and caps autonomous runs", () => {
     () => parseMaxIterations(["--max-iterations", "11"]),
     /integer from 1 through 10/,
   );
+});
+
+test("both agent phases tolerate the repository's long full-suite silence", () => {
+  const agent = { kind: "test-agent" };
+  const implementation = buildImplementationPhaseOptions(agent, 54, "MDM");
+  const review = buildReviewPhaseOptions(agent, 54, "sandcastle/issue-54");
+
+  assert.equal(AGENT_PHASE_IDLE_TIMEOUT_SECONDS, 2 * 60 * 60);
+  assert.equal(
+    implementation.idleTimeoutSeconds,
+    AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
+  );
+  assert.equal(review.idleTimeoutSeconds, AGENT_PHASE_IDLE_TIMEOUT_SECONDS);
+  assert.equal(implementation.name, "issue-54-implementer");
+  assert.equal(review.name, "issue-54-reviewer");
 });
 
 test("Codex provider uses the current automatic-review CLI flag", () => {
