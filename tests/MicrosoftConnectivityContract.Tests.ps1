@@ -72,6 +72,32 @@ Assert-Equal 'ExpectedCondition' @($record.findings | Where-Object {
 })[0].outcome `
     'matching completed paths support only the not-observed TLS-inspection result'
 
+# Cross a failed transport result through the canonical contract as well as the
+# collector unit seam. DNS and generic enrollment DNS succeeded, so their
+# coverage must remain Complete while only the dependent transport layers gap.
+$blockedRecord = New-CertificateReadyRecord
+$blockedCollector = Invoke-MicrosoftConnectivityCollection -Policy $connectivityPolicy `
+    -ValidationScenario Blocked -NetworkBehavior MicrosoftConnectivityEnabled
+$blockedRecord = Add-MicrosoftConnectivityEvidenceRecord -Record $blockedRecord `
+    -CollectorResult $blockedCollector -Policy $connectivityPolicy
+$blockedValidation = Test-CanonicalRecord $blockedRecord
+Assert-Equal 'CONTRACT.ACCEPTED' $blockedValidation.reasonCode `
+    'typed partial connectivity evidence crosses the canonical contract'
+$blockedRecord = Complete-ValidatedMicrosoftConnectivityAssessmentRecord `
+    -Record $blockedRecord -Policy $connectivityPolicy `
+    -ContractValidation $blockedValidation
+Assert-Equal 'Complete' @($blockedRecord.coverage | Where-Object {
+    $_.scopeId -eq 'scope:connectivity.dns'
+})[0].state 'a TCP block does not smear failure onto successful DNS evidence'
+Assert-Equal 'Partial' @($blockedRecord.coverage | Where-Object {
+    $_.scopeId -eq 'scope:connectivity.tcp'
+})[0].state 'the blocked transport alone remains a recoverable partial scope'
+Assert-Equal 'Complete' @($blockedRecord.coverage | Where-Object {
+    $_.scopeId -eq 'scope:connectivity.enrollment-dns'
+})[0].state 'unrelated successful enrollment DNS remains complete'
+Assert-Equal 'CONTRACT.ACCEPTED' (Test-CanonicalRecord $blockedRecord).reasonCode `
+    'interpreted partial connectivity evidence remains canonical'
+
 $localOnlyRecord = New-CertificateReadyRecord
 $localOnlyCollector = Invoke-MicrosoftConnectivityCollection -Policy $connectivityPolicy `
     -ValidationScenario LocalOnly -NetworkBehavior LocalOnly

@@ -9,6 +9,7 @@ Validated behavior:
 - collector output keeps DNS, TCP, TLS, offline chain, negotiated protocol/cipher, Windows proxy, bounded HTTP metadata, and enrollment DNS in eight separate typed Evidence Scopes;
 - credentials, tenant identifiers, collected evidence, arbitrary payloads, cookies, redirect following, packet capture, settings changes, downloads, installation, and self-elevation are prohibited by the closed policy and payload contracts;
 - TLS inspection has only Confirmed, Suspected, NotObservedWithinCompletedTests, and Indeterminate outcomes, and a certificate difference without independent corroboration is rejected;
+- both TLS transports receive an offline chain policy before validation, provider status text is mapped before packaging, and failed proxy sends retain their selected transport mode;
 - direct, proxy, blocked, partially reachable, DNS failure, redirect, timeout, confirmed/suspected inspection, invalid chain, HTTP metadata bound, Local Only, retired endpoint, and non-English fixtures cross the generated application seam;
 - every scenario composes prerequisite evidence, validates the canonical Assessment Record, derives the beginner report, creates and reopens the Protected Evidence Package, verifies cleanup, emits one identifier-free projection, and reaches one honest terminal outcome;
 - failed remote scopes remain recoverable gaps while local evidence and protected packaging continue;
@@ -20,6 +21,7 @@ Reproduction commands:
 pwsh -NoLogo -NoProfile -File ./build/Build.ps1
 pwsh -NoLogo -NoProfile -File ./tests/MicrosoftConnectivityPolicy.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/MicrosoftConnectivity.Tests.ps1
+pwsh -NoLogo -NoProfile -File ./tests/MicrosoftConnectivityNative.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/MicrosoftConnectivityContract.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/MicrosoftConnectivityApplication.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/AssessmentContractSet.Tests.ps1

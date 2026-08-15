@@ -62,6 +62,22 @@ foreach ($case in $cases) {
     }
 }
 
+$scopeIsolation=@{
+    Blocked=@{'scope:connectivity.dns'='Complete';'scope:connectivity.tcp'='Partial';'scope:connectivity.enrollment-dns'='Complete'}
+    DnsFailure=@{'scope:connectivity.dns'='Partial';'scope:connectivity.tcp'='Partial';'scope:connectivity.http'='Partial'}
+    Redirect=@{'scope:connectivity.dns'='Complete';'scope:connectivity.tls'='Complete';'scope:connectivity.http'='Partial'}
+    InvalidChain=@{'scope:connectivity.dns'='Complete';'scope:connectivity.tcp'='Complete';'scope:connectivity.certificate-chain'='Complete';'scope:connectivity.tls'='Partial'}
+}
+foreach($scenario in $scopeIsolation.Keys){
+    $payload=New-MicrosoftConnectivitySyntheticPayload -Scenario $scenario `
+        -Policy $policy -NetworkBehavior MicrosoftConnectivityEnabled
+    foreach($scopeId in $scopeIsolation[$scenario].Keys){
+        Assert-Equal $scopeIsolation[$scenario][$scopeId] `
+            @($payload.scopeStates|Where-Object scopeId -eq $scopeId)[0].state `
+            "$scenario affects only the related $scopeId coverage"
+    }
+}
+
 $tampered = New-MicrosoftConnectivitySyntheticPayload -Scenario DirectOutbound `
     -Policy $policy -NetworkBehavior MicrosoftConnectivityEnabled
 $tampered | Add-Member -NotePropertyName bearerToken -NotePropertyValue 'synthetic-secret-marker'
@@ -73,6 +89,15 @@ $certificateOnly = New-MicrosoftConnectivitySyntheticPayload -Scenario TlsInspec
 $certificateOnly.endpointResults[0].tlsInspectionCorroboration = 'CertificateDifferenceOnly'
 Assert-Equal $false (Test-MicrosoftConnectivityPayload -Payload $certificateOnly -Policy $policy) `
     'certificate difference alone cannot confirm or corroborate TLS inspection'
+
+$unsupportedConfirmation = New-MicrosoftConnectivitySyntheticPayload `
+    -Scenario TlsInspectionConfirmed -Policy $policy `
+    -NetworkBehavior MicrosoftConnectivityEnabled
+$unsupportedConfirmation.endpointResults[0].proxyState='Bypassed'
+$unsupportedConfirmation.endpointResults[0].transportMode='Direct'
+Assert-Equal $false (Test-MicrosoftConnectivityPayload `
+    -Payload $unsupportedConfirmation -Policy $policy) `
+    'Confirmed requires independent Windows-proxy evidence as well as a path difference'
 
 $liveLocalOnly = Invoke-MicrosoftConnectivityCollection -Policy $policy -Live `
     -NetworkBehavior LocalOnly

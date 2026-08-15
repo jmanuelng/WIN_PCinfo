@@ -38,12 +38,10 @@ foreach($case in $cases){
     $terminal=@($result.Records|Where-Object recordType -eq 'win-pcinfo.terminal')
     Assert-Equal 1 $validation.Count "$($case.scenario) emits one sanitized connectivity projection"
     Assert-Equal 1 $terminal.Count "$($case.scenario) retains one terminal path"
-    $expectedExit=if($case.scenario -in @('DirectOutbound','WindowsProxy',
-        'TlsInspectionConfirmed','TlsInspectionSuspected','HttpMetadata','Unicode')){0}else{10}
-    $expectedOutcome=if($expectedExit -eq 0){'Completed'}else{'CompletedWithGaps'}
-    Assert-Equal $expectedExit $result.ExitCode "$($case.scenario) returns the honest coverage exit code"
-    Assert-Equal $expectedOutcome $terminal[0].outcome `
-        "$($case.scenario) preserves packaging while reporting related gaps"
+    Assert-Equal 10 $result.ExitCode `
+        "$($case.scenario) preserves unrelated purpose-bound certificate gaps"
+    Assert-Equal 'CompletedWithGaps' $terminal[0].outcome `
+        "$($case.scenario) preserves packaging while reporting all remaining gaps"
     Assert-Equal $case.scenario $validation[0].scenario "$($case.scenario) crosses the release-owned validation seam"
     Assert-Equal $case.behavior $validation[0].networkBehavior "$($case.scenario) retains approved network behavior"
     Assert-Equal 3 $validation[0].endpointDefinitionCount "$($case.scenario) uses the exact versioned catalog"

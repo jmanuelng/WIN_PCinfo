@@ -52,5 +52,11 @@ foreach ($operation in @($policy.collector) + @($policy.operations) + @($policy.
         }
     }
 }
+foreach($probe in @($policy.collector)+@($policy.operations)){
+    if([int]$probe.maximumEndpoints -lt 1 -or
+        [int]$probe.maximumResultUtf8Bytes -lt 1){
+        throw 'Every collector or probe must freeze output and evidence bounds.'
+    }
+}
 
 Write-Output 'PASS: the Microsoft Connectivity policy freezes exact endpoints, operations, bounds, and prohibitions.'
