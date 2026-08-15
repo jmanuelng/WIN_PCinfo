@@ -287,6 +287,22 @@ $appLockerConflictRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Reco
 Assert-Equal 'NeedsAttention' (@($appLockerConflictRecord.findings|Where-Object `
     ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome) `
     'conflicting AppLocker GP and CSP channels become a bounded advisory conflict'
+$appLockerGpObservation=@($appLockerConflictRecord.observations|Where-Object {
+    $_.fieldId -eq 'field:policy.applocker.gp.rule-collection'
+})[0]
+$appLockerCspObservation=@($appLockerConflictRecord.observations|Where-Object {
+    $_.fieldId -eq 'field:policy.applocker.csp.rule-collection'
+})[0]
+$appLockerGpProvenance=@($appLockerConflictRecord.provenance|Where-Object {
+    $_.provenanceId -eq $appLockerGpObservation.provenanceId
+})[0]
+$appLockerCspProvenance=@($appLockerConflictRecord.provenance|Where-Object {
+    $_.provenanceId -eq $appLockerCspObservation.provenanceId
+})[0]
+Assert-Equal 'source:windows.applocker.gp-effective-policy' $appLockerGpProvenance.sourceId `
+    'AppLocker GP evidence keeps the GP-only source provenance'
+Assert-Equal 'source:windows.applocker.csp-policy' $appLockerCspProvenance.sourceId `
+    'AppLocker CSP evidence keeps the CSP-only source provenance'
 
 $appLockerIncompleteRecord=New-AdministratorReadyRecord
 $appLockerIncompleteCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario AppLockerChannelIncomplete

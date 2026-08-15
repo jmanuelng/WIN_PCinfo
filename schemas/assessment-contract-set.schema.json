@@ -40,7 +40,7 @@
     "fieldDefinitions": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 220,
+      "maxItems": 222,
       "items": { "$ref": "#/$defs/fieldDefinition" }
     },
     "scopeDefinitions": {

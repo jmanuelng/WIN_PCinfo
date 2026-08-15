@@ -999,7 +999,8 @@ function Get-EffectivePolicySourceId {
         $FieldId -like 'field:policy.memory-integrity.*' -or
         $FieldId -like 'field:policy.user-mode-code-integrity.*'){'source:windows.device-guard.status'}
     elseif($FieldId -like 'field:policy.wdac.*'){'source:windows.app-control.citool'}
-    elseif($FieldId -like 'field:policy.applocker.*'){'source:windows.applocker.gp-effective-policy'}
+    elseif($FieldId -like 'field:policy.applocker.gp.*'){'source:windows.applocker.gp-effective-policy'}
+    elseif($FieldId -like 'field:policy.applocker.csp.*'){'source:windows.applocker.csp-policy'}
     elseif($FieldId -like 'field:policy.mdm.*'){'source:windows.mdm-policy-csp-results'}
     else{'source:windows.local-configured-signals'}
 }
@@ -1399,23 +1400,35 @@ function Add-EffectivePolicyEvidenceRecord {
         }
     }
     foreach($channel in @(
-        @{scopeId='scope:policy.applocker.gp-channel';items=@($payload.appLockerGpCollections);prefix='gp'},
-        @{scopeId='scope:policy.applocker.csp-channel';items=@($payload.appLockerCspCollections);prefix='csp'}
+        @{
+            scopeId='scope:policy.applocker.gp-channel';items=@($payload.appLockerGpCollections);prefix='gp'
+            collectionField='field:policy.applocker.gp.rule-collection'
+            modeField='field:policy.applocker.gp.enforcement-mode'
+        },
+        @{
+            scopeId='scope:policy.applocker.csp-channel';items=@($payload.appLockerCspCollections);prefix='csp'
+            collectionField='field:policy.applocker.csp.rule-collection'
+            modeField='field:policy.applocker.csp.enforcement-mode'
+        }
     )){
         $collectionIndex=0
         foreach($collection in @($channel.items)){
             $subjectId="subject:policy-applocker-$($channel.prefix):$collectionIndex"
             $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
-            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-$collectionIndex-collection" 'field:policy.applocker.rule-collection' $subjectId ([string]$collection.ruleCollection)
-            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-$collectionIndex-mode" 'field:policy.applocker.enforcement-mode' $subjectId ([string]$collection.enforcementMode)
+            # AppLocker GP and CSP can report the same rule collection names, so
+            # the admitted field identity must carry the originating channel.
+            # Keeping the field IDs distinct prevents later provenance collapse
+            # if a consumer looks at field identity before subject naming.
+            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-$collectionIndex-collection" ([string]$channel.collectionField) $subjectId ([string]$collection.ruleCollection)
+            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-$collectionIndex-mode" ([string]$channel.modeField) $subjectId ([string]$collection.enforcementMode)
             $collectionIndex++
         }
         if(@($channel.items).Count -eq 0 -and
             @($payload.scopeStates|Where-Object scopeId -eq ([string]$channel.scopeId))[0].state -eq 'Complete'){
             $subjectId="subject:policy-applocker-$($channel.prefix):none"
             $newSubjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='OtherSynthetic'})
-            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-collection-absent" 'field:policy.applocker.rule-collection' $subjectId $null $true
-            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-mode-absent" 'field:policy.applocker.enforcement-mode' $subjectId $null $true
+            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-collection-absent" ([string]$channel.collectionField) $subjectId $null $true
+            Add-PolicyObservation ([string]$channel.scopeId) "applocker-$($channel.prefix)-mode-absent" ([string]$channel.modeField) $subjectId $null $true
         }
     }
 
@@ -1693,9 +1706,21 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $appLockerGpCoverage=@($Record.coverage|Where-Object {$_.scopeId -eq 'scope:policy.applocker.gp-channel'})
     $appLockerCspCoverage=@($Record.coverage|Where-Object {$_.scopeId -eq 'scope:policy.applocker.csp-channel'})
     $appLockerByChannel=@{gp=@{};csp=@{}}
+    $appLockerChannelFields=@{
+        gp=@{
+            collection='field:policy.applocker.gp.rule-collection'
+            mode='field:policy.applocker.gp.enforcement-mode'
+        }
+        csp=@{
+            collection='field:policy.applocker.csp.rule-collection'
+            mode='field:policy.applocker.csp.enforcement-mode'
+        }
+    }
     foreach($observation in @($Record.observations|Where-Object {
-        $_.fieldId -in @('field:policy.applocker.rule-collection','field:policy.applocker.enforcement-mode') -and
-        $_.valueState -eq 'ObservedValue'
+        $_.fieldId -in @(
+            $appLockerChannelFields.gp.collection,$appLockerChannelFields.gp.mode,
+            $appLockerChannelFields.csp.collection,$appLockerChannelFields.csp.mode
+        ) -and $_.valueState -eq 'ObservedValue'
     })){
         $channel=if([string]$observation.subjectId -like 'subject:policy-applocker-gp:*'){'gp'}
             elseif([string]$observation.subjectId -like 'subject:policy-applocker-csp:*'){'csp'}
@@ -1712,17 +1737,17 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     }
     $gpCollections=@{}
     foreach($entry in @($appLockerByChannel.gp.Values)){
-        if($entry.Contains('field:policy.applocker.rule-collection') -and
-            $entry.Contains('field:policy.applocker.enforcement-mode')){
-            $gpCollections[[string]$entry['field:policy.applocker.rule-collection'].value]=[string]$entry['field:policy.applocker.enforcement-mode'].value
+        if($entry.Contains($appLockerChannelFields.gp.collection) -and
+            $entry.Contains($appLockerChannelFields.gp.mode)){
+            $gpCollections[[string]$entry[$appLockerChannelFields.gp.collection].value]=[string]$entry[$appLockerChannelFields.gp.mode].value
         }
     }
     foreach($entry in @($appLockerByChannel.csp.Values)){
-        if($entry.Contains('field:policy.applocker.rule-collection') -and
-            $entry.Contains('field:policy.applocker.enforcement-mode')){
-            $collectionName=[string]$entry['field:policy.applocker.rule-collection'].value
+        if($entry.Contains($appLockerChannelFields.csp.collection) -and
+            $entry.Contains($appLockerChannelFields.csp.mode)){
+            $collectionName=[string]$entry[$appLockerChannelFields.csp.collection].value
             if($gpCollections.ContainsKey($collectionName) -and
-                [string]$gpCollections[$collectionName] -ne [string]$entry['field:policy.applocker.enforcement-mode'].value){
+                [string]$gpCollections[$collectionName] -ne [string]$entry[$appLockerChannelFields.csp.mode].value){
                 $channelConflictDetected=$true
             }
         }

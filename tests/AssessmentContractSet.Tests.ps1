@@ -24,7 +24,7 @@ Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 220 @($contractSet.fieldDefinitions).Count `
+Assert-Equal 222 @($contractSet.fieldDefinitions).Count `
     'historical fields remain while bounded platform-protection and app-control fields are admitted'
 Assert-Equal 85 @($contractSet.scopeDefinitions).Count `
     'historical through BitLocker, VBS, WDAC, and AppLocker scopes remain distinct'
@@ -190,6 +190,12 @@ Assert-Equal 2 @($appLockerGpScope.fieldIds).Count `
     'AppLocker GP coverage retains only rule-collection and enforcement state'
 Assert-Equal 2 @($appLockerCspScope.fieldIds).Count `
     'AppLocker CSP coverage retains only rule-collection and enforcement state'
+Assert-Equal 'field:policy.applocker.gp.rule-collection|field:policy.applocker.gp.enforcement-mode' `
+    (@($appLockerGpScope.fieldIds) -join '|') `
+    'AppLocker GP scope keeps its own channel-specific field identities'
+Assert-Equal 'field:policy.applocker.csp.rule-collection|field:policy.applocker.csp.enforcement-mode' `
+    (@($appLockerCspScope.fieldIds) -join '|') `
+    'AppLocker CSP scope keeps its own channel-specific field identities'
 foreach($scope in @(
     $bitLockerScope,$bitLockerProtectorScope,$vbsScope,$wdacScope,$appLockerGpScope,$appLockerCspScope
 )){
@@ -199,6 +205,16 @@ foreach($scope in @(
         throw 'Every new policy scope must belong to the additive combined evidence profile.'
     }
 }
+$appLockerGpField=@($contractSet.fieldDefinitions|Where-Object {
+    $_.fieldId -eq 'field:policy.applocker.gp.rule-collection'
+})[0]
+$appLockerCspField=@($contractSet.fieldDefinitions|Where-Object {
+    $_.fieldId -eq 'field:policy.applocker.csp.rule-collection'
+})[0]
+Assert-Equal 'source:windows.applocker.gp-effective-policy' $appLockerGpField.source.sourceId `
+    'AppLocker GP field definitions stay bound to the GP-only source'
+Assert-Equal 'source:windows.applocker.csp-policy' $appLockerCspField.source.sourceId `
+    'AppLocker CSP field definitions stay bound to the CSP-only source'
 if (@($contextScope.fieldIds | Where-Object {
     [string]$_ -match '(?i)(product.?key|license.?key|private.?key|secret|token)'
 }).Count -gt 0) {
@@ -243,4 +259,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.11 binds historical through Defender security-control scopes and Microsoft Connectivity annotations to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.12 binds historical through platform-protection, AppLocker, and Microsoft Connectivity scopes to Draft 2020-12 contracts.'

@@ -758,13 +758,23 @@
       "valueType": "Boolean", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 5, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
     },
     {
-      "fieldId": "field:policy.applocker.rule-collection", "capabilityIds": ["CAP-0008"], "purpose": "Record one bounded AppLocker rule-collection class while keeping Group Policy and CSP channels separate at the scope level.",
-      "source": { "sourceId": "source:windows.applocker.gp-effective-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release-owned structured projection of AppLocker rule collection type" },
+      "fieldId": "field:policy.applocker.gp.rule-collection", "capabilityIds": ["CAP-0008"], "purpose": "Record one bounded AppLocker Group Policy rule-collection class without collapsing it into CSP evidence.",
+      "source": { "sourceId": "source:windows.applocker.gp-effective-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release-owned structured projection of AppLocker Group Policy rule collection type" },
       "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
     },
     {
-      "fieldId": "field:policy.applocker.enforcement-mode", "capabilityIds": ["CAP-0008"], "purpose": "Record one bounded AppLocker enforcement mode while keeping Group Policy and CSP channels separately evaluable.",
-      "source": { "sourceId": "source:windows.applocker.gp-effective-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release-owned structured projection of AppLocker enforcement mode" },
+      "fieldId": "field:policy.applocker.gp.enforcement-mode", "capabilityIds": ["CAP-0008"], "purpose": "Record one bounded AppLocker Group Policy enforcement mode while keeping the deployment channel explicit.",
+      "source": { "sourceId": "source:windows.applocker.gp-effective-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release-owned structured projection of AppLocker Group Policy enforcement mode" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applocker.csp.rule-collection", "capabilityIds": ["CAP-0008"], "purpose": "Record one bounded AppLocker CSP rule-collection class without inferring Group Policy state from it.",
+      "source": { "sourceId": "source:windows.applocker.csp-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release-owned structured projection of AppLocker CSP rule collection type" },
+      "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 16, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
+    },
+    {
+      "fieldId": "field:policy.applocker.csp.enforcement-mode", "capabilityIds": ["CAP-0008"], "purpose": "Record one bounded AppLocker CSP enforcement mode while keeping the CSP channel independently evaluable.",
+      "source": { "sourceId": "source:windows.applocker.csp-policy", "kind": "StructuredWindowsSource", "authoritativeIdentity": "Release-owned structured projection of AppLocker CSP enforcement mode" },
       "valueType": "String", "sensitivity": "RestrictedDiagnosticEvidence", "bounds": { "maximumUtf8Bytes": 32, "maximumOccurrencesPerSubject": 1 }, "redaction": { "behavior": "OmitProhibitedMaterial", "publicProjection": "DefinitionOnly" }, "publicEligibility": { "definition": true, "values": false }
     },
     {
@@ -1298,11 +1308,11 @@
     },
     {
       "scopeId": "scope:policy.applocker.gp-channel", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
-      "purpose": "Close AppLocker Group Policy channel coverage independently from CSP results so conflicts remain explicit.", "fieldIds": ["field:policy.applocker.rule-collection", "field:policy.applocker.enforcement-mode"], "collectorIds": ["collector:windows.effective-policy"]
+      "purpose": "Close AppLocker Group Policy channel coverage independently from CSP results so conflicts remain explicit.", "fieldIds": ["field:policy.applocker.gp.rule-collection", "field:policy.applocker.gp.enforcement-mode"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
       "scopeId": "scope:policy.applocker.csp-channel", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],
-      "purpose": "Close AppLocker CSP channel coverage independently from Group Policy results so incomplete channel evidence stays indeterminate.", "fieldIds": ["field:policy.applocker.rule-collection", "field:policy.applocker.enforcement-mode"], "collectorIds": ["collector:windows.effective-policy"]
+      "purpose": "Close AppLocker CSP channel coverage independently from Group Policy results so incomplete channel evidence stays indeterminate.", "fieldIds": ["field:policy.applocker.csp.rule-collection", "field:policy.applocker.csp.enforcement-mode"], "collectorIds": ["collector:windows.effective-policy"]
     },
     {
       "scopeId": "scope:policy.security-center.antivirus-providers", "profileIds": ["profile:device-firmware-identity-administrator-and-policy-readiness", "profile:device-firmware-identity-administrator-policy-and-resource-dependencies", "profile:device-firmware-identity-administrator-policy-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-and-network-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness", "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"], "capabilityIds": ["CAP-0008"],

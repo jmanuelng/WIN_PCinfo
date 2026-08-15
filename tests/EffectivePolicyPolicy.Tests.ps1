@@ -118,6 +118,18 @@ Assert-Equal ($expectedSecurityScopes -join '|') (@($policy.scopes | Where-Objec
     $_.scopeId -in $expectedSecurityScopes
 } | ForEach-Object scopeId) -join '|') `
     'the new platform-protection and application-control scopes are explicit and finite'
+$appLockerGpScope=@($policy.scopes|Where-Object {
+    $_.scopeId -eq 'scope:policy.applocker.gp-channel'
+})[0]
+$appLockerCspScope=@($policy.scopes|Where-Object {
+    $_.scopeId -eq 'scope:policy.applocker.csp-channel'
+})[0]
+Assert-Equal 'field:policy.applocker.gp.rule-collection|field:policy.applocker.gp.enforcement-mode' `
+    (@($appLockerGpScope.fieldIds) -join '|') `
+    'the GP AppLocker scope retains channel-specific field identities'
+Assert-Equal 'field:policy.applocker.csp.rule-collection|field:policy.applocker.csp.enforcement-mode' `
+    (@($appLockerCspScope.fieldIds) -join '|') `
+    'the CSP AppLocker scope retains channel-specific field identities'
 $expectedScenarios = @(
     'Workgroup','Domain','UserAndComputerRsop','MissingRsop','StaleRegistry',
     'DeniedAdministrator','DeniedSystem','NonEnglish','AppliedOrderConflict',
