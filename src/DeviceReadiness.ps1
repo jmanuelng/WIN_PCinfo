@@ -1555,6 +1555,8 @@ function Invoke-DeviceReadinessSlice {
     $appliedOrderFinding='Indeterminate'
     $securityControlFinding='Indeterminate';$securityControlConstraintFinding='Indeterminate'
     $antivirusProviderCount=0;$firewallProfileCount=0;$asrRuleCount=0
+    $bitLockerProtectorTypeCount=0;$wdacPolicyCount=0
+    $appLockerGpCollectionCount=0;$appLockerCspCollectionCount=0
     $mdmPolicyCspFinding='Indeterminate';$policyCspGpoConflictFinding='Indeterminate'
     $policyDiscoveryTaskCount=0
     $resourceScenario=if($isResourceDependenciesFixture){''}else{'Live'}
@@ -2231,6 +2233,10 @@ function Invoke-DeviceReadinessSlice {
                     $antivirusProviderCount=@($effectivePolicyCollector.payload.antivirusProviders).Count
                     $firewallProfileCount=@($effectivePolicyCollector.payload.firewallProfiles.PSObject.Properties).Count
                     $asrRuleCount=@($effectivePolicyCollector.payload.defenderAsrRules).Count
+                    $bitLockerProtectorTypeCount=@($effectivePolicyCollector.payload.bitLockerProtectors).Count
+                    $wdacPolicyCount=@($effectivePolicyCollector.payload.wdacPolicies).Count
+                    $appLockerGpCollectionCount=@($effectivePolicyCollector.payload.appLockerGpCollections).Count
+                    $appLockerCspCollectionCount=@($effectivePolicyCollector.payload.appLockerCspCollections).Count
                     $mdmPolicyCspFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.mdm-policy-csp-coverage/1.0.0')[0].outcome
                     $policyCspGpoConflictFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome
                     $policyDiscoveryTaskCount=@($record.recommendations|Where-Object {
@@ -2609,6 +2615,10 @@ function Invoke-DeviceReadinessSlice {
             antivirusProviderCount=$antivirusProviderCount
             firewallProfileCount=$firewallProfileCount
             asrRuleCount=$asrRuleCount
+            bitLockerProtectorTypeCount=$bitLockerProtectorTypeCount
+            wdacPolicyCount=$wdacPolicyCount
+            appLockerGpCollectionCount=$appLockerGpCollectionCount
+            appLockerCspCollectionCount=$appLockerCspCollectionCount
             mdmPolicyCspFinding=$mdmPolicyCspFinding
             policyCspGpoConflictFinding=$policyCspGpoConflictFinding
             policyDiscoveryTaskCount=$policyDiscoveryTaskCount
@@ -2617,6 +2627,7 @@ function Invoke-DeviceReadinessSlice {
             localSamOnly=$null -ne $effectivePolicyCollector -and
                 $effectivePolicyCollector.payload.localAccountPolicySemantics -eq 'LocalSamAccountsOnly'
             policyIdentifiersPublished=$false;policyValuesPublished=$false
+            bitLockerSecretsPublished=$false;applicationControlPoliciesPublished=$false
             policyStateChanged=$false;policyRefreshAttempted=$false;toolInstalled=$false
             assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
             protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified

@@ -56,7 +56,7 @@ $record=Complete-ValidatedResourceDependenciesAssessmentRecord -Record $record -
 $validation=Test-CanonicalRecord $record
 Assert-Equal 'CONTRACT.ACCEPTED' $validation.reasonCode 'the combined resource dependency record remains canonical'
 Assert-Equal $resourcePolicy.evidenceProfileId $record.run.evidenceProfileId 'the record selects the additive resource dependency profile'
-Assert-Equal 43 @($record.coverage).Count 'all five resource scopes remain independently closed'
+Assert-Equal 49 @($record.coverage).Count 'all five resource scopes remain independently closed'
 Assert-Equal 21 @($record.findings).Count 'three resource rules each produce exactly one finding'
 Assert-Equal 1 @($record.collectorResults|Where-Object collectorId -eq $resourcePolicy.collector.collectorId).Count 'one approved attempt owns the five resource scopes'
 Assert-Equal 'NeedsAttention' @($record.findings|Where-Object ruleId -eq 'rule:resource.user-migration-dependencies/1.0.0')[0].outcome 'observed printer dependencies produce advisory attention'

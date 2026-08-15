@@ -42,7 +42,12 @@ $expectedSources = @(
     'source:windows.defender.runtime-status',
     'source:windows.defender.preferences',
     'source:windows.firewall.activestore-profiles',
-    'source:windows.mdm-policy-csp-results'
+    'source:windows.mdm-policy-csp-results',
+    'source:windows.bitlocker.volume-status',
+    'source:windows.device-guard.status',
+    'source:windows.app-control.citool',
+    'source:windows.applocker.gp-effective-policy',
+    'source:windows.applocker.csp-policy'
 )
 Assert-Equal ($expectedSources -join '|') ($sourceIds -join '|') `
     'the structured source catalog is finite and ordered'
@@ -55,6 +60,16 @@ Assert-Equal 'root\RSOP\User\{AssessmentUserSid}' $policy.sourceCatalog[0].names
     'user RSoP is frozen to the verified Assessment User SID namespace template'
 Assert-Equal 'NetUserModalsGet(NULL,0|3)' $policy.sourceCatalog[1].interface `
     'local account policy is explicitly local SAM policy'
+Assert-Equal 'Get-BitLockerVolume' $policy.sourceCatalog[10].interface `
+    'BitLocker evidence uses the bounded structured volume cmdlet'
+Assert-Equal 'Get-CimInstance Win32_DeviceGuard' $policy.sourceCatalog[11].interface `
+    'VBS and Credential Guard use the device-reported structured class'
+Assert-Equal 'CiTool -lp -json' $policy.sourceCatalog[12].interface `
+    'WDAC inventory is structured and never parsed from legacy text'
+Assert-Equal 'Get-AppLockerPolicy -Effective' $policy.sourceCatalog[13].interface `
+    'Group Policy AppLocker state stays on the GP-only surface'
+Assert-Equal 'Get-CimInstance MDM_AppLocker_*' $policy.sourceCatalog[14].interface `
+    'AppLocker CSP state stays on the separate WMI Bridge surface'
 
 Assert-Equal 3 @($policy.auditSubcategories).Count `
     'the release owns a finite audit subcategory catalog'
@@ -79,8 +94,8 @@ foreach ($rule in $policy.rules) {
             "the $($rule.ruleId) operation freezes $flag as false"
     }
 }
-Assert-Equal 29 @($policy.scopes).Count `
-    'field-specific applied, local-policy, security-control, and Policy CSP coverage is release-closed'
+Assert-Equal 35 @($policy.scopes).Count `
+    'field-specific policy, platform-protection, app-control, and Policy CSP coverage is release-closed'
 $expectedMdmScopes = @(
     'scope:policy.mdm.control-policy-conflict',
     'scope:policy.mdm.security-option.machine-inactivity-limit',
@@ -91,6 +106,30 @@ Assert-Equal ($expectedMdmScopes -join '|') (@($policy.scopes | Where-Object {
     $_.scopeId -like 'scope:policy.mdm.*'
 } | ForEach-Object scopeId) -join '|') `
     'the MDM Policy CSP result scopes are explicit and finite'
+$expectedSecurityScopes = @(
+    'scope:policy.bitlocker.operating-system-volume',
+    'scope:policy.bitlocker.protectors',
+    'scope:policy.vbs.runtime',
+    'scope:policy.wdac.inventory',
+    'scope:policy.applocker.gp-channel',
+    'scope:policy.applocker.csp-channel'
+)
+Assert-Equal ($expectedSecurityScopes -join '|') (@($policy.scopes | Where-Object {
+    $_.scopeId -in $expectedSecurityScopes
+} | ForEach-Object scopeId) -join '|') `
+    'the new platform-protection and application-control scopes are explicit and finite'
+$appLockerGpScope=@($policy.scopes|Where-Object {
+    $_.scopeId -eq 'scope:policy.applocker.gp-channel'
+})[0]
+$appLockerCspScope=@($policy.scopes|Where-Object {
+    $_.scopeId -eq 'scope:policy.applocker.csp-channel'
+})[0]
+Assert-Equal 'field:policy.applocker.gp.rule-collection|field:policy.applocker.gp.enforcement-mode' `
+    (@($appLockerGpScope.fieldIds) -join '|') `
+    'the GP AppLocker scope retains channel-specific field identities'
+Assert-Equal 'field:policy.applocker.csp.rule-collection|field:policy.applocker.csp.enforcement-mode' `
+    (@($appLockerCspScope.fieldIds) -join '|') `
+    'the CSP AppLocker scope retains channel-specific field identities'
 $expectedScenarios = @(
     'Workgroup','Domain','UserAndComputerRsop','MissingRsop','StaleRegistry',
     'DeniedAdministrator','DeniedSystem','NonEnglish','AppliedOrderConflict',
@@ -98,7 +137,11 @@ $expectedScenarios = @(
     'NonMdm','UnsupportedMdmBuild','MissingMdmClass','MissingMdmProperty',
     'MdmPolicyConflict','MdmWinsOverGpScoped','ThirdPartyRegistration',
     'DefenderDisabled','DefenderUnavailable','AmbiguousSecurityCenter',
-    'TamperProtected','MissingDefenderProperty','FirewallProfiles','AsrRulePairs'
+    'TamperProtected','MissingDefenderProperty','FirewallProfiles','AsrRulePairs',
+    'BitLockerEncrypted','BitLockerUnencrypted','BitLockerUnknown',
+    'VbsCredentialGuardRunning','VbsConfiguredNotRunning','WdacWindows11Policies',
+    'WdacWindows10Unsupported','AppLockerGpOnly','AppLockerCspOnly',
+    'AppLockerGpCspConflict','AppLockerChannelIncomplete','VirtualMachineSecurity'
 )
 Assert-Equal ($expectedScenarios -join '|') (@($policy.validationScenarios) -join '|') `
     'the ticket validation matrix is release-closed'

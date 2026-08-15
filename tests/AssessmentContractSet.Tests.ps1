@@ -18,16 +18,16 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.11.0' $contractSet.contractVersion `
-    'the additive Defender and Windows security-control contract has an explicit version'
+Assert-Equal '1.12.0' $contractSet.contractVersion `
+    'the additive platform-protection and application-control contract has an explicit version'
 Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 204 @($contractSet.fieldDefinitions).Count `
-    'historical fields remain while bounded Defender and security-control fields are admitted'
-Assert-Equal 79 @($contractSet.scopeDefinitions).Count `
-    'historical through Defender and firewall scopes remain distinct'
+Assert-Equal 222 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while bounded platform-protection and app-control fields are admitted'
+Assert-Equal 85 @($contractSet.scopeDefinitions).Count `
+    'historical through BitLocker, VBS, WDAC, and AppLocker scopes remain distinct'
 $certificateFields = @($contractSet.fieldDefinitions | Where-Object fieldId -like 'field:certificate.*')
 Assert-Equal 12 $certificateFields.Count `
     'presence, purpose, identity, store, dates, validity, chain, trust, and key protection remain explicit fields'
@@ -49,8 +49,8 @@ foreach ($certificateScope in $certificateScopes) {
         'certificate scopes resolve only to the purpose-bound read-only collector'
 }
 $certificateProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness'
-Assert-Equal 69 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
-    'the additive certificate profile inherits every earlier scope and the ten security-control scopes'
+Assert-Equal 75 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
+    'the additive certificate profile inherits every earlier scope and the sixteen security-control scopes'
 $connectivityFields = @($contractSet.fieldDefinitions | Where-Object {
     $_.fieldId -like 'field:connectivity.*'
 })
@@ -68,10 +68,10 @@ $connectivityScopes = @($contractSet.scopeDefinitions | Where-Object {
 Assert-Equal 8 $connectivityScopes.Count `
     'the eight connectivity observation classes retain independent coverage'
 $connectivityProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness'
-Assert-Equal 74 @($contractSet.scopeDefinitions | Where-Object {
+Assert-Equal 80 @($contractSet.scopeDefinitions | Where-Object {
     $connectivityProfile -in @($_.profileIds)
 }).Count `
-    'the implemented connectivity profile inherits prior evidence, adds security controls, and replaces three deferred placeholders'
+    'the implemented connectivity profile inherits prior evidence, adds platform protection, and replaces three deferred placeholders'
 Assert-Equal 0 @($contractSet.scopeDefinitions | Where-Object {
     $_.scopeId -in @('scope:network.microsoft-connectivity', 'scope:network.enrollment-dns',
         'scope:network.tls-trust') -and $connectivityProfile -in @($_.profileIds)
@@ -160,6 +160,61 @@ Assert-Equal 8 @($administratorScope.fieldIds).Count `
     'direct membership retains exact group, completeness, count, identity, kind, origin, and relationship fields'
 Assert-Equal 'collector:windows.local-administrators.direct-members' $administratorScope.collectorIds[0] `
     'the administrator scope resolves only to the approved SID-based collector'
+$bitLockerScope=@($contractSet.scopeDefinitions|Where-Object {
+    $_.scopeId -eq 'scope:policy.bitlocker.operating-system-volume'
+})[0]
+$bitLockerProtectorScope=@($contractSet.scopeDefinitions|Where-Object {
+    $_.scopeId -eq 'scope:policy.bitlocker.protectors'
+})[0]
+$vbsScope=@($contractSet.scopeDefinitions|Where-Object {
+    $_.scopeId -eq 'scope:policy.vbs.runtime'
+})[0]
+$wdacScope=@($contractSet.scopeDefinitions|Where-Object {
+    $_.scopeId -eq 'scope:policy.wdac.inventory'
+})[0]
+$appLockerGpScope=@($contractSet.scopeDefinitions|Where-Object {
+    $_.scopeId -eq 'scope:policy.applocker.gp-channel'
+})[0]
+$appLockerCspScope=@($contractSet.scopeDefinitions|Where-Object {
+    $_.scopeId -eq 'scope:policy.applocker.csp-channel'
+})[0]
+Assert-Equal 4 @($bitLockerScope.fieldIds).Count `
+    'BitLocker volume state resolves only conversion, protection, encryption, and lock evidence'
+Assert-Equal 2 @($bitLockerProtectorScope.fieldIds).Count `
+    'BitLocker protector evidence retains only type and count'
+Assert-Equal 4 @($vbsScope.fieldIds).Count `
+    'VBS, Credential Guard, and code-integrity runtime states remain structured and distinct'
+Assert-Equal 4 @($wdacScope.fieldIds).Count `
+    'WDAC inventory retains structured channel, signing, platform, and enforcement facts only'
+Assert-Equal 2 @($appLockerGpScope.fieldIds).Count `
+    'AppLocker GP coverage retains only rule-collection and enforcement state'
+Assert-Equal 2 @($appLockerCspScope.fieldIds).Count `
+    'AppLocker CSP coverage retains only rule-collection and enforcement state'
+Assert-Equal 'field:policy.applocker.gp.rule-collection|field:policy.applocker.gp.enforcement-mode' `
+    (@($appLockerGpScope.fieldIds) -join '|') `
+    'AppLocker GP scope keeps its own channel-specific field identities'
+Assert-Equal 'field:policy.applocker.csp.rule-collection|field:policy.applocker.csp.enforcement-mode' `
+    (@($appLockerCspScope.fieldIds) -join '|') `
+    'AppLocker CSP scope keeps its own channel-specific field identities'
+foreach($scope in @(
+    $bitLockerScope,$bitLockerProtectorScope,$vbsScope,$wdacScope,$appLockerGpScope,$appLockerCspScope
+)){
+    Assert-Equal 'collector:windows.effective-policy' $scope.collectorIds[0] `
+        'new platform-protection and application-control scopes compose through the existing effective-policy collector'
+    if('profile:device-firmware-identity-administrator-and-policy-readiness' -notin @($scope.profileIds)){
+        throw 'Every new policy scope must belong to the additive combined evidence profile.'
+    }
+}
+$appLockerGpField=@($contractSet.fieldDefinitions|Where-Object {
+    $_.fieldId -eq 'field:policy.applocker.gp.rule-collection'
+})[0]
+$appLockerCspField=@($contractSet.fieldDefinitions|Where-Object {
+    $_.fieldId -eq 'field:policy.applocker.csp.rule-collection'
+})[0]
+Assert-Equal 'source:windows.applocker.gp-effective-policy' $appLockerGpField.source.sourceId `
+    'AppLocker GP field definitions stay bound to the GP-only source'
+Assert-Equal 'source:windows.applocker.csp-policy' $appLockerCspField.source.sourceId `
+    'AppLocker CSP field definitions stay bound to the CSP-only source'
 if (@($contextScope.fieldIds | Where-Object {
     [string]$_ -match '(?i)(product.?key|license.?key|private.?key|secret|token)'
 }).Count -gt 0) {
@@ -204,4 +259,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.11 binds historical through Defender security-control scopes and Microsoft Connectivity annotations to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.12 binds historical through platform-protection, AppLocker, and Microsoft Connectivity scopes to Draft 2020-12 contracts.'

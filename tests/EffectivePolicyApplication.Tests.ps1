@@ -38,13 +38,25 @@ $cases=@(
     @{scenario='TamperProtected';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='ExpectedCondition';providers=1;firewalls=3;asr=0},
     @{scenario='MissingDefenderProperty';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Complete';control='Partial';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Indeterminate';constraintFinding='Indeterminate';providers=1;firewalls=3;asr=0},
     @{scenario='FirewallProfiles';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
-    @{scenario='AsrRulePairs';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=2}
+    @{scenario='AsrRulePairs';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=2},
+    @{scenario='BitLockerEncrypted';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='ExpectedCondition';providers=1;firewalls=3;asr=0;bitlockerProtectors=2},
+    @{scenario='BitLockerUnencrypted';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0;bitlockerProtectors=0},
+    @{scenario='BitLockerUnknown';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Complete';control='Partial';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Indeterminate';constraintFinding='Indeterminate';providers=1;firewalls=3;asr=0;bitlockerProtectors=0},
+    @{scenario='VbsCredentialGuardRunning';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
+    @{scenario='VbsConfiguredNotRunning';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
+    @{scenario='WdacWindows11Policies';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0;wdacPolicies=2},
+    @{scenario='WdacWindows10Unsupported';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Partial';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Indeterminate';constraintFinding='Informational';providers=1;firewalls=3;asr=0;wdacPolicies=0},
+    @{scenario='AppLockerGpOnly';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0;appLockerGp=1;appLockerCsp=0},
+    @{scenario='AppLockerCspOnly';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0;appLockerGp=0;appLockerCsp=1},
+    @{scenario='AppLockerGpCspConflict';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0;channelFinding='NeedsAttention';tasks=2;appLockerGp=1;appLockerCsp=1},
+    @{scenario='AppLockerChannelIncomplete';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Partial';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Indeterminate';constraintFinding='Informational';providers=1;firewalls=3;asr=0;channelFinding='Indeterminate';tasks=2;appLockerGp=1;appLockerCsp=0},
+    @{scenario='VirtualMachineSecurity';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='ExpectedCondition';providers=1;firewalls=3;asr=0;bitlockerProtectors=1}
 )
 
 foreach($case in $cases){
-    if(-not $case.ContainsKey('mdmFinding')){
-        $case.mdmFinding='Informational';$case.channelFinding='ExpectedCondition';$case.tasks=0
-    }
+    if(-not $case.ContainsKey('mdmFinding')){$case.mdmFinding='Informational'}
+    if(-not $case.ContainsKey('channelFinding')){$case.channelFinding='ExpectedCondition'}
+    if(-not $case.ContainsKey('tasks')){$case.tasks=0}
     if($case.scenario -in @('StaleRegistry','DeniedAdministrator','PartialChannel')){
         $case.channelFinding='Indeterminate';$case.tasks=2
     }
@@ -86,13 +98,31 @@ foreach($case in $cases){
     Assert-Equal $case.providers $validation[0].antivirusProviderCount "$($case.scenario) publishes only a safe antivirus-provider count"
     Assert-Equal $case.firewalls $validation[0].firewallProfileCount "$($case.scenario) publishes only the bounded firewall profile count"
     Assert-Equal $case.asr $validation[0].asrRuleCount "$($case.scenario) publishes only a safe ASR rule count"
+    Assert-Equal $true $validation[0].PSObject.Properties.Name.Contains('bitLockerProtectorTypeCount') "$($case.scenario) projects a safe BitLocker protector count"
+    Assert-Equal $true $validation[0].PSObject.Properties.Name.Contains('wdacPolicyCount') "$($case.scenario) projects a safe WDAC policy count"
+    Assert-Equal $true $validation[0].PSObject.Properties.Name.Contains('appLockerGpCollectionCount') "$($case.scenario) projects a safe AppLocker GP count"
+    Assert-Equal $true $validation[0].PSObject.Properties.Name.Contains('appLockerCspCollectionCount') "$($case.scenario) projects a safe AppLocker CSP count"
     Assert-Equal $case.mdmFinding $validation[0].mdmPolicyCspFinding "$($case.scenario) derives the MDM coverage finding"
     Assert-Equal $case.channelFinding $validation[0].policyCspGpoConflictFinding "$($case.scenario) does not guess a winning channel"
     Assert-Equal $case.tasks $validation[0].policyDiscoveryTaskCount "$($case.scenario) emits only frozen discovery tasks"
+    if($case.ContainsKey('bitlockerProtectors')){
+        Assert-Equal $case.bitlockerProtectors $validation[0].bitLockerProtectorTypeCount "$($case.scenario) publishes only the safe BitLocker protector-type count"
+    }
+    if($case.ContainsKey('wdacPolicies')){
+        Assert-Equal $case.wdacPolicies $validation[0].wdacPolicyCount "$($case.scenario) publishes only the safe WDAC policy count"
+    }
+    if($case.ContainsKey('appLockerGp')){
+        Assert-Equal $case.appLockerGp $validation[0].appLockerGpCollectionCount "$($case.scenario) publishes only the safe AppLocker GP collection count"
+    }
+    if($case.ContainsKey('appLockerCsp')){
+        Assert-Equal $case.appLockerCsp $validation[0].appLockerCspCollectionCount "$($case.scenario) publishes only the safe AppLocker CSP collection count"
+    }
     Assert-Equal $true $validation[0].directRightsOnly "$($case.scenario) does not expand assigned groups"
     Assert-Equal $true $validation[0].localSamOnly "$($case.scenario) does not call local SAM state domain policy"
     Assert-Equal $false $validation[0].policyIdentifiersPublished "$($case.scenario) keeps policy identifiers restricted"
     Assert-Equal $false $validation[0].policyValuesPublished "$($case.scenario) keeps configured values restricted"
+    Assert-Equal $false $validation[0].bitLockerSecretsPublished "$($case.scenario) keeps BitLocker recovery material restricted"
+    Assert-Equal $false $validation[0].applicationControlPoliciesPublished "$($case.scenario) keeps App Control policy payloads restricted"
     Assert-Equal $false $validation[0].policyStateChanged "$($case.scenario) performs no policy mutation"
     Assert-Equal $false $validation[0].policyRefreshAttempted "$($case.scenario) never refreshes policy"
     Assert-Equal $false $validation[0].toolInstalled "$($case.scenario) installs no policy tool"
@@ -100,7 +130,7 @@ foreach($case in $cases){
     Assert-Equal $true $validation[0].beginnerReportVerified "$($case.scenario) creates three-layer beginner guidance"
     Assert-Equal $true $validation[0].protectedPackageVerified "$($case.scenario) reopens the protected package"
     Assert-Equal $true $validation[0].validationCleanupVerified "$($case.scenario) proves validation residue absent"
-    if($result.StandardOutput -match '(?i)6ac1786c|7f7d1f60|LocalGPO|synthetic-(?:domain|user|computer)-link|local-machine|bounded-link-[0-9]+|registry:(?:[0-9a-f-]{36}|bounded-setting-[0-9]+)|S-1-5-(?:18|19|20|21-[0-9-]+|32-54[46])'){
+    if($result.StandardOutput -match '(?i)6ac1786c|7f7d1f60|LocalGPO|synthetic-(?:domain|user|computer)-link|local-machine|bounded-link-[0-9]+|registry:(?:[0-9a-f-]{36}|bounded-setting-[0-9]+)|S-1-5-(?:18|19|20|21-[0-9-]+|32-54[46])|RecoveryPassword|NumericalPassword|TpmPin|XtsAes(?:128|256)?|PolicyXml|RuleCollectionXml'){
         throw "$($case.scenario) leaked Restricted policy evidence into public output."
     }
     if($result.StandardError){throw "$($case.scenario) wrote stderr: $($result.StandardError)"}

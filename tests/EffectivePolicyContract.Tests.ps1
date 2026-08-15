@@ -75,7 +75,7 @@ Assert-Equal '1.0.0' $record.contractVersion `
     'the record shape remains backward-compatible while Contract Set 1.4 adds policy definitions'
 Assert-Equal 'profile:device-firmware-identity-administrator-and-policy-readiness' $record.run.evidenceProfileId `
     'the record selects the exact additive policy evidence profile'
-Assert-Equal 38 @($record.coverage).Count 'all twenty-nine policy scopes remain independently closed'
+Assert-Equal 44 @($record.coverage).Count 'all thirty-five policy scopes remain independently closed'
 Assert-Equal 18 @($record.findings).Count 'seven bounded rules each produce one finding'
 Assert-Equal 1 @($record.collectorResults|Where-Object collectorId -eq 'collector:windows.effective-policy').Count `
     'one approved attempt owns all policy source coverage'
@@ -256,5 +256,62 @@ $tamperRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $tamperR
 Assert-Equal 'ExpectedCondition' (@($tamperRecord.findings|Where-Object `
     ruleId -eq 'rule:policy.security-control-constraint/1.0.0')[0].outcome) `
     'tamper protection is reported as a bounded security-control constraint'
+
+$bitLockerRecord=New-AdministratorReadyRecord
+$bitLockerCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario BitLockerEncrypted
+$bitLockerRecord=Add-EffectivePolicyEvidenceRecord -Record $bitLockerRecord -CollectorResult $bitLockerCollector -Policy $effectivePolicy
+$bitLockerRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $bitLockerRecord -Policy $effectivePolicy `
+    -ContractValidation (Test-CanonicalRecord $bitLockerRecord)
+Assert-Equal 'ExpectedCondition' (@($bitLockerRecord.findings|Where-Object `
+    ruleId -eq 'rule:policy.security-control-constraint/1.0.0')[0].outcome) `
+    'local BitLocker protection becomes a bounded discovery constraint rather than an escrow claim'
+Assert-Equal 0 @($bitLockerRecord.observations|Where-Object {
+    $_.fieldId -match '(?i)recovery|password|protector-id|key'
+}).Count 'BitLocker evidence excludes recovery secrets and unnecessary protector identifiers'
+
+$wdacRecord=New-AdministratorReadyRecord
+$wdacCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario WdacWindows10Unsupported
+$wdacRecord=Add-EffectivePolicyEvidenceRecord -Record $wdacRecord -CollectorResult $wdacCollector -Policy $effectivePolicy
+$wdacRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $wdacRecord -Policy $effectivePolicy `
+    -ContractValidation (Test-CanonicalRecord $wdacRecord)
+Assert-Equal 'Indeterminate' (@($wdacRecord.findings|Where-Object `
+    ruleId -eq 'rule:policy.security-control-coverage/1.0.0')[0].outcome) `
+    'unsupported Windows 10 WDAC inventory becomes explicit incomplete coverage'
+
+$appLockerConflictRecord=New-AdministratorReadyRecord
+$appLockerConflictCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario AppLockerGpCspConflict
+$appLockerConflictRecord=Add-EffectivePolicyEvidenceRecord -Record $appLockerConflictRecord `
+    -CollectorResult $appLockerConflictCollector -Policy $effectivePolicy
+$appLockerConflictRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $appLockerConflictRecord `
+    -Policy $effectivePolicy -ContractValidation (Test-CanonicalRecord $appLockerConflictRecord)
+Assert-Equal 'NeedsAttention' (@($appLockerConflictRecord.findings|Where-Object `
+    ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome) `
+    'conflicting AppLocker GP and CSP channels become a bounded advisory conflict'
+$appLockerGpObservation=@($appLockerConflictRecord.observations|Where-Object {
+    $_.fieldId -eq 'field:policy.applocker.gp.rule-collection'
+})[0]
+$appLockerCspObservation=@($appLockerConflictRecord.observations|Where-Object {
+    $_.fieldId -eq 'field:policy.applocker.csp.rule-collection'
+})[0]
+$appLockerGpProvenance=@($appLockerConflictRecord.provenance|Where-Object {
+    $_.provenanceId -eq $appLockerGpObservation.provenanceId
+})[0]
+$appLockerCspProvenance=@($appLockerConflictRecord.provenance|Where-Object {
+    $_.provenanceId -eq $appLockerCspObservation.provenanceId
+})[0]
+Assert-Equal 'source:windows.applocker.gp-effective-policy' $appLockerGpProvenance.sourceId `
+    'AppLocker GP evidence keeps the GP-only source provenance'
+Assert-Equal 'source:windows.applocker.csp-policy' $appLockerCspProvenance.sourceId `
+    'AppLocker CSP evidence keeps the CSP-only source provenance'
+
+$appLockerIncompleteRecord=New-AdministratorReadyRecord
+$appLockerIncompleteCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario AppLockerChannelIncomplete
+$appLockerIncompleteRecord=Add-EffectivePolicyEvidenceRecord -Record $appLockerIncompleteRecord `
+    -CollectorResult $appLockerIncompleteCollector -Policy $effectivePolicy
+$appLockerIncompleteRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $appLockerIncompleteRecord `
+    -Policy $effectivePolicy -ContractValidation (Test-CanonicalRecord $appLockerIncompleteRecord)
+Assert-Equal 'Indeterminate' (@($appLockerIncompleteRecord.findings|Where-Object `
+    ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome) `
+    'incomplete AppLocker channel coverage cannot guess a winning deployment channel'
 
 Write-Output 'PASS: Effective Policy composes canonical three-layer evidence, closed coverage, and bounded findings.'
