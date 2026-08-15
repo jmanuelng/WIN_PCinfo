@@ -43,6 +43,48 @@ test("selectNextIssue accepts array-shaped blockedBy data", () => {
   );
 });
 
+test("selectNextIssue ignores closed historical blockers", () => {
+  const selected = selectNextIssue([
+    issue(54, {
+      blockedBy: {
+        nodes: [
+          { number: 53, state: "CLOSED" },
+          { number: 44, state: "CLOSED" },
+        ],
+      },
+    }),
+  ]);
+
+  assert.equal(selected?.number, 54);
+  assert.equal(
+    selectNextIssue([
+      issue(55, {
+        blockedBy: [{ number: 54, state: "closed" }],
+      }),
+    ])?.number,
+    55,
+  );
+});
+
+test("selectNextIssue treats open or unrecognized dependencies as blockers", () => {
+  assert.equal(
+    selectNextIssue([
+      issue(55, {
+        blockedBy: { nodes: [{ number: 54, state: "OPEN" }] },
+      }),
+    ]),
+    undefined,
+  );
+  assert.equal(
+    selectNextIssue([
+      issue(55, {
+        blockedBy: { nodes: [{ number: 54, state: "UNKNOWN" }] },
+      }),
+    ]),
+    undefined,
+  );
+});
+
 test("selectNextIssue excludes parent specifications with open child issues", () => {
   const parentSpecification = issue(37, {
     subIssuesSummary: {
