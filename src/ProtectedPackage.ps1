@@ -388,7 +388,7 @@ function Test-AssessmentPackageManifest {
         $Manifest.contractVersion -ne '1.0.0' -or $Manifest.productRelease -ne $policy.release -or
         $Manifest.packagePolicy -notin @('win-pcinfo.protected-package/1.0.0',$policy.policyId) -or
         $Manifest.manifestContract -ne $policy.innerPackage.manifestContract -or
-        $Manifest.assessmentContractSet -notin @('1.0.0','1.1.0','1.2.0','1.3.0','1.4.0','1.5.0','1.6.0','1.7.0','1.8.0') -or
+        $Manifest.assessmentContractSet -notin @('1.0.0','1.1.0','1.2.0','1.3.0','1.4.0','1.5.0','1.6.0','1.7.0','1.8.0','1.9.0') -or
         $Manifest.completeness -notin @($policy.manifest.completenessStates)) { return $false }
     $protectionNames = @($Manifest.protection.PSObject.Properties.Name | Sort-Object)
     if (($protectionNames -join '|') -ne 'authorshipClaim|durableTamperEvidenceClaim|state' -or
@@ -821,7 +821,7 @@ function New-ProtectedEvidencePackage {
     param(
         [Parameter(Mandatory)] [string] $DestinationDirectory,
         [Parameter(Mandatory)] [System.Collections.IDictionary] $Artifacts,
-        [Parameter(Mandatory)] [ValidateSet('1.0.0','1.1.0','1.2.0','1.3.0','1.4.0','1.5.0','1.6.0','1.7.0','1.8.0')] [string] $AssessmentContractSetVersion,
+        [Parameter(Mandatory)] [ValidateSet('1.0.0','1.1.0','1.2.0','1.3.0','1.4.0','1.5.0','1.6.0','1.7.0','1.8.0','1.9.0')] [string] $AssessmentContractSetVersion,
         [Parameter(Mandatory)] [ValidateSet('Complete', 'RecoverablePartial')] [string] $Completeness,
         [Parameter()] [string] $JournalPath,
         [Parameter()] $ApprovedRecipient,

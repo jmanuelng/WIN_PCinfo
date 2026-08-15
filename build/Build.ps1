@@ -26,6 +26,7 @@ $sourcePaths = @(
     'src/NetworkTopology.ps1'
     'src/SoftwareInventory.ps1'
     'src/CertificateTrust.ps1'
+    'src/MicrosoftConnectivity.ps1'
     'src/SoftwareRecognition.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
@@ -80,6 +81,8 @@ $softwareInventoryPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0
 $softwareInventorySchemaPath = Join-Path $repositoryRoot 'schemas/software-inventory.schema.json'
 $certificateTrustPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
 $certificateTrustSchemaPath = Join-Path $repositoryRoot 'schemas/certificate-trust.schema.json'
+$microsoftConnectivityPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-microsoft-connectivity.json'
+$microsoftConnectivitySchemaPath = Join-Path $repositoryRoot 'schemas/microsoft-connectivity.schema.json'
 $softwareRecognitionCatalogPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 $softwareRecognitionCatalogSchemaPath = Join-Path $repositoryRoot 'schemas/software-recognition-catalog.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
@@ -107,6 +110,7 @@ foreach ($requiredDefinitionPath in @(
     $networkTopologyPolicyPath, $networkTopologySchemaPath,
     $softwareInventoryPolicyPath, $softwareInventorySchemaPath,
     $certificateTrustPolicyPath, $certificateTrustSchemaPath,
+    $microsoftConnectivityPolicyPath, $microsoftConnectivitySchemaPath,
     $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
@@ -223,6 +227,12 @@ $certificateTrustPolicyDigest = Get-Sha256Hex -Bytes $certificateTrustPolicyByte
 $certificateTrustPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $certificateTrustPolicyBytes
 )
+$microsoftConnectivityPolicyBytes = Get-Utf8LfBytes -LiteralPath $microsoftConnectivityPolicyPath
+$microsoftConnectivityPolicyBase64 = [Convert]::ToBase64String($microsoftConnectivityPolicyBytes)
+$microsoftConnectivityPolicyDigest = Get-Sha256Hex -Bytes $microsoftConnectivityPolicyBytes
+$microsoftConnectivityPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $microsoftConnectivityPolicyBytes
+)
 $softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
 $softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
 $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
@@ -284,6 +294,9 @@ if (-not (Test-Json -Json $softwareInventoryPolicyJson -SchemaFile $softwareInve
 if (-not (Test-Json -Json $certificateTrustPolicyJson -SchemaFile $certificateTrustSchemaPath)) {
     throw 'The Certificate Trust policy does not satisfy its release schema.'
 }
+if (-not (Test-Json -Json $microsoftConnectivityPolicyJson -SchemaFile $microsoftConnectivitySchemaPath)) {
+    throw 'The Microsoft Connectivity policy does not satisfy its release schema.'
+}
 if (-not (Test-Json -Json $softwareRecognitionCatalogJson -SchemaFile $softwareRecognitionCatalogSchemaPath)) {
     throw 'The Software Recognition Catalog does not satisfy its release schema.'
 }
@@ -340,6 +353,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/network-topology.schema.json'
     'schemas/software-inventory.schema.json'
     'schemas/certificate-trust.schema.json'
+    'schemas/microsoft-connectivity.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -358,6 +372,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-network-topology.json'
     'docs/spec/releases/2.0.0-preview.1-software-inventory.json'
     'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
+    'docs/spec/releases/2.0.0-preview.1-microsoft-connectivity.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
@@ -392,6 +407,7 @@ $preparationDefinition = [pscustomobject][ordered]@{
     networkTopology = ($networkTopologyPolicyJson | ConvertFrom-Json -Depth 20)
     softwareInventory = ($softwareInventoryPolicyJson | ConvertFrom-Json -Depth 20)
     certificateTrust = ($certificateTrustPolicyJson | ConvertFrom-Json -Depth 20)
+    microsoftConnectivity = ($microsoftConnectivityPolicyJson | ConvertFrom-Json -Depth 20)
     requiredFreeDiskMiB = [int] $preparationPlan.requiredFreeDiskMiB
     governingResources = @(
         foreach ($path in @(
@@ -598,6 +614,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__CERTIFICATE_TRUST_POLICY_SHA256__', $certificateTrustPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/MicrosoftConnectivity.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__MICROSOFT_CONNECTIVITY_POLICY_BASE64__', $microsoftConnectivityPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__MICROSOFT_CONNECTIVITY_POLICY_SHA256__', $microsoftConnectivityPolicyDigest
         )
     }
     if ($sourceFile.path -eq 'src/SoftwareRecognition.ps1') {

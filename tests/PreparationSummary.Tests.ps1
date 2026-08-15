@@ -77,6 +77,15 @@ Assert-Equal 'StandardUser|StandardUser|LocalSystem' `
 Assert-Equal 4 $automationSummary.plan.privilege.privilegedOperations.Count 'administrator and SYSTEM work is concrete and frozen'
 Assert-Equal 'LocalOnly' $automationSummary.plan.network.behavior 'local-only behavior is explicit'
 Assert-Equal 0 $automationSummary.plan.network.plannedRequests.Count 'local-only plans no assessment requests'
+Assert-Equal 'op:microsoft-connectivity.collect' `
+    $automationSummary.plan.microsoftConnectivity.collector.operationId `
+    'the immutable plan freezes the bounded connectivity operation before approval'
+Assert-Equal 3 $automationSummary.plan.microsoftConnectivity.endpoints.Count `
+    'the immutable plan freezes the exact generic endpoint catalog'
+Assert-Equal 8 $automationSummary.plan.microsoftConnectivity.scopes.Count `
+    'the immutable plan keeps protocol layers separate'
+Assert-Equal $false $automationSummary.plan.microsoftConnectivity.collector.mayPrompt `
+    'connectivity cannot request credentials after approval'
 Assert-Equal $true $automationSummary.plan.privilege.elevationRequired 'the frozen plan discloses its one elevation boundary'
 Assert-Equal 1 $automationSummary.plan.privilege.maximumUacInteractions 'the privilege ceiling is disclosed once'
 Assert-Equal $false $automationSummary.plan.privilege.laterPromptsAllowed 'no later authority or elevation prompt is permitted'

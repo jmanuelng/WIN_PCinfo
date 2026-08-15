@@ -18,16 +18,16 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.8.0' $contractSet.contractVersion `
-    'the additive Certificate Trust and Software Recognition contracts have an explicit version'
+Assert-Equal '1.9.0' $contractSet.contractVersion `
+    'the additive Microsoft Connectivity contract has an explicit version'
 Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 161 @($contractSet.fieldDefinitions).Count `
-    'historical fields remain while bounded certificate fields are admitted'
-Assert-Equal 57 @($contractSet.scopeDefinitions).Count `
-    'historical through purpose-bound certificate scopes remain distinct'
+Assert-Equal 185 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while bounded connectivity fields are admitted'
+Assert-Equal 65 @($contractSet.scopeDefinitions).Count `
+    'historical through connectivity protocol scopes remain distinct'
 $certificateFields = @($contractSet.fieldDefinitions | Where-Object fieldId -like 'field:certificate.*')
 Assert-Equal 12 $certificateFields.Count `
     'presence, purpose, identity, store, dates, validity, chain, trust, and key protection remain explicit fields'
@@ -51,6 +51,31 @@ foreach ($certificateScope in $certificateScopes) {
 $certificateProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness'
 Assert-Equal 55 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
     'the additive certificate profile inherits every earlier scope and adds six purpose scopes'
+$connectivityFields = @($contractSet.fieldDefinitions | Where-Object {
+    $_.fieldId -like 'field:connectivity.*'
+})
+Assert-Equal 24 $connectivityFields.Count `
+    'endpoint identity and DNS, TCP, TLS, chain, negotiation, proxy, HTTP, and enrollment DNS remain typed'
+foreach ($connectivityField in $connectivityFields) {
+    Assert-Equal 'RestrictedDiagnosticEvidence' $connectivityField.sensitivity `
+        'every per-endpoint connectivity value remains Restricted Diagnostic Evidence'
+    Assert-Equal $false $connectivityField.publicEligibility.values `
+        'no per-endpoint result or certificate observation is public'
+}
+$connectivityScopes = @($contractSet.scopeDefinitions | Where-Object {
+    $_.scopeId -like 'scope:connectivity.*'
+})
+Assert-Equal 8 $connectivityScopes.Count `
+    'the eight connectivity observation classes retain independent coverage'
+$connectivityProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness'
+Assert-Equal 60 @($contractSet.scopeDefinitions | Where-Object {
+    $connectivityProfile -in @($_.profileIds)
+}).Count `
+    'the implemented connectivity profile inherits prior evidence and replaces three deferred placeholders'
+Assert-Equal 0 @($contractSet.scopeDefinitions | Where-Object {
+    $_.scopeId -in @('scope:network.microsoft-connectivity', 'scope:network.enrollment-dns',
+        'scope:network.tls-trust') -and $connectivityProfile -in @($_.profileIds)
+}).Count 'the implemented profile cannot retain obsolete NotAttempted placeholder scopes'
 
 $definition = @($contractSet.fieldDefinitions | Where-Object fieldId -eq 'field:device.os.display-name')[0]
 Assert-Equal 'field:device.os.display-name' $definition.fieldId 'the admitted field identity is release-bound'
@@ -165,4 +190,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.8 binds historical through Certificate Trust scopes and Software Recognition annotations to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.9 binds historical through Microsoft Connectivity scopes and Software Recognition annotations to Draft 2020-12 contracts.'

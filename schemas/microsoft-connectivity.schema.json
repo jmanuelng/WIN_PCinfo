@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/microsoft-connectivity.schema.json",
+  "title": "WIN-PCInfo Microsoft Connectivity policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "contractVersion", "release", "catalogVersion", "evidenceProfileId", "collector", "endpoints", "scopes", "operations", "rules", "recommendations", "validationScenarios"],
+  "properties": {
+    "kind": { "const": "win-pcinfo.microsoft-connectivity-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "catalogVersion": { "type": "string", "format": "date" },
+    "evidenceProfileId": { "$ref": "#/$defs/id" },
+    "collector": { "$ref": "#/$defs/operation" },
+    "endpoints": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/endpoint" } },
+    "scopes": { "type": "array", "minItems": 8, "maxItems": 8, "items": { "$ref": "#/$defs/scope" } },
+    "operations": { "type": "array", "minItems": 8, "maxItems": 8, "items": { "$ref": "#/$defs/operation" } },
+    "rules": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/rule" } },
+    "recommendations": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/recommendation" } },
+    "validationScenarios": { "type": "array", "minItems": 14, "maxItems": 14, "uniqueItems": true, "items": { "type": "string", "minLength": 3, "maxLength": 64 } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._:/-]*$", "maxLength": 160 },
+    "endpoint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["endpointId", "service", "dnsName", "uri", "port", "transportModes", "http", "source"],
+      "properties": {
+        "endpointId": { "$ref": "#/$defs/id" }, "service": { "type": "string", "minLength": 3, "maxLength": 96 },
+        "dnsName": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$", "maxLength": 253 },
+        "uri": { "type": "string", "format": "uri", "pattern": "^https://", "maxLength": 512 },
+        "port": { "const": 443 },
+        "transportModes": { "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": { "enum": ["Direct", "WindowsProxy"] } },
+        "http": { "type": "object", "additionalProperties": false, "required": ["method", "maximumResponseBodyBytes", "maximumHeaderBytes", "maximumRedirects"], "properties": { "method": { "const": "HEAD" }, "maximumResponseBodyBytes": { "const": 0 }, "maximumHeaderBytes": { "type": "integer", "minimum": 1, "maximum": 16384 }, "maximumRedirects": { "const": 0 } } },
+        "source": { "type": "object", "additionalProperties": false, "required": ["url", "reviewedOn", "limitation"], "properties": { "url": { "type": "string", "format": "uri", "pattern": "^https://learn.microsoft.com/", "maxLength": 512 }, "reviewedOn": { "type": "string", "format": "date" }, "limitation": { "type": "string", "minLength": 40, "maxLength": 384 } } }
+      }
+    },
+    "scope": { "type": "object", "additionalProperties": false, "required": ["scopeId", "sourceId", "fieldIds"], "properties": { "scopeId": { "$ref": "#/$defs/id" }, "sourceId": { "$ref": "#/$defs/id" }, "fieldIds": { "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } } },
+    "operation": { "type": "object", "required": ["operationId", "sourceId", "executionContext", "privilege", "networkBehavior", "executable", "dependency", "deadlineMilliseconds", "maximumEndpoints", "maximumResultUtf8Bytes", "maximumAttempts", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "cleanup"], "properties": { "operationId": { "$ref": "#/$defs/id" }, "sourceId": { "$ref": "#/$defs/id" }, "collectorId": { "$ref": "#/$defs/id" }, "collectorVersion": { "type": "string" }, "executionContext": { "const": "StandardUser" }, "privilege": { "const": "StandardUser" }, "networkBehavior": { "enum": ["None", "MicrosoftConnectivityEnabled"] }, "executable": { "enum": ["InProcessPowerShell", "InProcessDotNet"] }, "dependency": { "enum": ["None", "BuiltInDotNet", "CurrentUserRegistryAndBuiltInDotNet"] }, "deadlineMilliseconds": { "type": "integer", "minimum": 1, "maximum": 45000 }, "maximumEndpoints": { "type": "integer", "minimum": 1, "maximum": 3 }, "maximumAddressesPerEndpoint": { "type": "integer", "minimum": 1, "maximum": 8 }, "maximumCertificateChainElements": { "type": "integer", "minimum": 1, "maximum": 8 }, "maximumChainStatusCodes": { "type": "integer", "minimum": 1, "maximum": 8 }, "maximumHeaderEntries": { "type": "integer", "minimum": 1, "maximum": 32 }, "maximumProxyServerUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 2048 }, "maximumProxyOverrideUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 4096 }, "maximumProxyOverrideEntries": { "type": "integer", "minimum": 1, "maximum": 32 }, "maximumResponseBodyBytes": { "const": 0 }, "maximumRedirects": { "const": 0 }, "maximumResultUtf8Bytes": { "type": "integer", "minimum": 256, "maximum": 65536 }, "maximumAttempts": { "const": 1 }, "mayPrompt": { "const": false }, "mayInstall": { "const": false }, "mayDownload": { "const": false }, "maySelfElevate": { "const": false }, "writesAllowed": { "const": false }, "cleanup": { "type": "string", "minLength": 20, "maxLength": 256 } }, "additionalProperties": false },
+    "rule": { "type": "object", "additionalProperties": false, "required": ["operationId", "ruleId", "findingKind", "sourceId", "executionContext", "privilege", "networkBehavior", "executable", "dependency", "deadlineMilliseconds", "maximumInputObservations", "maximumOutputFindings", "maximumAttempts", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "cleanup"], "properties": { "operationId": { "$ref": "#/$defs/id" }, "ruleId": { "$ref": "#/$defs/id" }, "findingKind": { "type": "string" }, "sourceId": { "$ref": "#/$defs/id" }, "executionContext": { "const": "InProcessValidatedAssessmentRecord" }, "privilege": { "const": "NoElevation" }, "networkBehavior": { "const": "None" }, "executable": { "const": "InProcessPowerShell" }, "dependency": { "const": "None" }, "deadlineMilliseconds": { "type": "integer", "minimum": 1 }, "maximumInputObservations": { "type": "integer", "minimum": 1 }, "maximumOutputFindings": { "const": 1 }, "maximumAttempts": { "const": 1 }, "mayPrompt": { "const": false }, "mayInstall": { "const": false }, "mayDownload": { "const": false }, "maySelfElevate": { "const": false }, "writesAllowed": { "const": false }, "cleanup": { "type": "string", "minLength": 20, "maxLength": 128 } } },
+    "recommendation": { "type": "object", "additionalProperties": false, "required": ["findingKind", "definitionId"], "properties": { "findingKind": { "type": "string" }, "definitionId": { "$ref": "#/$defs/id" } } }
+  }
+}

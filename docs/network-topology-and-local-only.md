@@ -10,7 +10,7 @@ Each source has a fixed property list, an eight-item ceiling per Evidence Scope,
 
 Local configuration cannot prove external reachability, authorization, service health, certificate trust, tenant assignment, or Microsoft endpoint availability. To request those facts, start a new Preparation Summary using the separately approved Microsoft Connectivity Enabled mode; approval for Local Only cannot be widened after collection starts.
 
-Microsoft Connectivity Enabled is a distinct approved request choice, but its DNS, TCP, TLS, and HTTP operations are not implemented in this preview. When selected, WIN-PCInfo preserves that choice, performs only the same offline local inventory, makes zero assessment network requests, and reports each enabled operation as `NotAttempted` with `NETWORK.CONNECTIVITY_OPERATIONS_NOT_IMPLEMENTED`. It never silently substitutes a successful Local Only claim.
+Microsoft Connectivity Enabled is a distinct approved request choice. It runs the exact generic Microsoft targets and bounded DNS, TCP, TLS, offline-chain, Windows-proxy, and metadata-only HTTP operations documented in [Microsoft service connectivity and enrollment discovery](microsoft-connectivity-and-enrollment-dns.md). Those remote observations remain separate from this local topology inventory. Local Only still returns before target materialization and cannot be widened by a later fixture or collector choice.
 
 ## Reading the report
 
