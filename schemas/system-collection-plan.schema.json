@@ -95,12 +95,13 @@
         },
         "supplementalSources": {
           "type": "array",
-          "minItems": 3,
-          "maxItems": 3,
+          "minItems": 4,
+          "maxItems": 4,
           "prefixItems": [
             { "$ref": "#/$defs/buildNumberSource" },
             { "$ref": "#/$defs/controlPolicyResultSource" },
-            { "$ref": "#/$defs/securityOptionsResultSource" }
+            { "$ref": "#/$defs/securityOptionsResultSource" },
+            { "$ref": "#/$defs/updateResultSource" }
           ],
           "items": false
         },
@@ -147,7 +148,10 @@
             { "const": "scope:policy.mdm.control-policy-conflict" },
             { "const": "scope:policy.mdm.security-option.machine-inactivity-limit" },
             { "const": "scope:policy.mdm.security-option.disable-cad" },
-            { "const": "scope:policy.mdm.security-option.lm-compatibility-level" }
+            { "const": "scope:policy.mdm.security-option.lm-compatibility-level" },
+            { "const": "scope:policy.mdm.update.defer-feature-updates" },
+            { "const": "scope:policy.mdm.update.defer-quality-updates" },
+            { "const": "scope:policy.mdm.update.disable-dual-scan" }
           ],
           "items": false
         },
@@ -174,8 +178,8 @@
         "maximumBuildNumber": { "type": "integer", "minimum": 10240, "maximum": 99999 },
         "resultFields": {
           "type": "array",
-          "minItems": 4,
-          "maxItems": 4,
+          "minItems": 7,
+          "maxItems": 7,
           "items": { "$ref": "#/$defs/policyResultField" }
         }
       }
@@ -190,17 +194,21 @@
         "className": {
           "enum": [
             "MDM_Policy_Result01_ControlPolicyConflict02",
-            "MDM_Policy_Result01_LocalPoliciesSecurityOptions02"
+            "MDM_Policy_Result01_LocalPoliciesSecurityOptions02",
+            "MDM_Policy_Result01_Update02"
           ]
         },
         "parentId": { "const": "./Vendor/MSFT/Policy/Result" },
-        "instanceId": { "enum": ["ControlPolicyConflict", "LocalPoliciesSecurityOptions"] },
+        "instanceId": { "enum": ["ControlPolicyConflict", "LocalPoliciesSecurityOptions", "Update"] },
         "propertyName": {
           "enum": [
             "MDMWinsOverGP",
             "InteractiveLogon_MachineInactivityLimit",
             "Interactivelogon_DoNotRequireCTRLALTDEL",
-            "NetworkSecurity_LANManagerAuthenticationLevel"
+            "NetworkSecurity_LANManagerAuthenticationLevel",
+            "DeferFeatureUpdatesPeriodInDays",
+            "DeferQualityUpdatesPeriodInDays",
+            "DisableDualScan"
           ]
         },
         "valueType": { "enum": ["Boolean", "Integer"] },
@@ -247,6 +255,21 @@
         "className": { "const": "MDM_Policy_Result01_LocalPoliciesSecurityOptions02" },
         "parentId": { "const": "./Vendor/MSFT/Policy/Result" },
         "instanceId": { "const": "LocalPoliciesSecurityOptions" },
+        "maximumInstances": { "const": 1 },
+        "access": { "const": "ReadOnlyProperties" }
+      }
+    },
+    "updateResultSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "interface", "namespace", "className", "parentId", "instanceId", "maximumInstances", "access"],
+      "properties": {
+        "sourceId": { "const": "source:windows.mdm-policy-result.update" },
+        "interface": { "const": "WindowsMdmBridgeWmiProvider" },
+        "namespace": { "const": "Root\\cimv2\\mdm\\dmmap" },
+        "className": { "const": "MDM_Policy_Result01_Update02" },
+        "parentId": { "const": "./Vendor/MSFT/Policy/Result" },
+        "instanceId": { "const": "Update" },
         "maximumInstances": { "const": 1 },
         "access": { "const": "ReadOnlyProperties" }
       }

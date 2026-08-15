@@ -38,10 +38,15 @@ $expectedSources = @(
     'source:windows.system-audit-policy',
     'source:windows.lsa-user-rights',
     'source:windows.local-configured-signals',
+    'source:windows.update-policy-registry',
+    'source:windows.legacy-authentication-registry',
     'source:windows.security-center.providers',
     'source:windows.defender.runtime-status',
     'source:windows.defender.preferences',
     'source:windows.firewall.activestore-profiles',
+    'source:windows.rdp.configuration',
+    'source:windows.winrm.configuration',
+    'source:windows.smb.configuration',
     'source:windows.mdm-policy-csp-results',
     'source:windows.bitlocker.volume-status',
     'source:windows.device-guard.status',
@@ -60,15 +65,23 @@ Assert-Equal 'root\RSOP\User\{AssessmentUserSid}' $policy.sourceCatalog[0].names
     'user RSoP is frozen to the verified Assessment User SID namespace template'
 Assert-Equal 'NetUserModalsGet(NULL,0|3)' $policy.sourceCatalog[1].interface `
     'local account policy is explicitly local SAM policy'
-Assert-Equal 'Get-BitLockerVolume' $policy.sourceCatalog[10].interface `
+Assert-Equal 'Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly' $policy.sourceCatalog[5].interface `
+    'Windows Update registry mappings stay on the fixed read-only registry seam'
+Assert-Equal 'Get-CimInstance Win32_Service,Get-CimInstance Win32_TSGeneralSetting,Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly' $policy.sourceCatalog[11].interface `
+    'RDP state uses structured service, terminal-services, and registry sources only'
+Assert-Equal 'Get-ChildItem WSMan:\\localhost\\Service,Get-ChildItem WSMan:\\localhost\\Service\\Auth,Get-ChildItem WSMan:\\localhost\\Listener,Get-CimInstance Win32_Service' $policy.sourceCatalog[12].interface `
+    'WinRM state uses the structured WSMan provider and service source only'
+Assert-Equal 'Get-SmbClientConfiguration,Get-SmbServerConfiguration,Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol' $policy.sourceCatalog[13].interface `
+    'SMB posture uses approved structured client, server, and feature-state objects only'
+Assert-Equal 'Get-BitLockerVolume' $policy.sourceCatalog[15].interface `
     'BitLocker evidence uses the bounded structured volume cmdlet'
-Assert-Equal 'Get-CimInstance Win32_DeviceGuard' $policy.sourceCatalog[11].interface `
+Assert-Equal 'Get-CimInstance Win32_DeviceGuard' $policy.sourceCatalog[16].interface `
     'VBS and Credential Guard use the device-reported structured class'
-Assert-Equal 'CiTool -lp -json' $policy.sourceCatalog[12].interface `
+Assert-Equal 'CiTool -lp -json' $policy.sourceCatalog[17].interface `
     'WDAC inventory is structured and never parsed from legacy text'
-Assert-Equal 'Get-AppLockerPolicy -Effective' $policy.sourceCatalog[13].interface `
+Assert-Equal 'Get-AppLockerPolicy -Effective' $policy.sourceCatalog[18].interface `
     'Group Policy AppLocker state stays on the GP-only surface'
-Assert-Equal 'Get-CimInstance MDM_AppLocker_*' $policy.sourceCatalog[14].interface `
+Assert-Equal 'Get-CimInstance MDM_AppLocker_*' $policy.sourceCatalog[19].interface `
     'AppLocker CSP state stays on the separate WMI Bridge surface'
 
 Assert-Equal 3 @($policy.auditSubcategories).Count `
@@ -94,18 +107,55 @@ foreach ($rule in $policy.rules) {
             "the $($rule.ruleId) operation freezes $flag as false"
     }
 }
-Assert-Equal 35 @($policy.scopes).Count `
-    'field-specific policy, platform-protection, app-control, and Policy CSP coverage is release-closed'
+Assert-Equal 54 @($policy.scopes).Count `
+    'field-specific policy, update, remote-management, SMB, legacy-auth, platform-protection, app-control, and Policy CSP coverage is release-closed'
 $expectedMdmScopes = @(
     'scope:policy.mdm.control-policy-conflict',
     'scope:policy.mdm.security-option.machine-inactivity-limit',
     'scope:policy.mdm.security-option.disable-cad',
-    'scope:policy.mdm.security-option.lm-compatibility-level'
+    'scope:policy.mdm.security-option.lm-compatibility-level',
+    'scope:policy.mdm.update.defer-feature-updates',
+    'scope:policy.mdm.update.defer-quality-updates',
+    'scope:policy.mdm.update.disable-dual-scan'
 )
 Assert-Equal ($expectedMdmScopes -join '|') (@($policy.scopes | Where-Object {
     $_.scopeId -like 'scope:policy.mdm.*'
 } | ForEach-Object scopeId) -join '|') `
     'the MDM Policy CSP result scopes are explicit and finite'
+$expectedRemoteScopes = @(
+    'scope:policy.rdp.connections',
+    'scope:policy.rdp.service',
+    'scope:policy.rdp.authentication',
+    'scope:policy.rdp.listener',
+    'scope:policy.winrm.service',
+    'scope:policy.winrm.configuration',
+    'scope:policy.winrm.authentication',
+    'scope:policy.winrm.listener'
+)
+Assert-Equal ($expectedRemoteScopes -join '|') (@($policy.scopes | Where-Object {
+    $_.scopeId -in $expectedRemoteScopes
+} | ForEach-Object scopeId) -join '|') `
+    'RDP and WinRM scopes are separate from reachability and finite'
+$expectedSmbScopes = @(
+    'scope:policy.smb.client',
+    'scope:policy.smb.server',
+    'scope:policy.smb.smb1-feature'
+)
+Assert-Equal ($expectedSmbScopes -join '|') (@($policy.scopes | Where-Object {
+    $_.scopeId -in $expectedSmbScopes
+} | ForEach-Object scopeId) -join '|') `
+    'SMB client, server, and SMB1 feature scopes are explicit and finite'
+$expectedIssue57Scopes = @(
+    'scope:policy.windows-update.defer-feature-updates',
+    'scope:policy.windows-update.defer-quality-updates',
+    'scope:policy.windows-update.disable-dual-scan',
+    'scope:policy.legacy-auth.lm-compatibility-level',
+    'scope:policy.legacy-auth.ntlm-minimum-session-security'
+)
+Assert-Equal ($expectedIssue57Scopes -join '|') (@($policy.scopes | Where-Object {
+    $_.scopeId -in $expectedIssue57Scopes
+} | ForEach-Object scopeId) -join '|') `
+    'Windows Update and legacy-auth scopes are explicit and finite'
 $expectedSecurityScopes = @(
     'scope:policy.bitlocker.operating-system-volume',
     'scope:policy.bitlocker.protectors',
@@ -135,7 +185,9 @@ $expectedScenarios = @(
     'DeniedAdministrator','DeniedSystem','NonEnglish','AppliedOrderConflict',
     'AccountLockout','AuditPolicy','UserRights','SecurityOptions','PartialChannel',
     'NonMdm','UnsupportedMdmBuild','MissingMdmClass','MissingMdmProperty',
-    'MdmPolicyConflict','MdmWinsOverGpScoped','ThirdPartyRegistration',
+    'MdmPolicyConflict','MdmWinsOverGpScoped',
+    'WindowsUpdatePolicy','RemoteManagementCombinations','SmbPosture','LegacyAuthMasks',
+    'ThirdPartyRegistration',
     'DefenderDisabled','DefenderUnavailable','AmbiguousSecurityCenter',
     'TamperProtected','MissingDefenderProperty','FirewallProfiles','AsrRulePairs',
     'BitLockerEncrypted','BitLockerUnencrypted','BitLockerUnknown',

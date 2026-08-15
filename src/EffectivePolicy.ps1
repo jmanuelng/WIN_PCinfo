@@ -31,10 +31,10 @@ function Get-EffectivePolicyPolicy {
     if ($policy.kind -ne 'win-pcinfo.effective-policy-policy' -or
         $policy.contractVersion -ne '1.0.0' -or
         $policy.policyId -ne 'win-pcinfo.effective-policy/1.0.0' -or
-        @($policy.layers).Count -ne 3 -or @($policy.scopes).Count -ne 35 -or
-        @($policy.sourceCatalog).Count -ne 15 -or @($policy.rules).Count -ne 7 -or
+        @($policy.layers).Count -ne 3 -or @($policy.scopes).Count -ne 54 -or
+        @($policy.sourceCatalog).Count -ne 20 -or @($policy.rules).Count -ne 7 -or
         @($policy.discoveryTasks).Count -ne 2 -or
-        @($policy.validationScenarios).Count -ne 40) {
+        @($policy.validationScenarios).Count -ne 44) {
         throw 'The Effective Policy policy is not semantically closed.'
     }
     $policy
@@ -81,6 +81,52 @@ function Get-EffectivePolicyCollectorScopes {
     @($Policy.scopes | Where-Object { [string]$_.scopeId -notlike 'scope:policy.mdm.*' })
 }
 
+function Get-EffectivePolicyWindowsUpdateDefinitions {
+    @(
+        [pscustomobject]@{
+            catalogId='windows-update:defer-feature-updates'
+            scopeId='scope:policy.windows-update.defer-feature-updates'
+            fieldId='field:policy.windows-update.defer-feature-updates-days'
+            valueType='Integer'
+        },
+        [pscustomobject]@{
+            catalogId='windows-update:defer-quality-updates'
+            scopeId='scope:policy.windows-update.defer-quality-updates'
+            fieldId='field:policy.windows-update.defer-quality-updates-days'
+            valueType='Integer'
+        },
+        [pscustomobject]@{
+            catalogId='windows-update:disable-dual-scan'
+            scopeId='scope:policy.windows-update.disable-dual-scan'
+            fieldId='field:policy.windows-update.disable-dual-scan'
+            valueType='Boolean'
+        }
+    )
+}
+
+function Get-EffectivePolicyLegacyAuthenticationDefinitions {
+    @(
+        [pscustomobject]@{
+            catalogId='legacy-auth:lm-compatibility-level'
+            scopeId='scope:policy.legacy-auth.lm-compatibility-level'
+            fieldId='field:policy.legacy-auth.lm-compatibility-level'
+            valueType='Integer'
+        },
+        [pscustomobject]@{
+            catalogId='legacy-auth:ntlm-min-client-sec'
+            scopeId='scope:policy.legacy-auth.ntlm-minimum-session-security'
+            fieldId='field:policy.legacy-auth.ntlm-min-client-sec'
+            valueType='Integer'
+        },
+        [pscustomobject]@{
+            catalogId='legacy-auth:ntlm-min-server-sec'
+            scopeId='scope:policy.legacy-auth.ntlm-minimum-session-security'
+            fieldId='field:policy.legacy-auth.ntlm-min-server-sec'
+            valueType='Integer'
+        }
+    )
+}
+
 function Get-EffectivePolicyLayerState {
     param(
         [Parameter(Mandatory)] [object[]] $ScopeStates,
@@ -116,7 +162,10 @@ function New-EffectivePolicySyntheticPayload {
         target='Computer';origin='Local';objectId=$localObject;applicable=$true
         linkId=$null;appliedOrder=$null
     })
-    if ($localScenario -in @('Domain','StaleRegistry','DeniedSystem','NonEnglish','AppliedOrderConflict')) {
+    if ($localScenario -in @(
+        'Domain','StaleRegistry','DeniedSystem','NonEnglish','AppliedOrderConflict',
+        'WindowsUpdatePolicy','RemoteManagementCombinations','SmbPosture','LegacyAuthMasks'
+    )) {
         $policies = @(
             [pscustomobject][ordered]@{target='Computer';origin='Domain';objectId=$domainObject;applicable=$true;linkId='synthetic-domain-link';appliedOrder=1},
             [pscustomobject][ordered]@{target='Computer';origin='Local';objectId=$localObject;applicable=$false;linkId=$null;appliedOrder=$null}
@@ -179,6 +228,16 @@ function New-EffectivePolicySyntheticPayload {
     if ($localScenario -eq 'SecurityOptions') {
         $options[0].value=600;$options[1].value=$true;$options[2].value=3
     }
+    $windowsUpdateSignals = @(
+        [pscustomobject][ordered]@{catalogId='windows-update:defer-feature-updates';state='Complete';value=14;sourceAttribution='Unproven'},
+        [pscustomobject][ordered]@{catalogId='windows-update:defer-quality-updates';state='Complete';value=3;sourceAttribution='Unproven'},
+        [pscustomobject][ordered]@{catalogId='windows-update:disable-dual-scan';state='Complete';value=$false;sourceAttribution='Unproven'}
+    )
+    $legacyAuthenticationSignals = @(
+        [pscustomobject][ordered]@{catalogId='legacy-auth:lm-compatibility-level';state='Complete';value=5;sourceAttribution='Unproven'},
+        [pscustomobject][ordered]@{catalogId='legacy-auth:ntlm-min-client-sec';state='Complete';value=537395200;sourceAttribution='Unproven'},
+        [pscustomobject][ordered]@{catalogId='legacy-auth:ntlm-min-server-sec';state='Complete';value=537395200;sourceAttribution='Unproven'}
+    )
     $antivirusProviders = @(
         [pscustomobject][ordered]@{name='Microsoft Defender Antivirus';health='Good'}
     )
@@ -202,6 +261,40 @@ function New-EffectivePolicySyntheticPayload {
         domain=[pscustomobject][ordered]@{state='Complete';enabled=$true;defaultInboundAction='Block';defaultOutboundAction='Allow'}
         private=[pscustomobject][ordered]@{state='Complete';enabled=$true;defaultInboundAction='Block';defaultOutboundAction='Allow'}
         public=[pscustomobject][ordered]@{state='Complete';enabled=$true;defaultInboundAction='Block';defaultOutboundAction='Allow'}
+    }
+    $rdpState = [pscustomobject][ordered]@{
+        connectionsAllowed=$false
+        serviceStartMode='Manual'
+        serviceState='Stopped'
+        userAuthenticationRequired=$true
+        securityLayer='Negotiate'
+        minimumEncryptionLevel='High'
+        listenerState='Present'
+        listenerName='RDP-Tcp'
+    }
+    $winrmState = [pscustomobject][ordered]@{
+        serviceStartMode='Manual'
+        serviceState='Stopped'
+        allowUnencrypted=$false
+        basicAuthentication=$false
+        kerberosAuthentication=$true
+        negotiateAuthentication=$true
+        certificateAuthentication=$false
+        credSspAuthentication=$false
+        listenerState='Http5985Only'
+        listenerTransport='HTTP'
+        listenerPort=5985
+    }
+    $smbState = [pscustomobject][ordered]@{
+        clientRequireSigning=$true
+        clientEnableSigning=$true
+        clientEnableInsecureGuestLogons=$false
+        serverRequireSigning=$true
+        serverEnableSigning=$true
+        serverEncryptData=$true
+        serverRejectUnencryptedAccess=$true
+        serverEnableSmb1=$false
+        smb1FeatureState='Disabled'
     }
     $bitLockerSystemVolume = [pscustomobject][ordered]@{
         conversionStatus='FullyDecrypted';protectionStatus='Off';encryptionMethod='None';lockStatus='Unlocked'
@@ -236,6 +329,8 @@ function New-EffectivePolicySyntheticPayload {
         $audits|ForEach-Object {$_.state='Denied';$_.successEnabled=$null;$_.failureEnabled=$null}
         $rights|ForEach-Object {$_.state='Denied';$_.directSids=@()}
         $options|ForEach-Object {$_.state='Unavailable';$_.value=$null}
+        $windowsUpdateSignals|ForEach-Object {$_.state='Unavailable';$_.value=$null}
+        $legacyAuthenticationSignals|ForEach-Object {$_.state='Unavailable';$_.value=$null}
         $antivirusProviders=@();$firewallProviders=@()
         $defenderRuntime.runningMode=$null;$defenderRuntime.antivirusEnabled=$null
         $defenderRuntime.realTimeProtectionEnabled=$null;$defenderRuntime.tamperProtected=$null
@@ -244,6 +339,16 @@ function New-EffectivePolicySyntheticPayload {
         $firewallProfiles.domain.state='Denied';$firewallProfiles.domain.enabled=$null;$firewallProfiles.domain.defaultInboundAction=$null;$firewallProfiles.domain.defaultOutboundAction=$null
         $firewallProfiles.private.state='Denied';$firewallProfiles.private.enabled=$null;$firewallProfiles.private.defaultInboundAction=$null;$firewallProfiles.private.defaultOutboundAction=$null
         $firewallProfiles.public.state='Denied';$firewallProfiles.public.enabled=$null;$firewallProfiles.public.defaultInboundAction=$null;$firewallProfiles.public.defaultOutboundAction=$null
+        $rdpState.connectionsAllowed=$null;$rdpState.serviceStartMode=$null;$rdpState.serviceState=$null
+        $rdpState.userAuthenticationRequired=$null;$rdpState.securityLayer=$null;$rdpState.minimumEncryptionLevel=$null
+        $rdpState.listenerState=$null;$rdpState.listenerName=$null
+        $winrmState.serviceStartMode=$null;$winrmState.serviceState=$null;$winrmState.allowUnencrypted=$null
+        $winrmState.basicAuthentication=$null;$winrmState.kerberosAuthentication=$null;$winrmState.negotiateAuthentication=$null
+        $winrmState.certificateAuthentication=$null;$winrmState.credSspAuthentication=$null
+        $winrmState.listenerState=$null;$winrmState.listenerTransport=$null;$winrmState.listenerPort=$null
+        $smbState.clientRequireSigning=$null;$smbState.clientEnableSigning=$null;$smbState.clientEnableInsecureGuestLogons=$null
+        $smbState.serverRequireSigning=$null;$smbState.serverEnableSigning=$null;$smbState.serverEncryptData=$null
+        $smbState.serverRejectUnencryptedAccess=$null;$smbState.serverEnableSmb1=$null;$smbState.smb1FeatureState=$null
         $bitLockerSystemVolume.conversionStatus=$null;$bitLockerSystemVolume.protectionStatus=$null
         $bitLockerSystemVolume.encryptionMethod=$null;$bitLockerSystemVolume.lockStatus=$null
         $bitLockerProtectors=@()
@@ -322,6 +427,42 @@ function New-EffectivePolicySyntheticPayload {
                 [pscustomobject][ordered]@{ruleId='26190899-1602-49e8-8b27-eb1d0a1ce869';action='Block'},
                 [pscustomobject][ordered]@{ruleId='3b576869-a4ec-4529-8536-b80a7769e899';action='Audit'}
             )
+        }
+        'WindowsUpdatePolicy' {
+            $windowsUpdateSignals[0].value=30
+            $windowsUpdateSignals[1].value=7
+            $windowsUpdateSignals[2].value=$true
+        }
+        'RemoteManagementCombinations' {
+            $rdpState.connectionsAllowed=$true
+            $rdpState.serviceStartMode='Automatic'
+            $rdpState.serviceState='Running'
+            $rdpState.userAuthenticationRequired=$true
+            $rdpState.securityLayer='Ssl'
+            $rdpState.minimumEncryptionLevel='ClientCompatible'
+            $rdpState.listenerState='Present'
+            $winrmState.serviceStartMode='Automatic'
+            $winrmState.serviceState='Running'
+            $winrmState.certificateAuthentication=$true
+            $winrmState.listenerState='Https5986Only'
+            $winrmState.listenerTransport='HTTPS'
+            $winrmState.listenerPort=5986
+        }
+        'SmbPosture' {
+            $smbState.clientRequireSigning=$true
+            $smbState.clientEnableSigning=$true
+            $smbState.clientEnableInsecureGuestLogons=$false
+            $smbState.serverRequireSigning=$true
+            $smbState.serverEnableSigning=$true
+            $smbState.serverEncryptData=$true
+            $smbState.serverRejectUnencryptedAccess=$true
+            $smbState.serverEnableSmb1=$false
+            $smbState.smb1FeatureState='Disabled'
+        }
+        'LegacyAuthMasks' {
+            $legacyAuthenticationSignals[0].value=3
+            $legacyAuthenticationSignals[1].value=537395232
+            $legacyAuthenticationSignals[2].value=537395200
         }
         'NonEnglish' {
             $antivirusProviders=@([pscustomobject][ordered]@{name='Antivirus Microsoft Defender';health='Good'})
@@ -423,10 +564,13 @@ function New-EffectivePolicySyntheticPayload {
         }
         scopeStates=@($states);appliedPolicies=@($policies);policySettings=@($settings)
         localSam=$sam;auditSubcategories=@($audits);userRights=@($rights);securityOptions=@($options)
+        windowsUpdateSignals=@($windowsUpdateSignals)
+        legacyAuthenticationSignals=@($legacyAuthenticationSignals)
         antivirusProviders=@($antivirusProviders);firewallProviders=@($firewallProviders)
         defenderRuntime=$defenderRuntime;defenderNetworkProtection=$defenderNetworkProtection
         defenderAsrRules=@($defenderAsrRules);smartScreenSignals=@($smartScreenSignals)
         firewallProfiles=$firewallProfiles
+        rdpState=$rdpState;winrmState=$winrmState;smbState=$smbState
         bitLockerSystemVolume=$bitLockerSystemVolume;bitLockerProtectors=@($bitLockerProtectors)
         deviceGuard=$deviceGuard;wdacPolicies=@($wdacPolicies)
         appLockerGpCollections=@($appLockerGpCollections);appLockerCspCollections=@($appLockerCspCollections)
@@ -460,6 +604,21 @@ function New-EffectivePolicySyntheticPolicyCspResults {
                 fieldId='field:policy.mdm.security-option.lm-compatibility-level'
                 scopeId='scope:policy.mdm.security-option.lm-compatibility-level'
                 state='Complete';reasonCode='';valueState='ObservedValue';value=5
+            },
+            [pscustomobject][ordered]@{
+                fieldId='field:policy.mdm.update.defer-feature-updates-days'
+                scopeId='scope:policy.mdm.update.defer-feature-updates'
+                state='Complete';reasonCode='';valueState='ObservedValue';value=14
+            },
+            [pscustomobject][ordered]@{
+                fieldId='field:policy.mdm.update.defer-quality-updates-days'
+                scopeId='scope:policy.mdm.update.defer-quality-updates'
+                state='Complete';reasonCode='';valueState='ObservedValue';value=3
+            },
+            [pscustomobject][ordered]@{
+                fieldId='field:policy.mdm.update.disable-dual-scan'
+                scopeId='scope:policy.mdm.update.disable-dual-scan'
+                state='Complete';reasonCode='';valueState='ObservedValue';value=$false
             }
         )
     }
@@ -499,6 +658,11 @@ function New-EffectivePolicySyntheticPolicyCspResults {
         'MdmWinsOverGpScoped' {
             $results.fields[0].value=$true
         }
+        'WindowsUpdatePolicy' {
+            $results.fields[4].value=30
+            $results.fields[5].value=7
+            $results.fields[6].value=$true
+        }
     }
     $results
 }
@@ -537,9 +701,11 @@ function Test-EffectivePolicyCollectorPayload {
             'appliedOrderConflict','appliedPolicies','auditSubcategories',
             'bitLockerProtectors','bitLockerSystemVolume','defenderAsrRules',
             'defenderNetworkProtection','defenderRuntime','deviceGuard','firewallProfiles',
+            'legacyAuthenticationSignals',
             'firewallProviders','layerStates','localAccountPolicySemantics','localSam',
-            'policySettings','scopeStates','securityOptions','smartScreenSignals',
-            'sourceLocale','userRights','userRightSemantics','wdacPolicies'
+            'policySettings','rdpState','scopeStates','securityOptions','smartScreenSignals',
+            'smbState','sourceLocale','userRights','userRightSemantics','wdacPolicies',
+            'windowsUpdateSignals','winrmState'
         )|Sort-Object
         if(($names -join '|') -ne ($expected -join '|') -or
             $Payload.localAccountPolicySemantics -isnot [string] -or $Payload.userRightSemantics -isnot [string] -or
@@ -550,6 +716,8 @@ function Test-EffectivePolicyCollectorPayload {
             @($Payload.appliedPolicies).Count -gt 16 -or @($Payload.policySettings).Count -gt 16 -or
             @($Payload.auditSubcategories).Count -ne 3 -or @($Payload.userRights).Count -ne 3 -or
             @($Payload.securityOptions).Count -ne 3 -or
+            @($Payload.windowsUpdateSignals).Count -ne 3 -or
+            @($Payload.legacyAuthenticationSignals).Count -ne 3 -or
             @($Payload.antivirusProviders).Count -gt [int]$Policy.collectors[0].maximumSecurityProvidersPerCategory -or
             @($Payload.firewallProviders).Count -gt [int]$Policy.collectors[0].maximumSecurityProvidersPerCategory -or
             @($Payload.defenderAsrRules).Count -gt [int]$Policy.collectors[0].maximumAsrRules -or
@@ -641,6 +809,28 @@ function Test-EffectivePolicyCollectorPayload {
                     ([string]$definition.valueType -eq 'Integer' -and -not (Test-BoundedUnsignedInteger $option.value ([uint64]4294967295)) )){return $false}
             }
         }
+        $updateIds=@((Get-EffectivePolicyWindowsUpdateDefinitions).catalogId)
+        if((@($Payload.windowsUpdateSignals.catalogId)-join '|') -ne ($updateIds-join '|')){return $false}
+        foreach($signal in $Payload.windowsUpdateSignals){
+            if(-not (Test-ExactProperties $signal @('catalogId','state','value','sourceAttribution')) -or
+                [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed') -or
+                [string]$signal.sourceAttribution -ne 'Unproven' -or
+                ($signal.state -ne 'Complete' -and $null -ne $signal.value)){return $false}
+            if([string]$signal.state -eq 'Complete'){
+                if([string]$signal.catalogId -eq 'windows-update:disable-dual-scan'){
+                    if($signal.value -isnot [bool]){return $false}
+                } elseif(-not (Test-BoundedUnsignedInteger $signal.value ([uint64]365))){return $false}
+            }
+        }
+        $legacyIds=@((Get-EffectivePolicyLegacyAuthenticationDefinitions).catalogId)
+        if((@($Payload.legacyAuthenticationSignals.catalogId)-join '|') -ne ($legacyIds-join '|')){return $false}
+        foreach($signal in $Payload.legacyAuthenticationSignals){
+            if(-not (Test-ExactProperties $signal @('catalogId','state','value','sourceAttribution')) -or
+                [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed') -or
+                [string]$signal.sourceAttribution -ne 'Unproven' -or
+                ($signal.state -ne 'Complete' -and $null -ne $signal.value)){return $false}
+            if([string]$signal.state -eq 'Complete' -and -not (Test-BoundedUnsignedInteger $signal.value ([uint64]4294967295))){return $false}
+        }
         foreach($provider in @($Payload.antivirusProviders)+@($Payload.firewallProviders)){
             if(-not (Test-ExactProperties $provider @('name','health')) -or
                 -not (Test-BoundedString $provider.name 256) -or
@@ -701,6 +891,47 @@ function Test-EffectivePolicyCollectorPayload {
                     [string]$profile.defaultOutboundAction -notin @('Allow','Block','NotConfigured')){return $false}
             } elseif($null -ne $profile.enabled -or $null -ne $profile.defaultInboundAction -or $null -ne $profile.defaultOutboundAction){return $false}
         }
+        if(-not (Test-ExactProperties $Payload.rdpState @(
+            'connectionsAllowed','listenerName','listenerState','minimumEncryptionLevel',
+            'securityLayer','serviceStartMode','serviceState','userAuthenticationRequired'
+        ))){return $false}
+        if(($null -ne $Payload.rdpState.connectionsAllowed -and $Payload.rdpState.connectionsAllowed -isnot [bool]) -or
+            ($null -ne $Payload.rdpState.userAuthenticationRequired -and $Payload.rdpState.userAuthenticationRequired -isnot [bool]) -or
+            -not (Test-NullableBoundedString $Payload.rdpState.serviceStartMode 32 '^[A-Za-z]+$') -or
+            -not (Test-NullableBoundedString $Payload.rdpState.serviceState 32 '^[A-Za-z]+$') -or
+            -not (Test-NullableBoundedString $Payload.rdpState.securityLayer 32 '^[A-Za-z]+$') -or
+            -not (Test-NullableBoundedString $Payload.rdpState.minimumEncryptionLevel 32 '^[A-Za-z]+$') -or
+            -not (Test-NullableBoundedString $Payload.rdpState.listenerState 32 '^[A-Za-z0-9]+$') -or
+            -not (Test-NullableBoundedString $Payload.rdpState.listenerName 64 '^[A-Za-z0-9-]+$')){return $false}
+        if(-not (Test-ExactProperties $Payload.winrmState @(
+            'allowUnencrypted','basicAuthentication','certificateAuthentication','credSspAuthentication',
+            'kerberosAuthentication','listenerPort','listenerState','listenerTransport',
+            'negotiateAuthentication','serviceStartMode','serviceState'
+        ))){return $false}
+        if(($null -ne $Payload.winrmState.allowUnencrypted -and $Payload.winrmState.allowUnencrypted -isnot [bool]) -or
+            ($null -ne $Payload.winrmState.basicAuthentication -and $Payload.winrmState.basicAuthentication -isnot [bool]) -or
+            ($null -ne $Payload.winrmState.kerberosAuthentication -and $Payload.winrmState.kerberosAuthentication -isnot [bool]) -or
+            ($null -ne $Payload.winrmState.negotiateAuthentication -and $Payload.winrmState.negotiateAuthentication -isnot [bool]) -or
+            ($null -ne $Payload.winrmState.certificateAuthentication -and $Payload.winrmState.certificateAuthentication -isnot [bool]) -or
+            ($null -ne $Payload.winrmState.credSspAuthentication -and $Payload.winrmState.credSspAuthentication -isnot [bool]) -or
+            ($null -ne $Payload.winrmState.listenerPort -and -not (Test-BoundedUnsignedInteger $Payload.winrmState.listenerPort ([uint64]65535))) -or
+            -not (Test-NullableBoundedString $Payload.winrmState.serviceStartMode 32 '^[A-Za-z]+$') -or
+            -not (Test-NullableBoundedString $Payload.winrmState.serviceState 32 '^[A-Za-z]+$') -or
+            -not (Test-NullableBoundedString $Payload.winrmState.listenerState 32 '^[A-Za-z0-9]+$') -or
+            -not (Test-NullableBoundedString $Payload.winrmState.listenerTransport 16 '^(?:HTTP|HTTPS)$')){return $false}
+        if(-not (Test-ExactProperties $Payload.smbState @(
+            'clientEnableInsecureGuestLogons','clientEnableSigning','clientRequireSigning',
+            'serverEnableSigning','serverEnableSmb1','serverEncryptData',
+            'serverRejectUnencryptedAccess','serverRequireSigning','smb1FeatureState'
+        ))){return $false}
+        foreach($property in @(
+            'clientRequireSigning','clientEnableSigning','clientEnableInsecureGuestLogons',
+            'serverRequireSigning','serverEnableSigning','serverEncryptData',
+            'serverRejectUnencryptedAccess','serverEnableSmb1'
+        )){
+            if($null -ne $Payload.smbState.$property -and $Payload.smbState.$property -isnot [bool]){return $false}
+        }
+        if(-not (Test-NullableBoundedString $Payload.smbState.smb1FeatureState 32 '^[A-Za-z]+$')){return $false}
         if(-not (Test-ExactProperties $Payload.bitLockerSystemVolume @(
             'conversionStatus','protectionStatus','encryptionMethod','lockStatus'
         ))){return $false}
@@ -809,6 +1040,13 @@ function Copy-EffectivePolicyCollectorPayload {
             $value=if($null -eq $_.value){$null}elseif([string]$definition.valueType -eq 'Boolean'){[bool]$_.value}else{[long]$_.value}
             [pscustomobject][ordered]@{catalogId=[string]$_.catalogId;state=[string]$_.state;value=$value;sourceAttribution=[string]$_.sourceAttribution}
         })
+        windowsUpdateSignals=@($Payload.windowsUpdateSignals|ForEach-Object {
+            $value=if($null -eq $_.value){$null}elseif([string]$_.catalogId -eq 'windows-update:disable-dual-scan'){[bool]$_.value}else{[long]$_.value}
+            [pscustomobject][ordered]@{catalogId=[string]$_.catalogId;state=[string]$_.state;value=$value;sourceAttribution=[string]$_.sourceAttribution}
+        })
+        legacyAuthenticationSignals=@($Payload.legacyAuthenticationSignals|ForEach-Object {
+            [pscustomobject][ordered]@{catalogId=[string]$_.catalogId;state=[string]$_.state;value=$(if($null -eq $_.value){$null}else{[long]$_.value});sourceAttribution=[string]$_.sourceAttribution}
+        })
         antivirusProviders=@($Payload.antivirusProviders|ForEach-Object {
             [pscustomobject][ordered]@{name=[string]$_.name;health=[string]$_.health}
         })
@@ -857,6 +1095,40 @@ function Copy-EffectivePolicyCollectorPayload {
                 defaultInboundAction=$(if($null -eq $Payload.firewallProfiles.public.defaultInboundAction){$null}else{[string]$Payload.firewallProfiles.public.defaultInboundAction})
                 defaultOutboundAction=$(if($null -eq $Payload.firewallProfiles.public.defaultOutboundAction){$null}else{[string]$Payload.firewallProfiles.public.defaultOutboundAction})
             }
+        }
+        rdpState=[pscustomobject][ordered]@{
+            connectionsAllowed=$Payload.rdpState.connectionsAllowed
+            serviceStartMode=$(if($null -eq $Payload.rdpState.serviceStartMode){$null}else{[string]$Payload.rdpState.serviceStartMode})
+            serviceState=$(if($null -eq $Payload.rdpState.serviceState){$null}else{[string]$Payload.rdpState.serviceState})
+            userAuthenticationRequired=$Payload.rdpState.userAuthenticationRequired
+            securityLayer=$(if($null -eq $Payload.rdpState.securityLayer){$null}else{[string]$Payload.rdpState.securityLayer})
+            minimumEncryptionLevel=$(if($null -eq $Payload.rdpState.minimumEncryptionLevel){$null}else{[string]$Payload.rdpState.minimumEncryptionLevel})
+            listenerState=$(if($null -eq $Payload.rdpState.listenerState){$null}else{[string]$Payload.rdpState.listenerState})
+            listenerName=$(if($null -eq $Payload.rdpState.listenerName){$null}else{[string]$Payload.rdpState.listenerName})
+        }
+        winrmState=[pscustomobject][ordered]@{
+            serviceStartMode=$(if($null -eq $Payload.winrmState.serviceStartMode){$null}else{[string]$Payload.winrmState.serviceStartMode})
+            serviceState=$(if($null -eq $Payload.winrmState.serviceState){$null}else{[string]$Payload.winrmState.serviceState})
+            allowUnencrypted=$Payload.winrmState.allowUnencrypted
+            basicAuthentication=$Payload.winrmState.basicAuthentication
+            kerberosAuthentication=$Payload.winrmState.kerberosAuthentication
+            negotiateAuthentication=$Payload.winrmState.negotiateAuthentication
+            certificateAuthentication=$Payload.winrmState.certificateAuthentication
+            credSspAuthentication=$Payload.winrmState.credSspAuthentication
+            listenerState=$(if($null -eq $Payload.winrmState.listenerState){$null}else{[string]$Payload.winrmState.listenerState})
+            listenerTransport=$(if($null -eq $Payload.winrmState.listenerTransport){$null}else{[string]$Payload.winrmState.listenerTransport})
+            listenerPort=$(if($null -eq $Payload.winrmState.listenerPort){$null}else{[long]$Payload.winrmState.listenerPort})
+        }
+        smbState=[pscustomobject][ordered]@{
+            clientRequireSigning=$Payload.smbState.clientRequireSigning
+            clientEnableSigning=$Payload.smbState.clientEnableSigning
+            clientEnableInsecureGuestLogons=$Payload.smbState.clientEnableInsecureGuestLogons
+            serverRequireSigning=$Payload.smbState.serverRequireSigning
+            serverEnableSigning=$Payload.smbState.serverEnableSigning
+            serverEncryptData=$Payload.smbState.serverEncryptData
+            serverRejectUnencryptedAccess=$Payload.smbState.serverRejectUnencryptedAccess
+            serverEnableSmb1=$Payload.smbState.serverEnableSmb1
+            smb1FeatureState=$(if($null -eq $Payload.smbState.smb1FeatureState){$null}else{[string]$Payload.smbState.smb1FeatureState})
         }
         bitLockerSystemVolume=[pscustomobject][ordered]@{
             conversionStatus=$(if($null -eq $Payload.bitLockerSystemVolume.conversionStatus){$null}else{[string]$Payload.bitLockerSystemVolume.conversionStatus})
@@ -923,12 +1195,31 @@ function Invoke-EffectivePolicyCollection {
 function New-EffectivePolicyPublicProjection {
     param([Parameter(Mandatory)]$CollectorResult)
     $payload=$CollectorResult.payload
+    $windowsUpdateCoverage=Get-EffectivePolicyLayerState -ScopeStates @($payload.scopeStates) -ScopeIds @(
+        'scope:policy.windows-update.defer-feature-updates',
+        'scope:policy.windows-update.defer-quality-updates',
+        'scope:policy.windows-update.disable-dual-scan'
+    )
+    $remoteManagementCoverage=Get-EffectivePolicyLayerState -ScopeStates @($payload.scopeStates) -ScopeIds @(
+        'scope:policy.rdp.connections','scope:policy.rdp.service','scope:policy.rdp.authentication','scope:policy.rdp.listener',
+        'scope:policy.winrm.service','scope:policy.winrm.configuration','scope:policy.winrm.authentication','scope:policy.winrm.listener'
+    )
+    $smbCoverage=Get-EffectivePolicyLayerState -ScopeStates @($payload.scopeStates) -ScopeIds @(
+        'scope:policy.smb.client','scope:policy.smb.server','scope:policy.smb.smb1-feature'
+    )
+    $legacyCoverage=Get-EffectivePolicyLayerState -ScopeStates @($payload.scopeStates) -ScopeIds @(
+        'scope:policy.legacy-auth.lm-compatibility-level','scope:policy.legacy-auth.ntlm-minimum-session-security'
+    )
     [pscustomobject][ordered]@{
         recordType='win-pcinfo.effective-policy-validation';contractVersion='1.0.0'
         scenario=[string]$CollectorResult.validationScenario
         appliedPolicyCoverage=[string]$payload.layerStates.AppliedPolicyEvidence
         configuredSignalCoverage=[string]$payload.layerStates.ConfiguredPolicySignals
         currentControlCoverage=[string]$payload.layerStates.CurrentControlState
+        windowsUpdateSignalCoverage=[string]$windowsUpdateCoverage
+        remoteManagementCoverage=[string]$remoteManagementCoverage
+        smbCoverage=[string]$smbCoverage
+        legacyAuthenticationCoverage=[string]$legacyCoverage
         appliedPolicyCount=@($payload.appliedPolicies).Count
         appliedOrderConflict=[bool]$payload.appliedOrderConflict
         auditCatalogCount=@($payload.auditSubcategories).Count
@@ -943,6 +1234,18 @@ function New-EffectivePolicyPublicProjection {
         appLockerCspCollectionCount=@($payload.appLockerCspCollections).Count
         directRightsOnly=([string]$payload.userRightSemantics -eq 'DirectAssignmentsOnly')
         localSamOnly=([string]$payload.localAccountPolicySemantics -eq 'LocalSamAccountsOnly')
+        policyIdentifiersPublished=$false
+        policyValuesPublished=$false
+        bitLockerSecretsPublished=$false
+        applicationControlPoliciesPublished=$false
+        updateScanAttempted=$false
+        remoteReachabilityTested=$false
+        smbSharesEnumerated=$false
+        smbSessionsEnumerated=$false
+        legacyProtocolUseInferred=$false
+        policyStateChanged=$false
+        policyRefreshAttempted=$false
+        toolInstalled=$false
     }
 }
 
@@ -951,7 +1254,10 @@ function Get-EffectivePolicyMdmSystemFieldIds {
         'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp',
         'field:policy.mdm.security-option.machine-inactivity-limit-seconds',
         'field:policy.mdm.security-option.disable-cad',
-        'field:policy.mdm.security-option.lm-compatibility-level'
+        'field:policy.mdm.security-option.lm-compatibility-level',
+        'field:policy.mdm.update.defer-feature-updates-days',
+        'field:policy.mdm.update.defer-quality-updates-days',
+        'field:policy.mdm.update.disable-dual-scan'
     )
 }
 
@@ -986,6 +1292,8 @@ function Get-EffectivePolicySourceId {
     elseif($FieldId -like 'field:policy.audit.*'){'source:windows.system-audit-policy'}
     elseif($FieldId -like 'field:policy.user-right.*'){'source:windows.lsa-user-rights'}
     elseif($FieldId -like 'field:policy.security-provider.*'){'source:windows.security-center.providers'}
+    elseif($FieldId -like 'field:policy.windows-update.*'){'source:windows.update-policy-registry'}
+    elseif($FieldId -like 'field:policy.legacy-auth.*'){'source:windows.legacy-authentication-registry'}
     elseif($FieldId -like 'field:policy.defender.running-mode' -or
         $FieldId -like 'field:policy.defender.antivirus-enabled' -or
         $FieldId -like 'field:policy.defender.real-time-protection-enabled' -or
@@ -993,6 +1301,9 @@ function Get-EffectivePolicySourceId {
     elseif($FieldId -like 'field:policy.defender.asr.*' -or
         $FieldId -eq 'field:policy.defender.network-protection'){'source:windows.defender.preferences'}
     elseif($FieldId -like 'field:policy.firewall.*'){'source:windows.firewall.activestore-profiles'}
+    elseif($FieldId -like 'field:policy.rdp.*'){'source:windows.rdp.configuration'}
+    elseif($FieldId -like 'field:policy.winrm.*'){'source:windows.winrm.configuration'}
+    elseif($FieldId -like 'field:policy.smb.*'){'source:windows.smb.configuration'}
     elseif($FieldId -like 'field:policy.bitlocker.*'){'source:windows.bitlocker.volume-status'}
     elseif($FieldId -like 'field:policy.vbs.*' -or
         $FieldId -like 'field:policy.credential-guard.*' -or
@@ -1244,6 +1555,30 @@ function Add-EffectivePolicyEvidenceRecord {
         }
         $optionIndex++
     }
+    $updateIndex=0
+    foreach($signal in @($payload.windowsUpdateSignals)){
+        $definition=@(Get-EffectivePolicyWindowsUpdateDefinitions|Where-Object catalogId -eq ([string]$signal.catalogId))[0]
+        if($signal.state -eq 'Complete'){
+            if($null -eq $signal.value){
+                Add-PolicyObservation ([string]$definition.scopeId) "windows-update-$updateIndex" ([string]$definition.fieldId) 'subject:device:primary' $null $true
+            } else {
+                Add-PolicyObservation ([string]$definition.scopeId) "windows-update-$updateIndex" ([string]$definition.fieldId) 'subject:device:primary' $signal.value
+            }
+        }
+        $updateIndex++
+    }
+    $legacyIndex=0
+    foreach($signal in @($payload.legacyAuthenticationSignals)){
+        $definition=@(Get-EffectivePolicyLegacyAuthenticationDefinitions|Where-Object catalogId -eq ([string]$signal.catalogId))[0]
+        if($signal.state -eq 'Complete'){
+            if($null -eq $signal.value){
+                Add-PolicyObservation ([string]$definition.scopeId) "legacy-auth-$legacyIndex" ([string]$definition.fieldId) 'subject:device:primary' $null $true
+            } else {
+                Add-PolicyObservation ([string]$definition.scopeId) "legacy-auth-$legacyIndex" ([string]$definition.fieldId) 'subject:device:primary' ([long]$signal.value)
+            }
+        }
+        $legacyIndex++
+    }
     $providerIndex=0
     foreach($provider in @($payload.antivirusProviders)){
         $subjectId="subject:policy-antivirus-provider:$providerIndex"
@@ -1334,6 +1669,56 @@ function Add-EffectivePolicyEvidenceRecord {
             Add-PolicyObservation $scopeId "firewall-$profileName-inbound" 'field:policy.firewall.default-inbound-action' $subjectId ([string]$profile.defaultInboundAction)
             Add-PolicyObservation $scopeId "firewall-$profileName-outbound" 'field:policy.firewall.default-outbound-action' $subjectId ([string]$profile.defaultOutboundAction)
         }
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.rdp.connections')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.rdp.connections' 'rdp-connections' 'field:policy.rdp.connections-allowed' 'subject:device:primary' ([bool]$payload.rdpState.connectionsAllowed)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.rdp.service')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.rdp.service' 'rdp-service-mode' 'field:policy.rdp.service-start-mode' 'subject:device:primary' ([string]$payload.rdpState.serviceStartMode)
+        Add-PolicyObservation 'scope:policy.rdp.service' 'rdp-service-state' 'field:policy.rdp.service-state' 'subject:device:primary' ([string]$payload.rdpState.serviceState)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.rdp.authentication')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.rdp.authentication' 'rdp-auth-required' 'field:policy.rdp.user-authentication-required' 'subject:device:primary' ([bool]$payload.rdpState.userAuthenticationRequired)
+        Add-PolicyObservation 'scope:policy.rdp.authentication' 'rdp-security-layer' 'field:policy.rdp.security-layer' 'subject:device:primary' ([string]$payload.rdpState.securityLayer)
+        Add-PolicyObservation 'scope:policy.rdp.authentication' 'rdp-min-encryption' 'field:policy.rdp.minimum-encryption-level' 'subject:device:primary' ([string]$payload.rdpState.minimumEncryptionLevel)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.rdp.listener')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.rdp.listener' 'rdp-listener-state' 'field:policy.rdp.listener-state' 'subject:device:primary' ([string]$payload.rdpState.listenerState)
+        Add-PolicyObservation 'scope:policy.rdp.listener' 'rdp-listener-name' 'field:policy.rdp.listener-name' 'subject:device:primary' ([string]$payload.rdpState.listenerName)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.service')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.winrm.service' 'winrm-service-mode' 'field:policy.winrm.service-start-mode' 'subject:device:primary' ([string]$payload.winrmState.serviceStartMode)
+        Add-PolicyObservation 'scope:policy.winrm.service' 'winrm-service-state' 'field:policy.winrm.service-state' 'subject:device:primary' ([string]$payload.winrmState.serviceState)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.configuration')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.winrm.configuration' 'winrm-allow-unencrypted' 'field:policy.winrm.allow-unencrypted' 'subject:device:primary' ([bool]$payload.winrmState.allowUnencrypted)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.authentication')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-basic' 'field:policy.winrm.auth-basic' 'subject:device:primary' ([bool]$payload.winrmState.basicAuthentication)
+        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-kerberos' 'field:policy.winrm.auth-kerberos' 'subject:device:primary' ([bool]$payload.winrmState.kerberosAuthentication)
+        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-negotiate' 'field:policy.winrm.auth-negotiate' 'subject:device:primary' ([bool]$payload.winrmState.negotiateAuthentication)
+        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-certificate' 'field:policy.winrm.auth-certificate' 'subject:device:primary' ([bool]$payload.winrmState.certificateAuthentication)
+        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-credssp' 'field:policy.winrm.auth-credssp' 'subject:device:primary' ([bool]$payload.winrmState.credSspAuthentication)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.listener')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-state' 'field:policy.winrm.listener-state' 'subject:device:primary' ([string]$payload.winrmState.listenerState)
+        Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-transport' 'field:policy.winrm.listener-transport' 'subject:device:primary' ([string]$payload.winrmState.listenerTransport)
+        Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-port' 'field:policy.winrm.listener-port' 'subject:device:primary' ([int]$payload.winrmState.listenerPort)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.smb.client')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-require-signing' 'field:policy.smb.client-require-signing' 'subject:device:primary' ([bool]$payload.smbState.clientRequireSigning)
+        Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-enable-signing' 'field:policy.smb.client-enable-signing' 'subject:device:primary' ([bool]$payload.smbState.clientEnableSigning)
+        Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-insecure-guest' 'field:policy.smb.client-enable-insecure-guest-logons' 'subject:device:primary' ([bool]$payload.smbState.clientEnableInsecureGuestLogons)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.smb.server')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-require-signing' 'field:policy.smb.server-require-signing' 'subject:device:primary' ([bool]$payload.smbState.serverRequireSigning)
+        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-enable-signing' 'field:policy.smb.server-enable-signing' 'subject:device:primary' ([bool]$payload.smbState.serverEnableSigning)
+        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-encrypt-data' 'field:policy.smb.server-encrypt-data' 'subject:device:primary' ([bool]$payload.smbState.serverEncryptData)
+        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-reject-unencrypted' 'field:policy.smb.server-reject-unencrypted-access' 'subject:device:primary' ([bool]$payload.smbState.serverRejectUnencryptedAccess)
+        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-enable-smb1' 'field:policy.smb.server-enable-smb1' 'subject:device:primary' ([bool]$payload.smbState.serverEnableSmb1)
+    }
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.smb.smb1-feature')[0].state -eq 'Complete'){
+        Add-PolicyObservation 'scope:policy.smb.smb1-feature' 'smb1-feature-state' 'field:policy.smb.smb1-feature-state' 'subject:device:primary' ([string]$payload.smbState.smb1FeatureState)
     }
     $bitLockerVolumeScope=@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.bitlocker.operating-system-volume')[0]
     if($bitLockerVolumeScope.state -in @('Complete','Partial')){
@@ -1572,10 +1957,15 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $appliedCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.applied.*'})
     $localCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.local-*' -or $_.scopeId -like 'scope:policy.security-option.*'})
     $securityCoverage=@($Record.coverage|Where-Object {
+        $_.scopeId -like 'scope:policy.windows-update.*' -or
+        $_.scopeId -like 'scope:policy.legacy-auth.*' -or
         $_.scopeId -like 'scope:policy.defender.*' -or
         $_.scopeId -like 'scope:policy.smartscreen.*' -or
         $_.scopeId -like 'scope:policy.security-center.*' -or
         $_.scopeId -like 'scope:policy.firewall.*' -or
+        $_.scopeId -like 'scope:policy.rdp.*' -or
+        $_.scopeId -like 'scope:policy.winrm.*' -or
+        $_.scopeId -like 'scope:policy.smb.*' -or
         $_.scopeId -like 'scope:policy.bitlocker.*' -or
         $_.scopeId -like 'scope:policy.vbs.*' -or
         $_.scopeId -like 'scope:policy.wdac.*' -or
@@ -1591,10 +1981,15 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $appliedReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.applied.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $localReferences=@($Record.observations|Where-Object {$_.fieldId -like 'field:policy.local-*' -or $_.fieldId -like 'field:policy.audit.*' -or $_.fieldId -like 'field:policy.user-right.*' -or $_.fieldId -like 'field:policy.security-option.*'}|Select-Object -First 16|ForEach-Object {[pscustomobject][ordered]@{observationId=$_.observationId;fieldId=$_.fieldId;subjectId=$_.subjectId}})
     $securityReferences=@($Record.observations|Where-Object {
+        $_.fieldId -like 'field:policy.windows-update.*' -or
+        $_.fieldId -like 'field:policy.legacy-auth.*' -or
         $_.fieldId -like 'field:policy.security-provider.*' -or
         $_.fieldId -like 'field:policy.defender.*' -or
         $_.fieldId -like 'field:policy.smartscreen.*' -or
         $_.fieldId -like 'field:policy.firewall.*' -or
+        $_.fieldId -like 'field:policy.rdp.*' -or
+        $_.fieldId -like 'field:policy.winrm.*' -or
+        $_.fieldId -like 'field:policy.smb.*' -or
         $_.fieldId -like 'field:policy.bitlocker.*' -or
         $_.fieldId -like 'field:policy.vbs.*' -or
         $_.fieldId -like 'field:policy.credential-guard.*' -or
@@ -1681,7 +2076,10 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
     $policyMappings=@(
         @{local='field:policy.security-option.machine-inactivity-limit-seconds';mdm='field:policy.mdm.security-option.machine-inactivity-limit-seconds'},
         @{local='field:policy.security-option.disable-cad';mdm='field:policy.mdm.security-option.disable-cad'},
-        @{local='field:policy.security-option.lm-compatibility-level';mdm='field:policy.mdm.security-option.lm-compatibility-level'}
+        @{local='field:policy.security-option.lm-compatibility-level';mdm='field:policy.mdm.security-option.lm-compatibility-level'},
+        @{local='field:policy.windows-update.defer-feature-updates-days';mdm='field:policy.mdm.update.defer-feature-updates-days'},
+        @{local='field:policy.windows-update.defer-quality-updates-days';mdm='field:policy.mdm.update.defer-quality-updates-days'},
+        @{local='field:policy.windows-update.disable-dual-scan';mdm='field:policy.mdm.update.disable-dual-scan'}
     )
     $channelConflictDetected=$false
     $channelConflictReferences=[Collections.Generic.List[object]]::new()
@@ -1702,7 +2100,10 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
             $channelConflictDetected=$true
         }
     }
-    $localSignalCoverage=@($Record.coverage|Where-Object {$_.scopeId -like 'scope:policy.security-option.*'})
+    $localSignalCoverage=@($Record.coverage|Where-Object {
+        $_.scopeId -like 'scope:policy.security-option.*' -or
+        $_.scopeId -like 'scope:policy.windows-update.*'
+    })
     $appLockerGpCoverage=@($Record.coverage|Where-Object {$_.scopeId -eq 'scope:policy.applocker.gp-channel'})
     $appLockerCspCoverage=@($Record.coverage|Where-Object {$_.scopeId -eq 'scope:policy.applocker.csp-channel'})
     $appLockerByChannel=@{gp=@{};csp=@{}}

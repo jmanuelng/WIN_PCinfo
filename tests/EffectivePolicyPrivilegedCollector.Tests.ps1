@@ -39,7 +39,13 @@ foreach($fragment in @(
     'Get-MpComputerStatus','Get-MpPreference',
     'Get-Command Get-NetFirewallProfile','-PolicyStore ActiveStore',
     'AttackSurfaceReductionRules_Ids','AttackSurfaceReductionRules_Actions',
-    'EnableNetworkProtection','IsTamperProtected'
+    'EnableNetworkProtection','IsTamperProtected',
+    'MDM_Policy_Result01_Update02','DeferFeatureUpdatesPeriodInDays',
+    'DeferQualityUpdatesPeriodInDays','DisableDualScan',
+    'Win32_TSGeneralSetting','WSMan:\\localhost\\Service\\Auth',
+    'WSMan:\\localhost\\Listener','Get-SmbClientConfiguration',
+    'Get-SmbServerConfiguration','Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol',
+    'NtlmMinClientSec','NtlmMinServerSec'
 )){
     if(-not $workerSource.Contains($fragment)){throw "The live structured policy collector is missing: $fragment"}
 }

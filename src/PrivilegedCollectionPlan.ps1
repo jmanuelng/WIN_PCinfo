@@ -1090,7 +1090,16 @@ function Get-LiveEffectivePolicyResult {
     # refreshes policy, invokes a policy tool, resolves groups recursively, or
     # contacts a domain controller. Trust assumption: the local cached RSoP,
     # NetAPI, Audit, LSA, Windows Security Center, Defender cmdlets, NetSecurity,
-    # and registry providers truthfully report their own layer. Safe failure:
+    # and registry providers truthfully report their own layer. Policy CSP
+    # comparisons for MDM_Policy_Result01_Update02
+    # (DeferFeatureUpdatesPeriodInDays, DeferQualityUpdatesPeriodInDays,
+    # DisableDualScan) cross the separate LocalSystem SYSTEM sub-plan and are
+    # deliberately not queried here under Administrator. The Administrator seam
+    # does, however, own the local structured sources named in the release:
+    # Win32_TSGeneralSetting, WSMan:\\localhost\\Service\\Auth,
+    # WSMan:\\localhost\\Listener, Get-SmbClientConfiguration,
+    # Get-SmbServerConfiguration, Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol,
+    # NtlmMinClientSec, and NtlmMinServerSec. Safe failure:
     # each independent source becomes a field-specific gap; an empty or denied
     # source never becomes affirmative compliance evidence.
     $result=New-EffectivePolicyBaseResult Failed
@@ -2212,7 +2221,8 @@ function Invoke-PrivilegedCollectionPlan {
             'AppliedOrderConflict','AccountLockout','AuditPolicy','UserRights',
             'SecurityOptions','PartialChannel','NonMdm','UnsupportedMdmBuild',
             'MissingMdmClass','MissingMdmProperty','MdmPolicyConflict',
-            'MdmWinsOverGpScoped','ThirdPartyRegistration','DefenderDisabled',
+            'MdmWinsOverGpScoped','WindowsUpdatePolicy','RemoteManagementCombinations',
+            'SmbPosture','LegacyAuthMasks','ThirdPartyRegistration','DefenderDisabled',
             'DefenderUnavailable','AmbiguousSecurityCenter','TamperProtected',
             'MissingDefenderProperty','FirewallProfiles','AsrRulePairs',
             'BitLockerEncrypted','BitLockerUnencrypted','BitLockerUnknown',

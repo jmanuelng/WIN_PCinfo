@@ -75,7 +75,7 @@ Assert-Equal '1.0.0' $record.contractVersion `
     'the record shape remains backward-compatible while Contract Set 1.4 adds policy definitions'
 Assert-Equal 'profile:device-firmware-identity-administrator-and-policy-readiness' $record.run.evidenceProfileId `
     'the record selects the exact additive policy evidence profile'
-Assert-Equal 44 @($record.coverage).Count 'all thirty-five policy scopes remain independently closed'
+Assert-Equal 63 @($record.coverage).Count 'all fifty-four policy scopes remain independently closed'
 Assert-Equal 18 @($record.findings).Count 'seven bounded rules each produce one finding'
 Assert-Equal 1 @($record.collectorResults|Where-Object collectorId -eq 'collector:windows.effective-policy').Count `
     'one approved attempt owns all policy source coverage'

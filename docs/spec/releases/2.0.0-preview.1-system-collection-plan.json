@@ -59,6 +59,16 @@
           "instanceId": "LocalPoliciesSecurityOptions",
           "maximumInstances": 1,
           "access": "ReadOnlyProperties"
+        },
+        {
+          "sourceId": "source:windows.mdm-policy-result.update",
+          "interface": "WindowsMdmBridgeWmiProvider",
+          "namespace": "Root\\cimv2\\mdm\\dmmap",
+          "className": "MDM_Policy_Result01_Update02",
+          "parentId": "./Vendor/MSFT/Policy/Result",
+          "instanceId": "Update",
+          "maximumInstances": 1,
+          "access": "ReadOnlyProperties"
         }
       ],
       "authorityProof": {
@@ -121,6 +131,39 @@
               "valueType": "Integer",
               "minimumValue": 0,
               "maximumValue": 5
+            },
+            {
+              "fieldId": "field:policy.mdm.update.defer-feature-updates-days",
+              "scopeId": "scope:policy.mdm.update.defer-feature-updates",
+              "className": "MDM_Policy_Result01_Update02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "Update",
+              "propertyName": "DeferFeatureUpdatesPeriodInDays",
+              "valueType": "Integer",
+              "minimumValue": 0,
+              "maximumValue": 365
+            },
+            {
+              "fieldId": "field:policy.mdm.update.defer-quality-updates-days",
+              "scopeId": "scope:policy.mdm.update.defer-quality-updates",
+              "className": "MDM_Policy_Result01_Update02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "Update",
+              "propertyName": "DeferQualityUpdatesPeriodInDays",
+              "valueType": "Integer",
+              "minimumValue": 0,
+              "maximumValue": 30
+            },
+            {
+              "fieldId": "field:policy.mdm.update.disable-dual-scan",
+              "scopeId": "scope:policy.mdm.update.disable-dual-scan",
+              "className": "MDM_Policy_Result01_Update02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "Update",
+              "propertyName": "DisableDualScan",
+              "valueType": "Boolean",
+              "minimumValue": 0,
+              "maximumValue": 1
             }
           ]
         },
@@ -172,6 +215,39 @@
               "valueType": "Integer",
               "minimumValue": 0,
               "maximumValue": 5
+            },
+            {
+              "fieldId": "field:policy.mdm.update.defer-feature-updates-days",
+              "scopeId": "scope:policy.mdm.update.defer-feature-updates",
+              "className": "MDM_Policy_Result01_Update02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "Update",
+              "propertyName": "DeferFeatureUpdatesPeriodInDays",
+              "valueType": "Integer",
+              "minimumValue": 0,
+              "maximumValue": 365
+            },
+            {
+              "fieldId": "field:policy.mdm.update.defer-quality-updates-days",
+              "scopeId": "scope:policy.mdm.update.defer-quality-updates",
+              "className": "MDM_Policy_Result01_Update02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "Update",
+              "propertyName": "DeferQualityUpdatesPeriodInDays",
+              "valueType": "Integer",
+              "minimumValue": 0,
+              "maximumValue": 30
+            },
+            {
+              "fieldId": "field:policy.mdm.update.disable-dual-scan",
+              "scopeId": "scope:policy.mdm.update.disable-dual-scan",
+              "className": "MDM_Policy_Result01_Update02",
+              "parentId": "./Vendor/MSFT/Policy/Result",
+              "instanceId": "Update",
+              "propertyName": "DisableDualScan",
+              "valueType": "Boolean",
+              "minimumValue": 0,
+              "maximumValue": 1
             }
           ]
         }
@@ -181,7 +257,10 @@
         "scope:policy.mdm.control-policy-conflict",
         "scope:policy.mdm.security-option.machine-inactivity-limit",
         "scope:policy.mdm.security-option.disable-cad",
-        "scope:policy.mdm.security-option.lm-compatibility-level"
+        "scope:policy.mdm.security-option.lm-compatibility-level",
+        "scope:policy.mdm.update.defer-feature-updates",
+        "scope:policy.mdm.update.defer-quality-updates",
+        "scope:policy.mdm.update.disable-dual-scan"
       ],
       "subjectIds": ["subject:device:primary"],
       "result": {
@@ -203,7 +282,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "EncodedReleaseSource",
-    "payloadSha256": "abf73ffaeeb451b8f0ea6a72c495ea9ba69afb5f05300c7e878db5bf1d0ee08c"
+    "payloadSha256": "8412a03ba0b61529a80ed89eac0bd1decb8d997ce718756700793ff71fb77f80"
   },
   "channel": {
     "pipeNamePrefix": "WINPCInfo-SystemCollection-v1-",
