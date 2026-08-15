@@ -18,6 +18,7 @@ function issue(
     labels: [{ name: "ready-for-agent" }],
     assignees: [],
     blockedBy: { nodes: [] },
+    subIssuesSummary: { completed: 0, percentCompleted: 0, total: 0 },
     ...overrides,
   };
 }
@@ -39,6 +40,34 @@ test("selectNextIssue accepts array-shaped blockedBy data", () => {
   assert.equal(
     selectNextIssue([issue(2, { blockedBy: [{ number: 1 }] })]),
     undefined,
+  );
+});
+
+test("selectNextIssue excludes parent specifications with open child issues", () => {
+  const parentSpecification = issue(37, {
+    subIssuesSummary: {
+      completed: 22,
+      percentCompleted: 57,
+      total: 38,
+    },
+  });
+
+  assert.equal(selectNextIssue([parentSpecification]), undefined);
+  assert.equal(
+    selectNextIssue([issue(38, { subIssuesSummary: undefined })]),
+    undefined,
+  );
+  assert.equal(
+    selectNextIssue([
+      issue(39, {
+        subIssuesSummary: {
+          completed: 38,
+          percentCompleted: 100,
+          total: 38,
+        },
+      }),
+    ])?.number,
+    39,
   );
 });
 

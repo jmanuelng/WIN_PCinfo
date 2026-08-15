@@ -16,6 +16,12 @@ export interface RelationshipConnection {
   readonly nodes?: readonly unknown[];
 }
 
+export interface SubIssuesSummary {
+  readonly completed: number;
+  readonly percentCompleted?: number;
+  readonly total: number;
+}
+
 export interface GitHubIssue {
   readonly number: number;
   readonly title: string;
@@ -24,6 +30,7 @@ export interface GitHubIssue {
   readonly labels?: readonly GitHubLabel[];
   readonly assignees?: readonly GitHubActor[];
   readonly blockedBy?: RelationshipConnection | readonly unknown[] | null;
+  readonly subIssuesSummary?: SubIssuesSummary | null;
 }
 
 export interface StatusCheck {
@@ -131,11 +138,20 @@ function relationshipCount(
 
 export function isEligibleIssue(issue: GitHubIssue): boolean {
   const labelNames = new Set((issue.labels ?? []).map((label) => label.name));
+  const subIssues = issue.subIssuesSummary;
+  const hasNoOpenSubIssues =
+    subIssues !== null &&
+    subIssues !== undefined &&
+    Number.isInteger(subIssues.completed) &&
+    Number.isInteger(subIssues.total) &&
+    subIssues.total >= 0 &&
+    subIssues.completed === subIssues.total;
   return (
     issue.state.toUpperCase() === "OPEN" &&
     labelNames.has(READY_LABEL) &&
     (issue.assignees ?? []).length === 0 &&
-    relationshipCount(issue.blockedBy) === 0
+    relationshipCount(issue.blockedBy) === 0 &&
+    hasNoOpenSubIssues
   );
 }
 
@@ -160,7 +176,7 @@ export function listEligibleIssues(): readonly GitHubIssue[] {
     "--limit",
     "100",
     "--json",
-    "number,title,state,url,labels,assignees,blockedBy",
+    "number,title,state,url,labels,assignees,blockedBy,subIssuesSummary",
   ]);
 }
 
@@ -183,12 +199,15 @@ export function claimIssue(issue: GitHubIssue): void {
     "view",
     String(issue.number),
     "--json",
-    "number,title,state,url,labels,assignees,blockedBy",
+    "number,title,state,url,labels,assignees,blockedBy,subIssuesSummary",
   ]);
   const assignees = claimed.assignees ?? [];
   const safelyClaimed =
     claimed.state.toUpperCase() === "OPEN" &&
     relationshipCount(claimed.blockedBy) === 0 &&
+    claimed.subIssuesSummary !== null &&
+    claimed.subIssuesSummary !== undefined &&
+    claimed.subIssuesSummary.completed === claimed.subIssuesSummary.total &&
     assignees.length === 1 &&
     assignees[0]?.login.toLowerCase() === viewer.toLowerCase();
 
