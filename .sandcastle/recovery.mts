@@ -92,12 +92,17 @@ export function reconcileLaneRecovery(
   ]);
   if (
     isCommandResult(worktrees) &&
+    worktrees.exitCode === 0 &&
     (recovery.worktreeDisposition === "not-created" ||
       recovery.worktreeDisposition === "unknown")
   ) {
     const block = worktrees.stdout
       .split(/\r?\n\r?\n/)
-      .find((entry) => entry.includes(`branch refs/heads/${recovery.branch}`));
+      .find((entry) =>
+        entry
+          .split(/\r?\n/)
+          .some((line) => line === `branch refs/heads/${recovery.branch}`),
+      );
     const pathLine = block
       ?.split(/\r?\n/)
       .find((line) => line.startsWith("worktree "));

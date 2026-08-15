@@ -462,6 +462,32 @@ test("unknown sandbox-close disposition reconciles present and absent worktrees"
   absent.worktreeDisposition = "unknown";
   reconcileLaneRecovery(absent, base);
   assert.equal(absent.worktreeDisposition, "removed");
+
+  const prefixOnly = createLaneRecovery(58, "test-branch");
+  prefixOnly.worktreeDisposition = "unknown";
+  reconcileLaneRecovery(prefixOnly, {
+    run(command, args) {
+      if (command === "git" && args[0] === "worktree") {
+        return commandResult(
+          "worktree C:/worktrees/test-branch-longer\nHEAD branch-sha\nbranch refs/heads/test-branch-longer\n",
+        );
+      }
+      return base.run(command, args);
+    },
+  });
+  assert.equal(prefixOnly.worktreeDisposition, "removed");
+
+  const queryFailed = createLaneRecovery(58, "test-branch");
+  queryFailed.worktreeDisposition = "unknown";
+  reconcileLaneRecovery(queryFailed, {
+    run(command, args) {
+      if (command === "git" && args[0] === "worktree") {
+        return failedCommand("worktree enumeration failed");
+      }
+      return base.run(command, args);
+    },
+  });
+  assert.equal(queryFailed.worktreeDisposition, "unknown");
 });
 
 test("parseMaxParallel defaults to two and enforces the host-safe cap", () => {
