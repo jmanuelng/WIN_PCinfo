@@ -20,3 +20,4 @@
 
 # Local Node dependencies used only by the Sandcastle orchestrator.
 /node_modules/
+/.worktrees/

@@ -7,11 +7,17 @@ import test from "node:test";
 import { createCodexAgent } from "./codex-agent.mts";
 import {
   AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
+  DEFAULT_MAX_PARALLEL_ISSUES,
   analyzeChecks,
   buildImplementationPhaseOptions,
+  buildIntegrationPhaseOptions,
   buildReviewPhaseOptions,
+  createSerializedExecutor,
   parseMaxIterations,
+  parseMaxParallel,
+  runCommandAsync,
   selectNextIssue,
+  selectNextIssues,
   type GitHubIssue,
 } from "./workflow.mts";
 
@@ -41,6 +47,19 @@ test("selectNextIssue chooses the oldest eligible frontier issue", () => {
   ]);
 
   assert.equal(selected?.number, 4);
+});
+
+test("selectNextIssues returns a bounded oldest-first frontier batch", () => {
+  assert.deepEqual(
+    selectNextIssues([
+      issue(9),
+      issue(4),
+      issue(7, { assignees: [{ login: "someone" }] }),
+      issue(6),
+    ], 2).map(({ number }) => number),
+    [4, 6],
+  );
+  assert.throws(() => selectNextIssues([issue(1)], 0), /positive integer/);
 });
 
 test("selectNextIssue accepts array-shaped blockedBy data", () => {
@@ -146,10 +165,75 @@ test("parseMaxIterations defaults to one and caps autonomous runs", () => {
   );
 });
 
-test("both agent phases tolerate the repository's long full-suite silence", () => {
+test("parseMaxParallel defaults to two and enforces the host-safe cap", () => {
+  assert.equal(DEFAULT_MAX_PARALLEL_ISSUES, 2);
+  assert.equal(parseMaxParallel([]), 2);
+  assert.equal(parseMaxParallel(["--max-parallel", "1"]), 1);
+  assert.equal(parseMaxParallel(["--max-parallel", "2"]), 2);
+  assert.throws(
+    () => parseMaxParallel(["--max-parallel", "3"]),
+    /integer from 1 through 2/,
+  );
+});
+
+test("async command execution permits two long-running lanes to overlap", async () => {
+  const barrierDirectory = mkdtempSync(join(tmpdir(), "sandcastle-parallel-"));
+  const firstMarker = join(barrierDirectory, "first");
+  const secondMarker = join(barrierDirectory, "second");
+  const barrierScript = (ownMarker: string, peerMarker: string) => `
+    const { existsSync, writeFileSync } = require("node:fs");
+    writeFileSync(${JSON.stringify(ownMarker)}, "ready");
+    const deadline = Date.now() + 5000;
+    while (!existsSync(${JSON.stringify(peerMarker)}) && Date.now() < deadline) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+    }
+    if (!existsSync(${JSON.stringify(peerMarker)})) process.exit(2);
+  `;
+
+  try {
+    await Promise.all([
+      runCommandAsync(process.execPath, ["-e", barrierScript(firstMarker, secondMarker)]),
+      runCommandAsync(process.execPath, ["-e", barrierScript(secondMarker, firstMarker)]),
+    ]);
+  } finally {
+    rmSync(barrierDirectory, { force: true, recursive: true });
+  }
+});
+
+test("serialized executor delivers one lane at a time and survives failures", async () => {
+  const execute = createSerializedExecutor();
+  const events: string[] = [];
+  const first = execute(async () => {
+    events.push("first:start");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    events.push("first:fail");
+    throw new Error("expected failure");
+  });
+  const second = execute(async () => {
+    events.push("second:start");
+    events.push("second:done");
+    return 2;
+  });
+
+  await assert.rejects(first, /expected failure/);
+  assert.equal(await second, 2);
+  assert.deepEqual(events, [
+    "first:start",
+    "first:fail",
+    "second:start",
+    "second:done",
+  ]);
+});
+
+test("all agent phases tolerate the repository's long full-suite silence", () => {
   const agent = { kind: "test-agent" };
   const implementation = buildImplementationPhaseOptions(agent, 54, "MDM");
   const review = buildReviewPhaseOptions(agent, 54, "sandcastle/issue-54");
+  const integration = buildIntegrationPhaseOptions(
+    agent,
+    54,
+    "sandcastle/issue-54",
+  );
 
   assert.equal(AGENT_PHASE_IDLE_TIMEOUT_SECONDS, 2 * 60 * 60);
   assert.equal(
@@ -157,8 +241,11 @@ test("both agent phases tolerate the repository's long full-suite silence", () =
     AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   );
   assert.equal(review.idleTimeoutSeconds, AGENT_PHASE_IDLE_TIMEOUT_SECONDS);
+  assert.equal(integration.idleTimeoutSeconds, AGENT_PHASE_IDLE_TIMEOUT_SECONDS);
   assert.equal(implementation.name, "issue-54-implementer");
   assert.equal(review.name, "issue-54-reviewer");
+  assert.equal(integration.name, "issue-54-integrator");
+  assert.equal(integration.promptFile, "./.sandcastle/integration-prompt.md");
 });
 
 test("Codex provider uses the current automatic-review CLI flag", () => {

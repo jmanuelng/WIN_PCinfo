@@ -1,8 +1,10 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 export const READY_LABEL = "ready-for-agent";
 export const BASE_REF = "origin/main";
 export const MAX_ALLOWED_ITERATIONS = 10;
+export const DEFAULT_MAX_PARALLEL_ISSUES = 2;
+export const MAX_ALLOWED_PARALLEL_ISSUES = 2;
 export const AGENT_PHASE_IDLE_TIMEOUT_SECONDS = 2 * 60 * 60;
 
 export interface GitHubActor {
@@ -87,6 +89,37 @@ export function buildReviewPhaseOptions<TAgent>(
   } as const;
 }
 
+export function createSerializedExecutor() {
+  let tail = Promise.resolve();
+  return function execute<T>(operation: () => Promise<T>): Promise<T> {
+    const current = tail.then(operation, operation);
+    tail = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    return current;
+  };
+}
+
+export function buildIntegrationPhaseOptions<TAgent>(
+  agent: TAgent,
+  issueNumber: number,
+  branch: string,
+) {
+  return {
+    name: `issue-${issueNumber}-integrator`,
+    maxIterations: 1,
+    idleTimeoutSeconds: AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
+    agent,
+    promptFile: "./.sandcastle/integration-prompt.md",
+    promptArgs: {
+      ISSUE_NUMBER: issueNumber,
+      BRANCH: branch,
+      BASE_BRANCH: BASE_REF,
+    },
+  } as const;
+}
+
 interface RunOptions {
   readonly cwd?: string;
   readonly stream?: boolean;
@@ -144,6 +177,58 @@ export function runCommand(
   }
 
   return { stdout, stderr, exitCode };
+}
+
+export async function runCommandAsync(
+  command: string,
+  args: readonly string[],
+  options: RunOptions = {},
+): Promise<CommandResult> {
+  const invocation = commandInvocation(command, args);
+  return await new Promise<CommandResult>((resolve, reject) => {
+    const child = spawn(invocation.command, invocation.args, {
+      cwd: options.cwd,
+      windowsHide: true,
+      stdio: options.stream ? "inherit" : ["ignore", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+
+    let timedOut = false;
+    const timeout = options.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill();
+        }, options.timeoutMs)
+      : undefined;
+
+    child.once("error", (error) => {
+      if (timeout) clearTimeout(timeout);
+      reject(new Error(`Unable to run ${command}: ${error.message}`, { cause: error }));
+    });
+    child.once("close", (code) => {
+      if (timeout) clearTimeout(timeout);
+      const exitCode = code ?? 1;
+      const stdoutText = Buffer.concat(stdout).toString("utf8").trim();
+      const stderrText = Buffer.concat(stderr).toString("utf8").trim();
+      if (timedOut) {
+        reject(new Error(`${command} ${args.join(" ")} timed out.`));
+        return;
+      }
+      if (exitCode !== 0 && !options.allowFailure) {
+        const detail = [stdoutText, stderrText].filter(Boolean).join("\n");
+        reject(
+          new Error(
+            `${command} ${args.join(" ")} exited with code ${exitCode}${detail ? `:\n${detail}` : ""}`,
+          ),
+        );
+        return;
+      }
+      resolve({ stdout: stdoutText, stderr: stderrText, exitCode });
+    });
+  });
 }
 
 export function runJson<T>(
@@ -205,9 +290,21 @@ export function isEligibleIssue(issue: GitHubIssue): boolean {
 export function selectNextIssue(
   issues: readonly GitHubIssue[],
 ): GitHubIssue | undefined {
+  return selectNextIssues(issues, 1)[0];
+}
+
+export function selectNextIssues(
+  issues: readonly GitHubIssue[],
+  limit: number,
+): readonly GitHubIssue[] {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error("Issue selection limit must be a positive integer.");
+  }
+
   return [...issues]
     .filter(isEligibleIssue)
-    .sort((left, right) => left.number - right.number)[0];
+    .sort((left, right) => left.number - right.number)
+    .slice(0, limit);
 }
 
 export function listEligibleIssues(): readonly GitHubIssue[] {
@@ -268,6 +365,14 @@ export function claimIssue(issue: GitHubIssue): void {
       `Issue #${issue.number} changed while it was being claimed; the claim was released.`,
     );
   }
+}
+
+export function releaseIssueClaim(issueNumber: number): void {
+  runCommand(
+    "gh",
+    ["issue", "edit", String(issueNumber), "--remove-assignee", "@me"],
+    { allowFailure: true },
+  );
 }
 
 export function refreshBase(): string {
@@ -490,6 +595,25 @@ export function parseMaxIterations(args: readonly string[]): number {
   if (!Number.isInteger(value) || value < 1 || value > MAX_ALLOWED_ITERATIONS) {
     throw new Error(
       `--max-iterations must be an integer from 1 through ${MAX_ALLOWED_ITERATIONS}.`,
+    );
+  }
+  return value;
+}
+
+export function parseMaxParallel(args: readonly string[]): number {
+  const flagIndex = args.indexOf("--max-parallel");
+  if (flagIndex === -1) {
+    return DEFAULT_MAX_PARALLEL_ISSUES;
+  }
+
+  const value = Number.parseInt(args[flagIndex + 1] ?? "", 10);
+  if (
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_ALLOWED_PARALLEL_ISSUES
+  ) {
+    throw new Error(
+      `--max-parallel must be an integer from 1 through ${MAX_ALLOWED_PARALLEL_ISSUES}.`,
     );
   }
   return value;
