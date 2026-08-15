@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { createCodexAgent } from "./codex-agent.mts";
 import {
   analyzeChecks,
   parseMaxIterations,
@@ -136,4 +141,62 @@ test("parseMaxIterations defaults to one and caps autonomous runs", () => {
     () => parseMaxIterations(["--max-iterations", "11"]),
     /integer from 1 through 10/,
   );
+});
+
+test("Codex provider uses the current automatic-review CLI flag", () => {
+  const agent = createCodexAgent();
+  const options = {
+    prompt: "Return only OK.",
+    dangerouslySkipPermissions: true,
+  } as Parameters<typeof agent.buildPrintCommand>[0];
+  const command = agent.buildPrintCommand(options).command;
+
+  assert.match(command, /(?:^| )--approve-for-me(?: |$)/);
+  assert.doesNotMatch(command, /(?:^| )-a(?: |$)/);
+  assert.doesNotMatch(
+    command,
+    /(?:^| )--dangerously-bypass-approvals-and-sandbox(?: |$)/,
+  );
+
+  if (process.platform !== "win32") {
+    return;
+  }
+
+  const shimDirectory = mkdtempSync(join(tmpdir(), "sandcastle-codex-argv-"));
+  try {
+    writeFileSync(
+      join(shimDirectory, "capture.mjs"),
+      "console.log(JSON.stringify(process.argv.slice(2)));\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(shimDirectory, "codex.cmd"),
+      '@echo off\r\nnode "%~dp0capture.mjs" %*\r\n',
+      "utf8",
+    );
+
+    const invocation = spawnSync(
+      process.env.ComSpec || "cmd.exe",
+      ["/d", "/s", "/c", command],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${shimDirectory}${delimiter}${process.env.PATH ?? ""}`,
+        },
+      },
+    );
+    assert.equal(invocation.status, 0, invocation.stderr);
+    assert.deepEqual(JSON.parse(invocation.stdout.trim()), [
+      "exec",
+      "--json",
+      "--approve-for-me",
+      "-m",
+      "gpt-5.4",
+      "-c",
+      "model_reasoning_effort=high",
+    ]);
+  } finally {
+    rmSync(shimDirectory, { force: true, recursive: true });
+  }
 });

@@ -19,6 +19,11 @@ codex login status
 
 Git authentication in an IDE does not replace either CLI login.
 
+The pinned Sandcastle `0.12.0` Codex provider predates the current Codex CLI
+automatic-review flag. `codex-agent.mts` adapts its generated command to
+`--approve-for-me` and fails closed if Sandcastle changes the expected command
+shape. Do not replace the adapter with approval bypass.
+
 ## Eligibility
 
 Sandcastle considers only open issues that:

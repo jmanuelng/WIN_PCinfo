@@ -16,12 +16,10 @@ import {
   syncLocalMain,
   waitForPullRequestChecks,
 } from "./workflow.mts";
+import { createCodexAgent } from "./codex-agent.mts";
 
 const maxIterations = parseMaxIterations(process.argv.slice(2));
-const agent = sandcastle.codex("gpt-5.4", {
-  effort: "high",
-  approvalsReviewer: "auto_review",
-});
+const agent = createCodexAgent();
 
 async function run(): Promise<void> {
   console.log("Running Sandcastle preflight...");
