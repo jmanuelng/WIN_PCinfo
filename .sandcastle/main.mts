@@ -19,6 +19,7 @@ import {
   releaseIssueClaim,
   runCommand,
   runCommandAsync,
+  runWithRequiredCleanup,
   selectNextIssues,
   syncLocalMain,
   waitForPullRequestChecks,
@@ -144,8 +145,8 @@ async function closePreparedIssue(
   if (prepared.closed) {
     return;
   }
-  prepared.closed = true;
   await closeSandbox(prepared.sandbox, prepared.recovery);
+  prepared.closed = true;
 }
 
 async function integrateLatestBase(
@@ -212,12 +213,10 @@ async function deliverIssue(
   prepared: Awaited<ReturnType<typeof prepareIssue>>,
 ): Promise<void> {
   const { issue, branch } = prepared;
-  let headSha = "";
-  try {
-    headSha = await integrateLatestBase(prepared);
-  } finally {
-    await closePreparedIssue(prepared);
-  }
+  const headSha = await runWithRequiredCleanup(
+    () => integrateLatestBase(prepared),
+    () => closePreparedIssue(prepared),
+  );
 
   const pullRequest = pushAndCreatePullRequest(issue, branch);
   console.log(`Created pull request #${pullRequest.number}: ${pullRequest.url}`);

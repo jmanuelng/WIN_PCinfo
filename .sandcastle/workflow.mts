@@ -133,6 +133,38 @@ export function createSerializedExecutor() {
   return { execute, stop } as const;
 }
 
+export async function runWithRequiredCleanup<T>(
+  operation: () => Promise<T>,
+  cleanup: () => Promise<void>,
+): Promise<T> {
+  let result: T | undefined;
+  let operationFailed = false;
+  let operationError: unknown;
+  try {
+    result = await operation();
+  } catch (error) {
+    operationFailed = true;
+    operationError = error;
+  }
+
+  try {
+    await cleanup();
+  } catch (cleanupError) {
+    if (operationFailed) {
+      throw new AggregateError(
+        [operationError, cleanupError],
+        "The operation and its required cleanup both failed.",
+      );
+    }
+    throw cleanupError;
+  }
+
+  if (operationFailed) {
+    throw operationError;
+  }
+  return result as T;
+}
+
 export function buildIntegrationPhaseOptions<TAgent>(
   agent: TAgent,
   issueNumber: number,

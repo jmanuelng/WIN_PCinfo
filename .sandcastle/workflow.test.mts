@@ -5,7 +5,11 @@ import { delimiter, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { createCodexAgent } from "./codex-agent.mts";
-import { createLaneRecovery, laneFailure } from "./recovery.mts";
+import {
+  createLaneRecovery,
+  laneFailure,
+  reconcileLaneRecovery,
+} from "./recovery.mts";
 import {
   AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   DEFAULT_MAX_PARALLEL_ISSUES,
@@ -20,6 +24,7 @@ import {
   listEligibleIssues,
   releaseIssueClaim,
   runCommandAsync,
+  runWithRequiredCleanup,
   selectNextIssue,
   selectNextIssues,
   type CommandResult,
@@ -58,13 +63,15 @@ function recoveryCommands(options: {
         return commandResult("branch-sha refs/heads/test-branch");
       }
       if (command === "git" && args[0] === "ls-remote") {
+        if (args.at(-1) === "refs/heads/main") {
+          return commandResult(
+            `${options.remoteMain}\trefs/heads/main`,
+          );
+        }
         return failedCommand("remote branch absent");
       }
       if (command === "git" && args.at(-1) === "refs/heads/main") {
         return commandResult(options.localMain);
-      }
-      if (command === "git" && args.at(-1) === "refs/remotes/origin/main") {
-        return commandResult(options.remoteMain);
       }
       throw new Error(`Unexpected recovery command: ${command} ${args.join(" ")}`);
     },
@@ -429,6 +436,34 @@ test("post-merge failure reports merged PR, closed issue, and stale local main",
   assert.match(error.message, /"mainSynced": false/);
 });
 
+test("unknown sandbox-close disposition reconciles present and absent worktrees", () => {
+  const base = recoveryCommands({
+    pullRequest: null,
+    issue: { number: 58, state: "OPEN", assignees: [{ login: "agent" }] },
+    localMain: "same-sha",
+    remoteMain: "same-sha",
+  });
+  const present = createLaneRecovery(58, "test-branch");
+  present.worktreeDisposition = "unknown";
+  reconcileLaneRecovery(present, {
+    run(command, args) {
+      if (command === "git" && args[0] === "worktree") {
+        return commandResult(
+          "worktree C:/worktrees/test-branch\nHEAD branch-sha\nbranch refs/heads/test-branch\n",
+        );
+      }
+      return base.run(command, args);
+    },
+  });
+  assert.equal(present.worktreeDisposition, "active");
+  assert.equal(present.worktreePath, "C:/worktrees/test-branch");
+
+  const absent = createLaneRecovery(58, "test-branch");
+  absent.worktreeDisposition = "unknown";
+  reconcileLaneRecovery(absent, base);
+  assert.equal(absent.worktreeDisposition, "removed");
+});
+
 test("parseMaxParallel defaults to two and enforces the host-safe cap", () => {
   assert.equal(DEFAULT_MAX_PARALLEL_ISSUES, 2);
   assert.equal(parseMaxParallel([]), 2);
@@ -482,6 +517,26 @@ test("serialized executor stops queued deliveries after the first failure", asyn
   await assert.rejects(first, /expected failure/);
   await assert.rejects(second, /stopped before this operation/);
   assert.deepEqual(events, ["first:start", "first:fail"]);
+});
+
+test("required cleanup preserves simultaneous operation and cleanup failures", async () => {
+  const operationError = new Error("integration failed");
+  const cleanupError = new Error("sandbox close failed");
+  await assert.rejects(
+    runWithRequiredCleanup(
+      async () => {
+        throw operationError;
+      },
+      async () => {
+        throw cleanupError;
+      },
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AggregateError);
+      assert.deepEqual(error.errors, [operationError, cleanupError]);
+      return true;
+    },
+  );
 });
 
 test("all agent phases tolerate the repository's long full-suite silence", () => {

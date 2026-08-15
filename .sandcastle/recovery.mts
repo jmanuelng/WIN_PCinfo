@@ -92,7 +92,8 @@ export function reconcileLaneRecovery(
   ]);
   if (
     isCommandResult(worktrees) &&
-    recovery.worktreeDisposition === "not-created"
+    (recovery.worktreeDisposition === "not-created" ||
+      recovery.worktreeDisposition === "unknown")
   ) {
     const block = worktrees.stdout
       .split(/\r?\n\r?\n/)
@@ -103,6 +104,8 @@ export function reconcileLaneRecovery(
     if (pathLine) {
       recovery.worktreePath = pathLine.slice("worktree ".length);
       recovery.worktreeDisposition = "active";
+    } else if (recovery.worktreeDisposition === "unknown") {
+      recovery.worktreeDisposition = "removed";
     }
   }
 
@@ -141,15 +144,20 @@ export function reconcileLaneRecovery(
     "refs/heads/main",
   ]);
   recovery.remoteMain = captureCommand(commands, "git", [
-    "rev-parse",
-    "refs/remotes/origin/main",
+    "ls-remote",
+    "--exit-code",
+    "origin",
+    "refs/heads/main",
   ]);
+  const liveRemoteMain = isCommandResult(recovery.remoteMain)
+    ? recovery.remoteMain.stdout.split(/\s+/, 1)[0]
+    : "";
   recovery.mainSynced =
     isCommandResult(recovery.localMain) &&
     isCommandResult(recovery.remoteMain) &&
     recovery.localMain.exitCode === 0 &&
     recovery.remoteMain.exitCode === 0
-      ? recovery.localMain.stdout === recovery.remoteMain.stdout
+      ? recovery.localMain.stdout === liveRemoteMain
       : "unknown";
 }
 
