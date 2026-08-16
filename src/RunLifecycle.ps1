@@ -934,15 +934,6 @@ function Invoke-RunLifecycleFixture {
         [Parameter(Mandatory)] $ConvertToJsonCommand
     )
 
-    $writeContractRecordCommand = $ExecutionContext.InvokeCommand.GetCommand(
-        'Write-ContractRecord',
-        [System.Management.Automation.CommandTypes]::Function
-    )
-    $approvedCollectorCommand = $ExecutionContext.InvokeCommand.GetCommand(
-        'Invoke-ApprovedCollectorProcess',
-        [System.Management.Automation.CommandTypes]::Function
-    )
-
     try {
         $fixture = Read-RunLifecycleFixture -LiteralPath $LiteralPath `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
@@ -950,7 +941,7 @@ function Invoke-RunLifecycleFixture {
     catch {
         $terminal = New-TerminalRecord -ReasonCode 'RUN.FIXTURE_INVALID' `
             -ValidationFixture $true -Phase 'RunControl'
-        & $writeContractRecordCommand $terminal -ConvertToJsonCommand $ConvertToJsonCommand
+        Write-ContractRecord $terminal -ConvertToJsonCommand $ConvertToJsonCommand
         return 20
     }
 
@@ -960,16 +951,16 @@ function Invoke-RunLifecycleFixture {
 
         switch ($scenario) {
             'Timeout' {
-                & $approvedCollectorCommand -OperationId 'fixture:synthetic.timeout' `
+                Invoke-ApprovedCollectorProcess -OperationId 'fixture:synthetic.timeout' `
                     -CancellationToken $CancellationToken
             }
             'Cancellation' {
-                & $approvedCollectorCommand `
+                Invoke-ApprovedCollectorProcess `
                     -OperationId 'fixture:synthetic.cooperative-cancel' `
                     -CancellationToken $CancellationToken
             }
             'PackageUnavailable' {
-                & $approvedCollectorCommand -OperationId 'op:synthetic.windows.os.success' `
+                Invoke-ApprovedCollectorProcess -OperationId 'op:synthetic.windows.os.success' `
                     -CancellationToken $CancellationToken
             }
         }
@@ -999,7 +990,7 @@ function Invoke-RunLifecycleFixture {
     $runId = "run:synthetic:$([System.Guid]::NewGuid().ToString('N'))"
     $progressAdapter = {
         param($ProgressRecord)
-        & $writeContractRecordCommand $ProgressRecord -ConvertToJsonCommand $ConvertToJsonCommand
+        Write-ContractRecord $ProgressRecord -ConvertToJsonCommand $ConvertToJsonCommand
     }.GetNewClosure()
     $fixtureRunCancellation = if ($scenario -eq 'Cancellation') {
         [System.Threading.CancellationTokenSource]::new()
@@ -1018,7 +1009,7 @@ function Invoke-RunLifecycleFixture {
         if ($null -ne $fixtureRunCancellation) { $fixtureRunCancellation.Dispose() }
     }
     foreach ($record in @($result.Records | Where-Object recordType -ne 'win-pcinfo.progress')) {
-        & $writeContractRecordCommand $record -ConvertToJsonCommand $ConvertToJsonCommand
+        Write-ContractRecord $record -ConvertToJsonCommand $ConvertToJsonCommand
     }
     [int] $result.ExitCode
 }

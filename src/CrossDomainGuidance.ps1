@@ -1,9 +1,15 @@
+Set-StrictMode -Version Latest
+
 $script:CrossDomainGuidancePolicyBase64 = '__CROSS_DOMAIN_GUIDANCE_POLICY_BASE64__'
 $script:CrossDomainGuidancePolicyDigest = '__CROSS_DOMAIN_GUIDANCE_POLICY_SHA256__'
 
 function Get-CrossDomainGuidancePolicy {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
+    # The generated application carries the frozen release policy inline. Hash
+    # the exact UTF-8 bytes before parsing so a truncated build artifact or a
+    # local text edit cannot silently change the privacy bounds or migration
+    # advice. Safe failure here is to stop before any guidance is derived.
     if ($script:CrossDomainGuidancePolicyBase64 -eq ('__CROSS_DOMAIN_' + 'GUIDANCE_POLICY_BASE64__')) {
         $path = Join-Path (Split-Path -Parent $PSScriptRoot) `
             'docs/spec/releases/2.0.0-preview.1-cross-domain-guidance.json'
@@ -82,7 +88,17 @@ function Get-CrossDomainFindingByRuleId {
         [Parameter(Mandatory)] [string] $RuleId
     )
 
-    @($Record.findings | Where-Object ruleId -eq $RuleId)
+    # Focused fixture seams can omit earlier slice findings entirely. Preserve
+    # that absence as an explicit sentinel so the rollup can degrade to
+    # Indeterminate instead of silently treating a missing prerequisite as if
+    # the rule had never existed.
+    $findings = @($Record.findings | Where-Object ruleId -eq $RuleId)
+    if ($findings.Count -lt 1) {
+        return ,([pscustomobject][ordered]@{
+                missingSourceRuleId = $RuleId
+            })
+    }
+    @($findings)
 }
 
 function Get-CrossDomainEvidenceReferences {
@@ -99,6 +115,9 @@ function Get-CrossDomainEvidenceReferences {
     )
     $references = [System.Collections.Generic.List[object]]::new()
     foreach ($finding in $Findings) {
+        if ($null -eq $finding -or $null -ne $finding.PSObject.Properties['missingSourceRuleId']) {
+            continue
+        }
         foreach ($reference in @($finding.evidenceReferences)) {
             $key = ([string] $reference.observationId) + '|' +
                 ([string] $reference.fieldId) + '|' +
@@ -125,7 +144,9 @@ function Get-CrossDomainDerivedOutcome {
     )
 
     if ($SourceFindings.Count -lt 1 -or
-        @($SourceFindings | Where-Object { $null -eq $_ }).Count -gt 0) {
+        @($SourceFindings | Where-Object {
+            $null -eq $_ -or $null -ne $_.PSObject.Properties['missingSourceRuleId']
+        }).Count -gt 0) {
         return [pscustomobject]@{
             outcome = 'Indeterminate'
             reasonCode = [string] $Rule.indeterminateReasonCode
@@ -152,10 +173,11 @@ function Get-CrossDomainDerivedOutcome {
             reasonCode = [string] $Rule.indeterminateReasonCode
         }
     }
-    # Certificate and enrollment prerequisites can be purpose-specific. When a
-    # management-plane rollup mixes ExpectedCondition with NotApplicable, the
-    # endpoint proved only a subset of the release-owned trust paths. Keep the
-    # cross-domain advice cautious instead of overstating cloud-readiness.
+    # Certificate and enrollment prerequisites can be purpose-specific. A
+    # generic HTTPS success does not prove that the enrollment certificate path
+    # or purpose-specific trust chain is acceptable for the tenant's design. If
+    # one prerequisite is NotApplicable, fail toward operator review instead of
+    # overstating cloud-readiness from the partial success.
     if ([string] $Rule.findingKind -eq 'management-plane' -and
         @($outcomes | Where-Object { $_ -eq 'NotApplicable' }).Count -gt 0) {
         return [pscustomobject]@{ outcome = 'NeedsAttention' }

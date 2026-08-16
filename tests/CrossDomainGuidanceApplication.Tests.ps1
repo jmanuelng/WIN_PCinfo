@@ -18,9 +18,9 @@ $cases = @(
         file = 'direct-outbound'
         scenario = 'DirectOutbound'
         request = $enabledRequestPath
-        overall = 'NeedsAttention'
-        management = 'NeedsAttention'
-        discoveryTasks = 2
+        overall = 'Indeterminate'
+        management = 'Indeterminate'
+        discoveryTasks = 3
     }
     @{
         file = 'local-only'

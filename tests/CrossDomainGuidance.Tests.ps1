@@ -379,4 +379,17 @@ foreach ($case in $cases) {
     Assert-Equal $case.discoveryTasks $crossDomainTasks.Count "$($case.scenario) materializes only supported tenant-side tasks"
 }
 
+$missingPrerequisiteRecord = New-SyntheticCrossDomainRecord -RunId 'run:missing-prerequisite' `
+    -Outcomes @{ assessmentUser = 'ExpectedCondition' }
+$missingPrerequisiteRecord.findings = @($missingPrerequisiteRecord.findings | Where-Object {
+    $_.ruleId -ne 'rule:certificate.trust/1.0.0'
+})
+$missingPrerequisiteDerived = Add-CrossDomainGuidanceToAssessmentRecord `
+    -Record $missingPrerequisiteRecord -Policy $policy
+$missingPrerequisiteManagementFinding = @($missingPrerequisiteDerived.findings | Where-Object {
+    $_.ruleId -eq 'rule:cross-domain.management-plane/1.0.0'
+})[0]
+Assert-Equal 'Indeterminate' $missingPrerequisiteManagementFinding.outcome `
+    'Cross-domain guidance degrades missing prerequisite findings to Indeterminate'
+
 Write-Output 'PASS: Cross-domain guidance derives stable findings, recommendations, discovery tasks, and relationships from synthetic combined records.'

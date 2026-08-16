@@ -14,7 +14,7 @@ This public projection contains release-owned contracts and identifier-free synt
 
 ## Generated scenarios
 
-- `DirectOutbound` proves a cautious path even when generic Microsoft connectivity succeeds: the management-plane rollup remains advisory, the ordered path remains fixed, and only bounded public counts leave the protected boundary.
+- `DirectOutbound` proves that generic Microsoft connectivity alone is insufficient to complete the management-plane prerequisite: the rollup stays `Indeterminate`, the tenant-side enrollment-path task remains explicit, the ordered path remains fixed, and only bounded public counts leave the protected boundary.
 - `LocalOnly` proves that zero outbound requests become `Indeterminate` guidance where required and that the additional tenant-side enrollment-path task appears instead of a fabricated cloud conclusion.
 
 The fixture seam cannot supply a tenant, real certificate, proxy configuration, or production migration plan. The scenarios are synthetic and do not change the machine, the tenant, or any Microsoft service.
