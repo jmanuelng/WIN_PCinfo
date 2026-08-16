@@ -738,6 +738,15 @@ function New-BoundedDiscoveryGuidanceHtml {
     '<h3>Safe follow-up</h3><ul>'+($items -join '')+'</ul>'
 }
 
+function Get-CrossDomainGuidancePriorityCount {
+    param(
+        [Parameter(Mandatory)] $Model,
+        [Parameter(Mandatory)] [string] $Priority
+    )
+
+    @($Model.pathRecommendations | Where-Object priority -eq $Priority).Count
+}
+
 function New-DeviceReadinessReportBytes {
     param(
         [Parameter(Mandatory)] $Record,
@@ -1211,6 +1220,19 @@ $identityGuidance
 <p>These generic probes do not test a tenant-specific enrollment CNAME, authenticate to Microsoft, prove enrollment or compliance, cover every regional Microsoft service endpoint, or guarantee future reachability.</p>
 "@
     }else{''}
+    $crossDomainSection = if (@($Record.findings | Where-Object ruleId -like 'rule:cross-domain.*').Count -gt 0) {
+        if ($null -eq $MicrosoftConnectivityPolicy) {
+            throw 'Cross-domain guidance requires the full-profile policy set.'
+        }
+        $crossDomainPolicy = Get-CrossDomainGuidancePolicy -ConvertFromJsonCommand (
+            $ExecutionContext.InvokeCommand.GetCommand(
+                'ConvertFrom-Json',
+                [System.Management.Automation.CommandTypes]::Cmdlet
+            )
+        )
+        New-CrossDomainGuidanceHtml -Record $Record -Policy $crossDomainPolicy
+    }
+    else { '' }
     $html = @"
 <!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
 <h1>Device, Windows, activation, and power context</h1><p>$summary</p>
@@ -1240,6 +1262,7 @@ $networkSection
 $softwareSection
 $certificateSection
 $connectivitySection
+$crossDomainSection
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -1524,6 +1547,7 @@ function Invoke-DeviceReadinessSlice {
     $softwarePolicy=$null;$softwareCollector=$null
     $certificatePolicy=$null;$certificateCollector=$null
     $connectivityPolicy=$null;$connectivityCollector=$null
+    $crossDomainPolicy = $null
     $recognitionCatalogResult=$null
     $privilegeResult = $null; $identityCollector = $null; $systemResult = $null
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
@@ -1599,6 +1623,7 @@ function Invoke-DeviceReadinessSlice {
         $softwarePolicy=Get-SoftwareInventoryPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $certificatePolicy=Get-CertificateTrustPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $connectivityPolicy=Get-MicrosoftConnectivityPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $crossDomainPolicy=Get-CrossDomainGuidancePolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $recognitionCatalogResult=Get-SoftwareRecognitionCatalog `
             -ConvertFromJsonCommand $ConvertFromJsonCommand `
             -TestJsonCommand $TestJsonCommand
@@ -2124,6 +2149,11 @@ function Invoke-DeviceReadinessSlice {
                     }
                     $sourceValidation=$connectivitySourceValidation
                 }
+                if($null -ne $connectivityCollector){
+                    $sliceStage='CROSS_DOMAIN_GUIDANCE'
+                    $record = Add-CrossDomainGuidanceToAssessmentRecord `
+                        -Record $record -Policy $crossDomainPolicy
+                }
                 $sliceStage='FINAL_SERIALIZE'
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
@@ -2445,6 +2475,13 @@ function Invoke-DeviceReadinessSlice {
                             $reportText.Contains('A failure in one layer is not relabeled as a failure in another') -and
                             $reportText.Contains('Local Only materializes no endpoint and performs zero outbound requests') -and
                             $reportText.Contains('do not test a tenant-specific enrollment CNAME')
+                        $reportVerified=$reportVerified -and
+                            $reportText.Contains('Cross-domain findings and cautious migration path') -and
+                            $reportText.Contains('Ordered Microsoft Zero Trust migration path') -and
+                            $reportText.Contains('ImmediateReview') -and
+                            $reportText.Contains('PlanNext') -and
+                            $reportText.Contains('ConsiderLater') -and
+                            $reportText.Contains('does not produce a score, compliance verdict, fixed schedule, or automatic remediation plan')
                     }
                     if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
                     $sliceStage='PACKAGE'
@@ -2722,6 +2759,40 @@ function Invoke-DeviceReadinessSlice {
         $projection|Add-Member -NotePropertyName protectedPackageVerified -NotePropertyValue $packageVerified
         $projection|Add-Member -NotePropertyName validationCleanupVerified -NotePropertyValue $cleanupVerified
         Write-ContractRecord $projection -ConvertToJsonCommand $ConvertToJsonCommand
+
+        $crossDomainModel = Get-CrossDomainGuidanceModel -Record $record -Policy $crossDomainPolicy
+        if(@($crossDomainModel.findings).Count -gt 0){
+            $overallFinding = $crossDomainModel.findings | Where-Object findingKind -eq 'zero-trust-path' | Select-Object -First 1
+            $identityFinding = $crossDomainModel.findings | Where-Object findingKind -eq 'identity-foundation' | Select-Object -First 1
+            $managementFinding = $crossDomainModel.findings | Where-Object findingKind -eq 'management-plane' | Select-Object -First 1
+            $dependencyFinding = $crossDomainModel.findings | Where-Object findingKind -eq 'dependency-transition' | Select-Object -First 1
+            $policyFinding = $crossDomainModel.findings | Where-Object findingKind -eq 'policy-modernization' | Select-Object -First 1
+            Write-ContractRecord ([pscustomobject][ordered]@{
+                recordType = 'win-pcinfo.cross-domain-guidance-validation'
+                contractVersion = '1.0.0'
+                scenario = if([string]$connectivityCollector.payload.networkBehavior -eq 'LocalOnly'){
+                    'LocalOnly'
+                }else{$connectivityScenario}
+                overallFindingOutcome = [string]$overallFinding.outcome
+                identityFoundationOutcome = [string]$identityFinding.outcome
+                managementPlaneOutcome = [string]$managementFinding.outcome
+                dependencyTransitionOutcome = [string]$dependencyFinding.outcome
+                policyModernizationOutcome = [string]$policyFinding.outcome
+                orderedRecommendationCount = @($crossDomainModel.pathRecommendations).Count
+                immediateReviewCount = Get-CrossDomainGuidancePriorityCount -Model $crossDomainModel -Priority 'ImmediateReview'
+                planNextCount = Get-CrossDomainGuidancePriorityCount -Model $crossDomainModel -Priority 'PlanNext'
+                considerLaterCount = Get-CrossDomainGuidancePriorityCount -Model $crossDomainModel -Priority 'ConsiderLater'
+                relationshipCount = @($crossDomainModel.relationships).Count
+                discoveryTaskCount = @($crossDomainModel.tasks).Count
+                scoreProduced = $false
+                automaticRemediationAttempted = $false
+                reportSectionVerified = $reportVerified
+                assessmentRecordValidated = $recordAccepted
+                beginnerReportVerified = $reportVerified
+                protectedPackageVerified = $packageVerified
+                validationCleanupVerified = $cleanupVerified
+            }) -ConvertToJsonCommand $ConvertToJsonCommand
+        }
     }
     $recipientSelected = $null -ne $ApprovedRecipient
     $recipientProtectionLevel = if ($recipientSelected) {

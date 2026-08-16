@@ -46,6 +46,7 @@ $expectedSourcePaths = @(
     'src/CertificateTrust.ps1'
     'src/MicrosoftConnectivity.ps1'
     'src/SoftwareRecognition.ps1'
+    'src/CrossDomainGuidance.ps1'
     'src/EvidenceWorkspace.ps1'
     'src/RecipientSharing.ps1'
     'src/ProtectedPackage.ps1'
@@ -91,6 +92,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/software-inventory.schema.json'
     'schemas/certificate-trust.schema.json'
     'schemas/microsoft-connectivity.schema.json'
+    'schemas/cross-domain-guidance.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -110,6 +112,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-software-inventory.json'
     'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
     'docs/spec/releases/2.0.0-preview.1-microsoft-connectivity.json'
+    'docs/spec/releases/2.0.0-preview.1-cross-domain-guidance.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq
