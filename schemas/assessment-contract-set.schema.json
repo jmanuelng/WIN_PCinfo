@@ -40,13 +40,13 @@
     "fieldDefinitions": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 222,
+      "maxItems": 259,
       "items": { "$ref": "#/$defs/fieldDefinition" }
     },
     "scopeDefinitions": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 85,
+      "maxItems": 104,
       "items": { "$ref": "#/$defs/scopeDefinition" }
     },
     "vocabularies": {

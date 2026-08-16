@@ -1462,12 +1462,12 @@ function Get-DeviceReadinessSliceSelection {
 
 function Get-CombinedAssessmentContractSetVersion {
     param($ConnectivityCollector,$CertificateCollector,$SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
-    if($null -ne $ConnectivityCollector){'1.11.0'}
-    elseif($null -ne $CertificateCollector){'1.11.0'}
-    elseif($null -ne $SoftwareCollector){'1.11.0'}
-    elseif($null -ne $NetworkCollector){'1.11.0'}
-    elseif($null -ne $ResourceCollector){'1.11.0'}
-    elseif($null -ne $EffectivePolicyCollector){'1.11.0'}
+    if($null -ne $ConnectivityCollector){'1.12.0'}
+    elseif($null -ne $CertificateCollector){'1.12.0'}
+    elseif($null -ne $SoftwareCollector){'1.12.0'}
+    elseif($null -ne $NetworkCollector){'1.12.0'}
+    elseif($null -ne $ResourceCollector){'1.12.0'}
+    elseif($null -ne $EffectivePolicyCollector){'1.12.0'}
     elseif($null -ne $AdministratorCollector){'1.3.0'}
     elseif($null -ne $IdentityCollector){'1.2.0'}else{'1.1.0'}
 }
@@ -2600,38 +2600,57 @@ function Invoke-DeviceReadinessSlice {
         # This is Public Security Evidence: only bounded states and counts leave
         # the protected package. GPO identifiers, link paths, setting IDs,
         # registry values, account-policy values, and principal SIDs do not.
-        Write-ContractRecord ([pscustomobject][ordered]@{
-            recordType='win-pcinfo.effective-policy-validation';contractVersion='1.0.0'
-            scenario=$effectivePolicyScenario
-            appliedPolicyCoverage=$appliedPolicyCoverage
-            configuredSignalCoverage=$configuredPolicyCoverage
-            currentControlCoverage=$currentControlCoverage
-            appliedPolicyCount=$appliedPolicyCount
-            appliedPolicyFinding=$appliedPolicyFinding
-            localSecurityFinding=$localSecurityFinding
-            appliedOrderFinding=$appliedOrderFinding
-            securityControlFinding=$securityControlFinding
-            securityControlConstraintFinding=$securityControlConstraintFinding
-            antivirusProviderCount=$antivirusProviderCount
-            firewallProfileCount=$firewallProfileCount
-            asrRuleCount=$asrRuleCount
-            bitLockerProtectorTypeCount=$bitLockerProtectorTypeCount
-            wdacPolicyCount=$wdacPolicyCount
-            appLockerGpCollectionCount=$appLockerGpCollectionCount
-            appLockerCspCollectionCount=$appLockerCspCollectionCount
-            mdmPolicyCspFinding=$mdmPolicyCspFinding
-            policyCspGpoConflictFinding=$policyCspGpoConflictFinding
-            policyDiscoveryTaskCount=$policyDiscoveryTaskCount
-            directRightsOnly=$null -ne $effectivePolicyCollector -and
-                $effectivePolicyCollector.payload.userRightSemantics -eq 'DirectAssignmentsOnly'
-            localSamOnly=$null -ne $effectivePolicyCollector -and
-                $effectivePolicyCollector.payload.localAccountPolicySemantics -eq 'LocalSamAccountsOnly'
-            policyIdentifiersPublished=$false;policyValuesPublished=$false
-            bitLockerSecretsPublished=$false;applicationControlPoliciesPublished=$false
-            policyStateChanged=$false;policyRefreshAttempted=$false;toolInstalled=$false
-            assessmentRecordValidated=$recordAccepted;beginnerReportVerified=$reportVerified
-            protectedPackageVerified=$packageVerified;validationCleanupVerified=$cleanupVerified
-        }) -ConvertToJsonCommand $ConvertToJsonCommand
+        $projection = if($null -ne $effectivePolicyCollector){
+            New-EffectivePolicyPublicProjection -CollectorResult $effectivePolicyCollector
+        }
+        else {
+            [pscustomobject][ordered]@{
+                recordType='win-pcinfo.effective-policy-validation';contractVersion='1.0.0'
+                appliedPolicyCoverage=$appliedPolicyCoverage
+                configuredSignalCoverage=$configuredPolicyCoverage
+                currentControlCoverage=$currentControlCoverage
+                windowsUpdateSignalCoverage='NotAttempted'
+                remoteManagementCoverage='NotAttempted'
+                smbCoverage='NotAttempted'
+                legacyAuthenticationCoverage='NotAttempted'
+                appliedPolicyCount=$appliedPolicyCount
+                antivirusProviderCount=$antivirusProviderCount
+                firewallProfileCount=$firewallProfileCount
+                asrRuleCount=$asrRuleCount
+                bitLockerProtectorTypeCount=$bitLockerProtectorTypeCount
+                wdacPolicyCount=$wdacPolicyCount
+                appLockerGpCollectionCount=$appLockerGpCollectionCount
+                appLockerCspCollectionCount=$appLockerCspCollectionCount
+                directRightsOnly=$false
+                localSamOnly=$false
+                policyIdentifiersPublished=$false
+                policyValuesPublished=$false
+                bitLockerSecretsPublished=$false
+                applicationControlPoliciesPublished=$false
+                updateScanAttempted=$false
+                remoteReachabilityTested=$false
+                smbSharesEnumerated=$false
+                smbSessionsEnumerated=$false
+                legacyProtocolUseInferred=$false
+                policyStateChanged=$false
+                policyRefreshAttempted=$false
+                toolInstalled=$false
+            }
+        }
+        $projection|Add-Member -NotePropertyName scenario -NotePropertyValue $effectivePolicyScenario -Force
+        $projection|Add-Member -NotePropertyName appliedPolicyFinding -NotePropertyValue $appliedPolicyFinding -Force
+        $projection|Add-Member -NotePropertyName localSecurityFinding -NotePropertyValue $localSecurityFinding -Force
+        $projection|Add-Member -NotePropertyName appliedOrderFinding -NotePropertyValue $appliedOrderFinding -Force
+        $projection|Add-Member -NotePropertyName securityControlFinding -NotePropertyValue $securityControlFinding -Force
+        $projection|Add-Member -NotePropertyName securityControlConstraintFinding -NotePropertyValue $securityControlConstraintFinding -Force
+        $projection|Add-Member -NotePropertyName mdmPolicyCspFinding -NotePropertyValue $mdmPolicyCspFinding -Force
+        $projection|Add-Member -NotePropertyName policyCspGpoConflictFinding -NotePropertyValue $policyCspGpoConflictFinding -Force
+        $projection|Add-Member -NotePropertyName policyDiscoveryTaskCount -NotePropertyValue $policyDiscoveryTaskCount -Force
+        $projection|Add-Member -NotePropertyName assessmentRecordValidated -NotePropertyValue $recordAccepted -Force
+        $projection|Add-Member -NotePropertyName beginnerReportVerified -NotePropertyValue $reportVerified -Force
+        $projection|Add-Member -NotePropertyName protectedPackageVerified -NotePropertyValue $packageVerified -Force
+        $projection|Add-Member -NotePropertyName validationCleanupVerified -NotePropertyValue $cleanupVerified -Force
+        Write-ContractRecord $projection -ConvertToJsonCommand $ConvertToJsonCommand
     }
     if($isResourceDependenciesFixture -and $null -ne $resourceCollector){
         $projection=New-ResourceDependenciesPublicProjection `

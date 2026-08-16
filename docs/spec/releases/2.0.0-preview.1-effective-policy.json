@@ -26,6 +26,11 @@
         "scope:policy.security-option.machine-inactivity-limit",
         "scope:policy.security-option.disable-cad",
         "scope:policy.security-option.lm-compatibility-level",
+        "scope:policy.windows-update.defer-feature-updates",
+        "scope:policy.windows-update.defer-quality-updates",
+        "scope:policy.windows-update.disable-dual-scan",
+        "scope:policy.legacy-auth.lm-compatibility-level",
+        "scope:policy.legacy-auth.ntlm-minimum-session-security",
         "scope:policy.defender.asr",
         "scope:policy.defender.network-protection",
         "scope:policy.smartscreen.shell",
@@ -49,6 +54,17 @@
         "scope:policy.firewall.domain-profile",
         "scope:policy.firewall.private-profile",
         "scope:policy.firewall.public-profile",
+        "scope:policy.rdp.connections",
+        "scope:policy.rdp.service",
+        "scope:policy.rdp.authentication",
+        "scope:policy.rdp.listener",
+        "scope:policy.winrm.service",
+        "scope:policy.winrm.configuration",
+        "scope:policy.winrm.authentication",
+        "scope:policy.winrm.listener",
+        "scope:policy.smb.client",
+        "scope:policy.smb.server",
+        "scope:policy.smb.smb1-feature",
         "scope:policy.bitlocker.operating-system-volume",
         "scope:policy.bitlocker.protectors",
         "scope:policy.vbs.runtime"
@@ -72,6 +88,9 @@
         "Wscapi.dll",
         "Defender PowerShell module",
         "NetSecurity PowerShell module",
+        "Microsoft.WSMan.Management PowerShell module",
+        "SmbShare PowerShell module",
+        "DISM PowerShell module",
         "BitLocker PowerShell module",
         "AppLocker PowerShell module",
         "CiTool.exe",
@@ -124,6 +143,16 @@
       "limitation": "ConfiguredSignalOnlySourceEnforcementAndFreshnessUnproven"
     },
     {
+      "sourceId": "source:windows.update-policy-registry",
+      "interface": "Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly",
+      "limitation": "DocumentedRegistryMappingsOnlyNoUpdateScanNoIntentInference"
+    },
+    {
+      "sourceId": "source:windows.legacy-authentication-registry",
+      "interface": "Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly",
+      "limitation": "FiniteRegistryNamesAndMasksOnlyNoProtocolUseInference"
+    },
+    {
       "sourceId": "source:windows.security-center.providers",
       "interface": "IWSCProductList,IWscProduct,WscGetSecurityProviderHealth",
       "limitation": "AntivirusAndFirewallProvidersOnlyNoTrustOrRemediationClaims"
@@ -142,6 +171,21 @@
       "sourceId": "source:windows.firewall.activestore-profiles",
       "interface": "Get-NetFirewallProfile -PolicyStore ActiveStore",
       "limitation": "DomainPrivatePublicProfilesOnlyNoRuleEnumeration"
+    },
+    {
+      "sourceId": "source:windows.rdp.configuration",
+      "interface": "Get-CimInstance Win32_Service,Get-CimInstance Win32_TSGeneralSetting,Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly",
+      "limitation": "ConfigurationServiceAuthenticationAndListenerStateOnlyNoReachability"
+    },
+    {
+      "sourceId": "source:windows.winrm.configuration",
+      "interface": "Get-ChildItem WSMan:\\\\localhost\\\\Service,Get-ChildItem WSMan:\\\\localhost\\\\Service\\\\Auth,Get-ChildItem WSMan:\\\\localhost\\\\Listener,Get-CimInstance Win32_Service",
+      "limitation": "ConfigurationServiceAuthenticationAndListenerStateOnlyNoReachability"
+    },
+    {
+      "sourceId": "source:windows.smb.configuration",
+      "interface": "Get-SmbClientConfiguration,Get-SmbServerConfiguration,Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol",
+      "limitation": "ClientServerAndSmb1FeatureStateOnlyNoShareOrSessionEnumeration"
     },
     {
       "sourceId": "source:windows.mdm-policy-csp-results",
@@ -261,6 +305,11 @@
     { "scopeId": "scope:policy.security-option.machine-inactivity-limit", "fieldIds": ["field:policy.security-option.machine-inactivity-limit-seconds"] },
     { "scopeId": "scope:policy.security-option.disable-cad", "fieldIds": ["field:policy.security-option.disable-cad"] },
     { "scopeId": "scope:policy.security-option.lm-compatibility-level", "fieldIds": ["field:policy.security-option.lm-compatibility-level"] },
+    { "scopeId": "scope:policy.windows-update.defer-feature-updates", "fieldIds": ["field:policy.windows-update.defer-feature-updates-days"] },
+    { "scopeId": "scope:policy.windows-update.defer-quality-updates", "fieldIds": ["field:policy.windows-update.defer-quality-updates-days"] },
+    { "scopeId": "scope:policy.windows-update.disable-dual-scan", "fieldIds": ["field:policy.windows-update.disable-dual-scan"] },
+    { "scopeId": "scope:policy.legacy-auth.lm-compatibility-level", "fieldIds": ["field:policy.legacy-auth.lm-compatibility-level"] },
+    { "scopeId": "scope:policy.legacy-auth.ntlm-minimum-session-security", "fieldIds": ["field:policy.legacy-auth.ntlm-min-client-sec", "field:policy.legacy-auth.ntlm-min-server-sec"] },
     { "scopeId": "scope:policy.defender.asr", "fieldIds": ["field:policy.defender.asr.rule-id", "field:policy.defender.asr.action"] },
     { "scopeId": "scope:policy.defender.network-protection", "fieldIds": ["field:policy.defender.network-protection"] },
     { "scopeId": "scope:policy.smartscreen.shell", "fieldIds": ["field:policy.smartscreen.shell-enabled", "field:policy.smartscreen.shell-prevent-override"] },
@@ -277,10 +326,24 @@
     { "scopeId": "scope:policy.firewall.domain-profile", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"] },
     { "scopeId": "scope:policy.firewall.private-profile", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"] },
     { "scopeId": "scope:policy.firewall.public-profile", "fieldIds": ["field:policy.firewall.enabled", "field:policy.firewall.default-inbound-action", "field:policy.firewall.default-outbound-action"] },
+    { "scopeId": "scope:policy.rdp.connections", "fieldIds": ["field:policy.rdp.connections-allowed"] },
+    { "scopeId": "scope:policy.rdp.service", "fieldIds": ["field:policy.rdp.service-start-mode", "field:policy.rdp.service-state"] },
+    { "scopeId": "scope:policy.rdp.authentication", "fieldIds": ["field:policy.rdp.user-authentication-required", "field:policy.rdp.security-layer", "field:policy.rdp.minimum-encryption-level"] },
+    { "scopeId": "scope:policy.rdp.listener", "fieldIds": ["field:policy.rdp.listener-state", "field:policy.rdp.listener-name"] },
+    { "scopeId": "scope:policy.winrm.service", "fieldIds": ["field:policy.winrm.service-start-mode", "field:policy.winrm.service-state"] },
+    { "scopeId": "scope:policy.winrm.configuration", "fieldIds": ["field:policy.winrm.allow-unencrypted"] },
+    { "scopeId": "scope:policy.winrm.authentication", "fieldIds": ["field:policy.winrm.auth-basic", "field:policy.winrm.auth-kerberos", "field:policy.winrm.auth-negotiate", "field:policy.winrm.auth-certificate", "field:policy.winrm.auth-credssp"] },
+    { "scopeId": "scope:policy.winrm.listener", "fieldIds": ["field:policy.winrm.listener-state", "field:policy.winrm.listener-transport", "field:policy.winrm.listener-port"] },
+    { "scopeId": "scope:policy.smb.client", "fieldIds": ["field:policy.smb.client-require-signing", "field:policy.smb.client-enable-signing", "field:policy.smb.client-enable-insecure-guest-logons"] },
+    { "scopeId": "scope:policy.smb.server", "fieldIds": ["field:policy.smb.server-require-signing", "field:policy.smb.server-enable-signing", "field:policy.smb.server-encrypt-data", "field:policy.smb.server-reject-unencrypted-access", "field:policy.smb.server-enable-smb1"] },
+    { "scopeId": "scope:policy.smb.smb1-feature", "fieldIds": ["field:policy.smb.smb1-feature-state"] },
     { "scopeId": "scope:policy.mdm.control-policy-conflict", "fieldIds": ["field:policy.mdm.control-policy-conflict.mdm-wins-over-gp"] },
     { "scopeId": "scope:policy.mdm.security-option.machine-inactivity-limit", "fieldIds": ["field:policy.mdm.security-option.machine-inactivity-limit-seconds"] },
     { "scopeId": "scope:policy.mdm.security-option.disable-cad", "fieldIds": ["field:policy.mdm.security-option.disable-cad"] },
-    { "scopeId": "scope:policy.mdm.security-option.lm-compatibility-level", "fieldIds": ["field:policy.mdm.security-option.lm-compatibility-level"] }
+    { "scopeId": "scope:policy.mdm.security-option.lm-compatibility-level", "fieldIds": ["field:policy.mdm.security-option.lm-compatibility-level"] },
+    { "scopeId": "scope:policy.mdm.update.defer-feature-updates", "fieldIds": ["field:policy.mdm.update.defer-feature-updates-days"] },
+    { "scopeId": "scope:policy.mdm.update.defer-quality-updates", "fieldIds": ["field:policy.mdm.update.defer-quality-updates-days"] },
+    { "scopeId": "scope:policy.mdm.update.disable-dual-scan", "fieldIds": ["field:policy.mdm.update.disable-dual-scan"] }
   ],
   "rules": [
     {
@@ -473,6 +536,10 @@
     "MissingMdmProperty",
     "MdmPolicyConflict",
     "MdmWinsOverGpScoped",
+    "WindowsUpdatePolicy",
+    "RemoteManagementCombinations",
+    "SmbPosture",
+    "LegacyAuthMasks",
     "ThirdPartyRegistration",
     "DefenderDisabled",
     "DefenderUnavailable",

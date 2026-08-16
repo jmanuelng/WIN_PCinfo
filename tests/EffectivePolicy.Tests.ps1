@@ -31,6 +31,10 @@ $expected = @{
     MissingMdmProperty = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
     MdmPolicyConflict = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
     MdmWinsOverGpScoped = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    WindowsUpdatePolicy = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    RemoteManagementCombinations = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    SmbPosture = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
+    LegacyAuthMasks = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=2; conflict=$false; firewalls=1 }
     ThirdPartyRegistration = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
     DefenderDisabled = @{ applied='Complete'; configured='Complete'; local='Complete'; policies=1; conflict=$false; firewalls=1 }
     DefenderUnavailable = @{ applied='Complete'; configured='Partial'; local='Partial'; policies=1; conflict=$false; firewalls=1 }
@@ -112,6 +116,16 @@ foreach ($scenario in $policy.validationScenarios) {
         "$scenario includes the separate AppLocker GP projection"
     Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('appLockerCspCollections') `
         "$scenario includes the separate AppLocker CSP projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('windowsUpdateSignals') `
+        "$scenario includes the finite Windows Update and WUfB registry projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('legacyAuthenticationSignals') `
+        "$scenario includes the finite legacy-auth registry projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('rdpState') `
+        "$scenario includes the structured RDP projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('winrmState') `
+        "$scenario includes the structured WinRM projection"
+    Assert-Equal $true $result.payload.PSObject.Properties.Name.Contains('smbState') `
+        "$scenario includes the structured SMB projection"
     Assert-Equal 3 @($result.payload.smartScreenSignals).Count `
         "$scenario retains the exact SmartScreen signal catalog"
     Assert-Equal 3 @($result.payload.firewallProfiles.PSObject.Properties).Count `
@@ -140,6 +154,16 @@ Assert-Equal 1 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationSce
     'AppLocker CSP-only evidence stays in the CSP channel only'
 Assert-Equal 'EnabledAndRunning' (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario VbsCredentialGuardRunning).payload.deviceGuard.virtualizationBasedSecurityStatus `
     'VBS running state uses the device-reported structured value'
+Assert-Equal 3 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario WindowsUpdatePolicy).payload.windowsUpdateSignals.Count `
+    'Windows Update registry mappings remain a finite configured-signal catalog'
+Assert-Equal 'Https5986Only' (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario RemoteManagementCombinations).payload.winrmState.listenerState `
+    'WinRM listener posture stays separate from remote reachability'
+Assert-Equal 'Ssl' (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario RemoteManagementCombinations).payload.rdpState.securityLayer `
+    'RDP authentication state stays on the documented listener configuration seam'
+Assert-Equal 'Disabled' (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario SmbPosture).payload.smbState.smb1FeatureState `
+    'SMB1 feature state remains explicit instead of inferred from shares or sessions'
+Assert-Equal 3 @(Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario LegacyAuthMasks).payload.legacyAuthenticationSignals.Count `
+    'legacy-auth evidence remains a finite registry-name and mask catalog'
 
 $invalid = (Invoke-EffectivePolicyCollection -Policy $policy -ValidationScenario Workgroup).payload
 $invalid.appliedPolicies[0].objectId = 'localized display name'
@@ -190,6 +214,18 @@ Assert-Equal $true $projection.PSObject.Properties.Name.Contains('appLockerGpCol
     'the public projection carries only a safe AppLocker GP count'
 Assert-Equal $true $projection.PSObject.Properties.Name.Contains('appLockerCspCollectionCount') `
     'the public projection carries only a safe AppLocker CSP count'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('windowsUpdateSignalCoverage') `
+    'the public projection carries only the safe Windows Update signal coverage state'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('remoteManagementCoverage') `
+    'the public projection carries only the safe remote-management coverage state'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('smbCoverage') `
+    'the public projection carries only the safe SMB coverage state'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('legacyAuthenticationCoverage') `
+    'the public projection carries only the safe legacy-auth coverage state'
+Assert-Equal $true $projection.PSObject.Properties.Name.Contains('updateScanAttempted') `
+    'the public projection explicitly records that no update scan was attempted'
+Assert-Equal $false $projection.updateScanAttempted `
+    'the public projection never claims an update scan was attempted'
 if (($projection | ConvertTo-Json -Depth 10) -match '(?i)SYNTHETIC-DOMAIN|ÉQUIPE|[0-9a-f]{8}-[0-9a-f]{4}-') {
     throw 'Restricted policy identity or localized evidence entered the public projection.'
 }
