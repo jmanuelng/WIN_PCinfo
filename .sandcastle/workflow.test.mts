@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { createCodexAgent } from "./codex-agent.mts";
+import {
+  GROK_MODEL,
+  GROK_REASONING_EFFORT,
+  buildGrokPrintCommand,
+  createGrokAgent,
+  parseGrokStreamLine,
+} from "./grok-agent.mts";
 import {
   createLaneRecovery,
   laneFailure,
@@ -19,8 +25,10 @@ import {
   buildReviewPhaseOptions,
   createSerializedExecutor,
   isSafelyClaimedIssue,
+  parseIssueNumber,
   parseMaxIterations,
   parseMaxParallel,
+  requireEligibleIssue,
   listEligibleIssues,
   releaseIssueClaim,
   runCommandAsync,
@@ -247,6 +255,36 @@ test("parseMaxIterations defaults to the AFK run and caps autonomy", () => {
   assert.throws(
     () => parseMaxIterations(["--max-iterations", "11"]),
     /integer from 1 through 10/,
+  );
+});
+
+test("parseIssueNumber pins a single canary ticket", () => {
+  assert.equal(parseIssueNumber([]), undefined);
+  assert.equal(parseIssueNumber(["--issue", "66"]), 66);
+  assert.throws(() => parseIssueNumber(["--issue"]), /positive issue number/);
+  assert.throws(() => parseIssueNumber(["--issue", "0"]), /positive issue number/);
+});
+
+test("requireEligibleIssue fails closed when the pin is not claimable", () => {
+  const eligible = issue(66);
+  const assigned = issue(66, { assignees: [{ login: "agent" }] });
+  const commands: WorkflowCommandAdapter = {
+    run: () => commandResult(),
+    json<T>() {
+      return eligible as T;
+    },
+  };
+  assert.equal(requireEligibleIssue(66, commands).number, 66);
+
+  const blocked: WorkflowCommandAdapter = {
+    ...commands,
+    json<T>() {
+      return assigned as T;
+    },
+  };
+  assert.throws(
+    () => requireEligibleIssue(66, blocked),
+    /not an unassigned, unblocked ready-for-agent ticket/,
   );
 });
 
@@ -588,26 +626,56 @@ test("all agent phases tolerate the repository's long full-suite silence", () =>
   assert.equal(integration.promptFile, "./.sandcastle/integration-prompt.md");
 });
 
-test("Codex provider uses the current automatic-review CLI flag", () => {
-  const agent = createCodexAgent();
+test("Grok provider uses extra-high reasoning and always-approve", () => {
+  const agent = createGrokAgent();
   const options = {
     prompt: "Return only OK.",
     dangerouslySkipPermissions: true,
   } as Parameters<typeof agent.buildPrintCommand>[0];
   const command = agent.buildPrintCommand(options).command;
 
-  assert.match(command, /(?:^| )--approve-for-me(?: |$)/);
-  assert.doesNotMatch(command, /(?:^| )-a(?: |$)/);
-  assert.doesNotMatch(
-    command,
-    /(?:^| )--dangerously-bypass-approvals-and-sandbox(?: |$)/,
+  assert.match(command, /(?:^| )--always-approve(?: |$)/);
+  assert.match(command, /(?:^| )--reasoning-effort xhigh(?: |$)/);
+  assert.match(command, new RegExp(`(?:^| )-m ${GROK_MODEL}(?: |$)`));
+  assert.match(command, /(?:^| )--output-format streaming-json(?: |$)/);
+  assert.match(command, /(?:^| )--prompt-file(?: |$)/);
+  assert.doesNotMatch(command, /'/);
+  assert.equal(GROK_REASONING_EFFORT, "xhigh");
+
+  assert.deepEqual(parseGrokStreamLine('{"type":"text","data":"<promise>COMPLETE</promise>"}'), [
+    { type: "text", text: "<promise>COMPLETE</promise>" },
+    { type: "result", result: "<promise>COMPLETE</promise>" },
+  ]);
+  assert.deepEqual(
+    parseGrokStreamLine(
+      '{"type":"tool_call","toolName":"read_file","rawInput":{"path":"README.md"}}',
+    ),
+    [{ type: "tool_call", name: "read_file", args: '{"path":"README.md"}' }],
+  );
+  assert.deepEqual(
+    parseGrokStreamLine(
+      '{"type":"end","sessionId":"abc","usage":{"input_tokens":1,"output_tokens":2}}',
+    ),
+    [
+      { type: "session_id", sessionId: "abc" },
+      {
+        type: "usage",
+        usage: {
+          inputTokens: 1,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 0,
+          outputTokens: 2,
+        },
+      },
+    ],
   );
 
   if (process.platform !== "win32") {
     return;
   }
 
-  const shimDirectory = mkdtempSync(join(tmpdir(), "sandcastle-codex-argv-"));
+  const built = buildGrokPrintCommand("Return only OK.");
+  const shimDirectory = mkdtempSync(join(tmpdir(), "sandcastle-grok-argv-"));
   try {
     writeFileSync(
       join(shimDirectory, "capture.mjs"),
@@ -615,14 +683,14 @@ test("Codex provider uses the current automatic-review CLI flag", () => {
       "utf8",
     );
     writeFileSync(
-      join(shimDirectory, "codex.cmd"),
+      join(shimDirectory, "grok.cmd"),
       '@echo off\r\nnode "%~dp0capture.mjs" %*\r\n',
       "utf8",
     );
 
     const invocation = spawnSync(
       process.env.ComSpec || "cmd.exe",
-      ["/d", "/s", "/c", command],
+      ["/d", "/s", "/c", built.command],
       {
         encoding: "utf8",
         env: {
@@ -633,13 +701,17 @@ test("Codex provider uses the current automatic-review CLI flag", () => {
     );
     assert.equal(invocation.status, 0, invocation.stderr);
     assert.deepEqual(JSON.parse(invocation.stdout.trim()), [
-      "exec",
-      "--json",
-      "--approve-for-me",
+      "--prompt-file",
+      built.promptPath,
+      "--output-format",
+      "streaming-json",
+      "--always-approve",
+      "--no-plan",
+      "--verbatim",
+      "--reasoning-effort",
+      "xhigh",
       "-m",
-      "gpt-5.4",
-      "-c",
-      "model_reasoning_effort=high",
+      "grok-4.6",
     ]);
   } finally {
     rmSync(shimDirectory, { force: true, recursive: true });
