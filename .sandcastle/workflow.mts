@@ -1,8 +1,10 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 export const READY_LABEL = "ready-for-agent";
 export const BASE_REF = "origin/main";
 export const MAX_ALLOWED_ITERATIONS = 10;
+export const DEFAULT_MAX_PARALLEL_ISSUES = 2;
+export const MAX_ALLOWED_PARALLEL_ISSUES = 2;
 export const AGENT_PHASE_IDLE_TIMEOUT_SECONDS = 2 * 60 * 60;
 
 export interface GitHubActor {
@@ -15,6 +17,7 @@ export interface GitHubLabel {
 
 export interface RelationshipConnection {
   readonly nodes?: readonly unknown[];
+  readonly totalCount?: number;
 }
 
 export interface SubIssuesSummary {
@@ -87,7 +90,101 @@ export function buildReviewPhaseOptions<TAgent>(
   } as const;
 }
 
-interface RunOptions {
+export class SerializedExecutionStoppedError extends Error {
+  constructor(cause: unknown) {
+    super("Serialized execution stopped before this operation could begin.", {
+      cause,
+    });
+    this.name = "SerializedExecutionStoppedError";
+  }
+}
+
+export function createSerializedExecutor() {
+  let tail = Promise.resolve();
+  let stopped = false;
+  let stopCause: unknown;
+
+  function stop(cause: unknown): void {
+    if (!stopped) {
+      stopped = true;
+      stopCause = cause;
+    }
+  }
+
+  function execute<T>(operation: () => Promise<T>): Promise<T> {
+    const current = tail.then(async () => {
+      if (stopped) {
+        throw new SerializedExecutionStoppedError(stopCause);
+      }
+      try {
+        return await operation();
+      } catch (error) {
+        stop(error);
+        throw error;
+      }
+    });
+    tail = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    return current;
+  }
+
+  return { execute, stop } as const;
+}
+
+export async function runWithRequiredCleanup<T>(
+  operation: () => Promise<T>,
+  cleanup: () => Promise<void>,
+): Promise<T> {
+  let result: T | undefined;
+  let operationFailed = false;
+  let operationError: unknown;
+  try {
+    result = await operation();
+  } catch (error) {
+    operationFailed = true;
+    operationError = error;
+  }
+
+  try {
+    await cleanup();
+  } catch (cleanupError) {
+    if (operationFailed) {
+      throw new AggregateError(
+        [operationError, cleanupError],
+        "The operation and its required cleanup both failed.",
+      );
+    }
+    throw cleanupError;
+  }
+
+  if (operationFailed) {
+    throw operationError;
+  }
+  return result as T;
+}
+
+export function buildIntegrationPhaseOptions<TAgent>(
+  agent: TAgent,
+  issueNumber: number,
+  branch: string,
+) {
+  return {
+    name: `issue-${issueNumber}-integrator`,
+    maxIterations: 1,
+    idleTimeoutSeconds: AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
+    agent,
+    promptFile: "./.sandcastle/integration-prompt.md",
+    promptArgs: {
+      ISSUE_NUMBER: issueNumber,
+      BRANCH: branch,
+      BASE_BRANCH: BASE_REF,
+    },
+  } as const;
+}
+
+export interface RunOptions {
   readonly cwd?: string;
   readonly stream?: boolean;
   readonly allowFailure?: boolean;
@@ -111,6 +208,43 @@ function commandInvocation(command: string, args: readonly string[]) {
   return { command, args: [...args] };
 }
 
+export interface WorkflowCommandAdapter {
+  readonly run: (
+    command: string,
+    args: readonly string[],
+    options?: RunOptions,
+  ) => CommandResult;
+  readonly json: <T>(
+    command: string,
+    args: readonly string[],
+    options?: RunOptions,
+  ) => T;
+}
+
+function finalizeCommandResult(
+  command: string,
+  args: readonly string[],
+  exitCode: number,
+  stdout: string,
+  stderr: string,
+  allowFailure = false,
+): CommandResult {
+  const normalized = {
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+    exitCode,
+  };
+  if (exitCode !== 0 && !allowFailure) {
+    const detail = [normalized.stdout, normalized.stderr]
+      .filter(Boolean)
+      .join("\n");
+    throw new Error(
+      `${command} ${args.join(" ")} exited with code ${exitCode}${detail ? `:\n${detail}` : ""}`,
+    );
+  }
+  return normalized;
+}
+
 export function runCommand(
   command: string,
   args: readonly string[],
@@ -132,18 +266,72 @@ export function runCommand(
     );
   }
 
-  const exitCode = result.status ?? 1;
   const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
   const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+  return finalizeCommandResult(
+    command,
+    args,
+    result.status ?? 1,
+    stdout,
+    stderr,
+    options.allowFailure,
+  );
+}
 
-  if (exitCode !== 0 && !options.allowFailure) {
-    const detail = [stdout, stderr].filter(Boolean).join("\n");
-    throw new Error(
-      `${command} ${args.join(" ")} exited with code ${exitCode}${detail ? `:\n${detail}` : ""}`,
-    );
-  }
+export async function runCommandAsync(
+  command: string,
+  args: readonly string[],
+  options: RunOptions = {},
+): Promise<CommandResult> {
+  const invocation = commandInvocation(command, args);
+  return await new Promise<CommandResult>((resolve, reject) => {
+    const child = spawn(invocation.command, invocation.args, {
+      cwd: options.cwd,
+      windowsHide: true,
+      stdio: options.stream ? "inherit" : ["ignore", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
 
-  return { stdout, stderr, exitCode };
+    let timedOut = false;
+    const timeout = options.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill();
+        }, options.timeoutMs)
+      : undefined;
+
+    child.once("error", (error) => {
+      if (timeout) clearTimeout(timeout);
+      reject(new Error(`Unable to run ${command}: ${error.message}`, { cause: error }));
+    });
+    child.once("close", (code) => {
+      if (timeout) clearTimeout(timeout);
+      const exitCode = code ?? 1;
+      const stdoutText = Buffer.concat(stdout).toString("utf8").trim();
+      const stderrText = Buffer.concat(stderr).toString("utf8").trim();
+      if (timedOut) {
+        reject(new Error(`${command} ${args.join(" ")} timed out.`));
+        return;
+      }
+      try {
+        resolve(
+          finalizeCommandResult(
+            command,
+            args,
+            exitCode,
+            stdoutText,
+            stderrText,
+            options.allowFailure,
+          ),
+        );
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
 }
 
 export function runJson<T>(
@@ -173,7 +361,15 @@ function activeOrUnknownRelationshipCount(
       ? relationship.nodes
       : [];
 
-  return nodes.filter((node) => {
+  const incompleteRelationshipCount =
+    !Array.isArray(relationship) &&
+    relationship &&
+    Number.isInteger(relationship.totalCount) &&
+    (relationship.totalCount ?? 0) > nodes.length
+      ? (relationship.totalCount ?? 0) - nodes.length
+      : 0;
+
+  return incompleteRelationshipCount + nodes.filter((node) => {
     if (!node || typeof node !== "object" || !("state" in node)) {
       return true;
     }
@@ -183,48 +379,182 @@ function activeOrUnknownRelationshipCount(
   }).length;
 }
 
-export function isEligibleIssue(issue: GitHubIssue): boolean {
-  const labelNames = new Set((issue.labels ?? []).map((label) => label.name));
+function hasReadyLabel(issue: GitHubIssue): boolean {
+  return (issue.labels ?? []).some((label) => label.name === READY_LABEL);
+}
+
+const DEFAULT_WORKFLOW_COMMANDS: WorkflowCommandAdapter = {
+  run: runCommand,
+  json: runJson,
+};
+
+function hasNoOpenSubIssues(issue: GitHubIssue): boolean {
   const subIssues = issue.subIssuesSummary;
-  const hasNoOpenSubIssues =
+  return (
     subIssues !== null &&
     subIssues !== undefined &&
     Number.isInteger(subIssues.completed) &&
     Number.isInteger(subIssues.total) &&
     subIssues.total >= 0 &&
-    subIssues.completed === subIssues.total;
+    subIssues.completed === subIssues.total
+  );
+}
+
+export function isEligibleIssue(issue: GitHubIssue): boolean {
   return (
     issue.state.toUpperCase() === "OPEN" &&
-    labelNames.has(READY_LABEL) &&
+    hasReadyLabel(issue) &&
     (issue.assignees ?? []).length === 0 &&
     activeOrUnknownRelationshipCount(issue.blockedBy) === 0 &&
-    hasNoOpenSubIssues
+    hasNoOpenSubIssues(issue)
+  );
+}
+
+export function isSafelyClaimedIssue(
+  issue: GitHubIssue,
+  viewer: string,
+): boolean {
+  const assignees = issue.assignees ?? [];
+  return (
+    issue.state.toUpperCase() === "OPEN" &&
+    hasReadyLabel(issue) &&
+    activeOrUnknownRelationshipCount(issue.blockedBy) === 0 &&
+    hasNoOpenSubIssues(issue) &&
+    assignees.length === 1 &&
+    assignees[0]?.login.toLowerCase() === viewer.toLowerCase()
   );
 }
 
 export function selectNextIssue(
   issues: readonly GitHubIssue[],
 ): GitHubIssue | undefined {
-  return [...issues]
-    .filter(isEligibleIssue)
-    .sort((left, right) => left.number - right.number)[0];
+  return selectNextIssues(issues, 1)[0];
 }
 
-export function listEligibleIssues(): readonly GitHubIssue[] {
-  return runJson<GitHubIssue[]>("gh", [
-    "issue",
-    "list",
-    "--state",
-    "open",
-    "--label",
-    READY_LABEL,
-    "--search",
-    "no:assignee sort:created-asc",
-    "--limit",
-    "100",
-    "--json",
-    "number,title,state,url,labels,assignees,blockedBy,subIssuesSummary",
-  ]);
+export function selectNextIssues(
+  issues: readonly GitHubIssue[],
+  limit: number,
+): readonly GitHubIssue[] {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error("Issue selection limit must be a positive integer.");
+  }
+
+  return [...issues]
+    .filter(isEligibleIssue)
+    .sort((left, right) => left.number - right.number)
+    .slice(0, limit);
+}
+
+interface FrontierIssueNode {
+  readonly number: number;
+  readonly title: string;
+  readonly state: string;
+  readonly url: string;
+  readonly labels: { readonly nodes: readonly GitHubLabel[] };
+  readonly assignees: { readonly nodes: readonly GitHubActor[] };
+  readonly blockedBy: RelationshipConnection;
+  readonly subIssuesSummary: SubIssuesSummary | null;
+}
+
+interface FrontierPage {
+  readonly data: {
+    readonly repository: {
+      readonly issues: {
+        readonly nodes: readonly FrontierIssueNode[];
+        readonly pageInfo: {
+          readonly hasNextPage: boolean;
+          readonly endCursor: string | null;
+        };
+      };
+    };
+  };
+}
+
+const FRONTIER_QUERY = `
+  query($owner: String!, $name: String!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+      issues(
+        first: 100
+        after: $cursor
+        states: OPEN
+        labels: ["${READY_LABEL}"]
+        orderBy: { field: CREATED_AT, direction: ASC }
+      ) {
+        nodes {
+          number
+          title
+          state
+          url
+          labels(first: 100) { nodes { name } }
+          assignees(first: 100) { nodes { login } }
+          blockedBy(first: 100) { totalCount nodes { state } }
+          subIssuesSummary { completed percentCompleted total }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+`;
+
+export function listEligibleIssues(
+  desiredCount = MAX_ALLOWED_PARALLEL_ISSUES,
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): readonly GitHubIssue[] {
+  if (!Number.isInteger(desiredCount) || desiredCount < 1) {
+    throw new Error("Desired frontier count must be a positive integer.");
+  }
+
+  const repository = commands.run(
+    "gh",
+    ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+  ).stdout;
+  const [owner, name, ...unexpected] = repository.split("/");
+  if (!owner || !name || unexpected.length > 0) {
+    throw new Error(`GitHub CLI returned an invalid repository name: ${repository}`);
+  }
+
+  const issues: GitHubIssue[] = [];
+  let cursor: string | null = null;
+  while (true) {
+    const args = [
+      "api",
+      "graphql",
+      "-f",
+      `query=${FRONTIER_QUERY}`,
+      "-F",
+      `owner=${owner}`,
+      "-F",
+      `name=${name}`,
+    ];
+    if (cursor) {
+      args.push("-F", `cursor=${cursor}`);
+    }
+    const page = commands.json<FrontierPage>("gh", args);
+    const connection = page.data.repository.issues;
+    issues.push(
+      ...connection.nodes.map((issue) => ({
+        number: issue.number,
+        title: issue.title,
+        state: issue.state,
+        url: issue.url,
+        labels: issue.labels.nodes,
+        assignees: issue.assignees.nodes,
+        blockedBy: issue.blockedBy,
+        subIssuesSummary: issue.subIssuesSummary,
+      })),
+    );
+
+    if (selectNextIssues(issues, desiredCount).length >= desiredCount) {
+      return issues;
+    }
+    if (!connection.pageInfo.hasNextPage) {
+      return issues;
+    }
+    cursor = connection.pageInfo.endCursor;
+    if (!cursor) {
+      throw new Error("GitHub frontier pagination omitted its next cursor.");
+    }
+  }
 }
 
 export function claimIssue(issue: GitHubIssue): void {
@@ -248,17 +578,7 @@ export function claimIssue(issue: GitHubIssue): void {
     "--json",
     "number,title,state,url,labels,assignees,blockedBy,subIssuesSummary",
   ]);
-  const assignees = claimed.assignees ?? [];
-  const safelyClaimed =
-    claimed.state.toUpperCase() === "OPEN" &&
-    activeOrUnknownRelationshipCount(claimed.blockedBy) === 0 &&
-    claimed.subIssuesSummary !== null &&
-    claimed.subIssuesSummary !== undefined &&
-    claimed.subIssuesSummary.completed === claimed.subIssuesSummary.total &&
-    assignees.length === 1 &&
-    assignees[0]?.login.toLowerCase() === viewer.toLowerCase();
-
-  if (!safelyClaimed) {
+  if (!isSafelyClaimedIssue(claimed, viewer)) {
     runCommand(
       "gh",
       ["issue", "edit", String(issue.number), "--remove-assignee", "@me"],
@@ -267,6 +587,40 @@ export function claimIssue(issue: GitHubIssue): void {
     throw new Error(
       `Issue #${issue.number} changed while it was being claimed; the claim was released.`,
     );
+  }
+}
+
+export function releaseIssueClaim(
+  issueNumber: number,
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): void {
+  const viewer = commands.run(
+    "gh",
+    ["api", "user", "--jq", ".login"],
+  ).stdout;
+  if (!viewer) {
+    throw new Error("GitHub CLI did not return the authenticated login.");
+  }
+  commands.run("gh", [
+    "issue",
+    "edit",
+    String(issueNumber),
+    "--remove-assignee",
+    "@me",
+  ]);
+  const released = commands.json<GitHubIssue>("gh", [
+    "issue",
+    "view",
+    String(issueNumber),
+    "--json",
+    "number,assignees",
+  ]);
+  if (
+    (released.assignees ?? []).some(
+      (assignee) => assignee.login.toLowerCase() === viewer.toLowerCase(),
+    )
+  ) {
+    throw new Error(`Issue #${issueNumber} claim rollback could not be verified.`);
   }
 }
 
@@ -483,13 +837,32 @@ export function ensureIssueClosed(
 export function parseMaxIterations(args: readonly string[]): number {
   const flagIndex = args.indexOf("--max-iterations");
   if (flagIndex === -1) {
-    return 1;
+    return MAX_ALLOWED_ITERATIONS;
   }
 
   const value = Number.parseInt(args[flagIndex + 1] ?? "", 10);
   if (!Number.isInteger(value) || value < 1 || value > MAX_ALLOWED_ITERATIONS) {
     throw new Error(
       `--max-iterations must be an integer from 1 through ${MAX_ALLOWED_ITERATIONS}.`,
+    );
+  }
+  return value;
+}
+
+export function parseMaxParallel(args: readonly string[]): number {
+  const flagIndex = args.indexOf("--max-parallel");
+  if (flagIndex === -1) {
+    return DEFAULT_MAX_PARALLEL_ISSUES;
+  }
+
+  const value = Number.parseInt(args[flagIndex + 1] ?? "", 10);
+  if (
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_ALLOWED_PARALLEL_ISSUES
+  ) {
+    throw new Error(
+      `--max-parallel must be an integer from 1 through ${MAX_ALLOWED_PARALLEL_ISSUES}.`,
     );
   }
   return value;
