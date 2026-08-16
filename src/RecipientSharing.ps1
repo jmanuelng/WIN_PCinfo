@@ -992,18 +992,44 @@ function New-CompletionSummary {
         [ValidateSet('None', 'UserAndDeviceBound', 'WindowsUserBound')]
         [string] $RecipientProtectionLevel = 'None',
         [Parameter(Mandatory)] [bool] $RecipientAccessAvailable,
-        [Parameter(Mandatory)] [bool] $RestrictedReportExported
+        [Parameter(Mandatory)] [bool] $RestrictedReportExported,
+        [Parameter()]
+        [ValidateSet(
+            'Completed',
+            'CompletedWithGaps',
+            'NotStarted',
+            'Cancelled',
+            'TimedOut',
+            'IntegrityFailed',
+            'CleanupIncomplete'
+        )]
+        [string] $AssessmentOutcome,
+        [Parameter()] [ValidateSet('Complete', 'Gapped')] [string] $AssessmentCoverageState,
+        [Parameter()] [ValidateSet('Complete', 'RecoverablePartial')] [string] $PackageCompleteness,
+        [Parameter()] [ValidateSet('Complete', 'RecoverablePartial')] [string] $RenderedCompleteness,
+        [Parameter()] [bool] $CleanupVerified = $true
     )
 
+    $assessmentRequested = $PSBoundParameters.ContainsKey('AssessmentOutcome') -or
+        $PSBoundParameters.ContainsKey('AssessmentCoverageState') -or
+        $PSBoundParameters.ContainsKey('PackageCompleteness') -or
+        $PSBoundParameters.ContainsKey('RenderedCompleteness')
     if (($PackageAvailability -eq 'Available' -and -not $PackageVerified) -or
         ($RecipientSelected -and $RecipientProtectionLevel -eq 'None') -or
         (-not $RecipientSelected -and $RecipientProtectionLevel -ne 'None') -or
         ($RecipientAccessAvailable -and -not $RecipientSelected)) {
         throw 'The Completion Summary recipient state is inconsistent.'
     }
+    if ($assessmentRequested -and (
+            [string]::IsNullOrWhiteSpace($AssessmentOutcome) -or
+            [string]::IsNullOrWhiteSpace($AssessmentCoverageState) -or
+            [string]::IsNullOrWhiteSpace($PackageCompleteness) -or
+            [string]::IsNullOrWhiteSpace($RenderedCompleteness))) {
+        throw 'The Completion Summary assessment state is incomplete.'
+    }
     $packageAvailable = $PackageAvailability -eq 'Available'
     $packageUncertain = $PackageAvailability -eq 'Uncertain'
-    [pscustomobject][ordered]@{
+    $summary = [pscustomobject][ordered]@{
         recordType = 'win-pcinfo.completion-summary'
         contractVersion = '1.0.0'
         packageVerified = $PackageVerified
@@ -1049,6 +1075,20 @@ function New-CompletionSummary {
             )
         }
     }
+    if (-not [string]::IsNullOrWhiteSpace($AssessmentOutcome)) {
+        $summary | Add-Member -NotePropertyName assessment -NotePropertyValue (
+            [pscustomobject][ordered]@{
+                outcome = $AssessmentOutcome
+                coverageState = $AssessmentCoverageState
+                packageCompleteness = $PackageCompleteness
+                renderedCompleteness = $RenderedCompleteness
+                cleanupVerified = $CleanupVerified
+                reportArtifact = 'assessment-report.html'
+                manifestArtifact = 'package-manifest.json'
+            }
+        )
+    }
+    $summary
 }
 
 function Read-RecipientSharingFixture {
