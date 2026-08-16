@@ -992,7 +992,11 @@ function New-CompletionSummary {
         [ValidateSet('None', 'UserAndDeviceBound', 'WindowsUserBound')]
         [string] $RecipientProtectionLevel = 'None',
         [Parameter(Mandatory)] [bool] $RecipientAccessAvailable,
-        [Parameter(Mandatory)] [bool] $RestrictedReportExported
+        [Parameter(Mandatory)] [bool] $RestrictedReportExported,
+        [Parameter()] [string] $AssessmentOutcome,
+        [Parameter()] [string] $AssessmentCoverageState,
+        [Parameter()] [string] $PackageCompleteness,
+        [Parameter()] [bool] $CleanupVerified = $true
     )
 
     if (($PackageAvailability -eq 'Available' -and -not $PackageVerified) -or
@@ -1003,7 +1007,7 @@ function New-CompletionSummary {
     }
     $packageAvailable = $PackageAvailability -eq 'Available'
     $packageUncertain = $PackageAvailability -eq 'Uncertain'
-    [pscustomobject][ordered]@{
+    $summary = [pscustomobject][ordered]@{
         recordType = 'win-pcinfo.completion-summary'
         contractVersion = '1.0.0'
         packageVerified = $PackageVerified
@@ -1049,6 +1053,19 @@ function New-CompletionSummary {
             )
         }
     }
+    if (-not [string]::IsNullOrWhiteSpace($AssessmentOutcome)) {
+        $summary | Add-Member -NotePropertyName assessment -NotePropertyValue (
+            [pscustomobject][ordered]@{
+                outcome = $AssessmentOutcome
+                coverageState = $AssessmentCoverageState
+                packageCompleteness = $PackageCompleteness
+                cleanupVerified = $CleanupVerified
+                reportArtifact = 'assessment-report.html'
+                manifestArtifact = 'package-manifest.json'
+            }
+        )
+    }
+    $summary
 }
 
 function Read-RecipientSharingFixture {

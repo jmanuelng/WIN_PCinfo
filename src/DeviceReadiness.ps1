@@ -747,6 +747,341 @@ function Get-CrossDomainGuidancePriorityCount {
     @($Model.pathRecommendations | Where-Object priority -eq $Priority).Count
 }
 
+function Get-AssessmentReportOutcomeLabel {
+    param([Parameter(Mandatory)] [string] $Outcome)
+
+    switch ($Outcome) {
+        'Completed' { 'Completed' }
+        'CompletedWithGaps' { 'Completed with gaps' }
+        'NotStarted' { 'Not started' }
+        'Cancelled' { 'Cancelled' }
+        'TimedOut' { 'Timed out' }
+        'IntegrityFailed' { 'Integrity failed' }
+        'CleanupIncomplete' { 'Cleanup incomplete' }
+        default { [string] $Outcome }
+    }
+}
+
+function Get-AssessmentReportCompleteness {
+    param([Parameter(Mandatory)] $Record)
+
+    if ([string] $Record.run.outcome -eq 'Completed' -and
+        @($Record.coverage | Where-Object state -ne 'Complete').Count -eq 0) {
+        return 'Complete'
+    }
+    'RecoverablePartial'
+}
+
+function Get-AssessmentReportDefinitionLookup {
+    param(
+        [Parameter()] $FirmwarePolicy,
+        [Parameter()] $IdentityEnrollmentPolicy,
+        [Parameter()] $EffectivePolicyPolicy,
+        [Parameter()] $ResourceDependenciesPolicy,
+        [Parameter()] $NetworkTopologyPolicy,
+        [Parameter()] $SoftwareInventoryPolicy,
+        [Parameter()] $CertificateTrustPolicy,
+        [Parameter()] $MicrosoftConnectivityPolicy,
+        [Parameter()] $CrossDomainPolicy
+    )
+
+    $lookup = @{}
+    $definitionSets = @(
+        @($FirmwarePolicy, 'discoveryTasks'),
+        @($IdentityEnrollmentPolicy, 'discoveryTasks'),
+        @($EffectivePolicyPolicy, 'discoveryTasks'),
+        @($ResourceDependenciesPolicy, 'recommendations'),
+        @($NetworkTopologyPolicy, 'recommendations'),
+        @($SoftwareInventoryPolicy, 'recommendations'),
+        @($CertificateTrustPolicy, 'recommendations'),
+        @($MicrosoftConnectivityPolicy, 'recommendations'),
+        @($CrossDomainPolicy, 'recommendations'),
+        @($CrossDomainPolicy, 'discoveryTasks')
+    )
+    foreach ($set in $definitionSets) {
+        $policy = $set[0]
+        $propertyName = [string] $set[1]
+        if ($null -eq $policy -or -not $policy.PSObject.Properties[$propertyName]) { continue }
+        foreach ($definition in @($policy.$propertyName)) {
+            if ($null -eq $definition -or
+                [string]::IsNullOrWhiteSpace([string] $definition.definitionId)) {
+                continue
+            }
+            $lookup[[string] $definition.definitionId] = [pscustomobject][ordered]@{
+                definitionId = [string] $definition.definitionId
+                title = if ($definition.PSObject.Properties['title']) {
+                    [string] $definition.title
+                }
+                else { $null }
+                purpose = if ($definition.PSObject.Properties['purpose']) {
+                    [string] $definition.purpose
+                }
+                else { $null }
+                priority = if ($definition.PSObject.Properties['priority']) {
+                    [string] $definition.priority
+                }
+                else { $null }
+                priorityExplanation = if ($definition.PSObject.Properties['priorityExplanation']) {
+                    [string] $definition.priorityExplanation
+                }
+                else { $null }
+                responsibleRole = if ($definition.PSObject.Properties['responsibleRole']) {
+                    [string] $definition.responsibleRole
+                }
+                else { $null }
+                requiredRole = if ($definition.PSObject.Properties['requiredRole']) {
+                    [string] $definition.requiredRole
+                }
+                else { $null }
+                verification = if ($definition.PSObject.Properties['verification']) {
+                    [string] $definition.verification
+                }
+                else { $null }
+                caution = if ($definition.PSObject.Properties['caution']) {
+                    [string] $definition.caution
+                }
+                else { $null }
+            }
+        }
+    }
+    $lookup
+}
+
+function Get-AssessmentReportRecommendationDetails {
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] $DefinitionLookup,
+        [Parameter(Mandatory)] [ValidateSet('AssessmentRecommendation', 'TenantSideDiscoveryTask')]
+        [string] $Kind
+    )
+
+    @(
+        foreach ($recommendation in @($Record.recommendations | Where-Object kind -eq $Kind)) {
+            $definition = $DefinitionLookup[[string] $recommendation.definitionId]
+            [pscustomobject][ordered]@{
+                recommendationId = [string] $recommendation.recommendationId
+                definitionId = [string] $recommendation.definitionId
+                title = if ($null -ne $definition -and $definition.title) {
+                    [string] $definition.title
+                }
+                elseif ($null -ne $definition -and $definition.purpose) {
+                    [string] $definition.purpose
+                }
+                else { [string] $recommendation.definitionId }
+                purpose = if ($null -ne $definition) { [string] $definition.purpose } else { '' }
+                priority = if ($null -ne $definition) { [string] $definition.priority } else { '' }
+                priorityExplanation = if ($null -ne $definition) {
+                    [string] $definition.priorityExplanation
+                }
+                else { '' }
+                role = if ($null -ne $definition -and $definition.responsibleRole) {
+                    [string] $definition.responsibleRole
+                }
+                elseif ($null -ne $definition -and $definition.requiredRole) {
+                    [string] $definition.requiredRole
+                }
+                else { '' }
+                verification = if ($null -ne $definition) {
+                    [string] $definition.verification
+                }
+                else { '' }
+                caution = if ($null -ne $definition) { [string] $definition.caution } else { '' }
+            }
+        }
+    )
+}
+
+function Get-AssessmentReportPrioritizedResults {
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter()] $CrossDomainModel
+    )
+
+    if ($null -ne $CrossDomainModel -and @($CrossDomainModel.pathRecommendations).Count -gt 0) {
+        return @(
+            $CrossDomainModel.pathRecommendations | ForEach-Object {
+                [pscustomobject][ordered]@{
+                    title = [string] $_.title
+                    finding = [string] $_.findingOutcome
+                    severity = if ($null -eq $_.severity) { 'Not assigned' } else { [string] $_.severity }
+                    confidence = if ($null -eq $_.confidence) { 'Unspecified' } else { [string] $_.confidence }
+                    recommendation = [string] $_.purpose
+                }
+            }
+        )
+    }
+
+    $findingTitles = @{}
+    foreach ($finding in @($Record.findings)) {
+        $findingTitles[[string] $finding.findingId] = [string] $finding.ruleId
+    }
+    @(
+        foreach ($finding in @($Record.findings | Where-Object outcome -in @(
+                    'NeedsAttention', 'Indeterminate', 'ExpectedCondition'
+                ) | Select-Object -First 5)) {
+            [pscustomobject][ordered]@{
+                title = $findingTitles[[string] $finding.findingId]
+                finding = [string] $finding.outcome
+                severity = if ([string] $finding.outcome -eq 'NeedsAttention') {
+                    'Advisory'
+                }
+                elseif ([string] $finding.outcome -eq 'Indeterminate') {
+                    'CoverageGap'
+                }
+                else { 'Informational' }
+                confidence = if ([string] $finding.outcome -eq 'Indeterminate') {
+                    'Unspecified'
+                }
+                else { 'High' }
+                recommendation = 'Review the detailed section and related recommendation before changing device or tenant state.'
+            }
+        }
+    )
+}
+
+function Test-AssessmentReportBytesEqual {
+    param(
+        [Parameter(Mandatory)] [byte[]] $Left,
+        [Parameter(Mandatory)] [byte[]] $Right
+    )
+
+    if ($Left.Length -ne $Right.Length) { return $false }
+    for ($index = 0; $index -lt $Left.Length; $index++) {
+        if ($Left[$index] -ne $Right[$index]) { return $false }
+    }
+    $true
+}
+
+function Test-AssessmentReportContract {
+    param(
+        [Parameter(Mandatory)] [byte[]] $ReportBytes,
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] [string] $NetworkBehavior,
+        [Parameter(Mandatory)] [bool] $ExpectUnicode
+    )
+
+    $result = [ordered]@{
+        verified = $false
+        executiveSummaryVerified = $false
+        categorySeparationVerified = $false
+        offlineSafeVerified = $false
+        keyboardNavigationVerified = $false
+        printLayoutVerified = $false
+        utf8Verified = $false
+        unicodePreservedVerified = $false
+        renderedCompleteness = Get-AssessmentReportCompleteness -Record $Record
+    }
+    try {
+        $text = [System.Text.UTF8Encoding]::new($false, $true).GetString($ReportBytes)
+        $result.utf8Verified = $true
+    }
+    catch {
+        return [pscustomobject] $result
+    }
+
+    $headings = @(
+        '<h2>Outcome</h2>',
+        '<h2>Scope</h2>',
+        '<h2>Completeness</h2>',
+        '<h2>Limitations</h2>',
+        '<h2>Prioritized advisory results</h2>',
+        '<h2>Next steps</h2>',
+        '<h2>Evidence and provenance</h2>'
+    )
+    $headingIndexes = @()
+    foreach ($heading in $headings) {
+        $headingIndexes += $text.IndexOf($heading, [System.StringComparison]::Ordinal)
+    }
+    $result.executiveSummaryVerified = $headingIndexes -notcontains -1 -and (
+        $headingIndexes[0] -lt $headingIndexes[1] -and
+        $headingIndexes[1] -lt $headingIndexes[2] -and
+        $headingIndexes[2] -lt $headingIndexes[3] -and
+        $headingIndexes[3] -lt $headingIndexes[4] -and
+        $headingIndexes[4] -lt $headingIndexes[5] -and
+        $headingIndexes[5] -lt $headingIndexes[6]
+    )
+
+    $result.categorySeparationVerified = @(
+        '<strong>Observations:</strong>',
+        '<strong>Finding:</strong>',
+        '<strong>Severity:</strong>',
+        '<strong>Confidence:</strong>',
+        '<h2>Limitations</h2>',
+        '<h3>Assessment Recommendations</h3>',
+        '<h3>Diagnostics</h3>',
+        '<h3>Tenant-side Discovery Tasks</h3>'
+    ) | Where-Object { $text.Contains($_) } | Measure-Object | Select-Object -ExpandProperty Count
+    $result.categorySeparationVerified = $result.categorySeparationVerified -eq 8
+
+    $result.offlineSafeVerified = (
+        $text.Contains('<meta charset="utf-8">') -and
+        $text -notmatch '(?i)<script\b' -and
+        $text -notmatch '(?i)\son[a-z]+\s*=' -and
+        $text -notmatch '(?i)\b(?:src|href)\s*=\s*"(?:https?:|//)' -and
+        $text -notmatch '(?i)<(?:img|iframe|audio|video)\b' -and
+        $text -notmatch '(?i)@import' -and
+        $text -notmatch '(?i)url\s*\('
+    )
+    $result.keyboardNavigationVerified = (
+        $text.Contains('Skip to report content') -and
+        $text.Contains('<nav aria-label="Primary report navigation">') -and
+        $text.Contains('id="report-content"') -and
+        $text.Contains(':focus-visible')
+    )
+    $result.printLayoutVerified = $text.Contains('@page') -and $text.Contains('@media print')
+    $result.unicodePreservedVerified = if ($ExpectUnicode) {
+        [regex]::IsMatch($text, '[^\u0000-\u007F]') -or
+            [regex]::IsMatch($text, '&#(?:x[0-9A-Fa-f]+|\d+);')
+    }
+    else { $false }
+    $result.verified = $result.executiveSummaryVerified -and
+        $result.categorySeparationVerified -and $result.offlineSafeVerified -and
+        $result.keyboardNavigationVerified -and $result.printLayoutVerified -and
+        $result.utf8Verified -and ($result.unicodePreservedVerified -eq $ExpectUnicode)
+    [pscustomobject] $result
+}
+
+function Test-AssessmentPackageManifestConsistency {
+    param(
+        [Parameter(Mandatory)] $Manifest,
+        [Parameter(Mandatory)] [byte[]] $RecordBytes,
+        [Parameter(Mandatory)] [byte[]] $ReportBytes,
+        [Parameter(Mandatory)] [string] $ExpectedCompleteness
+    )
+
+    if ($null -eq $Manifest -or [string] $Manifest.completeness -ne $ExpectedCompleteness) {
+        return $false
+    }
+    if (@($Manifest.contents).Count -ne 2) { return $false }
+    $recordContent = @($Manifest.contents | Where-Object relativePath -eq 'assessment-record.json')
+    $reportContent = @($Manifest.contents | Where-Object relativePath -eq 'assessment-report.html')
+    if ($recordContent.Count -ne 1 -or $reportContent.Count -ne 1) { return $false }
+    [string] $recordContent[0].sha256 -eq (Get-ProtectedPackageSha256 $RecordBytes) -and
+        [int] $recordContent[0].byteLength -eq $RecordBytes.Length -and
+        [string] $reportContent[0].sha256 -eq (Get-ProtectedPackageSha256 $ReportBytes) -and
+        [int] $reportContent[0].byteLength -eq $ReportBytes.Length
+}
+
+function Test-AssessmentCompletionSummaryConsistency {
+    param(
+        [Parameter(Mandatory)] $Summary,
+        [Parameter(Mandatory)] $Terminal,
+        [Parameter(Mandatory)] $Manifest,
+        [Parameter(Mandatory)] [bool] $PackageVerified,
+        [Parameter(Mandatory)] [bool] $CleanupVerified
+    )
+
+    if ($null -eq $Summary -or $null -eq $Terminal -or $null -eq $Manifest) { return $false }
+    if (-not $Summary.PSObject.Properties['assessment']) { return $false }
+    $assessment = $Summary.assessment
+    [bool] $Summary.packageVerified -eq $PackageVerified -and
+        [string] $assessment.outcome -eq [string] $Terminal.outcome -and
+        [string] $assessment.packageCompleteness -eq [string] $Manifest.completeness -and
+        [bool] $assessment.cleanupVerified -eq $CleanupVerified -and
+        [string] $assessment.reportArtifact -eq 'assessment-report.html' -and
+        [string] $assessment.manifestArtifact -eq 'package-manifest.json'
+}
+
 function New-DeviceReadinessReportBytes {
     param(
         [Parameter(Mandatory)] $Record,
@@ -1134,8 +1469,8 @@ $identityGuidance
             }
             $sourceRows=@($annotation.provenance|ForEach-Object {
                 '<li>'+[Net.WebUtility]::HtmlEncode([string]$_.sourceType)+': '+
-                '<a href="'+[Net.WebUtility]::HtmlEncode([string]$_.url)+'">'+
-                [Net.WebUtility]::HtmlEncode([string]$_.owner)+'</a>, verified '+
+                [Net.WebUtility]::HtmlEncode([string]$_.owner)+' ('+
+                [Net.WebUtility]::HtmlEncode([string]$_.url)+'), verified '+
                 [Net.WebUtility]::HtmlEncode([string]$_.verifiedOn)+'</li>'
             })
             $technicalDetail=if(@($annotation.matcherTypes).Count -gt 0 -or $sourceRows.Count -gt 0){
@@ -1220,6 +1555,8 @@ $identityGuidance
 <p>These generic probes do not test a tenant-specific enrollment CNAME, authenticate to Microsoft, prove enrollment or compliance, cover every regional Microsoft service endpoint, or guarantee future reachability.</p>
 "@
     }else{''}
+    $crossDomainPolicy = $null
+    $crossDomainModel = $null
     $crossDomainSection = if (@($Record.findings | Where-Object ruleId -like 'rule:cross-domain.*').Count -gt 0) {
         if ($null -eq $MicrosoftConnectivityPolicy) {
             throw 'Cross-domain guidance requires the full-profile policy set.'
@@ -1230,12 +1567,177 @@ $identityGuidance
                 [System.Management.Automation.CommandTypes]::Cmdlet
             )
         )
+        $crossDomainModel = Get-CrossDomainGuidanceModel -Record $Record -Policy $crossDomainPolicy
         New-CrossDomainGuidanceHtml -Record $Record -Policy $crossDomainPolicy
     }
     else { '' }
+    $definitionLookup = Get-AssessmentReportDefinitionLookup `
+        -FirmwarePolicy $FirmwarePolicy `
+        -IdentityEnrollmentPolicy $IdentityEnrollmentPolicy `
+        -EffectivePolicyPolicy $EffectivePolicyPolicy `
+        -ResourceDependenciesPolicy $ResourceDependenciesPolicy `
+        -NetworkTopologyPolicy $NetworkTopologyPolicy `
+        -SoftwareInventoryPolicy $SoftwareInventoryPolicy `
+        -CertificateTrustPolicy $CertificateTrustPolicy `
+        -MicrosoftConnectivityPolicy $MicrosoftConnectivityPolicy `
+        -CrossDomainPolicy $crossDomainPolicy
+    $assessmentRecommendations = Get-AssessmentReportRecommendationDetails `
+        -Record $Record -DefinitionLookup $definitionLookup -Kind AssessmentRecommendation
+    $tenantTasks = Get-AssessmentReportRecommendationDetails `
+        -Record $Record -DefinitionLookup $definitionLookup -Kind TenantSideDiscoveryTask
+    $prioritizedResults = Get-AssessmentReportPrioritizedResults -Record $Record `
+        -CrossDomainModel $crossDomainModel
+    $reportOutcome = Get-AssessmentReportOutcomeLabel -Outcome ([string] $Record.run.outcome)
+    $reportCompleteness = Get-AssessmentReportCompleteness -Record $Record
+    $incompleteCoverage = @($Record.coverage | Where-Object state -ne 'Complete')
+    $limitationItems = @(
+        'This report uses only the validated local Assessment Record plus release-defined rendering inputs. It is advisory and does not provide a compliance verdict, overall score, or automatic remediation.'
+        $(if ($incompleteCoverage.Count -gt 0) {
+                "$($incompleteCoverage.Count) coverage scope(s) were not complete. Review Diagnostics and the detailed evidence sections before changing device or tenant state."
+            }
+            else {
+                'All admitted coverage scopes completed, but the report still preserves bounded platform limitations and confidence notes.'
+            })
+        $(if ($null -ne $MicrosoftConnectivityPolicy -and
+                @($Record.coverage | Where-Object scopeId -eq 'scope:microsoft-connectivity.tcp').Count -gt 0 -and
+                @($Record.observations | Where-Object {
+                    $_.fieldId -like 'field:microsoft-connectivity.endpoint*'
+                }).Count -eq 0) {
+                'The approved network behavior was Local Only, so Microsoft service reachability was not attempted and remains separate from local device findings.'
+            }
+            else {
+                'Tenant-specific cloud identity, enrollment ownership, licensing, and organization intent remain outside the local evidence boundary.'
+            })
+    )
+    $limitationRows = @($limitationItems | ForEach-Object {
+        '<li>' + [Net.WebUtility]::HtmlEncode([string] $_) + '</li>'
+    })
+    $priorityRows = if (@($prioritizedResults).Count -gt 0) {
+        @($prioritizedResults | ForEach-Object {
+            '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
+                '<br><strong>Finding:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.finding) +
+                '<br><strong>Severity:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.severity) +
+                '<br><strong>Confidence:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.confidence) +
+                '<br><strong>Recommendation:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.recommendation) + '</li>'
+        })
+    }
+    else {
+        @('<li><strong>No prioritized advisory result was derived.</strong><br><strong>Finding:</strong> Informational<br><strong>Severity:</strong> Not assigned<br><strong>Confidence:</strong> High<br><strong>Recommendation:</strong> Review the detailed sections only if you need the underlying evidence.</li>')
+    }
+    $assessmentRecommendationRows = if (@($assessmentRecommendations).Count -gt 0) {
+        @($assessmentRecommendations | ForEach-Object {
+            '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
+                '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose) +
+                $(if ($_.priority) {
+                        '<br><strong>Priority:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.priority)
+                    }
+                    else { '' }) +
+                $(if ($_.priorityExplanation) {
+                        '<br><strong>Why now:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.priorityExplanation)
+                    }
+                    else { '' }) +
+                $(if ($_.role) {
+                        '<br><strong>Owner:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.role)
+                    }
+                    else { '' }) +
+                $(if ($_.verification) {
+                        '<br><strong>Verification:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.verification)
+                    }
+                    else { '' }) +
+                $(if ($_.caution) {
+                        '<br><strong>Caution:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.caution)
+                    }
+                    else { '' }) + '</li>'
+        })
+    }
+    else { @('<li>No additional Assessment Recommendation is required by the current findings.</li>') }
+    $tenantTaskRows = if (@($tenantTasks).Count -gt 0) {
+        @($tenantTasks | ForEach-Object {
+            '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
+                '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose) +
+                $(if ($_.role) {
+                        '<br><strong>Owner:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.role)
+                    }
+                    else { '' }) + '</li>'
+        })
+    }
+    else { @('<li>No Tenant-side Discovery Task is currently required.</li>') }
+    $diagnosticRows = if (@($Record.diagnostics).Count -gt 0) {
+        @($Record.diagnostics | ForEach-Object {
+            '<li>' + [Net.WebUtility]::HtmlEncode([string] $_.reasonCode) + '</li>'
+        })
+    }
+    else { @('<li>No diagnostic reason code was recorded.</li>') }
+    $scopeSummary = 'Comprehensive Local Assessment for one Windows client across device, identity, privilege, policy, applications, user dependencies, network, certificate trust, Microsoft connectivity, and cautious migration guidance.'
     $html = @"
-<!doctype html><html lang="en"><meta charset="utf-8"><title>WIN-PCInfo device readiness</title>
-<h1>Device, Windows, activation, and power context</h1><p>$summary</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WIN-PCInfo Comprehensive Local Assessment</title>
+<style>
+:root { color-scheme: light; font-family: "Segoe UI", Tahoma, sans-serif; line-height: 1.45; }
+body { margin: 0 auto; max-width: 8.5in; padding: 1.25rem; color: #14213d; background: #f7f4ea; }
+a { color: #0a558c; }
+.skip-link { position: absolute; left: 0.75rem; top: -3rem; background: #ffffff; padding: 0.5rem 0.75rem; border: 2px solid #14213d; }
+.skip-link:focus-visible { top: 0.75rem; }
+nav { margin: 1rem 0; padding: 0.75rem 1rem; border: 1px solid #c8b88a; background: #fffdf6; }
+nav ul { margin: 0; padding-left: 1.25rem; }
+section, details, nav, header { margin-bottom: 1rem; }
+h1, h2, h3 { color: #1d3557; }
+details { border: 1px solid #d4c39b; background: #fffdf8; padding: 0.5rem 0.75rem; }
+summary { cursor: pointer; font-weight: 600; }
+:focus-visible { outline: 3px solid #b85c38; outline-offset: 2px; }
+@page { margin: 12mm; }
+@media print {
+  body { max-width: none; background: #ffffff; color: #000000; padding: 0; font-size: 10pt; }
+  nav { border: 1px solid #555555; background: #ffffff; }
+  details { break-inside: avoid; border-color: #777777; }
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#report-content">Skip to report content</a>
+<header>
+<p>WIN-PCInfo report format: self-contained English HTML for offline viewing and print.</p>
+<h1>WIN-PCInfo Comprehensive Local Assessment</h1>
+<p>$summary</p>
+<p>This report preserves observations, findings, confidence, severity, limitations, recommendations, diagnostics, and Tenant-side Discovery Tasks as separate categories. It remains usable without scripting and does not load external assets or services.</p>
+</header>
+<nav aria-label="Primary report navigation">
+<ul>
+<li><a href="#overview">Executive summary</a></li>
+<li><a href="#next-steps">Next steps</a></li>
+<li><a href="#diagnostics">Diagnostics</a></li>
+<li><a href="#evidence">Evidence and provenance</a></li>
+</ul>
+</nav>
+<main id="report-content">
+<section id="overview">
+<h2>Outcome</h2>
+<p>$([Net.WebUtility]::HtmlEncode($reportOutcome))</p>
+<h2>Scope</h2>
+<p>$([Net.WebUtility]::HtmlEncode($scopeSummary))</p>
+<h2>Completeness</h2>
+<p>$([Net.WebUtility]::HtmlEncode($reportCompleteness))</p>
+<h2>Limitations</h2>
+<ul>$($limitationRows -join '')</ul>
+<h2>Prioritized advisory results</h2>
+<ul>$($priorityRows -join '')</ul>
+<h2>Next steps</h2>
+<h3>Assessment Recommendations</h3>
+<ul>$($assessmentRecommendationRows -join '')</ul>
+<h3>Tenant-side Discovery Tasks</h3>
+<ul>$($tenantTaskRows -join '')</ul>
+</section>
+<section id="diagnostics">
+<h3>Diagnostics</h3>
+<ul>$($diagnosticRows -join '')</ul>
+</section>
+<section id="evidence">
+<h2>Evidence and provenance</h2>
+<p><strong>Observations:</strong> The detailed sections below preserve bounded Windows observations and provenance without relabeling them as findings.</p>
+<h2>Device, Windows, activation, and power context</h2><p>$summary</p>
 <p>This is advisory information, not a compliance result or a guarantee that every application or future update will work.</p>
 <dl><dt>Coverage</dt><dd>$([System.Net.WebUtility]::HtmlEncode([string]$coverage.state))</dd>
 <dt>Windows edition</dt><dd>$($values['field:device.windows.edition'])</dd>
@@ -1273,9 +1775,35 @@ $crossDomainSection
 <dt>Windows system type code</dt><dd>$($values['field:device.system-type-code'])</dd>
 <dt>Chassis type codes</dt><dd>$($values['field:device.chassis.type-codes'])</dd></dl>
 <p>Provenance: explicit Windows property projections normalized by WIN-PCInfo; see assessment-record.json for canonical typed evidence.</p>
-</details></html>
+</details>
+</section>
+</main>
+</body>
+</html>
 "@
     [System.Text.UTF8Encoding]::new($false).GetBytes($html.Replace("`r`n", "`n"))
+}
+
+function New-DeviceReadinessTerminalRecord {
+    param(
+        [Parameter(Mandatory)] [string] $Outcome,
+        [Parameter(Mandatory)] [int] $ExitCode,
+        [Parameter(Mandatory)] [string] $ReasonCode,
+        [Parameter(Mandatory)] [bool] $CollectionStarted,
+        [Parameter(Mandatory)] [bool] $ValidationFixture,
+        [Parameter(Mandatory)] [bool] $CleanupVerified,
+        [Parameter(Mandatory)] [string] $RequestDigest,
+        [Parameter(Mandatory)] [string] $PlanDigest
+    )
+
+    [pscustomobject][ordered]@{
+        recordType='win-pcinfo.terminal'; contractVersion='1.0.0'; outcome=$Outcome
+        exitCode=$ExitCode; reasonCode=$ReasonCode; phase='DeviceReadiness'
+        collectionStarted=$CollectionStarted; requestDigest=$RequestDigest
+        planDigest=$PlanDigest; preparationDecision='Accepted'
+        validationFixture=$ValidationFixture
+        cleanup=[pscustomobject][ordered]@{required=$true;verified=$CleanupVerified}
+    }
 }
 
 function Write-DeviceReadinessTerminal {
@@ -1290,14 +1818,11 @@ function Write-DeviceReadinessTerminal {
         [Parameter(Mandatory)] [string] $PlanDigest,
         [Parameter(Mandatory)] $ConvertToJsonCommand
     )
-    Write-ContractRecord ([pscustomobject][ordered]@{
-        recordType='win-pcinfo.terminal'; contractVersion='1.0.0'; outcome=$Outcome
-        exitCode=$ExitCode; reasonCode=$ReasonCode; phase='DeviceReadiness'
-        collectionStarted=$CollectionStarted; requestDigest=$RequestDigest
-        planDigest=$PlanDigest; preparationDecision='Accepted'
-        validationFixture=$ValidationFixture
-        cleanup=[pscustomobject][ordered]@{required=$true;verified=$CleanupVerified}
-    }) -ConvertToJsonCommand $ConvertToJsonCommand
+    Write-ContractRecord (New-DeviceReadinessTerminalRecord `
+        -Outcome $Outcome -ExitCode $ExitCode -ReasonCode $ReasonCode `
+        -CollectionStarted $CollectionStarted -ValidationFixture $ValidationFixture `
+        -CleanupVerified $CleanupVerified -RequestDigest $RequestDigest `
+        -PlanDigest $PlanDigest) -ConvertToJsonCommand $ConvertToJsonCommand
 }
 
 function Get-DeviceReadinessNoPayloadDisposition {
@@ -1553,6 +2078,13 @@ function Invoke-DeviceReadinessSlice {
     $firmwareCollector = $null; $boundary = $null; $opened = $null; $package = $null
     $cleanupVerified = $true; $recordAccepted = $false; $reportVerified = $false
     $packageVerified = $false; $coverageState = 'Unavailable'; $findingOutcome = 'Indeterminate'
+    $reportDeterministic = $false; $reportExecutiveSummaryVerified = $false
+    $reportCategorySeparationVerified = $false; $reportOfflineSafeVerified = $false
+    $reportKeyboardNavigationVerified = $false; $reportPrintLayoutVerified = $false
+    $reportUtf8Verified = $false; $reportUnicodePreservedVerified = $false
+    $reportRenderedCompleteness = 'RecoverablePartial'
+    $reportWithinPackageBound = $false; $packageManifestConsistent = $false
+    $completionSummaryConsistent = $false
     $activationFindingOutcome = 'Indeterminate'; $platformFindingOutcome = 'Indeterminate'
     $powerFindingOutcome = 'Indeterminate'; $sourceAccessDiagnostics = ''
     $activationContext = 'Unknown'; $virtualizationContext = 'Unknown'
@@ -1605,6 +2137,9 @@ function Invoke-DeviceReadinessSlice {
     $networkAdapterCount=0;$networkProfileCount=0;$networkRouteCount=0;$networkResolverCount=0
     $vpnComponentCount=0;$securityComponentCount=0;$localConnectionCount=0;$outboundRequestCount=0
     $collectionStarted = $false
+    $packageCompleteness = 'RecoverablePartial'
+    $completionSummary = $null
+    $terminalRecord = $null
     $sliceStage='POLICY'
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
     try {
@@ -2406,8 +2941,57 @@ function Invoke-DeviceReadinessSlice {
                             $connectivityPolicy
                         }else{$null})
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
-                    $reportVerified = $reportText.StartsWith('<!doctype html>') -and
-                        $reportText.Contains('Device, Windows, activation, and power context') -and
+                    $reportContract = Test-AssessmentReportContract -ReportBytes $reportBytes `
+                        -Record $record `
+                        -NetworkBehavior ([string] $PreparationPlan.network.behavior) `
+                        -ExpectUnicode ([string] $scenario -eq 'Unicode' -or
+                            [string] $softwareScenario -eq 'Unicode' -or
+                            [string] $resourceScenario -eq 'LongUnicode' -or
+                            [string] $certificateScenario -eq 'Unicode' -or
+                            [string] $connectivityScenario -eq 'Unicode')
+                    $reportDeterministic = Test-AssessmentReportBytesEqual `
+                        -Left ([byte[]] (New-DeviceReadinessReportBytes -Record $record `
+                            -FirmwarePolicy $(if ($null -ne $firmwareCollector) {
+                                $firmwarePolicy
+                            } else { $null }) `
+                            -IdentityEnrollmentPolicy $(if($null -ne $identityCollector){
+                                $identityPolicy
+                            }else{$null}) `
+                            -AdministratorExposurePolicy $(if($null -ne $administratorCollector){
+                                $administratorPolicy
+                            }else{$null}) `
+                            -EffectivePolicyPolicy $(if($null -ne $effectivePolicyCollector){
+                                $effectivePolicy
+                            }else{$null}) `
+                            -ResourceDependenciesPolicy $(if($null -ne $resourceCollector){
+                                $resourcePolicy
+                            }else{$null}) `
+                            -NetworkTopologyPolicy $(if($null -ne $networkCollector){
+                                $networkPolicy
+                            }else{$null}) `
+                            -SoftwareInventoryPolicy $(if($null -ne $softwareCollector){
+                                $softwarePolicy
+                            }else{$null}) `
+                            -CertificateTrustPolicy $(if($null -ne $certificateCollector){
+                                $certificatePolicy
+                            }else{$null}) `
+                            -MicrosoftConnectivityPolicy $(if($null -ne $connectivityCollector){
+                                $connectivityPolicy
+                            }else{$null}))) `
+                        -Right ([byte[]] $reportBytes)
+                    $reportExecutiveSummaryVerified = [bool] $reportContract.executiveSummaryVerified
+                    $reportCategorySeparationVerified = [bool] $reportContract.categorySeparationVerified
+                    $reportOfflineSafeVerified = [bool] $reportContract.offlineSafeVerified
+                    $reportKeyboardNavigationVerified = [bool] $reportContract.keyboardNavigationVerified
+                    $reportPrintLayoutVerified = [bool] $reportContract.printLayoutVerified
+                    $reportUtf8Verified = [bool] $reportContract.utf8Verified
+                    $reportUnicodePreservedVerified = [bool] $reportContract.unicodePreservedVerified
+                    $reportRenderedCompleteness = [string] $reportContract.renderedCompleteness
+                    $reportWithinPackageBound = $reportBytes.Length -le 262144
+                    $reportVerified = [bool] $reportContract.verified -and $reportDeterministic -and
+                        $reportWithinPackageBound -and
+                        $reportText.StartsWith('<!doctype html>') -and
+                        $reportText.Contains('WIN-PCInfo Comprehensive Local Assessment') -and
                         $reportText.Contains('<details><summary>Device details and where they came from</summary>') -and
                         $reportText.Contains('canonical typed evidence')
                     if ($null -ne $firmwareCollector) {
@@ -2483,7 +3067,7 @@ function Invoke-DeviceReadinessSlice {
                             $reportText.Contains('ConsiderLater') -and
                             $reportText.Contains('does not produce a score, compliance verdict, fixed schedule, or automatic remediation plan')
                     }
-                    if (-not $reportVerified) { throw 'The beginner report projection failed verification.' }
+                    if (-not $reportVerified) { throw 'The comprehensive report projection failed verification.' }
                     $sliceStage='PACKAGE'
                     if ($isFixture) {
                         $boundary = New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (
@@ -2527,6 +3111,12 @@ function Invoke-DeviceReadinessSlice {
                         $packageVerified = [bool]$opened.verified -and
                             $opened.artifacts.Contains('assessment-record.json') -and
                             $opened.artifacts.Contains('assessment-report.html')
+                        if ($packageVerified) {
+                            $packageManifestConsistent = Test-AssessmentPackageManifestConsistency `
+                                -Manifest $opened.manifest -RecordBytes $recordBytes `
+                                -ReportBytes $reportBytes -ExpectedCompleteness $packageCompleteness
+                            $reportVerified = $reportVerified -and $packageManifestConsistent
+                        }
                     }
                     if (-not $packageVerified) {
                         $packageDisposition = Get-DeviceReadinessPackageDisposition `
@@ -2811,16 +3401,59 @@ function Invoke-DeviceReadinessSlice {
         $exitCode=[int]$packageDisposition.exitCode
         $reasonCode=[string]$packageDisposition.reasonCode
     }
-    Write-ContractRecord (New-CompletionSummary -PackageVerified $packageVerified `
+    $completionSummary = New-CompletionSummary -PackageVerified $packageVerified `
         -PackageAvailability $packageAvailability `
         -RecipientSelected $recipientSelected `
         -RecipientProtectionLevel $recipientProtectionLevel `
         -RecipientAccessAvailable $recipientAccessAvailable `
-        -RestrictedReportExported $false) -ConvertToJsonCommand $ConvertToJsonCommand
-    Write-DeviceReadinessTerminal -Outcome $outcome -ExitCode $exitCode -ReasonCode $reasonCode `
-        -CollectionStarted $collectionStarted `
+        -RestrictedReportExported $false -AssessmentOutcome $outcome `
+        -AssessmentCoverageState $(if($packageCompleteness -eq 'Complete'){'Complete'}else{'Gapped'}) `
+        -PackageCompleteness $packageCompleteness -CleanupVerified $cleanupVerified
+    $terminalRecord = New-DeviceReadinessTerminalRecord -Outcome $outcome `
+        -ExitCode $exitCode -ReasonCode $reasonCode -CollectionStarted $collectionStarted `
         -ValidationFixture $isFixture -CleanupVerified $cleanupVerified `
-        -RequestDigest $RequestDigest -PlanDigest $PlanDigest `
-        -ConvertToJsonCommand $ConvertToJsonCommand
+        -RequestDigest $RequestDigest -PlanDigest $PlanDigest
+    if ($packageVerified -and $null -ne $opened) {
+        $completionSummaryConsistent = Test-AssessmentCompletionSummaryConsistency `
+            -Summary $completionSummary -Terminal $terminalRecord -Manifest $opened.manifest `
+            -PackageVerified $packageVerified -CleanupVerified $cleanupVerified
+    }
+    if ($isFixture) {
+        Write-ContractRecord ([pscustomobject][ordered]@{
+            recordType = 'win-pcinfo.comprehensive-report-validation'
+            contractVersion = '1.0.0'
+            scenario = if($isMicrosoftConnectivityFixture){
+                if([string]$connectivityCollector.payload.networkBehavior -eq 'LocalOnly'){
+                    'LocalOnly'
+                }else{$connectivityScenario}
+            }elseif($isSoftwareInventoryFixture){
+                $softwareScenario
+            }elseif($isCertificateTrustFixture){
+                $certificateScenario
+            }elseif($isResourceDependenciesFixture){
+                $resourceScenario
+            }elseif($isIdentityFixture){
+                $identityScenario
+            }else{$scenario}
+            networkBehavior = [string] $PreparationPlan.network.behavior
+            renderedCompleteness = $reportRenderedCompleteness
+            executiveSummaryVerified = $reportExecutiveSummaryVerified
+            categorySeparationVerified = $reportCategorySeparationVerified
+            deterministicVerified = $reportDeterministic
+            offlineSafeVerified = $reportOfflineSafeVerified
+            keyboardNavigationVerified = $reportKeyboardNavigationVerified
+            printLayoutVerified = $reportPrintLayoutVerified
+            utf8Verified = $reportUtf8Verified
+            unicodePreservedVerified = $reportUnicodePreservedVerified
+            reportWithinPackageBound = $reportWithinPackageBound
+            packageManifestConsistent = $packageManifestConsistent
+            completionSummaryConsistent = $completionSummaryConsistent
+            assessmentRecordValidated = $recordAccepted
+            protectedPackageVerified = $packageVerified
+            validationCleanupVerified = $cleanupVerified
+        }) -ConvertToJsonCommand $ConvertToJsonCommand
+    }
+    Write-ContractRecord $completionSummary -ConvertToJsonCommand $ConvertToJsonCommand
+    Write-ContractRecord $terminalRecord -ConvertToJsonCommand $ConvertToJsonCommand
     $exitCode
 }
