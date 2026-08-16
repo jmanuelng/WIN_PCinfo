@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/cross-domain-guidance.schema.json",
+  "title": "WIN-PCInfo Cross-domain Guidance Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "evidenceProfileId",
+    "authoritativeSources",
+    "rules",
+    "recommendations",
+    "discoveryTasks",
+    "relationships",
+    "migrationPath",
+    "validationScenarios"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.cross-domain-guidance-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.cross-domain-guidance/1.0.0" },
+    "evidenceProfileId": {
+      "const": "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness"
+    },
+    "authoritativeSources": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "title", "url", "reviewedOn"],
+        "properties": {
+          "sourceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://learn\\.microsoft\\.com/",
+            "maxLength": 2048
+          },
+          "reviewedOn": { "type": "string", "format": "date" }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "findingKind",
+          "ruleId",
+          "operationId",
+          "title",
+          "sourceRuleIds",
+          "source",
+          "executionContext",
+          "privilege",
+          "networkBehavior",
+          "executable",
+          "dependencies",
+          "mayPrompt",
+          "mayInstall",
+          "mayDownload",
+          "maySelfElevate",
+          "writesAllowed",
+          "maximumAttempts",
+          "deadlineMilliseconds",
+          "maximumInputFindings",
+          "maximumOutputFindings",
+          "cleanup",
+          "missingEvidenceOutcome",
+          "severityWhenNeedsAttention",
+          "confidenceWhenComplete",
+          "indeterminateReasonCode"
+        ],
+        "properties": {
+          "findingKind": { "type": "string", "minLength": 1, "maxLength": 96 },
+          "ruleId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "sourceRuleIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+          },
+          "source": { "const": "ReleaseEmbeddedValidatedCrossDomainRule" },
+          "executionContext": { "const": "InProcessValidatedAssessmentRecord" },
+          "privilege": { "const": "NoElevation" },
+          "networkBehavior": { "const": "OfflineOnly" },
+          "executable": { "const": "NoneInProcess" },
+          "dependencies": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "mayPrompt": { "const": false },
+          "mayInstall": { "const": false },
+          "mayDownload": { "const": false },
+          "maySelfElevate": { "const": false },
+          "writesAllowed": { "const": false },
+          "maximumAttempts": { "const": 1 },
+          "deadlineMilliseconds": { "const": 100 },
+          "maximumInputFindings": { "type": "integer", "minimum": 1, "maximum": 32 },
+          "maximumOutputFindings": { "const": 1 },
+          "cleanup": { "const": "NoArtifacts" },
+          "missingEvidenceOutcome": { "const": "Indeterminate" },
+          "severityWhenNeedsAttention": {
+            "enum": ["Low", "Medium", "High"]
+          },
+          "confidenceWhenComplete": {
+            "enum": ["High"]
+          },
+          "indeterminateReasonCode": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*(?:\\.[A-Z][A-Z0-9_]*)+$",
+            "maxLength": 96
+          }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "definitionId",
+          "findingKind",
+          "title",
+          "purpose",
+          "priority",
+          "priorityExplanation",
+          "prerequisites",
+          "caution",
+          "responsibleRole",
+          "verification",
+          "authoritativeReferences"
+        ],
+        "properties": {
+          "definitionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "findingKind": { "type": "string", "minLength": 1, "maxLength": 96 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "priority": {
+            "enum": ["ImmediateReview", "PlanNext", "ConsiderLater"]
+          },
+          "priorityExplanation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "prerequisites": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+          },
+          "caution": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "responsibleRole": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "verification": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "authoritativeReferences": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://learn\\.microsoft\\.com/",
+              "maxLength": 2048
+            }
+          }
+        }
+      }
+    },
+    "discoveryTasks": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "definitionId",
+          "findingKind",
+          "purpose",
+          "requiredRole",
+          "approvedDestination",
+          "expectedSafeResult",
+          "authoritativeReferences"
+        ],
+        "properties": {
+          "definitionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "findingKind": { "type": "string", "minLength": 1, "maxLength": 96 },
+          "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "requiredRole": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "approvedDestination": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "expectedSafeResult": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "authoritativeReferences": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://learn\\.microsoft\\.com/",
+              "maxLength": 2048
+            }
+          }
+        }
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relationshipId",
+          "fromDefinitionId",
+          "toDefinitionId",
+          "kind",
+          "explanation"
+        ],
+        "properties": {
+          "relationshipId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "fromDefinitionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "toDefinitionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "kind": {
+            "enum": ["Requires", "Enables", "ConflictsWith"]
+          },
+          "explanation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "migrationPath": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
+    "validationScenarios": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+    }
+  }
+}

@@ -1,0 +1,382 @@
+{
+  "kind": "win-pcinfo.cross-domain-guidance-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.cross-domain-guidance/1.0.0",
+  "evidenceProfileId": "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness",
+  "authoritativeSources": [
+    {
+      "sourceId": "source:microsoft.zero-trust-m365-plan",
+      "title": "Zero Trust deployment with Microsoft 365",
+      "url": "https://learn.microsoft.com/en-us/security/zero-trust/microsoft-365-zero-trust",
+      "reviewedOn": "2026-08-16"
+    },
+    {
+      "sourceId": "source:microsoft.intune-zero-trust-layers",
+      "title": "Zero Trust deployment approach with Microsoft Intune",
+      "url": "https://learn.microsoft.com/en-us/intune/fundamentals/zero-trust-deployment",
+      "reviewedOn": "2026-08-16"
+    },
+    {
+      "sourceId": "source:microsoft.zero-trust-endpoints",
+      "title": "Secure endpoints with Zero Trust",
+      "url": "https://learn.microsoft.com/en-us/security/zero-trust/deploy/endpoints",
+      "reviewedOn": "2026-08-16"
+    },
+    {
+      "sourceId": "source:microsoft.cloud-native-endpoints-planning",
+      "title": "Update your workloads to support cloud-native endpoints",
+      "url": "https://learn.microsoft.com/en-us/intune/solutions/cloud-native-endpoints/planning-guide",
+      "reviewedOn": "2026-08-16"
+    }
+  ],
+  "rules": [
+    {
+      "findingKind": "identity-foundation",
+      "ruleId": "rule:cross-domain.identity-foundation/1.0.0",
+      "operationId": "op:rule.cross-domain.identity-foundation.evaluate",
+      "title": "Identity foundation",
+      "sourceRuleIds": [
+        "rule:identity.assessment-user-context/1.0.0",
+        "rule:identity.device-registration-context/1.0.0",
+        "rule:identity.work-school-enrollment-context/1.0.0"
+      ],
+      "source": "ReleaseEmbeddedValidatedCrossDomainRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "maximumInputFindings": 3,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate",
+      "severityWhenNeedsAttention": "Medium",
+      "confidenceWhenComplete": "High",
+      "indeterminateReasonCode": "FINDING.CROSS_DOMAIN_IDENTITY_EVIDENCE_INCOMPLETE"
+    },
+    {
+      "findingKind": "management-plane",
+      "ruleId": "rule:cross-domain.management-plane/1.0.0",
+      "operationId": "op:rule.cross-domain.management-plane.evaluate",
+      "title": "Management-plane prerequisites",
+      "sourceRuleIds": [
+        "rule:microsoft-connectivity.reachability/1.0.0",
+        "rule:microsoft-connectivity.tls-inspection/1.0.0",
+        "rule:certificate.presence/1.0.0",
+        "rule:certificate.trust/1.0.0",
+        "rule:network.local-only-coverage/1.0.0"
+      ],
+      "source": "ReleaseEmbeddedValidatedCrossDomainRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "maximumInputFindings": 16,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate",
+      "severityWhenNeedsAttention": "High",
+      "confidenceWhenComplete": "High",
+      "indeterminateReasonCode": "FINDING.CROSS_DOMAIN_MANAGEMENT_EVIDENCE_INCOMPLETE"
+    },
+    {
+      "findingKind": "dependency-transition",
+      "ruleId": "rule:cross-domain.dependency-transition/1.0.0",
+      "operationId": "op:rule.cross-domain.dependency-transition.evaluate",
+      "title": "Dependency transition",
+      "sourceRuleIds": [
+        "rule:identity.local-administrator-exposure/1.0.0",
+        "rule:resource.user-migration-dependencies/1.0.0",
+        "rule:resource.peripheral-migration-dependencies/1.0.0",
+        "rule:software.machine-inventory/1.0.0",
+        "rule:software.assessment-user-inventory/1.0.0"
+      ],
+      "source": "ReleaseEmbeddedValidatedCrossDomainRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "maximumInputFindings": 8,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate",
+      "severityWhenNeedsAttention": "Medium",
+      "confidenceWhenComplete": "High",
+      "indeterminateReasonCode": "FINDING.CROSS_DOMAIN_DEPENDENCY_EVIDENCE_INCOMPLETE"
+    },
+    {
+      "findingKind": "policy-modernization",
+      "ruleId": "rule:cross-domain.policy-modernization/1.0.0",
+      "operationId": "op:rule.cross-domain.policy-modernization.evaluate",
+      "title": "Policy modernization",
+      "sourceRuleIds": [
+        "rule:policy.applied-policy-coverage/1.0.0",
+        "rule:policy.local-security-policy-coverage/1.0.0",
+        "rule:policy.applied-order-conflict/1.0.0",
+        "rule:policy.security-control-coverage/1.0.0",
+        "rule:policy.security-control-constraint/1.0.0",
+        "rule:policy.mdm-policy-csp-coverage/1.0.0",
+        "rule:policy.policy-csp-gpo-conflict/1.0.0"
+      ],
+      "source": "ReleaseEmbeddedValidatedCrossDomainRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "maximumInputFindings": 8,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate",
+      "severityWhenNeedsAttention": "Medium",
+      "confidenceWhenComplete": "High",
+      "indeterminateReasonCode": "FINDING.CROSS_DOMAIN_POLICY_EVIDENCE_INCOMPLETE"
+    },
+    {
+      "findingKind": "zero-trust-path",
+      "ruleId": "rule:cross-domain.zero-trust-path/1.0.0",
+      "operationId": "op:rule.cross-domain.zero-trust-path.evaluate",
+      "title": "Cautious Zero Trust path",
+      "sourceRuleIds": [
+        "rule:cross-domain.identity-foundation/1.0.0",
+        "rule:cross-domain.management-plane/1.0.0",
+        "rule:cross-domain.dependency-transition/1.0.0",
+        "rule:cross-domain.policy-modernization/1.0.0"
+      ],
+      "source": "ReleaseEmbeddedValidatedCrossDomainRule",
+      "executionContext": "InProcessValidatedAssessmentRecord",
+      "privilege": "NoElevation",
+      "networkBehavior": "OfflineOnly",
+      "executable": "NoneInProcess",
+      "dependencies": [],
+      "mayPrompt": false,
+      "mayInstall": false,
+      "mayDownload": false,
+      "maySelfElevate": false,
+      "writesAllowed": false,
+      "maximumAttempts": 1,
+      "deadlineMilliseconds": 100,
+      "maximumInputFindings": 8,
+      "maximumOutputFindings": 1,
+      "cleanup": "NoArtifacts",
+      "missingEvidenceOutcome": "Indeterminate",
+      "severityWhenNeedsAttention": "Medium",
+      "confidenceWhenComplete": "High",
+      "indeterminateReasonCode": "FINDING.CROSS_DOMAIN_PATH_EVIDENCE_INCOMPLETE"
+    }
+  ],
+  "recommendations": [
+    {
+      "definitionId": "recommendation:cross-domain.review-identity-foundation/1.0.0",
+      "findingKind": "identity-foundation",
+      "title": "Review identity foundation and target cloud identity path",
+      "purpose": "Confirm the intended Microsoft Entra registration or join outcome before changing provisioning, enrollment, or access policy.",
+      "priority": "ImmediateReview",
+      "priorityExplanation": "Cloud identity targeting comes first because later management and access controls depend on it.",
+      "prerequisites": [
+        "Confirm that the Assessment User Context and local registration evidence are complete.",
+        "Resolve tenant-side decisions about the intended join or enrollment path."
+      ],
+      "caution": "One endpoint cannot prove tenant assignment, licensing, compliance, or organization intent.",
+      "responsibleRole": "MicrosoftEntraAndIntuneAdministrator",
+      "verification": "Validate the approved target state in the authorized Microsoft Entra and Intune administration boundaries before device reprovisioning.",
+      "authoritativeReferences": [
+        "https://learn.microsoft.com/en-us/security/zero-trust/deploy/endpoints",
+        "https://learn.microsoft.com/en-us/security/zero-trust/microsoft-365-zero-trust"
+      ]
+    },
+    {
+      "definitionId": "recommendation:cross-domain.review-connectivity-and-trust/1.0.0",
+      "findingKind": "management-plane",
+      "title": "Review enrollment connectivity, DNS, and trust prerequisites",
+      "purpose": "Confirm that device-enrollment and identity endpoints can be reached through the approved DNS, proxy, TLS, and certificate path.",
+      "priority": "ImmediateReview",
+      "priorityExplanation": "Enrollment and access flows fail early when network or trust prerequisites are unresolved.",
+      "prerequisites": [
+        "Approve and interpret the bounded connectivity and certificate evidence together.",
+        "Confirm tenant-specific DNS and proxy requirements in an authorized boundary."
+      ],
+      "caution": "Generic Microsoft endpoint success does not prove tenant-specific enrollment DNS, authorization, or future service health.",
+      "responsibleRole": "NetworkAndSecurityEngineer",
+      "verification": "Compare the protected evidence with the approved enterprise proxy, DNS, TLS-interception, and certificate design before rollout.",
+      "authoritativeReferences": [
+        "https://learn.microsoft.com/en-us/intune/device-enrollment/windows/create-cname-autodiscovery",
+        "https://learn.microsoft.com/en-us/security/zero-trust/microsoft-365-zero-trust"
+      ]
+    },
+    {
+      "definitionId": "recommendation:cross-domain.plan-dependency-transition/1.0.0",
+      "findingKind": "dependency-transition",
+      "title": "Plan application, resource, and privilege dependency transition",
+      "purpose": "Review local software, resource, peripheral, and administrator dependencies before applying a new management or access model.",
+      "priority": "PlanNext",
+      "priorityExplanation": "Dependency review should happen before compliant-device enforcement so critical business access is not guessed.",
+      "prerequisites": [
+        "Confirm which local dependencies must be retained, replaced, or retired.",
+        "Validate approved support information for retained applications and peripherals."
+      ],
+      "caution": "Observed inventory and membership do not prove compatibility, support, approval, or least-privilege readiness.",
+      "responsibleRole": "EndpointMigrationOwner",
+      "verification": "Map retained dependencies to the target build, packaging, access, and support model before cutover.",
+      "authoritativeReferences": [
+        "https://learn.microsoft.com/en-us/intune/solutions/cloud-native-endpoints/planning-guide",
+        "https://learn.microsoft.com/en-us/intune/fundamentals/zero-trust-deployment"
+      ]
+    },
+    {
+      "definitionId": "recommendation:cross-domain.plan-policy-modernization/1.0.0",
+      "findingKind": "policy-modernization",
+      "title": "Plan policy and security-control modernization",
+      "purpose": "Translate the validated local policy and security-control state into an approved cloud management and security baseline plan.",
+      "priority": "PlanNext",
+      "priorityExplanation": "Modern policy translation should happen after identity and connectivity are understood but before compliant-device enforcement is tightened.",
+      "prerequisites": [
+        "Separate Applied Policy Evidence, Configured Policy Signals, and Current Control State.",
+        "Resolve unsupported, denied, stale, or contradictory policy evidence before claiming a target baseline."
+      ],
+      "caution": "One endpoint cannot prove tenant assignment, universal precedence, organization-wide scope, or service-side compliance.",
+      "responsibleRole": "EndpointSecurityEngineer",
+      "verification": "Map the protected local evidence to the approved Intune, Conditional Access, and security-baseline design without assuming direct one-to-one policy equivalence.",
+      "authoritativeReferences": [
+        "https://learn.microsoft.com/en-us/intune/fundamentals/zero-trust-deployment",
+        "https://learn.microsoft.com/en-us/security/zero-trust/microsoft-365-zero-trust"
+      ]
+    },
+    {
+      "definitionId": "recommendation:cross-domain.stage-compliant-device-access/1.0.0",
+      "findingKind": "zero-trust-path",
+      "title": "Stage compliant-device access, device risk, and advanced data protection",
+      "purpose": "Move from validated local readiness into approved compliant-device access, device-risk integration, and advanced endpoint data-protection rollout only after prerequisite path steps are understood.",
+      "priority": "ConsiderLater",
+      "priorityExplanation": "These controls come after identity, connectivity, dependency, and policy groundwork because they depend on a stable managed-device baseline.",
+      "prerequisites": [
+        "Confirm the cloud identity target state and enrollment path.",
+        "Resolve material dependency and policy-translation blockers.",
+        "Confirm tenant-side Conditional Access, compliance, and security-operations scope."
+      ],
+      "caution": "WIN-PCInfo does not produce a fixed rollout schedule, a compliance verdict, or an automatic remediation plan.",
+      "responsibleRole": "ZeroTrustProgramOwner",
+      "verification": "Validate that managed-device enrollment, compliance policies, and approved access controls are ready before expanding to device-risk and endpoint DLP stages.",
+      "authoritativeReferences": [
+        "https://learn.microsoft.com/en-us/intune/fundamentals/zero-trust-deployment",
+        "https://learn.microsoft.com/en-us/security/zero-trust/microsoft-365-zero-trust"
+      ]
+    }
+  ],
+  "discoveryTasks": [
+    {
+      "definitionId": "task:cross-domain.confirm-conditional-access-target/1.0.0",
+      "findingKind": "zero-trust-path",
+      "purpose": "Confirm the tenant-side Conditional Access, compliance, and approved protection tier target for this device class.",
+      "requiredRole": "ConditionalAccessAdministratorOrIntuneAdministrator",
+      "approvedDestination": "AuthorizedMicrosoft365AdministrationBoundary",
+      "expectedSafeResult": "A documented target access tier and compliant-device requirement decision without exporting tenant identifiers or policy values.",
+      "authoritativeReferences": [
+        "https://learn.microsoft.com/en-us/security/zero-trust/microsoft-365-zero-trust",
+        "https://learn.microsoft.com/en-us/intune/fundamentals/zero-trust-deployment"
+      ]
+    },
+    {
+      "definitionId": "task:cross-domain.confirm-advanced-security-target/1.0.0",
+      "findingKind": "policy-modernization",
+      "purpose": "Confirm whether Microsoft Defender for Endpoint, device risk, and endpoint data protection are in scope for the approved migration phase.",
+      "requiredRole": "SecurityOperationsOrPurviewProgramOwner",
+      "approvedDestination": "AuthorizedSecurityOperationsPlanningBoundary",
+      "expectedSafeResult": "An approved in-scope, later-phase, or unavailable conclusion without fabricating service-side onboarding state.",
+      "authoritativeReferences": [
+        "https://learn.microsoft.com/en-us/intune/fundamentals/zero-trust-deployment",
+        "https://learn.microsoft.com/en-us/security/zero-trust/microsoft-365-zero-trust"
+      ]
+    },
+    {
+      "definitionId": "task:cross-domain.confirm-tenant-enrollment-path/1.0.0",
+      "findingKind": "management-plane",
+      "purpose": "Confirm the tenant-specific enrollment DNS, proxy, and certificate-path requirements that cannot be proven from one endpoint alone.",
+      "requiredRole": "NetworkEngineerOrIntuneAdministrator",
+      "approvedDestination": "AuthorizedTenantConnectivityBoundary",
+      "expectedSafeResult": "A confirmed, blocked, or unresolved tenant-specific enrollment path conclusion without exporting tenant DNS labels or private certificate material.",
+      "authoritativeReferences": [
+        "https://learn.microsoft.com/en-us/intune/device-enrollment/windows/create-cname-autodiscovery",
+        "https://learn.microsoft.com/en-us/security/zero-trust/deploy/endpoints"
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "relationshipId": "relationship:cross-domain.identity-enables-policy/1.0.0",
+      "fromDefinitionId": "recommendation:cross-domain.review-identity-foundation/1.0.0",
+      "toDefinitionId": "recommendation:cross-domain.plan-policy-modernization/1.0.0",
+      "kind": "Enables",
+      "explanation": "A stable identity target makes policy translation and assignment planning meaningful."
+    },
+    {
+      "relationshipId": "relationship:cross-domain.connectivity-requires-compliant-access/1.0.0",
+      "fromDefinitionId": "recommendation:cross-domain.review-connectivity-and-trust/1.0.0",
+      "toDefinitionId": "recommendation:cross-domain.stage-compliant-device-access/1.0.0",
+      "kind": "Requires",
+      "explanation": "Compliant-device access depends on a reachable and trusted management plane."
+    },
+    {
+      "relationshipId": "relationship:cross-domain.dependencies-conflict-compliant-access/1.0.0",
+      "fromDefinitionId": "recommendation:cross-domain.plan-dependency-transition/1.0.0",
+      "toDefinitionId": "recommendation:cross-domain.stage-compliant-device-access/1.0.0",
+      "kind": "ConflictsWith",
+      "explanation": "Unresolved legacy dependencies can conflict with immediately requiring a new managed-device access model."
+    },
+    {
+      "relationshipId": "relationship:cross-domain.policy-enables-compliant-access/1.0.0",
+      "fromDefinitionId": "recommendation:cross-domain.plan-policy-modernization/1.0.0",
+      "toDefinitionId": "recommendation:cross-domain.stage-compliant-device-access/1.0.0",
+      "kind": "Enables",
+      "explanation": "Approved policy translation and assignment planning enable compliant-device and device-risk stages."
+    }
+  ],
+  "migrationPath": [
+    "recommendation:cross-domain.review-identity-foundation/1.0.0",
+    "recommendation:cross-domain.review-connectivity-and-trust/1.0.0",
+    "recommendation:cross-domain.plan-dependency-transition/1.0.0",
+    "recommendation:cross-domain.plan-policy-modernization/1.0.0",
+    "recommendation:cross-domain.stage-compliant-device-access/1.0.0"
+  ],
+  "validationScenarios": [
+    "Complete",
+    "Partial",
+    "Absent",
+    "Denied",
+    "Unsupported",
+    "Stale",
+    "Contradictory",
+    "CrossDomain"
+  ]
+}
