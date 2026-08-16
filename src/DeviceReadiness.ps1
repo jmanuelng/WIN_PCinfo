@@ -748,7 +748,19 @@ function Get-CrossDomainGuidancePriorityCount {
 }
 
 function Get-AssessmentReportOutcomeLabel {
-    param([Parameter(Mandatory)] [string] $Outcome)
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet(
+            'Completed',
+            'CompletedWithGaps',
+            'NotStarted',
+            'Cancelled',
+            'TimedOut',
+            'IntegrityFailed',
+            'CleanupIncomplete'
+        )]
+        [string] $Outcome
+    )
 
     switch ($Outcome) {
         'Completed' { 'Completed' }
@@ -956,7 +968,6 @@ function Test-AssessmentReportContract {
     param(
         [Parameter(Mandatory)] [byte[]] $ReportBytes,
         [Parameter(Mandatory)] $Record,
-        [Parameter(Mandatory)] [string] $NetworkBehavior,
         [Parameter(Mandatory)] [bool] $ExpectUnicode
     )
 
@@ -1022,11 +1033,24 @@ function Test-AssessmentReportContract {
         $text -notmatch '(?i)@import' -and
         $text -notmatch '(?i)url\s*\('
     )
+    $navigationLabels = @(
+        '>Executive summary<',
+        '>Next steps<',
+        '>Diagnostics<',
+        '>Evidence and provenance<'
+    )
+    # This report is intentionally plain HTML: without script hooks, positive
+    # tabindex overrides, or access keys, the navigation stays predictable for
+    # keyboard users and cannot create a custom focus trap.
     $result.keyboardNavigationVerified = (
         $text.Contains('Skip to report content') -and
         $text.Contains('<nav aria-label="Primary report navigation">') -and
         $text.Contains('id="report-content"') -and
-        $text.Contains(':focus-visible')
+        $text.Contains(':focus-visible') -and
+        (@($navigationLabels | Where-Object { $text.Contains($_) }).Count -eq
+            $navigationLabels.Count) -and
+        $text -notmatch '(?i)\baccesskey\s*=' -and
+        $text -notmatch '(?i)\btabindex\s*=\s*"[1-9]'
     )
     $result.printLayoutVerified = $text.Contains('@page') -and $text.Contains('@media print')
     $result.unicodePreservedVerified = if ($ExpectUnicode) {
@@ -1068,18 +1092,38 @@ function Test-AssessmentCompletionSummaryConsistency {
         [Parameter(Mandatory)] $Terminal,
         [Parameter(Mandatory)] $Manifest,
         [Parameter(Mandatory)] [bool] $PackageVerified,
-        [Parameter(Mandatory)] [bool] $CleanupVerified
+        [Parameter(Mandatory)] [bool] $CleanupVerified,
+        [Parameter(Mandatory)] [ValidateSet('Complete', 'RecoverablePartial')]
+        [string] $RenderedCompleteness
     )
 
     if ($null -eq $Summary -or $null -eq $Terminal -or $null -eq $Manifest) { return $false }
     if (-not $Summary.PSObject.Properties['assessment']) { return $false }
     $assessment = $Summary.assessment
+    $guidance = $Summary.resultSharingGuidance
+    $packageAvailability = [string] $Summary.packageAvailability
+    $packageAvailable = $packageAvailability -eq 'Available'
+    $packageUncertain = $packageAvailability -eq 'Uncertain'
+    $expectedLocalAccess = if ($PackageVerified -and $packageAvailable) {
+        'InitiatingWindowsUserAndDevice'
+    }
+    elseif ($packageUncertain) { 'Uncertain' }
+    else { 'Unavailable' }
     [bool] $Summary.packageVerified -eq $PackageVerified -and
         [string] $assessment.outcome -eq [string] $Terminal.outcome -and
         [string] $assessment.packageCompleteness -eq [string] $Manifest.completeness -and
+        [string] $assessment.renderedCompleteness -eq $RenderedCompleteness -and
         [bool] $assessment.cleanupVerified -eq $CleanupVerified -and
         [string] $assessment.reportArtifact -eq 'assessment-report.html' -and
-        [string] $assessment.manifestArtifact -eq 'package-manifest.json'
+        [string] $assessment.manifestArtifact -eq 'package-manifest.json' -and
+        $null -ne $guidance -and
+        [string] $guidance.kind -eq 'ResultSharingGuidance' -and
+        [string] $guidance.localAccess -eq $expectedLocalAccess -and
+        [bool] $guidance.privateTransfer.allowed -eq (
+            [string] $guidance.recipientAccess -eq 'ApprovedPackageRecipient'
+        ) -and
+        [bool] $guidance.restrictedExport.available -eq ($PackageVerified -and $packageAvailable) -and
+        [bool] $guidance.prohibitedPublicSharing
 }
 
 function New-DeviceReadinessReportBytes {
@@ -2943,7 +2987,6 @@ function Invoke-DeviceReadinessSlice {
                     $reportText = [System.Text.UTF8Encoding]::new($false,$true).GetString($reportBytes)
                     $reportContract = Test-AssessmentReportContract -ReportBytes $reportBytes `
                         -Record $record `
-                        -NetworkBehavior ([string] $PreparationPlan.network.behavior) `
                         -ExpectUnicode ([string] $scenario -eq 'Unicode' -or
                             [string] $softwareScenario -eq 'Unicode' -or
                             [string] $resourceScenario -eq 'LongUnicode' -or
@@ -3408,7 +3451,9 @@ function Invoke-DeviceReadinessSlice {
         -RecipientAccessAvailable $recipientAccessAvailable `
         -RestrictedReportExported $false -AssessmentOutcome $outcome `
         -AssessmentCoverageState $(if($packageCompleteness -eq 'Complete'){'Complete'}else{'Gapped'}) `
-        -PackageCompleteness $packageCompleteness -CleanupVerified $cleanupVerified
+        -PackageCompleteness $packageCompleteness `
+        -RenderedCompleteness $reportRenderedCompleteness `
+        -CleanupVerified $cleanupVerified
     $terminalRecord = New-DeviceReadinessTerminalRecord -Outcome $outcome `
         -ExitCode $exitCode -ReasonCode $reasonCode -CollectionStarted $collectionStarted `
         -ValidationFixture $isFixture -CleanupVerified $cleanupVerified `
@@ -3416,7 +3461,8 @@ function Invoke-DeviceReadinessSlice {
     if ($packageVerified -and $null -ne $opened) {
         $completionSummaryConsistent = Test-AssessmentCompletionSummaryConsistency `
             -Summary $completionSummary -Terminal $terminalRecord -Manifest $opened.manifest `
-            -PackageVerified $packageVerified -CleanupVerified $cleanupVerified
+            -PackageVerified $packageVerified -CleanupVerified $cleanupVerified `
+            -RenderedCompleteness $reportRenderedCompleteness
     }
     if ($isFixture) {
         Write-ContractRecord ([pscustomobject][ordered]@{

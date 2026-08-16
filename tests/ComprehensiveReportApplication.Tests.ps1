@@ -44,6 +44,16 @@ $cases = @(
         networkMode = 'MicrosoftConnectivityEnabled'
         unicode = $true
     }
+    @{
+        scenario = 'Redirect'
+        requestPath = $enabledRequestPath
+        arguments = @(
+            '-MicrosoftConnectivityFixturePath',
+            (Join-Path $PSScriptRoot 'fixtures/microsoft-connectivity/redirect.json')
+        )
+        networkMode = 'MicrosoftConnectivityEnabled'
+        unicode = $false
+    }
 )
 
 foreach ($case in $cases) {
@@ -87,8 +97,8 @@ foreach ($case in $cases) {
 
     Assert-Equal $terminal[0].outcome $completion[0].assessment.outcome `
         "$($case.scenario) carries the terminal outcome into the Completion Summary"
-    Assert-Equal $validation[0].renderedCompleteness $completion[0].assessment.packageCompleteness `
-        "$($case.scenario) carries package completeness into the Completion Summary"
+    Assert-Equal $validation[0].renderedCompleteness $completion[0].assessment.renderedCompleteness `
+        "$($case.scenario) carries report completeness into the Completion Summary"
     Assert-Equal $terminal[0].cleanup.verified $completion[0].assessment.cleanupVerified `
         "$($case.scenario) carries cleanup verification into the Completion Summary"
 

@@ -37,6 +37,26 @@ $validation = Test-AssessmentContract -Utf8Bytes $recordBytes `
 $baseRecord = Complete-ValidatedDeviceReadinessAssessmentRecord `
     -ValidatedRecord $record -Policy $policy -ContractValidation $validation
 
+function Copy-TestRecord {
+    param([Parameter(Mandatory)] $Record)
+
+    $Record | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+}
+
+function Set-TestObservationValue {
+    param(
+        [Parameter(Mandatory)] $Record,
+        [Parameter(Mandatory)] [string] $FieldId,
+        [Parameter(Mandatory)] [string] $Value
+    )
+
+    $observation = @($Record.observations | Where-Object fieldId -eq $FieldId)[0]
+    if ($null -eq $observation) {
+        throw "The test record did not contain observation '$FieldId'."
+    }
+    $observation.value = $Value
+}
+
 $cases = @(
     @{ outcome = 'Completed'; completeness = 'Complete' }
     @{ outcome = 'CompletedWithGaps'; completeness = 'RecoverablePartial' }
@@ -47,7 +67,7 @@ $cases = @(
 )
 
 foreach ($case in $cases) {
-    $variant = $baseRecord | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+    $variant = Copy-TestRecord -Record $baseRecord
     $variant.run.outcome = $case.outcome
     if ($case.outcome -ne 'Completed') {
         $variant.coverage[0].state = 'Partial'
@@ -63,7 +83,7 @@ foreach ($case in $cases) {
     [byte[]] $secondBytes = New-DeviceReadinessReportBytes -Record $variant
     $firstText = [System.Text.UTF8Encoding]::new($false, $true).GetString($firstBytes)
     $contract = Test-AssessmentReportContract -ReportBytes $firstBytes -Record $variant `
-        -NetworkBehavior 'MicrosoftConnectivityEnabled' -ExpectUnicode $false
+        -ExpectUnicode $false
 
     Assert-Equal $true ([System.Linq.Enumerable]::SequenceEqual[byte]($firstBytes, $secondBytes)) `
         "$($case.outcome) remains byte-identical across repeated renders"
@@ -89,4 +109,57 @@ foreach ($case in $cases) {
     }
 }
 
-Write-Output 'PASS: the comprehensive report renderer preserves deterministic executive summaries for every synthetic outcome state.'
+$localeCases = @(
+    @{ locale = 'en-US'; model = 'Baseline Device'; expectUnicode = $false }
+    @{ locale = 'es-MX'; model = 'Estación México'; expectUnicode = $true }
+    @{ locale = 'tr-TR'; model = 'İstanbul İstemcisi'; expectUnicode = $true }
+    @{ locale = 'ja-JP'; model = '東京端末'; expectUnicode = $true }
+    @{ locale = 'ar-SA'; model = 'جهاز-الرياض'; expectUnicode = $true }
+)
+
+foreach ($case in $localeCases) {
+    $variant = Copy-TestRecord -Record $baseRecord
+    foreach ($provenance in @($variant.provenance)) {
+        $provenance.sourceLocale = $case.locale
+    }
+    Set-TestObservationValue -Record $variant -FieldId 'field:device.model' -Value $case.model
+    [byte[]] $bytes = New-DeviceReadinessReportBytes -Record $variant
+    $text = [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+    $contract = Test-AssessmentReportContract -ReportBytes $bytes -Record $variant `
+        -ExpectUnicode $case.expectUnicode
+
+    Assert-Equal $true $contract.verified `
+        "$($case.locale) remains a valid comprehensive report render"
+    $encodedModel = [System.Net.WebUtility]::HtmlEncode($case.model)
+    if (-not ($text.Contains($case.model) -or $text.Contains($encodedModel))) {
+        throw "$($case.locale) did not preserve its locale fixture content in the report."
+    }
+}
+
+$maximumRecord = Copy-TestRecord -Record $baseRecord
+[byte[]] $maximumBytes = $null
+for ($length = 220000; $length -ge 120000; $length -= 10000) {
+    $maximumRecord = Copy-TestRecord -Record $baseRecord
+    Set-TestObservationValue -Record $maximumRecord -FieldId 'field:device.processor.name' `
+        -Value ('P' * $length)
+    [byte[]] $candidateBytes = New-DeviceReadinessReportBytes -Record $maximumRecord
+    if ($candidateBytes.Length -le 262144 -and $candidateBytes.Length -ge 200000) {
+        $maximumBytes = $candidateBytes
+        break
+    }
+}
+if ($null -eq $maximumBytes) {
+    throw 'The maximum-size synthetic record did not reach the report stress threshold.'
+}
+[byte[]] $maximumBytesRepeat = New-DeviceReadinessReportBytes -Record $maximumRecord
+$maximumContract = Test-AssessmentReportContract -ReportBytes $maximumBytes -Record $maximumRecord `
+    -ExpectUnicode $false
+
+Assert-Equal $true ([System.Linq.Enumerable]::SequenceEqual[byte]($maximumBytes, $maximumBytesRepeat)) `
+    'the maximum-size synthetic record remains byte-identical across repeated renders'
+Assert-Equal $true ($maximumBytes.Length -le 262144) `
+    'the maximum-size synthetic record stays within the protected-package report bound'
+Assert-Equal $true $maximumContract.verified `
+    'the maximum-size synthetic record still satisfies the comprehensive report contract'
+
+Write-Output 'PASS: the comprehensive report renderer preserves deterministic executive summaries, locale fixtures, and bounded maximum-size output.'
