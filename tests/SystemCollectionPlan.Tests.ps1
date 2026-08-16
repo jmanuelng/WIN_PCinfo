@@ -113,7 +113,7 @@ $ambiguousInstances = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
     -PlanDigest $planResult.Digest -ValidationScenario 'AmbiguousPolicyResultInstances'
 Assert-Equal 'Completed' $ambiguousInstances.state `
     'ambiguous live-style CIM cardinality remains a typed field-level gap'
-Assert-Equal 4 @($ambiguousInstances.PrivatePolicyCspResults.fields|Where-Object {
+Assert-Equal 7 @($ambiguousInstances.PrivatePolicyCspResults.fields|Where-Object {
     $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_INSTANCE_AMBIGUOUS'
 }).Count 'multiple Policy Result nodes never select an arbitrary first instance'
 
@@ -121,25 +121,25 @@ $malformedValues = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
     -PlanDigest $planResult.Digest -ValidationScenario 'MalformedPolicyResultValue'
 Assert-Equal 'Completed' $malformedValues.state `
     'malformed WMI values remain bounded field-level gaps'
-Assert-Equal 4 @($malformedValues.PrivatePolicyCspResults.fields|Where-Object {
+Assert-Equal 7 @($malformedValues.PrivatePolicyCspResults.fields|Where-Object {
     $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_VALUE_MALFORMED'
 }).Count 'Boolean, negative, and overflowing values are never coerced into successful observations'
 
 $emptyInstances = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
     -PlanDigest $planResult.Digest -ValidationScenario 'EmptyPolicyResultInstances'
-Assert-Equal 4 @($emptyInstances.PrivatePolicyCspResults.fields|Where-Object {
+Assert-Equal 7 @($emptyInstances.PrivatePolicyCspResults.fields|Where-Object {
     $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_NODE_UNAVAILABLE'
 }).Count 'a successful empty query is distinct from duplicate instances and query failure'
 
 $queryFailure = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
     -PlanDigest $planResult.Digest -ValidationScenario 'PolicyResultQueryFailure'
-Assert-Equal 4 @($queryFailure.PrivatePolicyCspResults.fields|Where-Object {
+Assert-Equal 7 @($queryFailure.PrivatePolicyCspResults.fields|Where-Object {
     $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
 }).Count 'an operational query failure is not misreported as an unsupported class'
 
 $unsupportedClass = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
     -PlanDigest $planResult.Digest -ValidationScenario 'PolicyResultClassUnsupported'
-Assert-Equal 4 @($unsupportedClass.PrivatePolicyCspResults.fields|Where-Object {
+Assert-Equal 7 @($unsupportedClass.PrivatePolicyCspResults.fields|Where-Object {
     $_.state -eq 'Unsupported' -and $_.reasonCode -eq 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
 }).Count 'an invalid-class result remains distinct from an access or transport failure'
 
@@ -154,7 +154,7 @@ $futureBuild = Invoke-SystemCollectionPlan -Plan $planResult.Plan `
     -PlanDigest $planResult.Digest -ValidationScenario 'UnsupportedFutureBuild'
 Assert-Equal '' $futureBuild.PrivatePolicyCspResults.catalogId `
     'a build above the frozen catalog ceiling selects no catalog'
-Assert-Equal 4 @($futureBuild.PrivatePolicyCspResults.fields|Where-Object {
+Assert-Equal 7 @($futureBuild.PrivatePolicyCspResults.fields|Where-Object {
     $_.state -eq 'Unsupported' -and $_.reasonCode -eq 'POLICY.MDM_BUILD_UNSUPPORTED'
 }).Count 'future builds fail closed until a release-owned catalog admits them'
 
@@ -166,7 +166,7 @@ Assert-Equal 0 @($providerFailure.collectorResult.Observations).Count `
     'a failed provider query fabricates no provider-availability Boolean'
 Assert-Equal 'Unavailable' $providerFailure.collectorResult.Coverage[0].state `
     'provider failure remains explicit unavailable coverage'
-Assert-Equal 4 @($providerFailure.PrivatePolicyCspResults.fields|Where-Object {
+Assert-Equal 7 @($providerFailure.PrivatePolicyCspResults.fields|Where-Object {
     $_.state -eq 'Unavailable' -and $_.reasonCode -eq 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE'
 }).Count 'provider query failure keeps all dependent Policy CSP fields unavailable'
 Assert-Equal $true $providerFailure.channel.assessmentEvidenceCrossed `

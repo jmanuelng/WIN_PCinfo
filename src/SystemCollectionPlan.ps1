@@ -310,7 +310,10 @@ try {
                     (New-PolicyFieldResult 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' 'scope:policy.mdm.control-policy-conflict' $State $ReasonCode 'ObservedAbsent' $null),
                     (New-PolicyFieldResult 'field:policy.mdm.security-option.machine-inactivity-limit-seconds' 'scope:policy.mdm.security-option.machine-inactivity-limit' $State $ReasonCode 'ObservedAbsent' $null),
                     (New-PolicyFieldResult 'field:policy.mdm.security-option.disable-cad' 'scope:policy.mdm.security-option.disable-cad' $State $ReasonCode 'ObservedAbsent' $null),
-                    (New-PolicyFieldResult 'field:policy.mdm.security-option.lm-compatibility-level' 'scope:policy.mdm.security-option.lm-compatibility-level' $State $ReasonCode 'ObservedAbsent' $null)
+                    (New-PolicyFieldResult 'field:policy.mdm.security-option.lm-compatibility-level' 'scope:policy.mdm.security-option.lm-compatibility-level' $State $ReasonCode 'ObservedAbsent' $null),
+                    (New-PolicyFieldResult 'field:policy.mdm.update.defer-feature-updates-days' 'scope:policy.mdm.update.defer-feature-updates' $State $ReasonCode 'ObservedAbsent' $null),
+                    (New-PolicyFieldResult 'field:policy.mdm.update.defer-quality-updates-days' 'scope:policy.mdm.update.defer-quality-updates' $State $ReasonCode 'ObservedAbsent' $null),
+                    (New-PolicyFieldResult 'field:policy.mdm.update.disable-dual-scan' 'scope:policy.mdm.update.disable-dual-scan' $State $ReasonCode 'ObservedAbsent' $null)
                 )
             }
         }
@@ -382,6 +385,8 @@ try {
         $controlFailureReason = ''
         $securityFailureState = ''
         $securityFailureReason = ''
+        $updateFailureState = ''
+        $updateFailureReason = ''
         if ([bool] $configuration.validationFixture) {
             $controlItem = [pscustomobject]@{
                 InstanceID='ControlPolicyConflict';ParentID='./Vendor/MSFT/Policy/Result';MDMWinsOverGP=0
@@ -392,33 +397,47 @@ try {
                 Interactivelogon_DoNotRequireCTRLALTDEL=0
                 NetworkSecurity_LANManagerAuthenticationLevel=5
             }
+            $updateItem = [pscustomobject]@{
+                InstanceID='Update';ParentID='./Vendor/MSFT/Policy/Result'
+                DeferFeatureUpdatesPeriodInDays=14
+                DeferQualityUpdatesPeriodInDays=3
+                DisableDualScan=0
+            }
             $control = @($controlItem)
             $security = @($securityItem)
+            $update = @($updateItem)
             if ([string] $configuration.workerFault -eq 'AmbiguousPolicyInstances') {
                 $control = @($controlItem, $controlItem)
                 $security = @($securityItem, $securityItem)
+                $update = @($updateItem, $updateItem)
             }
             elseif ([string] $configuration.workerFault -eq 'MalformedPolicyValue') {
                 $controlItem.MDMWinsOverGP = 2
                 $securityItem.Interactivelogon_DoNotRequireCTRLALTDEL = 2
                 $securityItem.InteractiveLogon_MachineInactivityLimit = [uint64]::MaxValue
                 $securityItem.NetworkSecurity_LANManagerAuthenticationLevel = -1
+                $updateItem.DeferFeatureUpdatesPeriodInDays = [uint64]::MaxValue
+                $updateItem.DeferQualityUpdatesPeriodInDays = -1
+                $updateItem.DisableDualScan = 2
             }
             elseif ([string] $configuration.workerFault -eq 'EmptyPolicyInstances') {
                 $control = @()
                 $security = @()
+                $update = @()
             }
             elseif ([string] $configuration.workerFault -eq 'PolicyQueryFailure') {
-                $control = @(); $security = @()
-                $controlFailureState = 'Unavailable'; $securityFailureState = 'Unavailable'
+                $control = @(); $security = @(); $update = @()
+                $controlFailureState = 'Unavailable'; $securityFailureState = 'Unavailable'; $updateFailureState = 'Unavailable'
                 $controlFailureReason = 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
                 $securityFailureReason = 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
+                $updateFailureReason = 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
             }
             elseif ([string] $configuration.workerFault -eq 'PolicyClassUnsupported') {
-                $control = @(); $security = @()
-                $controlFailureState = 'Unsupported'; $securityFailureState = 'Unsupported'
+                $control = @(); $security = @(); $update = @()
+                $controlFailureState = 'Unsupported'; $securityFailureState = 'Unsupported'; $updateFailureState = 'Unsupported'
                 $controlFailureReason = 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
                 $securityFailureReason = 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
+                $updateFailureReason = 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED'
             }
         }
         else {
@@ -448,6 +467,19 @@ try {
             catch {
                 $failure = Get-PolicyQueryFailureClassification -Exception $_.Exception
                 $security=@();$securityFailureState=$failure.State;$securityFailureReason=$failure.ReasonCode
+            }
+            try {
+                $update = @(Get-CimInstance -Namespace 'Root\cimv2\mdm\dmmap' `
+                    -ClassName 'MDM_Policy_Result01_Update02' `
+                    -Filter "ParentID='./Vendor/MSFT/Policy/Result' AND InstanceID='Update'" `
+                    -Property @(
+                        'InstanceID','ParentID','DeferFeatureUpdatesPeriodInDays',
+                        'DeferQualityUpdatesPeriodInDays','DisableDualScan'
+                    ) -ErrorAction Stop)
+            }
+            catch {
+                $failure = Get-PolicyQueryFailureClassification -Exception $_.Exception
+                $update=@();$updateFailureState=$failure.State;$updateFailureReason=$failure.ReasonCode
             }
         }
 
@@ -508,6 +540,47 @@ try {
                 continue
             }
             $value = $securityItem.($definition.propertyName)
+            if ($null -eq $value) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Complete' '' 'ObservedAbsent' $null))
+            }
+            elseif (-not (Test-WorkerIntegralValue $value $definition.minimumValue $definition.maximumValue)) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_VALUE_MALFORMED' 'ObservedAbsent' $null))
+            }
+            elseif ($definition.valueType -eq 'Boolean') {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Complete' '' 'ObservedValue' ([int64]$value -eq 1)))
+            }
+            else {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Complete' '' 'ObservedValue' ([int]$value)))
+            }
+        }
+        foreach ($definition in @(
+            @{ fieldId = 'field:policy.mdm.update.defer-feature-updates-days'; scopeId = 'scope:policy.mdm.update.defer-feature-updates'; propertyName = 'DeferFeatureUpdatesPeriodInDays'; valueType = 'Integer'; minimumValue = 0; maximumValue = 365 },
+            @{ fieldId = 'field:policy.mdm.update.defer-quality-updates-days'; scopeId = 'scope:policy.mdm.update.defer-quality-updates'; propertyName = 'DeferQualityUpdatesPeriodInDays'; valueType = 'Integer'; minimumValue = 0; maximumValue = 30 },
+            @{ fieldId = 'field:policy.mdm.update.disable-dual-scan'; scopeId = 'scope:policy.mdm.update.disable-dual-scan'; propertyName = 'DisableDualScan'; valueType = 'Boolean'; minimumValue = 0; maximumValue = 1 }
+        )) {
+            if ($updateFailureState) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId $updateFailureState $updateFailureReason 'ObservedAbsent' $null))
+                continue
+            }
+            if ($update.Count -eq 0) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_NODE_UNAVAILABLE' 'ObservedAbsent' $null))
+                continue
+            }
+            if ($update.Count -gt 1) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_INSTANCE_AMBIGUOUS' 'ObservedAbsent' $null))
+                continue
+            }
+            $updateEntry = $update[0]
+            if ([string]$updateEntry.InstanceID -ne 'Update' -or
+                [string]$updateEntry.ParentID -ne './Vendor/MSFT/Policy/Result') {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_NODE_UNAVAILABLE' 'ObservedAbsent' $null))
+                continue
+            }
+            if (-not $updateEntry.PSObject.Properties[$definition.propertyName]) {
+                $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Unavailable' 'POLICY.MDM_RESULT_PROPERTY_UNAVAILABLE' 'ObservedAbsent' $null))
+                continue
+            }
+            $value = $updateEntry.($definition.propertyName)
             if ($null -eq $value) {
                 $fields.Add((New-PolicyFieldResult $definition.fieldId $definition.scopeId 'Complete' '' 'ObservedAbsent' $null))
             }
@@ -1598,6 +1671,7 @@ function Invoke-SystemCollectionPlan {
         $result = $resultJson | ConvertFrom-Json -Depth 10
         $resultNames = @($result.PSObject.Properties.Name)
         $resultOperation = @($result.operations)[0]
+        $expectedFieldDefinitionCount = @(Get-SystemPolicyResultFieldDefinitions -Policy $policy).Count
         if ($resultNames.Count -ne 7 -or @($resultNames | Sort-Object -Unique).Count -ne 7 -or
             $result.kind -ne 'SystemPlanResult' -or $result.contractVersion -ne '1.0.0' -or
             $result.nonce -ne $nonce -or $result.planDigest -ne $PlanDigest -or
@@ -1614,7 +1688,8 @@ function Invoke-SystemCollectionPlan {
             ([string]$resultOperation.providerState -eq 'Unavailable' -and
                 ($null -ne $resultOperation.providerAvailable -or
                  [string]$resultOperation.providerReasonCode -ne 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE')) -or
-            $resultOperation.policyCatalogId -isnot [string] -or @($resultOperation.fields).Count -ne 4) {
+            $resultOperation.policyCatalogId -isnot [string] -or
+            @($resultOperation.fields).Count -ne $expectedFieldDefinitionCount) {
             throw 'The SYSTEM result failed its closed schema.'
         }
         $providerAvailable = if([string]$resultOperation.providerState -eq 'Complete'){

@@ -50,20 +50,22 @@ Assert-Equal 'Root\cimv2\mdm\dmmap' $operation.source.namespace `
     'the fixed Windows source namespace is release-defined'
 Assert-Equal 'MDM_DeviceManageability_Provider01_01' $operation.source.className `
     'the fixed device-level WMI Bridge class is release-defined'
-Assert-Equal 3 @($operation.supplementalSources).Count `
-    'the build registry and both Policy Result classes are frozen beside provider discovery'
+Assert-Equal 4 @($operation.supplementalSources).Count `
+    'the build registry and the three approved Policy Result classes are frozen beside provider discovery'
 Assert-Equal 'source:windows.registry.current-build-number' $operation.supplementalSources[0].sourceId `
     'OS catalog selection is bound to one read-only registry value'
 Assert-Equal 'MDM_Policy_Result01_ControlPolicyConflict02' $operation.supplementalSources[1].className `
     'the ControlPolicyConflict result class is an approved privileged source'
 Assert-Equal 'MDM_Policy_Result01_LocalPoliciesSecurityOptions02' $operation.supplementalSources[2].className `
     'the security-options result class is an approved privileged source'
-Assert-Equal 4 @($operation.privateResultScopeIds).Count `
-    'the operation separately freezes all four restricted Policy CSP result scopes'
+Assert-Equal 'MDM_Policy_Result01_Update02' $operation.supplementalSources[3].className `
+    'the Update result class is an approved privileged source'
+Assert-Equal 7 @($operation.privateResultScopeIds).Count `
+    'the operation separately freezes all seven restricted Policy CSP result scopes'
 Assert-Equal 2 @($operation.policyResultCatalogs).Count `
     'Windows 10 and Windows 11 Policy CSP result catalogs are both frozen'
-Assert-Equal 4 @($operation.policyResultCatalogs[0].resultFields).Count `
-    'each build catalog allowlists exactly four Policy CSP result fields'
+Assert-Equal 7 @($operation.policyResultCatalogs[0].resultFields).Count `
+    'each build catalog allowlists exactly seven Policy CSP result fields'
 Assert-Equal 'field:policy.mdm.control-policy-conflict.mdm-wins-over-gp' `
     $operation.policyResultCatalogs[0].resultFields[0].fieldId `
     'the fixed catalog includes the documented MDMWinsOverGP Policy CSP field'
@@ -85,6 +87,15 @@ Assert-Equal 599940 $operation.policyResultCatalogs[0].resultFields[1].maximumVa
     'machine inactivity is bounded to the documented Policy CSP range'
 Assert-Equal 5 $operation.policyResultCatalogs[0].resultFields[3].maximumValue `
     'LM compatibility accepts only a documented option index'
+Assert-Equal 'MDM_Policy_Result01_Update02' `
+    $operation.policyResultCatalogs[0].resultFields[4].className `
+    'the update catalog reads only the release-approved Update result class'
+Assert-Equal 365 $operation.policyResultCatalogs[0].resultFields[4].maximumValue `
+    'feature-update deferral is bounded to the documented Policy CSP range'
+Assert-Equal 30 $operation.policyResultCatalogs[0].resultFields[5].maximumValue `
+    'quality-update deferral is bounded to the documented Policy CSP range'
+Assert-Equal 1 $operation.policyResultCatalogs[0].resultFields[6].maximumValue `
+    'DisableDualScan remains a documented Boolean-like integer only'
 Assert-Equal 'MicrosoftDocumentation' $operation.authorityProof.kind `
     'the SYSTEM-only decision cites a primary Windows source'
 Assert-Equal 'PolicyCspResultCatalogV1' $policy.channel.assessmentEvidenceContract `

@@ -69,12 +69,12 @@
     "coverage": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 96,
+      "maxItems": 104,
       "items": { "$ref": "#/$defs/coverage" }
     },
     "diagnostics": {
       "type": "array",
-      "maxItems": 96,
+      "maxItems": 104,
       "items": { "$ref": "#/$defs/diagnostic" }
     },
     "collectorResults": {

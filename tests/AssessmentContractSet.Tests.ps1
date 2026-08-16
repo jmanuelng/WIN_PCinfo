@@ -24,10 +24,10 @@ Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 222 @($contractSet.fieldDefinitions).Count `
-    'historical fields remain while bounded platform-protection and app-control fields are admitted'
-Assert-Equal 85 @($contractSet.scopeDefinitions).Count `
-    'historical through BitLocker, VBS, WDAC, and AppLocker scopes remain distinct'
+Assert-Equal 259 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while bounded update, remote-management, SMB, legacy-auth, platform-protection, and app-control fields are admitted'
+Assert-Equal 104 @($contractSet.scopeDefinitions).Count `
+    'historical through update, remote-management, SMB, legacy-auth, BitLocker, VBS, WDAC, and AppLocker scopes remain distinct'
 $certificateFields = @($contractSet.fieldDefinitions | Where-Object fieldId -like 'field:certificate.*')
 Assert-Equal 12 $certificateFields.Count `
     'presence, purpose, identity, store, dates, validity, chain, trust, and key protection remain explicit fields'
@@ -49,8 +49,8 @@ foreach ($certificateScope in $certificateScopes) {
         'certificate scopes resolve only to the purpose-bound read-only collector'
 }
 $certificateProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-and-certificate-trust-readiness'
-Assert-Equal 75 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
-    'the additive certificate profile inherits every earlier scope and the sixteen security-control scopes'
+Assert-Equal 94 @($contractSet.scopeDefinitions | Where-Object profileIds -contains $certificateProfile).Count `
+    'the additive certificate profile inherits every earlier scope and the update, remote-management, SMB, legacy-auth, and platform-protection scopes'
 $connectivityFields = @($contractSet.fieldDefinitions | Where-Object {
     $_.fieldId -like 'field:connectivity.*'
 })
@@ -68,7 +68,7 @@ $connectivityScopes = @($contractSet.scopeDefinitions | Where-Object {
 Assert-Equal 8 $connectivityScopes.Count `
     'the eight connectivity observation classes retain independent coverage'
 $connectivityProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness'
-Assert-Equal 80 @($contractSet.scopeDefinitions | Where-Object {
+Assert-Equal 99 @($contractSet.scopeDefinitions | Where-Object {
     $connectivityProfile -in @($_.profileIds)
 }).Count `
     'the implemented connectivity profile inherits prior evidence, adds platform protection, and replaces three deferred placeholders'
@@ -237,11 +237,11 @@ $maximumProfileScopes = @(
         ForEach-Object Count |
         Measure-Object -Maximum
 ).Maximum
-Assert-Equal 96 $recordSchema.properties.coverage.maxItems `
+Assert-Equal 104 $recordSchema.properties.coverage.maxItems `
     'coverage admits the full additive release profile plus bounded future cleanup headroom'
 Assert-Equal $true ($recordSchema.properties.coverage.maxItems -ge $maximumProfileScopes) `
     'the Assessment Record schema can admit every release-defined scope in one combined record'
-Assert-Equal 96 $recordSchema.properties.diagnostics.maxItems `
+Assert-Equal 104 $recordSchema.properties.diagnostics.maxItems `
     'diagnostics stay finite while leaving room for one gap marker per admitted scope'
 Assert-Equal $true ($recordSchema.properties.diagnostics.maxItems -ge $maximumProfileScopes) `
     'the Assessment Record schema can admit a bounded diagnostic for each release-defined scope'

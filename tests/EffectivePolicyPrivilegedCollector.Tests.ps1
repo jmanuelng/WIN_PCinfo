@@ -27,6 +27,35 @@ $plan=[pscustomobject][ordered]@{
 }
 $digest=Get-ObjectDigest -Value $plan -ConvertToJsonCommand $convertToJsonCommand
 $workerSource=Get-PrivilegedCollectionWorkerSource
+$collectorScopes=@(Get-EffectivePolicyCollectorScopes -Policy $policy)
+Assert-Equal $collectorScopes.Count (@($policy.scopes|Where-Object { [string]$_.scopeId -notlike 'scope:policy.mdm.*' }).Count) `
+    'the privileged worker scope catalog carries every non-MDM Effective Policy scope'
+foreach($propertyName in @(
+    'windowsUpdateSignals','legacyAuthenticationSignals','rdpState','winrmState',
+    'smbState','bitLockerSystemVolume','bitLockerProtectors','deviceGuard',
+    'wdacPolicies','appLockerGpCollections','appLockerCspCollections'
+)){
+    if(-not $workerSource.Contains($propertyName)){
+        throw "The privileged worker base payload is missing: $propertyName"
+    }
+}
+foreach($scopeId in @(
+    'scope:policy.windows-update.defer-feature-updates',
+    'scope:policy.windows-update.defer-quality-updates',
+    'scope:policy.windows-update.disable-dual-scan',
+    'scope:policy.legacy-auth.lm-compatibility-level',
+    'scope:policy.legacy-auth.ntlm-minimum-session-security',
+    'scope:policy.rdp.connections','scope:policy.rdp.service',
+    'scope:policy.rdp.authentication','scope:policy.rdp.listener',
+    'scope:policy.winrm.service','scope:policy.winrm.configuration',
+    'scope:policy.winrm.authentication','scope:policy.winrm.listener',
+    'scope:policy.smb.client','scope:policy.smb.server',
+    'scope:policy.smb.smb1-feature'
+)){
+    if(-not (@($collectorScopes.scopeId) -contains $scopeId)){
+        throw "The privileged worker dropped a release-owned scope: $scopeId"
+    }
+}
 foreach($fragment in @(
     'RSOP_GPO','RSOP_GPLink','RSOP_PolicySetting','NetUserModalsGet(',
     'AuditQuerySystemPolicy(','LsaEnumerateAccountsWithUserRight(',
@@ -39,7 +68,18 @@ foreach($fragment in @(
     'Get-MpComputerStatus','Get-MpPreference',
     'Get-Command Get-NetFirewallProfile','-PolicyStore ActiveStore',
     'AttackSurfaceReductionRules_Ids','AttackSurfaceReductionRules_Actions',
-    'EnableNetworkProtection','IsTamperProtected'
+    'EnableNetworkProtection','IsTamperProtected',
+    'MDM_Policy_Result01_Update02','DeferFeatureUpdatesPeriodInDays',
+    'DeferQualityUpdatesPeriodInDays','DisableDualScan',
+    'SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate','NtlmMinClientSec',
+    'NtlmMinServerSec','fDenyTSConnections','fEnableWinStation',
+    'Win32_TSGeneralSetting','WSMan:\\localhost\\Service\\Auth',
+    'WSMan:\\localhost\\Listener','Get-SmbClientConfiguration',
+    'Get-SmbServerConfiguration','Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol',
+    'Convert-EffectivePolicyRdpSecurityLayer',
+    'Convert-EffectivePolicyRdpMinEncryptionLevel',
+    'Convert-EffectivePolicyOptionalFeatureState',
+    'Get-EffectivePolicyWsmanNodeValues'
 )){
     if(-not $workerSource.Contains($fragment)){throw "The live structured policy collector is missing: $fragment"}
 }
