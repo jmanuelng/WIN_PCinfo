@@ -894,28 +894,78 @@ function Get-EffectivePolicyScopeIds {
         'scope:policy.security-option.machine-inactivity-limit',
         'scope:policy.security-option.disable-cad',
         'scope:policy.security-option.lm-compatibility-level',
+        'scope:policy.windows-update.defer-feature-updates',
+        'scope:policy.windows-update.defer-quality-updates',
+        'scope:policy.windows-update.disable-dual-scan',
+        'scope:policy.legacy-auth.lm-compatibility-level',
+        'scope:policy.legacy-auth.ntlm-minimum-session-security',
         'scope:policy.defender.asr','scope:policy.defender.network-protection',
         'scope:policy.smartscreen.shell','scope:policy.smartscreen.app-install-control',
         'scope:policy.security-center.antivirus-providers',
         'scope:policy.security-center.firewall-providers',
         'scope:policy.defender.runtime',
         'scope:policy.firewall.domain-profile','scope:policy.firewall.private-profile',
-        'scope:policy.firewall.public-profile'
+        'scope:policy.firewall.public-profile',
+        'scope:policy.rdp.connections','scope:policy.rdp.service',
+        'scope:policy.rdp.authentication','scope:policy.rdp.listener',
+        'scope:policy.winrm.service','scope:policy.winrm.configuration',
+        'scope:policy.winrm.authentication','scope:policy.winrm.listener',
+        'scope:policy.smb.client','scope:policy.smb.server',
+        'scope:policy.smb.smb1-feature',
+        'scope:policy.bitlocker.operating-system-volume',
+        'scope:policy.bitlocker.protectors','scope:policy.vbs.runtime',
+        'scope:policy.wdac.inventory','scope:policy.applocker.gp-channel',
+        'scope:policy.applocker.csp-channel'
     )
 }
 
 function Complete-EffectivePolicyLayerStates {
     param([Parameter(Mandatory)]$Result)
-    function Get-LayerState([int[]]$Indexes){
-        $values=@($Indexes|ForEach-Object {[string]$Result.scopeStates[$_].state})
+    function Get-LayerState([string[]]$ScopeIds){
+        $values=@($Result.scopeStates|Where-Object { [string]$_.scopeId -in $ScopeIds }|ForEach-Object {[string]$_.state})
+        if($values.Count -ne $ScopeIds.Count){throw 'The privileged Effective Policy worker dropped a release-owned scope.'}
         if(@($values|Where-Object {$_ -ne 'Complete'}).Count -eq 0){return 'Complete'}
         if(@($values|Select-Object -Unique).Count -eq 1){return [string]$values[0]}
         'Partial'
     }
     $Result.layerStates=[ordered]@{
-        AppliedPolicyEvidence=Get-LayerState (0..7)
-        ConfiguredPolicySignals=Get-LayerState (12..18)
-        CurrentControlState=Get-LayerState @(8,9,10,11,19,20,21,22,23,24)
+        AppliedPolicyEvidence=Get-LayerState @(
+            'scope:policy.applied.user.identity','scope:policy.applied.user.applicability',
+            'scope:policy.applied.user.link','scope:policy.applied.user.precedence',
+            'scope:policy.applied.computer.identity','scope:policy.applied.computer.applicability',
+            'scope:policy.applied.computer.link','scope:policy.applied.computer.precedence'
+        )
+        ConfiguredPolicySignals=Get-LayerState @(
+            'scope:policy.security-option.machine-inactivity-limit',
+            'scope:policy.security-option.disable-cad',
+            'scope:policy.security-option.lm-compatibility-level',
+            'scope:policy.windows-update.defer-feature-updates',
+            'scope:policy.windows-update.defer-quality-updates',
+            'scope:policy.windows-update.disable-dual-scan',
+            'scope:policy.legacy-auth.lm-compatibility-level',
+            'scope:policy.legacy-auth.ntlm-minimum-session-security',
+            'scope:policy.defender.asr','scope:policy.defender.network-protection',
+            'scope:policy.smartscreen.shell','scope:policy.smartscreen.app-install-control',
+            'scope:policy.wdac.inventory','scope:policy.applocker.gp-channel',
+            'scope:policy.applocker.csp-channel'
+        )
+        CurrentControlState=Get-LayerState @(
+            'scope:policy.local-sam.password','scope:policy.local-sam.lockout',
+            'scope:policy.local-audit','scope:policy.local-user-rights',
+            'scope:policy.security-center.antivirus-providers',
+            'scope:policy.security-center.firewall-providers',
+            'scope:policy.defender.runtime',
+            'scope:policy.firewall.domain-profile','scope:policy.firewall.private-profile',
+            'scope:policy.firewall.public-profile',
+            'scope:policy.rdp.connections','scope:policy.rdp.service',
+            'scope:policy.rdp.authentication','scope:policy.rdp.listener',
+            'scope:policy.winrm.service','scope:policy.winrm.configuration',
+            'scope:policy.winrm.authentication','scope:policy.winrm.listener',
+            'scope:policy.smb.client','scope:policy.smb.server',
+            'scope:policy.smb.smb1-feature',
+            'scope:policy.bitlocker.operating-system-volume',
+            'scope:policy.bitlocker.protectors','scope:policy.vbs.runtime'
+        )
     }
     $Result
 }
@@ -947,6 +997,16 @@ function New-EffectivePolicyBaseResult {
             [ordered]@{catalogId='security-option:disable-cad';state=$State;value=$null;sourceAttribution='Unproven'},
             [ordered]@{catalogId='security-option:lm-compatibility-level';state=$State;value=$null;sourceAttribution='Unproven'}
         )
+        windowsUpdateSignals=@(
+            [ordered]@{catalogId='windows-update:defer-feature-updates';state=$State;value=$null;sourceAttribution='Unproven'},
+            [ordered]@{catalogId='windows-update:defer-quality-updates';state=$State;value=$null;sourceAttribution='Unproven'},
+            [ordered]@{catalogId='windows-update:disable-dual-scan';state=$State;value=$null;sourceAttribution='Unproven'}
+        )
+        legacyAuthenticationSignals=@(
+            [ordered]@{catalogId='legacy-auth:lm-compatibility-level';state=$State;value=$null;sourceAttribution='Unproven'},
+            [ordered]@{catalogId='legacy-auth:ntlm-min-client-sec';state=$State;value=$null;sourceAttribution='Unproven'},
+            [ordered]@{catalogId='legacy-auth:ntlm-min-server-sec';state=$State;value=$null;sourceAttribution='Unproven'}
+        )
         antivirusProviders=@()
         firewallProviders=@()
         defenderRuntime=[ordered]@{
@@ -967,6 +1027,37 @@ function New-EffectivePolicyBaseResult {
             private=[ordered]@{state=$State;enabled=$null;defaultInboundAction=$null;defaultOutboundAction=$null}
             public=[ordered]@{state=$State;enabled=$null;defaultInboundAction=$null;defaultOutboundAction=$null}
         }
+        rdpState=[ordered]@{
+            connectionsAllowed=$null;serviceStartMode=$null;serviceState=$null
+            userAuthenticationRequired=$null;securityLayer=$null
+            minimumEncryptionLevel=$null;listenerState=$null;listenerName=$null
+        }
+        winrmState=[ordered]@{
+            serviceStartMode=$null;serviceState=$null
+            allowUnencrypted=$null;basicAuthentication=$null
+            kerberosAuthentication=$null;negotiateAuthentication=$null
+            certificateAuthentication=$null;credSspAuthentication=$null
+            listenerState=$null;listenerTransport=$null;listenerPort=$null
+        }
+        smbState=[ordered]@{
+            clientRequireSigning=$null;clientEnableSigning=$null
+            clientEnableInsecureGuestLogons=$null;serverRequireSigning=$null
+            serverEnableSigning=$null;serverEncryptData=$null
+            serverRejectUnencryptedAccess=$null;serverEnableSmb1=$null
+            smb1FeatureState=$null
+        }
+        bitLockerSystemVolume=[ordered]@{
+            conversionStatus=$null;protectionStatus=$null
+            encryptionMethod=$null;lockStatus=$null
+        }
+        bitLockerProtectors=@()
+        deviceGuard=[ordered]@{
+            virtualizationBasedSecurityStatus=$null;credentialGuardState=$null
+            memoryIntegrityState=$null;userModeCodeIntegrityState=$null
+        }
+        wdacPolicies=@()
+        appLockerGpCollections=@()
+        appLockerCspCollections=@()
         appliedOrderConflict=$false
         localAccountPolicySemantics='LocalSamAccountsOnly'
         userRightSemantics='DirectAssignmentsOnly'
@@ -1080,6 +1171,68 @@ function Convert-EffectivePolicyFirewallAction {
         '^(?:NotConfigured|0)$' { 'NotConfigured'; break }
         default { $null }
     }
+}
+
+function Convert-EffectivePolicyServiceStartMode {
+    param($Value)
+    switch -Regex ([string]$Value) {
+        '^(?:Auto|Automatic)$' { 'Automatic'; break }
+        '^(?:Manual)$' { 'Manual'; break }
+        '^(?:Disabled)$' { 'Disabled'; break }
+        default { $null }
+    }
+}
+
+function Convert-EffectivePolicyServiceState {
+    param($Value)
+    $normalized=([string]$Value).Trim()
+    if($normalized -match '^[A-Za-z]+$'){ $normalized } else { $null }
+}
+
+function Convert-EffectivePolicyLooseBoolean {
+    param($Value)
+    switch -Regex ([string]$Value) {
+        '^(?:True|1|On|Enabled|Yes)$' { $true; break }
+        '^(?:False|0|Off|Disabled|No)$' { $false; break }
+        default { $null }
+    }
+}
+
+function Convert-EffectivePolicyRdpSecurityLayer {
+    param($Value)
+    switch ([string](Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $Value -Maximum 2)) {
+        '0' { 'Rdp'; break }
+        '1' { 'Negotiate'; break }
+        '2' { 'Ssl'; break }
+        default { $null }
+    }
+}
+
+function Convert-EffectivePolicyRdpMinEncryptionLevel {
+    param($Value)
+    switch ([string](Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $Value -Maximum 4)) {
+        '1' { 'Low'; break }
+        '2' { 'ClientCompatible'; break }
+        '3' { 'High'; break }
+        '4' { 'FipsCompliant'; break }
+        default { $null }
+    }
+}
+
+function Convert-EffectivePolicyOptionalFeatureState {
+    param($Value)
+    $normalized=([string]$Value).Trim()
+    if($normalized -match '^[A-Za-z]+$'){ $normalized } else { $null }
+}
+
+function Get-EffectivePolicyWsmanNodeValues {
+    param([Parameter(Mandatory)][string]$Path)
+    $values=@{}
+    foreach($item in @(Get-ChildItem -Path $Path -ErrorAction Stop)){
+        $valueProperty=$item.PSObject.Properties['Value']
+        $values[[string]$item.Name]=if($null -eq $valueProperty){$null}else{$valueProperty.Value}
+    }
+    $values
 }
 
 function Get-LiveEffectivePolicyResult {
@@ -1252,9 +1405,65 @@ function Get-LiveEffectivePolicyResult {
             }
         } catch {$state=Get-WorkerAccessState $_;$result.securityOptions[$index].state=$state;Set-EffectivePolicyScopeState $result @(12+$index) $state "POLICY.SECURITY_OPTION_$($state.ToUpperInvariant())"}
     }
+    foreach($definition in @(
+        [ordered]@{signalIndex=0;scopeIndex=15;path='SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate';valueName='DeferFeatureUpdatesPeriodInDays';valueType='Integer';maximum=[uint64]365;reasonPrefix='POLICY.WINDOWS_UPDATE_FEATURE'},
+        [ordered]@{signalIndex=1;scopeIndex=16;path='SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate';valueName='DeferQualityUpdatesPeriodInDays';valueType='Integer';maximum=[uint64]30;reasonPrefix='POLICY.WINDOWS_UPDATE_QUALITY'},
+        [ordered]@{signalIndex=2;scopeIndex=17;path='SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate';valueName='DisableDualScan';valueType='Boolean';maximum=[uint64]1;reasonPrefix='POLICY.WINDOWS_UPDATE_DISABLE_DUAL_SCAN'}
+    )){
+        try {
+            $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey([string]$definition.path,$false)
+            try {$rawValue=if($null -eq $key){$null}else{$key.GetValue([string]$definition.valueName,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
+            $value=if([string]$definition.valueType -eq 'Boolean'){
+                Convert-EffectivePolicyRegistryBooleanValue -Value $rawValue
+            } else {
+                Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $rawValue -Maximum ([uint64]$definition.maximum)
+            }
+            if($null -ne $rawValue -and $null -eq $value){
+                $result.windowsUpdateSignals[$definition.signalIndex].state='Malformed'
+                Set-EffectivePolicyScopeState $result @([int]$definition.scopeIndex) Malformed "$($definition.reasonPrefix)_MALFORMED"
+            } else {
+                $result.windowsUpdateSignals[$definition.signalIndex].state='Complete'
+                $result.windowsUpdateSignals[$definition.signalIndex].value=$value
+                Set-EffectivePolicyScopeState $result @([int]$definition.scopeIndex) Complete ''
+            }
+        } catch {
+            $state=Get-WorkerAccessState $_
+            $result.windowsUpdateSignals[$definition.signalIndex].state=$state
+            Set-EffectivePolicyScopeState $result @([int]$definition.scopeIndex) $state "$($definition.reasonPrefix)_$($state.ToUpperInvariant())"
+        }
+    }
+    foreach($definition in @(
+        [ordered]@{signalIndex=0;scopeIndex=18;path='SYSTEM\CurrentControlSet\Control\Lsa';valueName='LmCompatibilityLevel';maximum=[uint64]5;reasonPrefix='POLICY.LEGACY_AUTH_LM_COMPATIBILITY'},
+        [ordered]@{signalIndex=1;scopeIndex=19;path='SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0';valueName='NtlmMinClientSec';maximum=[uint64]4294967295;reasonPrefix='POLICY.LEGACY_AUTH_NTLM_MIN_CLIENT'},
+        [ordered]@{signalIndex=2;scopeIndex=19;path='SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0';valueName='NtlmMinServerSec';maximum=[uint64]4294967295;reasonPrefix='POLICY.LEGACY_AUTH_NTLM_MIN_SERVER'}
+    )){
+        try {
+            $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey([string]$definition.path,$false)
+            try {$rawValue=if($null -eq $key){$null}else{$key.GetValue([string]$definition.valueName,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
+            $value=Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $rawValue -Maximum ([uint64]$definition.maximum)
+            if($null -ne $rawValue -and $null -eq $value){
+                $result.legacyAuthenticationSignals[$definition.signalIndex].state='Malformed'
+                Set-EffectivePolicyScopeState $result @(19) Partial 'POLICY.LEGACY_AUTH_INCOMPLETE'
+            } else {
+                $result.legacyAuthenticationSignals[$definition.signalIndex].state='Complete'
+                $result.legacyAuthenticationSignals[$definition.signalIndex].value=$value
+                if(@($result.legacyAuthenticationSignals|Where-Object state -ne 'Complete').Count -eq 0){
+                    Set-EffectivePolicyScopeState $result @(19) Complete ''
+                }
+            }
+        } catch {
+            $state=Get-WorkerAccessState $_
+            $result.legacyAuthenticationSignals[$definition.signalIndex].state=$state
+            Set-EffectivePolicyScopeState $result @(19) Partial 'POLICY.LEGACY_AUTH_INCOMPLETE'
+        }
+    }
+    if([string]$result.scopeStates[18].state -eq 'Failed' -and
+        [string]$result.legacyAuthenticationSignals[0].state -eq 'Complete'){
+        Set-EffectivePolicyScopeState $result @(18) Complete ''
+    }
     $preferenceCommand=Get-Command Get-MpPreference -CommandType Cmdlet -ErrorAction SilentlyContinue
     if($null -eq $preferenceCommand){
-        Set-EffectivePolicyScopeState $result @(15,16) Unsupported 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
+        Set-EffectivePolicyScopeState $result @(20,21) Unsupported 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
         $result.defenderNetworkProtection.state='Unsupported'
     } else {
         # Defender preferences can include highly sensitive exclusions and broad
@@ -1268,7 +1477,7 @@ function Get-LiveEffectivePolicyResult {
             $idsProperty=$preferences.PSObject.Properties['AttackSurfaceReductionRules_Ids']
             $actionsProperty=$preferences.PSObject.Properties['AttackSurfaceReductionRules_Actions']
             if($null -eq $idsProperty -or $null -eq $actionsProperty){
-                Set-EffectivePolicyScopeState $result @(15) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
+                Set-EffectivePolicyScopeState $result @(20) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
             } else {
                 $pairCount=[Math]::Min(@($idsProperty.Value).Count,@($actionsProperty.Value).Count)
                 $boundedPairCount=[Math]::Min($pairCount,16)
@@ -1286,44 +1495,44 @@ function Get-LiveEffectivePolicyResult {
                 }
                 $result.defenderAsrRules=@($asrRules)
                 if($asrMalformed){
-                    Set-EffectivePolicyScopeState $result @(15) Malformed 'POLICY.DEFENDER_ASR_MALFORMED'
+                    Set-EffectivePolicyScopeState $result @(20) Malformed 'POLICY.DEFENDER_ASR_MALFORMED'
                     $result.defenderAsrRules=@()
                 } elseif(@($idsProperty.Value).Count -ne @($actionsProperty.Value).Count){
-                    Set-EffectivePolicyScopeState $result @(15) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
+                    Set-EffectivePolicyScopeState $result @(20) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
                 } elseif($pairCount -gt 16){
-                    Set-EffectivePolicyScopeState $result @(15) Partial 'POLICY.DEFENDER_ASR_EVIDENCE_BOUND_EXCEEDED'
+                    Set-EffectivePolicyScopeState $result @(20) Partial 'POLICY.DEFENDER_ASR_EVIDENCE_BOUND_EXCEEDED'
                 } else {
-                    Set-EffectivePolicyScopeState $result @(15) Complete ''
+                    Set-EffectivePolicyScopeState $result @(20) Complete ''
                 }
             }
             $networkProtectionProperty=$preferences.PSObject.Properties['EnableNetworkProtection']
             if($null -eq $networkProtectionProperty){
-                Set-EffectivePolicyScopeState $result @(16) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
+                Set-EffectivePolicyScopeState $result @(21) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
                 $result.defenderNetworkProtection.state='Unavailable'
             } else {
                 $networkProtection=Convert-EffectivePolicyNetworkProtectionValue $networkProtectionProperty.Value
                 if([string]::IsNullOrWhiteSpace([string]$networkProtection)){
-                    Set-EffectivePolicyScopeState $result @(16) Malformed 'POLICY.DEFENDER_NETWORK_PROTECTION_MALFORMED'
+                    Set-EffectivePolicyScopeState $result @(21) Malformed 'POLICY.DEFENDER_NETWORK_PROTECTION_MALFORMED'
                     $result.defenderNetworkProtection.state='Malformed'
                 } else {
                     $result.defenderNetworkProtection.state='Complete'
                     $result.defenderNetworkProtection.value=[string]$networkProtection
-                    Set-EffectivePolicyScopeState $result @(16) Complete ''
+                    Set-EffectivePolicyScopeState $result @(21) Complete ''
                 }
             }
         } catch {
             $state=Get-WorkerAccessState $_
-            Set-EffectivePolicyScopeState $result @(15,16) $state "POLICY.DEFENDER_$($state.ToUpperInvariant())"
+            Set-EffectivePolicyScopeState $result @(20,21) $state "POLICY.DEFENDER_$($state.ToUpperInvariant())"
             $result.defenderNetworkProtection.state=$state
             $result.defenderAsrRules=@()
         }
     }
     $smartScreenDefinitions=@(
-        [ordered]@{scopeIndex=17;signalIndex=0;path='SOFTWARE\Policies\Microsoft\Windows\System';valueName='EnableSmartScreen';valueType='Boolean';reasonPrefix='POLICY.SMARTSCREEN_SHELL'},
-        [ordered]@{scopeIndex=17;signalIndex=1;path='SOFTWARE\Policies\Microsoft\Windows\System';valueName='PreventOverrideForFilesInShell';valueType='Boolean';reasonPrefix='POLICY.SMARTSCREEN_SHELL'},
-        [ordered]@{scopeIndex=18;signalIndex=2;path='SOFTWARE\Policies\Microsoft\Windows Defender\SmartScreen';valueName='ConfigureAppInstallControlEnabled';valueType='Integer';reasonPrefix='POLICY.SMARTSCREEN_APP_INSTALL'}
+        [ordered]@{scopeIndex=22;signalIndex=0;path='SOFTWARE\Policies\Microsoft\Windows\System';valueName='EnableSmartScreen';valueType='Boolean';reasonPrefix='POLICY.SMARTSCREEN_SHELL'},
+        [ordered]@{scopeIndex=22;signalIndex=1;path='SOFTWARE\Policies\Microsoft\Windows\System';valueName='PreventOverrideForFilesInShell';valueType='Boolean';reasonPrefix='POLICY.SMARTSCREEN_SHELL'},
+        [ordered]@{scopeIndex=23;signalIndex=2;path='SOFTWARE\Policies\Microsoft\Windows Defender\SmartScreen';valueName='ConfigureAppInstallControlEnabled';valueType='Integer';reasonPrefix='POLICY.SMARTSCREEN_APP_INSTALL'}
     )
-    $smartScreenScopeState=@{17=@();18=@()}
+    $smartScreenScopeState=@{22=@();23=@()}
     foreach($definition in $smartScreenDefinitions){
         try {
             $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey([string]$definition.path,$false)
@@ -1352,7 +1561,7 @@ function Get-LiveEffectivePolicyResult {
             $smartScreenScopeState[$definition.scopeIndex]+=,[ordered]@{state=$state;reasonCode="$($definition.reasonPrefix)_$($state.ToUpperInvariant())"}
         }
     }
-    foreach($scopeIndex in @(17,18)){
+    foreach($scopeIndex in @(22,23)){
         $entries=@($smartScreenScopeState[$scopeIndex])
         if(@($entries|Where-Object state -eq 'Complete').Count -eq $entries.Count){
             Set-EffectivePolicyScopeState $result @($scopeIndex) Complete ''
@@ -1373,8 +1582,8 @@ function Get-LiveEffectivePolicyResult {
     # subject so the protected record can compare names and category state
     # without inventing a per-product winner from ambiguous registrations.
     foreach($providerDefinition in @(
-        [ordered]@{providerValue=4;scopeIndex=19;reasonPrefix='POLICY.SECURITY_CENTER_ANTIVIRUS';property='antivirusProviders'},
-        [ordered]@{providerValue=1;scopeIndex=20;reasonPrefix='POLICY.SECURITY_CENTER_FIREWALL';property='firewallProviders'}
+        [ordered]@{providerValue=4;scopeIndex=24;reasonPrefix='POLICY.SECURITY_CENTER_ANTIVIRUS';property='antivirusProviders'},
+        [ordered]@{providerValue=1;scopeIndex=25;reasonPrefix='POLICY.SECURITY_CENTER_FIREWALL';property='firewallProviders'}
     )){
         try {
             $health=[WinPCInfoEffectivePolicyNativeSource]::ReadSecurityProviderHealth([uint32]$providerDefinition.providerValue)
@@ -1405,7 +1614,7 @@ function Get-LiveEffectivePolicyResult {
     }
     $computerStatusCommand=Get-Command Get-MpComputerStatus -CommandType Cmdlet -ErrorAction SilentlyContinue
     if($null -eq $computerStatusCommand){
-        Set-EffectivePolicyScopeState $result @(21) Unsupported 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
+        Set-EffectivePolicyScopeState $result @(26) Unsupported 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
     } else {
         # Defender runtime is separate from Defender preferences on purpose.
         # Runtime answers "what is active now" while preferences answer
@@ -1439,18 +1648,18 @@ function Get-LiveEffectivePolicyResult {
                 $result.defenderRuntime.([string]$mapping.target)=$value
             }
             if($runtimeMissingProperty){
-                Set-EffectivePolicyScopeState $result @(21) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
+                Set-EffectivePolicyScopeState $result @(26) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
             } else {
-                Set-EffectivePolicyScopeState $result @(21) Complete ''
+                Set-EffectivePolicyScopeState $result @(26) Complete ''
             }
         } catch {
             $state=Get-WorkerAccessState $_
-            Set-EffectivePolicyScopeState $result @(21) $state "POLICY.DEFENDER_RUNTIME_$($state.ToUpperInvariant())"
+            Set-EffectivePolicyScopeState $result @(26) $state "POLICY.DEFENDER_RUNTIME_$($state.ToUpperInvariant())"
         }
     }
     $firewallCommand=Get-Command Get-NetFirewallProfile -CommandType Cmdlet -ErrorAction SilentlyContinue
     if($null -eq $firewallCommand){
-        Set-EffectivePolicyScopeState $result @(22,23,24) Unsupported 'POLICY.FIREWALL_MODULE_UNAVAILABLE'
+        Set-EffectivePolicyScopeState $result @(27,28,29) Unsupported 'POLICY.FIREWALL_MODULE_UNAVAILABLE'
     } else {
         # ActiveStore is the firewall "what actually applies now" seam. It
         # already merges local and policy-backed sources, so the worker does
@@ -1460,9 +1669,9 @@ function Get-LiveEffectivePolicyResult {
         try {
             $profiles=@(& $firewallCommand -PolicyStore ActiveStore -ErrorAction Stop)
             foreach($mapping in @(
-                [ordered]@{name='Domain';scopeIndex=22;property='domain'},
-                [ordered]@{name='Private';scopeIndex=23;property='private'},
-                [ordered]@{name='Public';scopeIndex=24;property='public'}
+                [ordered]@{name='Domain';scopeIndex=27;property='domain'},
+                [ordered]@{name='Private';scopeIndex=28;property='private'},
+                [ordered]@{name='Public';scopeIndex=29;property='public'}
             )){
                 $matching=@($profiles|Where-Object { [string]$_.Name -eq [string]$mapping.name })
                 if($matching.Count -eq 0){
@@ -1495,13 +1704,235 @@ function Get-LiveEffectivePolicyResult {
         } catch {
             $state=Get-WorkerAccessState $_
             foreach($mapping in @(
-                [ordered]@{scopeIndex=22;property='domain'},
-                [ordered]@{scopeIndex=23;property='private'},
-                [ordered]@{scopeIndex=24;property='public'}
+                [ordered]@{scopeIndex=27;property='domain'},
+                [ordered]@{scopeIndex=28;property='private'},
+                [ordered]@{scopeIndex=29;property='public'}
             )){
                 $result.firewallProfiles.([string]$mapping.property).state=$state
                 Set-EffectivePolicyScopeState $result @($mapping.scopeIndex) $state "POLICY.FIREWALL_PROFILE_$($state.ToUpperInvariant())"
             }
+        }
+    }
+    # Remote-management settings are collected from local service, WMI, WSMan,
+    # and registry surfaces only. The worker never opens a socket, attempts a
+    # logon, or probes another endpoint. Trust assumption: these local control
+    # surfaces truthfully report configured listener and authentication state.
+    # Safe failure: missing listeners, disabled providers, or malformed values
+    # stay as typed gaps and never become a claim that the host is unreachable.
+    try {
+        $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Terminal Server',$false)
+        try {$rawDenyRdp=if($null -eq $key){$null}else{$key.GetValue('fDenyTSConnections',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
+        $denyRdp=Convert-EffectivePolicyRegistryBooleanValue -Value $rawDenyRdp
+        if($null -eq $rawDenyRdp -or $null -eq $denyRdp){
+            Set-EffectivePolicyScopeState $result @(30) Unavailable 'POLICY.RDP_CONNECTIONS_UNAVAILABLE'
+        } else {
+            $result.rdpState.connectionsAllowed=-not [bool]$denyRdp
+            Set-EffectivePolicyScopeState $result @(30) Complete ''
+        }
+    } catch {
+        $state=Get-WorkerAccessState $_
+        Set-EffectivePolicyScopeState $result @(30) $state "POLICY.RDP_CONNECTIONS_$($state.ToUpperInvariant())"
+    }
+    foreach($serviceDefinition in @(
+        [ordered]@{name='TermService';scopeIndex=31;stateTarget=$result.rdpState},
+        [ordered]@{name='WinRM';scopeIndex=34;stateTarget=$result.winrmState}
+    )){
+        try {
+            $service=@(Get-CimInstance -ClassName Win32_Service -Filter "Name='$($serviceDefinition.name)'" -Property @('StartMode','State') -ErrorAction Stop)
+            if($service.Count -ne 1){
+                Set-EffectivePolicyScopeState $result @([int]$serviceDefinition.scopeIndex) Unavailable "POLICY.$($serviceDefinition.name.ToUpperInvariant())_SERVICE_UNAVAILABLE"
+                continue
+            }
+            $startMode=Convert-EffectivePolicyServiceStartMode $service[0].StartMode
+            $runtimeState=Convert-EffectivePolicyServiceState $service[0].State
+            if($null -eq $startMode -or $null -eq $runtimeState){
+                Set-EffectivePolicyScopeState $result @([int]$serviceDefinition.scopeIndex) Malformed "POLICY.$($serviceDefinition.name.ToUpperInvariant())_SERVICE_MALFORMED"
+                continue
+            }
+            $serviceDefinition.stateTarget.serviceStartMode=$startMode
+            $serviceDefinition.stateTarget.serviceState=$runtimeState
+            Set-EffectivePolicyScopeState $result @([int]$serviceDefinition.scopeIndex) Complete ''
+        } catch {
+            $state=Get-WorkerAccessState $_
+            Set-EffectivePolicyScopeState $result @([int]$serviceDefinition.scopeIndex) $state "POLICY.$($serviceDefinition.name.ToUpperInvariant())_SERVICE_$($state.ToUpperInvariant())"
+        }
+    }
+    try {
+        $rdpSettings=@(Get-CimInstance -Namespace 'Root\Cimv2\TerminalServices' -ClassName Win32_TSGeneralSetting -Property @(
+            'TerminalName','UserAuthenticationRequired','SecurityLayer','MinEncryptionLevel'
+        ) -ErrorAction Stop)
+        $rdpSetting=@($rdpSettings|Where-Object { ([string]$_.TerminalName).Trim() -eq 'RDP-Tcp' })
+        if($rdpSetting.Count -eq 0 -and $rdpSettings.Count -eq 1){$rdpSetting=@($rdpSettings[0])}
+        if($rdpSetting.Count -ne 1){
+            Set-EffectivePolicyScopeState $result @(32,33) Unavailable 'POLICY.RDP_LISTENER_UNAVAILABLE'
+        } else {
+            $selectedRdp=$rdpSetting[0]
+            $nlaRequired=Convert-EffectivePolicyRegistryBooleanValue -Value $selectedRdp.UserAuthenticationRequired
+            $securityLayer=Convert-EffectivePolicyRdpSecurityLayer -Value $selectedRdp.SecurityLayer
+            $minEncryption=Convert-EffectivePolicyRdpMinEncryptionLevel -Value $selectedRdp.MinEncryptionLevel
+            if($null -eq $nlaRequired -or [string]::IsNullOrWhiteSpace([string]$securityLayer) -or
+                [string]::IsNullOrWhiteSpace([string]$minEncryption)){
+                Set-EffectivePolicyScopeState $result @(32) Malformed 'POLICY.RDP_AUTHENTICATION_MALFORMED'
+            } else {
+                $result.rdpState.userAuthenticationRequired=$nlaRequired
+                $result.rdpState.securityLayer=[string]$securityLayer
+                $result.rdpState.minimumEncryptionLevel=[string]$minEncryption
+                Set-EffectivePolicyScopeState $result @(32) Complete ''
+            }
+            $listenerName=([string]$selectedRdp.TerminalName).Trim()
+            $listenerKey=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey("SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\$listenerName",$false)
+            try {$rawEnableListener=if($null -eq $listenerKey){$null}else{$listenerKey.GetValue('fEnableWinStation',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $listenerKey){$listenerKey.Dispose()}}
+            $listenerEnabled=Convert-EffectivePolicyRegistryBooleanValue -Value $rawEnableListener
+            if([string]::IsNullOrWhiteSpace($listenerName) -or $null -eq $listenerEnabled -or -not [bool]$listenerEnabled){
+                Set-EffectivePolicyScopeState $result @(33) Unavailable 'POLICY.RDP_LISTENER_UNAVAILABLE'
+            } else {
+                $result.rdpState.listenerState='Present'
+                $result.rdpState.listenerName=$listenerName
+                Set-EffectivePolicyScopeState $result @(33) Complete ''
+            }
+        }
+    } catch {
+        $state=Get-WorkerAccessState $_
+        if([string]$result.scopeStates[32].state -eq 'Failed'){
+            Set-EffectivePolicyScopeState $result @(32) $state "POLICY.RDP_AUTHENTICATION_$($state.ToUpperInvariant())"
+        }
+        Set-EffectivePolicyScopeState $result @(33) $state "POLICY.RDP_LISTENER_$($state.ToUpperInvariant())"
+    }
+    try {
+        $serviceValues=Get-EffectivePolicyWsmanNodeValues -Path 'WSMan:\localhost\Service'
+        $allowUnencrypted=Convert-EffectivePolicyLooseBoolean $serviceValues['AllowUnencrypted']
+        if($serviceValues.Count -eq 0 -or $null -eq $allowUnencrypted){
+            Set-EffectivePolicyScopeState $result @(35) Unavailable 'POLICY.WINRM_CONFIGURATION_UNAVAILABLE'
+        } else {
+            $result.winrmState.allowUnencrypted=$allowUnencrypted
+            Set-EffectivePolicyScopeState $result @(35) Complete ''
+        }
+        $authValues=Get-EffectivePolicyWsmanNodeValues -Path 'WSMan:\localhost\Service\Auth'
+        $authMissing=$false
+        foreach($mapping in @(
+            [ordered]@{name='Basic';target='basicAuthentication'},
+            [ordered]@{name='Kerberos';target='kerberosAuthentication'},
+            [ordered]@{name='Negotiate';target='negotiateAuthentication'},
+            [ordered]@{name='Certificate';target='certificateAuthentication'},
+            [ordered]@{name='CredSSP';target='credSspAuthentication'}
+        )){
+            $value=Convert-EffectivePolicyLooseBoolean $authValues[[string]$mapping.name]
+            if($null -eq $value){$authMissing=$true;continue}
+            $result.winrmState.([string]$mapping.target)=$value
+        }
+        if($authMissing){
+            Set-EffectivePolicyScopeState $result @(36) Partial 'POLICY.WINRM_AUTHENTICATION_INCOMPLETE'
+        } else {
+            Set-EffectivePolicyScopeState $result @(36) Complete ''
+        }
+    } catch {
+        $state=Get-WorkerAccessState $_
+        Set-EffectivePolicyScopeState $result @(35,36) $state "POLICY.WINRM_CONFIGURATION_$($state.ToUpperInvariant())"
+    }
+    try {
+        $listenerEntries=[Collections.Generic.List[object]]::new()
+        foreach($listener in @(Get-ChildItem -Path 'WSMan:\localhost\Listener' -ErrorAction Stop)){
+            $listenerValues=Get-EffectivePolicyWsmanNodeValues -Path ([string]$listener.PSPath)
+            $enabled=Convert-EffectivePolicyLooseBoolean $listenerValues['Enabled']
+            $transport=([string]$listenerValues['Transport']).Trim().ToUpperInvariant()
+            $port=Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $listenerValues['Port'] -Maximum ([uint64]65535)
+            if($enabled -eq $true -and $transport -in @('HTTP','HTTPS') -and $null -ne $port){
+                $listenerEntries.Add([ordered]@{transport=$transport;port=[int]$port})
+            }
+        }
+        if($listenerEntries.Count -ne 1){
+            Set-EffectivePolicyScopeState $result @(37) Unavailable 'POLICY.WINRM_LISTENER_UNAVAILABLE'
+        } else {
+            $listenerEntry=$listenerEntries[0]
+            $result.winrmState.listenerTransport=[string]$listenerEntry.transport
+            $result.winrmState.listenerPort=[int]$listenerEntry.port
+            $result.winrmState.listenerState=if($listenerEntry.transport -eq 'HTTP' -and $listenerEntry.port -eq 5985){
+                'Http5985Only'
+            } elseif($listenerEntry.transport -eq 'HTTPS' -and $listenerEntry.port -eq 5986){
+                'Https5986Only'
+            } else {
+                'Custom'
+            }
+            Set-EffectivePolicyScopeState $result @(37) Complete ''
+        }
+    } catch {
+        $state=Get-WorkerAccessState $_
+        Set-EffectivePolicyScopeState $result @(37) $state "POLICY.WINRM_LISTENER_$($state.ToUpperInvariant())"
+    }
+    $smbClientCommand=Get-Command Get-SmbClientConfiguration -CommandType Cmdlet -ErrorAction SilentlyContinue
+    if($null -eq $smbClientCommand){
+        Set-EffectivePolicyScopeState $result @(38) Unsupported 'POLICY.SMB_CLIENT_MODULE_UNAVAILABLE'
+    } else {
+        try {
+            $clientConfig=& $smbClientCommand -ErrorAction Stop
+            $clientMissing=$false
+            foreach($mapping in @(
+                [ordered]@{propertyName='RequireSecuritySignature';target='clientRequireSigning'},
+                [ordered]@{propertyName='EnableSecuritySignature';target='clientEnableSigning'},
+                [ordered]@{propertyName='EnableInsecureGuestLogons';target='clientEnableInsecureGuestLogons'}
+            )){
+                $property=$clientConfig.PSObject.Properties[[string]$mapping.propertyName]
+                if($null -eq $property -or $property.Value -isnot [bool]){$clientMissing=$true;continue}
+                $result.smbState.([string]$mapping.target)=[bool]$property.Value
+            }
+            if($clientMissing){
+                Set-EffectivePolicyScopeState $result @(38) Partial 'POLICY.SMB_CLIENT_INCOMPLETE'
+            } else {
+                Set-EffectivePolicyScopeState $result @(38) Complete ''
+            }
+        } catch {
+            $state=Get-WorkerAccessState $_
+            Set-EffectivePolicyScopeState $result @(38) $state "POLICY.SMB_CLIENT_$($state.ToUpperInvariant())"
+        }
+    }
+    $smbServerCommand=Get-Command Get-SmbServerConfiguration -CommandType Cmdlet -ErrorAction SilentlyContinue
+    if($null -eq $smbServerCommand){
+        Set-EffectivePolicyScopeState $result @(39) Unsupported 'POLICY.SMB_SERVER_MODULE_UNAVAILABLE'
+    } else {
+        try {
+            $serverConfig=& $smbServerCommand -ErrorAction Stop
+            $serverMissing=$false
+            foreach($mapping in @(
+                [ordered]@{propertyName='RequireSecuritySignature';target='serverRequireSigning'},
+                [ordered]@{propertyName='EnableSecuritySignature';target='serverEnableSigning'},
+                [ordered]@{propertyName='EncryptData';target='serverEncryptData'},
+                [ordered]@{propertyName='RejectUnencryptedAccess';target='serverRejectUnencryptedAccess'},
+                [ordered]@{propertyName='EnableSMB1Protocol';target='serverEnableSmb1'}
+            )){
+                $property=$serverConfig.PSObject.Properties[[string]$mapping.propertyName]
+                if($null -eq $property -or $property.Value -isnot [bool]){$serverMissing=$true;continue}
+                $result.smbState.([string]$mapping.target)=[bool]$property.Value
+            }
+            if($serverMissing){
+                Set-EffectivePolicyScopeState $result @(39) Partial 'POLICY.SMB_SERVER_INCOMPLETE'
+            } else {
+                Set-EffectivePolicyScopeState $result @(39) Complete ''
+            }
+        } catch {
+            $state=Get-WorkerAccessState $_
+            Set-EffectivePolicyScopeState $result @(39) $state "POLICY.SMB_SERVER_$($state.ToUpperInvariant())"
+        }
+    }
+    $optionalFeatureCommand=Get-Command Get-WindowsOptionalFeature -CommandType Cmdlet -ErrorAction SilentlyContinue
+    if($null -eq $optionalFeatureCommand){
+        Set-EffectivePolicyScopeState $result @(40) Unsupported 'POLICY.SMB1_FEATURE_MODULE_UNAVAILABLE'
+    } else {
+        try {
+            $feature=@(& $optionalFeatureCommand -Online -FeatureName SMB1Protocol -ErrorAction Stop)
+            if($feature.Count -ne 1){
+                Set-EffectivePolicyScopeState $result @(40) Unavailable 'POLICY.SMB1_FEATURE_UNAVAILABLE'
+            } else {
+                $featureState=Convert-EffectivePolicyOptionalFeatureState $feature[0].State
+                if([string]::IsNullOrWhiteSpace([string]$featureState)){
+                    Set-EffectivePolicyScopeState $result @(40) Malformed 'POLICY.SMB1_FEATURE_MALFORMED'
+                } else {
+                    $result.smbState.smb1FeatureState=[string]$featureState
+                    Set-EffectivePolicyScopeState $result @(40) Complete ''
+                }
+            }
+        } catch {
+            $state=Get-WorkerAccessState $_
+            Set-EffectivePolicyScopeState $result @(40) $state "POLICY.SMB1_FEATURE_$($state.ToUpperInvariant())"
         }
     }
     $groups=$result.policySettings|Group-Object target,settingId
