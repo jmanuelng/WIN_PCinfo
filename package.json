@@ -10,8 +10,8 @@
   "scripts": {
     "build": "pwsh -NoLogo -NoProfile -File ./build/Build.ps1",
     "test": "pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1",
-    "sandcastle": "tsx .sandcastle/main.mts",
-    "sandcastle:canary": "tsx .sandcastle/main.mts --max-iterations 1",
+    "sandcastle": "tsx .sandcastle/main.mts --max-parallel 2",
+    "sandcastle:canary": "tsx .sandcastle/main.mts --max-iterations 1 --max-parallel 1",
     "sandcastle:preflight": "tsx .sandcastle/preflight.mts",
     "sandcastle:test": "node --import tsx --test .sandcastle/workflow.test.mts"
   },

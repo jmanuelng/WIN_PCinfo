@@ -2,8 +2,9 @@
 
 This repository runs Sandcastle directly on its Windows host because its
 PowerShell collectors and tests require Windows. There is no Docker or other
-container boundary. Codex uses automatic approval review, but it still has
-broad host access. Run this workflow only in the dedicated secure VM and from a
+container boundary. Worktree agents are Grok 4.6 at extra-high reasoning
+(`--reasoning-effort xhigh`) with `--always-approve`. That still has broad
+host access. Run this workflow only in the dedicated secure VM and from a
 clean checkout.
 
 ## One-time CLI authentication
@@ -13,16 +14,14 @@ Run these commands in the same IDE terminal that will launch Sandcastle:
 ```powershell
 gh auth login -h github.com --web
 gh auth status
-codex login
-codex login status
+grok login
+grok models
 ```
 
 Git authentication in an IDE does not replace either CLI login.
 
-The pinned Sandcastle `0.12.0` Codex provider predates the current Codex CLI
-automatic-review flag. `codex-agent.mts` adapts its generated command to
-`--approve-for-me` and fails closed if Sandcastle changes the expected command
-shape. Do not replace the adapter with approval bypass.
+`grok-agent.mts` invokes headless Grok with `--output-format streaming-json`
+and a temp `--prompt-file`. It does not use Codex.
 
 ## Eligibility
 
@@ -50,21 +49,23 @@ From an up-to-date, clean `main` checkout:
 ```powershell
 npm install
 npm run sandcastle:test
-npm run sandcastle:preflight
-npm run sandcastle:canary
+npm run sandcastle:preflight -- --issue 66
+npm run sandcastle:canary -- --issue 66
 ```
 
-Preflight is read-only. The canary processes at most one issue.
+Preflight is read-only. The canary processes exactly one issue, sequentially.
+`--issue` pins that ticket so an assigned or later frontier item cannot steal
+the canary slot. Omit `--issue` to take the lowest eligible unassigned ticket.
 
 After inspecting a successful canary, a run may process up to ten issues with
-at most two independent tickets active at once:
+two independent tickets active at once:
 
 ```powershell
 npm run sandcastle -- --max-iterations 10
 ```
 
-`npm run sandcastle` uses the same ten-issue default. The named
-`sandcastle:canary` script explicitly limits execution to one issue.
+`npm run sandcastle` already sets `--max-parallel 2`. The named
+`sandcastle:canary` script forces `--max-iterations 1 --max-parallel 1`.
 
 Use `--max-parallel 1` to force sequential execution. The default and maximum
 are both two because this no-sandbox Windows host must retain enough capacity

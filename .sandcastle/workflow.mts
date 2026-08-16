@@ -198,10 +198,10 @@ export interface CommandResult {
 }
 
 function commandInvocation(command: string, args: readonly string[]) {
-  if (process.platform === "win32" && command === "codex") {
+  if (process.platform === "win32" && command === "grok") {
     return {
       command: process.env.ComSpec || "cmd.exe",
-      args: ["/d", "/s", "/c", "codex", ...args],
+      args: ["/d", "/s", "/c", command, ...args],
     };
   }
 
@@ -631,7 +631,12 @@ export function refreshBase(): string {
 
 export function assertAuthentication(): void {
   runCommand("gh", ["auth", "status"]);
-  runCommand("codex", ["login", "status"]);
+  const grok = runCommand("grok", ["models"]);
+  if (!/logged in/i.test(`${grok.stdout}\n${grok.stderr}`)) {
+    throw new Error(
+      "Grok CLI is not logged in. Run grok login in this terminal, then grok models.",
+    );
+  }
 }
 
 export function assertHostReady(): void {
@@ -847,6 +852,45 @@ export function parseMaxIterations(args: readonly string[]): number {
     );
   }
   return value;
+}
+
+export function parseIssueNumber(args: readonly string[]): number | undefined {
+  const flagIndex = args.indexOf("--issue");
+  if (flagIndex === -1) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(args[flagIndex + 1] ?? "", 10);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error("--issue must be a positive issue number.");
+  }
+  return value;
+}
+
+export function loadIssue(
+  issueNumber: number,
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): GitHubIssue {
+  return commands.json<GitHubIssue>("gh", [
+    "issue",
+    "view",
+    String(issueNumber),
+    "--json",
+    "number,title,state,url,labels,assignees,blockedBy,subIssuesSummary",
+  ]);
+}
+
+export function requireEligibleIssue(
+  issueNumber: number,
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): GitHubIssue {
+  const issue = loadIssue(issueNumber, commands);
+  if (!isEligibleIssue(issue)) {
+    throw new Error(
+      `Issue #${issueNumber} is not an unassigned, unblocked ready-for-agent ticket.`,
+    );
+  }
+  return issue;
 }
 
 export function parseMaxParallel(args: readonly string[]): number {

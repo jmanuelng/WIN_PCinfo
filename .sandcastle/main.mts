@@ -12,9 +12,11 @@ import {
   ensureIssueClosed,
   listEligibleIssues,
   mergePullRequest,
+  parseIssueNumber,
   parseMaxIterations,
   parseMaxParallel,
   pushAndCreatePullRequest,
+  requireEligibleIssue,
   refreshBase,
   releaseIssueClaim,
   runCommand,
@@ -25,7 +27,7 @@ import {
   waitForPullRequestChecks,
   type GitHubIssue,
 } from "./workflow.mts";
-import { createCodexAgent } from "./codex-agent.mts";
+import { createGrokAgent } from "./grok-agent.mts";
 import {
   createLaneRecovery,
   laneFailure,
@@ -35,7 +37,8 @@ import {
 const cliArgs = process.argv.slice(2);
 const maxIterations = parseMaxIterations(cliArgs);
 const maxParallel = parseMaxParallel(cliArgs);
-const agent = createCodexAgent();
+const requestedIssueNumber = parseIssueNumber(cliArgs);
+const agent = createGrokAgent();
 
 async function closeSandbox(
   sandbox: Awaited<ReturnType<typeof sandcastle.createSandbox>>,
@@ -264,6 +267,9 @@ async function run(): Promise<void> {
   assertAuthentication();
   assertHostReady();
   console.log(`Frontier concurrency: up to ${maxParallel} issue(s).`);
+  if (requestedIssueNumber !== undefined) {
+    console.log(`Pinned issue: #${requestedIssueNumber}.`);
+  }
 
   let attemptedIssues = 0;
   let batch = 0;
@@ -273,10 +279,15 @@ async function run(): Promise<void> {
     refreshBase();
     const remaining = maxIterations - attemptedIssues;
     const desiredBatchSize = Math.min(maxParallel, remaining);
-    const issues = selectNextIssues(
-      listEligibleIssues(desiredBatchSize),
-      desiredBatchSize,
-    );
+    const issues =
+      requestedIssueNumber === undefined
+        ? selectNextIssues(
+            listEligibleIssues(desiredBatchSize),
+            desiredBatchSize,
+          )
+        : attemptedIssues === 0
+          ? [requireEligibleIssue(requestedIssueNumber)]
+          : [];
     if (issues.length === 0) {
       console.log("No unassigned, unblocked ready-for-agent issues remain.");
       return;

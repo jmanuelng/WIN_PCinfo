@@ -2,24 +2,34 @@ import {
   assertAuthentication,
   assertHostReady,
   listEligibleIssues,
+  parseIssueNumber,
+  requireEligibleIssue,
   selectNextIssue,
 } from "./workflow.mts";
 
 function run(): void {
-  console.log("Checking GitHub and Codex CLI authentication...");
+  const requestedIssueNumber = parseIssueNumber(process.argv.slice(2));
+  console.log("Checking GitHub and Grok CLI authentication...");
   assertAuthentication();
 
   console.log("Checking repository state and refreshing origin/main...");
   assertHostReady();
 
   console.log("Reading eligible issues without claiming or modifying them...");
-  const issue = selectNextIssue(listEligibleIssues());
+  const issue =
+    requestedIssueNumber === undefined
+      ? selectNextIssue(listEligibleIssues())
+      : requireEligibleIssue(requestedIssueNumber);
   if (!issue) {
     console.log("PASS: no unassigned, unblocked ready-for-agent issue is available.");
     return;
   }
 
-  console.log(`PASS: next canary candidate is #${issue.number}: ${issue.title}`);
+  console.log(
+    requestedIssueNumber === undefined
+      ? `PASS: next canary candidate is #${issue.number}: ${issue.title}`
+      : `PASS: pinned canary candidate is #${issue.number}: ${issue.title}`,
+  );
   console.log("Preflight made no issue, branch, pull-request, or source changes.");
 }
 
