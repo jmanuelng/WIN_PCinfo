@@ -19,6 +19,7 @@ import {
   requireEligibleIssue,
   refreshBase,
   releaseIssueClaim,
+  resultHasCompletionSignal,
   runCommand,
   runCommandAsync,
   runWithRequiredCleanup,
@@ -105,7 +106,7 @@ async function prepareIssue(issue: GitHubIssue, recovery: LaneRecovery) {
     if (implementation.commits.length === 0) {
       throw new Error(`Issue #${issue.number} produced no implementation commit.`);
     }
-    if (!implementation.completionSignal) {
+    if (!resultHasCompletionSignal(implementation)) {
       throw new Error(
         `Issue #${issue.number} implementation did not emit its completion signal.`,
       );
@@ -114,7 +115,7 @@ async function prepareIssue(issue: GitHubIssue, recovery: LaneRecovery) {
     const review = await sandbox.run(
       buildReviewPhaseOptions(agent, issue.number, branch),
     );
-    if (!review.completionSignal) {
+    if (!resultHasCompletionSignal(review)) {
       throw new Error(
         `Issue #${issue.number} review did not emit its completion signal.`,
       );
@@ -187,7 +188,7 @@ async function integrateLatestBase(
       const integration = await sandbox.run(
         buildIntegrationPhaseOptions(agent, issue.number, branch),
       );
-      if (!integration.completionSignal) {
+      if (!resultHasCompletionSignal(integration)) {
         throw new Error(
           `Issue #${issue.number} integration did not emit its completion signal.`,
         );
