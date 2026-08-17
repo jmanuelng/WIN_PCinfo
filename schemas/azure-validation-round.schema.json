@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/azure-validation-round.schema.json",
+  "title": "WIN-PCInfo Azure validation round controller policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "productCapability",
+    "sliceDeliversCapability",
+    "supportClaim",
+    "previewOrStableClaim",
+    "trustClass",
+    "qualifyingEvidenceRequiresAttestedOrSignedPath",
+    "azure",
+    "guest",
+    "admissionProbes",
+    "lifecycle",
+    "zeroResidue",
+    "networkBehaviors",
+    "scenarios",
+    "privacy",
+    "workspace"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.azure-validation-round-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.azure-validation-round/1.0.0" },
+    "productCapability": { "const": "CAP-0028" },
+    "sliceDeliversCapability": { "const": false },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "trustClass": { "const": "ControllerDevTracer" },
+    "qualifyingEvidenceRequiresAttestedOrSignedPath": { "const": true },
+    "azure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contact",
+        "livePathWithoutIdentity",
+        "persistentResourceChange",
+        "credentialless",
+        "toolingAcquisition"
+      ],
+      "properties": {
+        "contact": { "const": "ManagedIdentity" },
+        "livePathWithoutIdentity": { "const": "NotStarted" },
+        "persistentResourceChange": { "const": "AdmittedRoundOnly" },
+        "credentialless": { "const": true },
+        "toolingAcquisition": { "const": "declared-not-acquired" }
+      }
+    },
+    "guest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "control",
+        "bootstrapCredentialExposure",
+        "captureOrReuse",
+        "publicIp",
+        "imageSourceKind",
+        "freshBaselineRequired"
+      ],
+      "properties": {
+        "control": { "const": "VmAgentRunCommand" },
+        "bootstrapCredentialExposure": { "const": "Prohibited" },
+        "captureOrReuse": { "const": "Prohibited" },
+        "publicIp": { "const": false },
+        "imageSourceKind": { "const": "ApprovedEvaluationGallery" },
+        "freshBaselineRequired": { "const": true }
+      }
+    },
+    "admissionProbes": {
+      "type": "array",
+      "minItems": 15,
+      "maxItems": 15,
+      "prefixItems": [
+        { "const": "Identity" },
+        { "const": "Policy" },
+        { "const": "Locks" },
+        { "const": "Quota" },
+        { "const": "Image" },
+        { "const": "Sku" },
+        { "const": "StandardSsd" },
+        { "const": "Tags" },
+        { "const": "Expiry" },
+        { "const": "SubnetCapacity" },
+        { "const": "VmCount" },
+        { "const": "CleanupRights" },
+        { "const": "EmptyTransientScope" },
+        { "const": "ExclusiveLease" },
+        { "const": "ArmedRecovery" }
+      ],
+      "items": false
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cleanupFirst",
+        "testingFailureCannotBlockCleanup",
+        "completionRequiresZeroResidue",
+        "terraformStateRemovalOnlyAfterZeroResidue",
+        "nextRoundEligibleOnlyAfterZeroResidue",
+        "persistentScopePreserved"
+      ],
+      "properties": {
+        "cleanupFirst": { "const": true },
+        "testingFailureCannotBlockCleanup": { "const": true },
+        "completionRequiresZeroResidue": { "const": true },
+        "terraformStateRemovalOnlyAfterZeroResidue": { "const": true },
+        "nextRoundEligibleOnlyAfterZeroResidue": { "const": true },
+        "persistentScopePreserved": { "const": true }
+      }
+    },
+    "zeroResidue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transientScopeEmpty",
+        "bothPeeringsAbsent",
+        "exactRoundIdsAbsent",
+        "transferObjectsRemoved",
+        "coordinationObjectsRemoved",
+        "tagSweepEmpty",
+        "unprotectedLocalMaterialAbsent"
+      ],
+      "properties": {
+        "transientScopeEmpty": { "const": true },
+        "bothPeeringsAbsent": { "const": true },
+        "exactRoundIdsAbsent": { "const": true },
+        "transferObjectsRemoved": { "const": true },
+        "coordinationObjectsRemoved": { "const": true },
+        "tagSweepEmpty": { "const": true },
+        "unprotectedLocalMaterialAbsent": { "const": true }
+      }
+    },
+    "networkBehaviors": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "LocalOnly" },
+        { "const": "ApprovedEgress" }
+      ],
+      "items": false
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "prefixItems": [
+        { "const": "CompleteZeroResidue" },
+        { "const": "CleanupFirst" },
+        { "const": "AssessmentFailed" },
+        { "const": "IdentityUnavailable" },
+        { "const": "AdmissionDenied" },
+        { "const": "ResidueRemains" },
+        { "const": "CaptureAttempted" },
+        { "const": "CredentialExposed" }
+      ],
+      "items": false
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredBoundary",
+        "markerFileName",
+        "markerContent",
+        "rejectRepositoryPath",
+        "rejectPublicPath",
+        "rejectUncPath"
+      ],
+      "properties": {
+        "requiredBoundary": { "const": "PrivateExternalWorkspace" },
+        "markerFileName": { "const": ".win-pcinfo-private-workspace" },
+        "markerContent": { "const": "win-pcinfo.private-external-workspace" },
+        "rejectRepositoryPath": { "const": true },
+        "rejectPublicPath": { "const": true },
+        "rejectUncPath": { "const": true }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recoveryDirectoryName",
+        "workingDirectoryName",
+        "renderedDirectoryName"
+      ],
+      "properties": {
+        "recoveryDirectoryName": { "const": "recovery" },
+        "workingDirectoryName": { "const": "round-work" },
+        "renderedDirectoryName": { "const": "rendered" }
+      }
+    }
+  }
+}

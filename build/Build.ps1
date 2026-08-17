@@ -42,6 +42,7 @@ $sourcePaths = @(
     'src/PortableDistribution.ps1'
     'src/AttestedPreview.ps1'
     'src/AzureValidationAdmission.ps1'
+    'src/AzureValidationRound.ps1'
     'src/ReleaseGates.ps1'
     'src/SigningBoundary.ps1'
     'src/ApplicationMain.ps1'
@@ -105,6 +106,10 @@ $azureValidationAdmissionPolicyPath = Join-Path $repositoryRoot 'docs/spec/relea
 $azureValidationAdmissionSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-admission.schema.json'
 $azureValidationRoundRequestSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-round-request.schema.json'
 $azureValidationAdmissionVerdictSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-admission-verdict.schema.json'
+$azureValidationRoundPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-azure-validation-round.json'
+$azureValidationRoundSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-round.schema.json'
+$azureValidationRoundExecutionRequestSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-round-execution-request.schema.json'
+$azureValidationRoundOutcomeSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-round-outcome.schema.json'
 $releaseGatesPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-release-gates.json'
 $releaseGatesSchemaPath = Join-Path $repositoryRoot 'schemas/release-gates.schema.json'
 $signingBoundaryPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
@@ -149,6 +154,8 @@ foreach ($requiredDefinitionPath in @(
     $attestedPreviewAttestationSchemaPath,
     $azureValidationAdmissionPolicyPath, $azureValidationAdmissionSchemaPath,
     $azureValidationRoundRequestSchemaPath, $azureValidationAdmissionVerdictSchemaPath,
+    $azureValidationRoundPolicyPath, $azureValidationRoundSchemaPath,
+    $azureValidationRoundExecutionRequestSchemaPath, $azureValidationRoundOutcomeSchemaPath,
     $releaseGatesPolicyPath, $releaseGatesSchemaPath,
     $signingBoundaryPolicyPath, $signingBoundarySchemaPath,
     $signingSessionRequestSchemaPath, $signingSessionResultSchemaPath,
@@ -304,6 +311,12 @@ $azureValidationAdmissionPolicyDigest = Get-Sha256Hex -Bytes $azureValidationAdm
 $azureValidationAdmissionPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $azureValidationAdmissionPolicyBytes
 )
+$azureValidationRoundPolicyBytes = Get-Utf8LfBytes -LiteralPath $azureValidationRoundPolicyPath
+$azureValidationRoundPolicyBase64 = [Convert]::ToBase64String($azureValidationRoundPolicyBytes)
+$azureValidationRoundPolicyDigest = Get-Sha256Hex -Bytes $azureValidationRoundPolicyBytes
+$azureValidationRoundPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $azureValidationRoundPolicyBytes
+)
 $releaseGatesPolicyBytes = Get-Utf8LfBytes -LiteralPath $releaseGatesPolicyPath
 $releaseGatesPolicyBase64 = [Convert]::ToBase64String($releaseGatesPolicyBytes)
 $releaseGatesPolicyDigest = Get-Sha256Hex -Bytes $releaseGatesPolicyBytes
@@ -395,6 +408,9 @@ if (-not (Test-Json -Json $attestedPreviewPolicyJson -SchemaFile $attestedPrevie
 if (-not (Test-Json -Json $azureValidationAdmissionPolicyJson -SchemaFile $azureValidationAdmissionSchemaPath)) {
     throw 'The Azure validation admission contract does not satisfy its release schema.'
 }
+if (-not (Test-Json -Json $azureValidationRoundPolicyJson -SchemaFile $azureValidationRoundSchemaPath)) {
+    throw 'The Azure validation-round contract does not satisfy its release schema.'
+}
 if (-not (Test-Json -Json $releaseGatesPolicyJson -SchemaFile $releaseGatesSchemaPath)) {
     throw 'The release-gate contract does not satisfy its release schema.'
 }
@@ -471,6 +487,9 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/azure-validation-admission.schema.json'
     'schemas/azure-validation-round-request.schema.json'
     'schemas/azure-validation-admission-verdict.schema.json'
+    'schemas/azure-validation-round.schema.json'
+    'schemas/azure-validation-round-execution-request.schema.json'
+    'schemas/azure-validation-round-outcome.schema.json'
     'schemas/release-gates.schema.json'
     'schemas/signing-boundary.schema.json'
     'schemas/signing-session-request.schema.json'
@@ -502,6 +521,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
     'docs/spec/releases/2.0.0-preview.1-attested-preview.json'
     'docs/spec/releases/2.0.0-preview.1-azure-validation-admission.json'
+    'docs/spec/releases/2.0.0-preview.1-azure-validation-round.json'
     'docs/spec/releases/2.0.0-preview.1-release-gates.json'
     'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
@@ -787,6 +807,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__AZURE_VALIDATION_ADMISSION_POLICY_SHA256__', $azureValidationAdmissionPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/AzureValidationRound.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__AZURE_VALIDATION_ROUND_POLICY_BASE64__', $azureValidationRoundPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__AZURE_VALIDATION_ROUND_POLICY_SHA256__', $azureValidationRoundPolicyDigest
         )
     }
     if ($sourceFile.path -eq 'src/ReleaseGates.ps1') {

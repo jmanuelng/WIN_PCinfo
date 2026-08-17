@@ -177,6 +177,141 @@ if ($Workflow -eq 'AdmitValidationRound') {
     exit $exitCode
 }
 
+if ($Workflow -eq 'RunValidationRound') {
+    # A Validation Round is a maintainer controller, not an assessment of
+    # this host. The threat is treating a synthetic fixture as live Azure,
+    # exposing a bootstrap password, or reporting completion while residue
+    # remains. The mechanism is the same trusted JSON commands as Help,
+    # cleanup-first admission, and VM Agent-only guest control. The trust
+    # assumption is that live Azure uses the approved managed identity.
+    # Safe failure is NotStarted before create, or CleanupIncomplete while
+    # any exact target remains.
+    Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'ValidationRound' -State 'Started' `
+        -MessageId 'validation.round.started' -CompletedUnits 0 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    $roundResult = if ([string]::IsNullOrWhiteSpace($ValidationRoundRequestPath) -or
+        [string]::IsNullOrWhiteSpace($ValidationPrivateWorkspacePath)) {
+        New-AzureValidationRoundOutcome -State Rejected `
+            -ReasonCode 'VALIDATION.REQUEST_INVALID' -PrivacyBoundary Missing
+    }
+    else {
+        try {
+            $roundPlanText = [System.IO.File]::ReadAllText(
+                $ValidationRoundRequestPath,
+                [System.Text.UTF8Encoding]::new($false, $true)
+            )
+            $roundPrivacy = Test-AzureValidationRoundPrivacyBoundary -Text $roundPlanText
+            if ($roundPrivacy) {
+                New-AzureValidationRoundOutcome -State Rejected `
+                    -ReasonCode $roundPrivacy -PrivacyBoundary Rejected
+            }
+            else {
+                $roundPlan = & $convertFromJsonCommand -InputObject $roundPlanText `
+                    -ErrorAction Stop
+                $roundRepositoryRoot = Split-Path -Parent $PSCommandPath
+                $roundApplicationDirectory = Split-Path -Parent $PSCommandPath
+                if (-not (Test-Path -LiteralPath (
+                    Join-Path $roundRepositoryRoot 'infra/azure-validation/versions.tf'
+                ))) {
+                    $roundRepositoryRoot = Split-Path -Parent $roundRepositoryRoot
+                }
+                $roundScenario = $null
+                $roundFixtureText = $null
+                if (-not [string]::IsNullOrWhiteSpace($ValidationRoundFixturePath)) {
+                    $roundFixtureText = [System.IO.File]::ReadAllText(
+                        $ValidationRoundFixturePath,
+                        [System.Text.UTF8Encoding]::new($false, $true)
+                    )
+                    $roundFixturePrivacy = Test-AzureValidationRoundPrivacyBoundary `
+                        -Text $roundFixtureText
+                    if ($roundFixturePrivacy) {
+                        New-AzureValidationRoundOutcome -State Rejected `
+                            -ReasonCode $roundFixturePrivacy -PrivacyBoundary Rejected
+                    }
+                    else {
+                        $roundFixtureSchema = Get-AzureValidationRoundCatalogPath `
+                            -RepositoryRoot $roundRepositoryRoot `
+                            -ApplicationDirectory $roundApplicationDirectory `
+                            -RelativePath 'schemas/azure-validation-round-execution-request.schema.json'
+                        $roundFixtureValid = $true
+                        if (-not [string]::IsNullOrWhiteSpace($roundFixtureSchema)) {
+                            try {
+                                $roundFixtureValid = Test-Json -Json $roundFixtureText `
+                                    -SchemaFile $roundFixtureSchema
+                            }
+                            catch {
+                                $roundFixtureValid = $false
+                            }
+                        }
+                        if (-not $roundFixtureValid) {
+                            New-AzureValidationRoundOutcome -State Rejected `
+                                -ReasonCode 'VALIDATION.REQUEST_INVALID' `
+                                -PrivacyBoundary Rejected
+                        }
+                        else {
+                            $roundFixture = & $convertFromJsonCommand `
+                                -InputObject $roundFixtureText -ErrorAction Stop
+                            $roundScenario = [string] $roundFixture.scenario
+                            Invoke-AzureValidationRound -Plan $roundPlan `
+                                -Scenario $roundScenario `
+                                -PrivateWorkspacePath $ValidationPrivateWorkspacePath `
+                                -RepositoryRoot $roundRepositoryRoot `
+                                -ApplicationDirectory $roundApplicationDirectory `
+                                -FixtureText $roundFixtureText
+                        }
+                    }
+                }
+                else {
+                    Invoke-AzureValidationRound -Plan $roundPlan `
+                        -PrivateWorkspacePath $ValidationPrivateWorkspacePath `
+                        -RepositoryRoot $roundRepositoryRoot `
+                        -ApplicationDirectory $roundApplicationDirectory
+                }
+            }
+        }
+        catch {
+            New-AzureValidationRoundOutcome -State Rejected `
+                -ReasonCode 'VALIDATION.REQUEST_INVALID' -PrivacyBoundary Missing
+        }
+    }
+    $roundSucceeded = $roundResult.state -eq 'ZeroResidueProven'
+    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'ValidationRound' `
+        -State $(if ($roundSucceeded) { 'Succeeded' } else { 'Failed' }) `
+        -MessageId $(if ($roundSucceeded) {
+            'validation.round.succeeded'
+        } else {
+            'validation.round.failed'
+        }) -CompletedUnits 1 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $roundResult -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode $roundResult.reasonCode `
+        -Phase ValidationRound
+    $exitCode = 20
+    if ($roundResult.state -eq 'ZeroResidueProven') {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $true
+        $exitCode = 0
+    }
+    elseif ($roundResult.state -eq 'FailedCleaned') {
+        $terminal.outcome = 'CompletedWithGaps'
+        $terminal.exitCode = 10
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $true
+        $exitCode = 10
+    }
+    elseif ($roundResult.state -eq 'ResidueRemains') {
+        $terminal.outcome = 'CleanupIncomplete'
+        $terminal.exitCode = 60
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $false
+        $exitCode = 60
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $exitCode
+}
+
 if ($Workflow -eq 'EvaluateReleaseGates') {
     # Pre-signing gates must run on the unsigned generated candidate. The
     # threat is hiding a failed or private pack behind Authenticode, or

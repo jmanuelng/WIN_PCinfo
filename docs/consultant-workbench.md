@@ -49,6 +49,7 @@ These documents explain intended release scope. They are not a support claim for
 ## Maintainer validation admission
 
 - [Offline Azure validation admission](azure-validation-admission.md) admits a synthetic one-to-four-client round plan into a private workspace without contacting Azure. Completing that gate does not deliver `CAP-0028` or create a Preview or Supported claim.
+- [One fresh Azure validation round](azure-validation-round.md) admits, runs, and tears down one private Windows 11 client through VM Agent control, then proves Zero Round Residue. Completing that controller does not deliver `CAP-0028` or create a Preview or Supported claim.
 - [Automated release gates and evidence manifests](release-gates.md) evaluate a synthetic evidence pack, derive the Preview Capability Matrix, and emit promotion-denial inputs. Completing that gate does not deliver `CAP-0030` or create a Preview or Supported claim.
 - [Signing Boundary](signing-boundary.md) signs a frozen eligible candidate only after release gates and human digest confirmation, verifies the signature contract, finalizes the outer package, and smoke-runs Help. Completing that workflow does not deliver `CAP-0025` or create a Trusted, Preview, or Supported claim.
 

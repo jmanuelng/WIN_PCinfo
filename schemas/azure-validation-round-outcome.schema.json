@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/azure-validation-round-outcome.schema.json",
+  "title": "WIN-PCInfo sanitized Azure validation-round outcome",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordType",
+    "contractVersion",
+    "state",
+    "reasonCode",
+    "admitted",
+    "created",
+    "guestReady",
+    "candidateVerified",
+    "payloadVerified",
+    "localOnlyChecked",
+    "approvedEgressChecked",
+    "assessmentExecuted",
+    "sanitizedRetrieval",
+    "cleanupFirst",
+    "teardownCompleted",
+    "zeroResidue",
+    "terraformStateRemoved",
+    "nextRoundEligible",
+    "persistentScopePreserved",
+    "hostPeeringAbsent",
+    "tagSweepEmpty",
+    "unprotectedLocalMaterialAbsent",
+    "guestControl",
+    "bootstrapCredentialExposed",
+    "clientCapturedOrReused",
+    "vmPublicIpAssigned",
+    "freshApprovedBaseline",
+    "clientCount",
+    "windows11ClaimingRoute",
+    "trustClass",
+    "qualifyingEvidence",
+    "sliceDeliversCapability",
+    "collectionStarted",
+    "synthetic",
+    "platformKind",
+    "azureContacted",
+    "supportClaim",
+    "previewOrStableClaim",
+    "privacyBoundary"
+  ],
+  "properties": {
+    "recordType": { "const": "win-pcinfo.azure-validation-round" },
+    "contractVersion": { "const": "1.0.0" },
+    "state": {
+      "enum": [
+        "ZeroResidueProven",
+        "FailedCleaned",
+        "Rejected",
+        "Blocked",
+        "ResidueRemains"
+      ]
+    },
+    "reasonCode": {
+      "type": "string",
+      "pattern": "^VALIDATION\\.[A-Z0-9_]+$"
+    },
+    "admitted": { "type": "boolean" },
+    "created": { "type": "boolean" },
+    "guestReady": { "type": "boolean" },
+    "candidateVerified": { "type": "boolean" },
+    "payloadVerified": { "type": "boolean" },
+    "localOnlyChecked": { "type": "boolean" },
+    "approvedEgressChecked": { "type": "boolean" },
+    "assessmentExecuted": { "type": "boolean" },
+    "sanitizedRetrieval": { "type": "boolean" },
+    "cleanupFirst": { "type": "boolean" },
+    "teardownCompleted": { "type": "boolean" },
+    "zeroResidue": { "type": "boolean" },
+    "terraformStateRemoved": { "type": "boolean" },
+    "nextRoundEligible": { "type": "boolean" },
+    "persistentScopePreserved": { "type": "boolean" },
+    "hostPeeringAbsent": { "type": "boolean" },
+    "tagSweepEmpty": { "type": "boolean" },
+    "unprotectedLocalMaterialAbsent": { "type": "boolean" },
+    "guestControl": {
+      "enum": ["VmAgentRunCommand", "None"]
+    },
+    "bootstrapCredentialExposed": { "type": "boolean" },
+    "clientCapturedOrReused": { "type": "boolean" },
+    "vmPublicIpAssigned": { "type": "boolean" },
+    "freshApprovedBaseline": { "type": "boolean" },
+    "clientCount": { "type": ["integer", "null"], "minimum": 0, "maximum": 8 },
+    "windows11ClaimingRoute": { "type": "boolean" },
+    "trustClass": {
+      "enum": ["ControllerDevTracer", "None"]
+    },
+    "qualifyingEvidence": { "const": false },
+    "sliceDeliversCapability": { "const": false },
+    "collectionStarted": { "const": false },
+    "synthetic": { "type": "boolean" },
+    "platformKind": {
+      "enum": ["Synthetic", "ManagedIdentity", "Unavailable"]
+    },
+    "azureContacted": { "type": "boolean" },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "privacyBoundary": {
+      "enum": ["PrivateExternalWorkspace", "Missing", "Rejected"]
+    }
+  }
+}
