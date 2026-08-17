@@ -14,6 +14,7 @@
   "previewOrStableClaim": "None",
   "attestedPackageIsFinalDistributableIdentity": true,
   "candidateIdentityKind": "win-pcinfo.unsigned-portable-package-identity",
+  "archiveRootName": "WIN-PCInfo-2.0.0-preview.1",
   "fallback": {
     "permittedReasons": [
       "ArtifactSigningNotOperational",

@@ -105,7 +105,7 @@ Before assessment work, WIN-PCInfo checks that the active host is PowerShell Cor
 
 ### Attested versus trusted
 
-Trusted Authenticode signing is the target for Stable and is not implemented here. An Attested Preview is a governed unsigned fallback: it binds one exact portable candidate to checksums, the resource manifest, dependency inventory, SBOM, source revision, and build provenance, and it always shows an **UNSIGNED LIMITED-TRUST WARNING** before launch. It is never Trusted, never signed, and never Supported, and it cannot satisfy the Stable signing gate. Fallback selection is allowed only when Artifact Signing is not operational or during a verified service incident, never for convenience. A local unsigned build without that governed selection is simply unsigned. See [Attested Preview trust bundle](attested-preview.md).
+Trusted Authenticode signing is the target for Stable and is not implemented here. An Attested Preview is a governed unsigned fallback: it binds one exact portable candidate to checksums, the resource manifest, dependency inventory, SBOM, source revision, and build provenance. Verifying that fallback through `-Workflow VerifyAttestation` always shows an **UNSIGNED LIMITED-TRUST WARNING** as the first record before any later smoke or validation work. It is never Trusted, never signed, and never Supported, and it cannot satisfy the Stable signing gate. Fallback selection is allowed only when Artifact Signing is not operational or during a verified service incident, never for convenience. A local unsigned build without that governed selection is simply unsigned and does not inherit this warning. See [Attested Preview trust bundle](attested-preview.md).
 
 ### Capability matrices
 

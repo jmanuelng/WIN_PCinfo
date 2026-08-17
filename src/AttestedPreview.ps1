@@ -6,6 +6,12 @@ $script:AttestedPreviewPolicyDigest = '__ATTESTED_PREVIEW_POLICY_SHA256__'
 
 function Get-AttestedPreviewFileDigest {
     param([Parameter(Mandatory)] $Bytes)
+
+    # SHA-256 is the only digest this fallback trusts. The threat is treating a
+    # checksum as Authenticode or silently using a weaker hash. The mechanism is
+    # a lowercase hex SHA-256 of the exact supplied bytes. The trust assumption
+    # is that those bytes are the reviewed candidate or sidecar. Safe failure is
+    # a mismatch, never a weaker algorithm.
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
     try {
         [System.Convert]::ToHexString($sha256.ComputeHash([byte[]] $Bytes)).ToLowerInvariant()
@@ -51,14 +57,49 @@ function Get-AttestedPreviewEmbeddedPolicy {
     [pscustomobject]@{ Valid = $true; Policy = $policy }
 }
 
+function Get-AttestedPreviewLimitedTrustMarkdown {
+    param([Parameter(Mandatory)] $Policy)
+
+    # The sidecar page is an input, not decoration. The threat is swapping it
+    # for text that calls the fallback Trusted or signed after a verified
+    # result. The mechanism is a policy-derived UTF-8 page compared
+    # byte-for-byte at verify time. The trust assumption is the embedded
+    # policy, not the unsigned attestation document. Safe failure is
+    # CONFLICTING_INPUT.
+    @(
+        "# $([string] $Policy.warning.title)"
+        ''
+        'This Attested Preview is **not Trusted**, **not signed**, **not Supported**,'
+        'and **not Authenticode**. It cannot satisfy the Stable signing gate.'
+        ''
+        'It is a governed unsigned fallback. Select it only when Artifact Signing is'
+        'genuinely not operational or during a recorded verified service incident.'
+        'Never select this fallback for convenience.'
+        ''
+        'The attested unsigned portable package remains the final distributable'
+        'identity. Checksums and provenance bind that unchanged package. A missing,'
+        'conflicting, substituted, or altered input fails verification. There is no'
+        'run-anyway switch.'
+        ''
+        "Policy: $($Policy.policyId)"
+        "Trust class: $($Policy.trustClass)"
+        ''
+    ) -join "`n"
+}
+
 function Get-AttestedPreviewLimitedTrustWarning {
     param([Parameter()] $Policy)
 
-    $title = if ($null -ne $Policy) {
-        [string] $Policy.warning.title
-    }
-    else {
-        'UNSIGNED LIMITED-TRUST WARNING — NOT TRUSTED, NOT SIGNED, NOT SUPPORTED'
+    $title = 'UNSIGNED LIMITED-TRUST WARNING — NOT TRUSTED, NOT SIGNED, NOT SUPPORTED'
+    if ($null -ne $Policy) {
+        try {
+            $fromPolicy = [string] $Policy.warning.title
+            if (-not [string]::IsNullOrWhiteSpace($fromPolicy)) {
+                $title = $fromPolicy
+            }
+        }
+        catch {
+        }
     }
     [pscustomobject][ordered]@{
         recordType = 'win-pcinfo.limited-trust-warning'
@@ -89,11 +130,40 @@ function Test-AttestedPreviewSatisfiesStableSigningGate {
     $false
 }
 
+function Get-AttestedPreviewNestedText {
+    param(
+        [Parameter()] $Value,
+        [Parameter(Mandatory)] [string[]] $Names
+    )
+
+    $current = $Value
+    foreach ($name in $Names) {
+        if ($null -eq $current) {
+            return $null
+        }
+        $property = $current.PSObject.Properties[$name]
+        if ($null -eq $property) {
+            return $null
+        }
+        $current = $property.Value
+    }
+    if ($null -eq $current) {
+        return $null
+    }
+    [string] $current
+}
+
 function Get-AttestedPreviewArchiveEntryBytes {
     param(
         [Parameter(Mandatory)] [string] $ZipPath,
         [Parameter(Mandatory)] [string] $EntryName
     )
+
+    # Zip entry names are exact identities. The threat is reading the wrong
+    # member because a host rewrites separators or missing entries become
+    # empty success. The mechanism is ZipFile.OpenRead plus a null return
+    # when GetEntry misses. The trust assumption is the deterministic
+    # portable archive layout. Safe failure is MISSING_INPUT.
 
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -153,15 +223,22 @@ function New-AttestedPreviewVerificationRecord {
         }
     }
     if ($null -ne $Attestation) {
-        $record.fallbackReason = [string] $Attestation.fallback.reason
-        $record.candidateSha256 = [string] $Attestation.candidate.sha256
-        $record.generatedApplicationSha256 = [string] $Attestation.generatedApplication.sha256
-        $record.sourceRevisionSha256 = [string] $Attestation.sourceRevision.sha256
-        $record.resourceManifestSha256 = [string] $Attestation.resourceManifest.sha256
-        $record.checksumsSha256 = [string] $Attestation.checksums.sha256
-        $record.dependencyInventorySha256 = [string] $Attestation.dependencyInventory.sha256
-        $record.sbomSha256 = [string] $Attestation.sbom.sha256
-        $record.buildProvenanceSha256 = [string] $Attestation.buildProvenance.sha256
+        $optional = [ordered]@{
+            fallbackReason = (Get-AttestedPreviewNestedText $Attestation @('fallback', 'reason'))
+            candidateSha256 = (Get-AttestedPreviewNestedText $Attestation @('candidate', 'sha256'))
+            generatedApplicationSha256 = (Get-AttestedPreviewNestedText $Attestation @('generatedApplication', 'sha256'))
+            sourceRevisionSha256 = (Get-AttestedPreviewNestedText $Attestation @('sourceRevision', 'sha256'))
+            resourceManifestSha256 = (Get-AttestedPreviewNestedText $Attestation @('resourceManifest', 'sha256'))
+            checksumsSha256 = (Get-AttestedPreviewNestedText $Attestation @('checksums', 'sha256'))
+            dependencyInventorySha256 = (Get-AttestedPreviewNestedText $Attestation @('dependencyInventory', 'sha256'))
+            sbomSha256 = (Get-AttestedPreviewNestedText $Attestation @('sbom', 'sha256'))
+            buildProvenanceSha256 = (Get-AttestedPreviewNestedText $Attestation @('buildProvenance', 'sha256'))
+        }
+        foreach ($name in @($optional.Keys)) {
+            if ($null -ne $optional[$name]) {
+                $record[$name] = $optional[$name]
+            }
+        }
     }
     [pscustomobject] $record
 }
@@ -172,21 +249,55 @@ function Test-AttestedPreviewLabelSafety {
     # Positive trust words in this document are claims, not English
     # description. The threat is relabeling an unsigned fallback as Trusted,
     # signed, or Supported so it could pass a later Stable gate. The
-    # mechanism is a closed comparison of the recorded flags. The trust
-    # assumption is that the operator reads the warning as well. Safe
-    # failure is FORBIDDEN_CLAIM or STABLE_SIGNING_UNSATISFIED.
-    if ([string] $Attestation.trustClass -ne 'AttestedPreview' -or
-        [bool] $Attestation.signed -or
-        [bool] $Attestation.trusted -or
-        [bool] $Attestation.supported -or
-        [string] $Attestation.supportClaim -eq 'Supported' -or
-        [string] $Attestation.previewOrStableClaim -in @('Preview', 'Stable')) {
+    # mechanism is a closed comparison of kind, policy, and recorded flags.
+    # The trust assumption is that the operator reads the warning as well.
+    # Safe failure is FORBIDDEN_CLAIM, CONFLICTING_INPUT, or
+    # STABLE_SIGNING_UNSATISFIED.
+    try {
+        $kind = [string] $Attestation.kind
+        $policyId = [string] $Attestation.policyId
+        $trustClass = [string] $Attestation.trustClass
+        $unsigned = [bool] $Attestation.unsigned
+        $limitedTrust = [bool] $Attestation.limitedTrust
+        $signed = [bool] $Attestation.signed
+        $trusted = [bool] $Attestation.trusted
+        $supported = [bool] $Attestation.supported
+        $supportClaim = [string] $Attestation.supportClaim
+        $previewOrStableClaim = [string] $Attestation.previewOrStableClaim
+        $candidateKind = [string] $Attestation.candidate.kind
+        $identityRole = [string] $Attestation.candidate.identityRole
+        $satisfiesStable = [bool] $Attestation.satisfiesStableSigningGate
+    }
+    catch {
+        return [pscustomobject]@{
+            Valid = $false
+            ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
+        }
+    }
+
+    if ($kind -ne 'win-pcinfo.attested-preview-attestation' -or
+        $policyId -ne 'win-pcinfo.attested-preview/1.0.0' -or
+        $candidateKind -ne 'win-pcinfo.unsigned-portable-package-identity' -or
+        $identityRole -ne 'final-distributable-when-fallback-selected') {
+        return [pscustomobject]@{
+            Valid = $false
+            ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
+        }
+    }
+    if ($trustClass -ne 'AttestedPreview' -or
+        -not $unsigned -or
+        -not $limitedTrust -or
+        $signed -or
+        $trusted -or
+        $supported -or
+        $supportClaim -ne 'None' -or
+        $previewOrStableClaim -ne 'None') {
         return [pscustomobject]@{
             Valid = $false
             ReasonCode = 'ATTESTATION.FORBIDDEN_CLAIM'
         }
     }
-    if ([bool] $Attestation.satisfiesStableSigningGate -or
+    if ($satisfiesStable -or
         (Test-AttestedPreviewSatisfiesStableSigningGate -Attestation $Attestation)) {
         return [pscustomobject]@{
             Valid = $false
@@ -241,6 +352,32 @@ function Test-AttestedPreviewBundle {
     }
 
     try {
+        $expectedWarningBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
+            (Get-AttestedPreviewLimitedTrustMarkdown -Policy $policy)
+        )
+        $warningBytes = [System.IO.File]::ReadAllBytes($warningPath)
+        if ((Get-AttestedPreviewFileDigest -Bytes $warningBytes) -ne
+            (Get-AttestedPreviewFileDigest -Bytes $expectedWarningBytes)) {
+            return [pscustomobject]@{
+                Valid = $false
+                ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
+                Record = (New-AttestedPreviewVerificationRecord -State Rejected `
+                    -ReasonCode 'ATTESTATION.CONFLICTING_INPUT')
+                Policy = $policy
+            }
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            Valid = $false
+            ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
+            Record = (New-AttestedPreviewVerificationRecord -State Rejected `
+                -ReasonCode 'ATTESTATION.CONFLICTING_INPUT')
+            Policy = $policy
+        }
+    }
+
+    try {
         $attestationText = [System.IO.File]::ReadAllText(
             $attestationPath,
             [System.Text.UTF8Encoding]::new($false, $true)
@@ -268,9 +405,31 @@ function Test-AttestedPreviewBundle {
         }
     }
 
-    $permitted = @($policy.fallback.permittedReasons)
-    if (-not [bool] $attestation.fallback.neverForConvenience -or
-        [string] $attestation.fallback.reason -notin $permitted) {
+    try {
+        $permitted = @($policy.fallback.permittedReasons)
+        $neverForConvenience = [bool] $attestation.fallback.neverForConvenience
+        $fallbackReason = [string] $attestation.fallback.reason
+        $archiveRoot = [string] $policy.archiveRootName
+    }
+    catch {
+        return [pscustomobject]@{
+            Valid = $false
+            ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
+            Record = (New-AttestedPreviewVerificationRecord -State Rejected `
+                -ReasonCode 'ATTESTATION.CONFLICTING_INPUT')
+            Policy = $policy
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($archiveRoot)) {
+        return [pscustomobject]@{
+            Valid = $false
+            ReasonCode = 'ATTESTATION.INPUT_INVALID'
+            Record = (New-AttestedPreviewVerificationRecord -State Rejected `
+                -ReasonCode 'ATTESTATION.INPUT_INVALID' -Attestation $attestation)
+            Policy = $policy
+        }
+    }
+    if (-not $neverForConvenience -or $fallbackReason -notin $permitted) {
         return [pscustomobject]@{
             Valid = $false
             ReasonCode = 'ATTESTATION.FALLBACK_REASON_INVALID'
@@ -279,40 +438,53 @@ function Test-AttestedPreviewBundle {
             Policy = $policy
         }
     }
-
-    $archiveRoot = 'WIN-PCInfo-2.0.0-preview.1'
-    $boundFiles = @(
-        [pscustomobject]@{
-            Reason = 'ATTESTATION.APPLICATION_ALTERED'
-            Entry = "$archiveRoot/WIN-PCInfo.ps1"
-            Expected = [string] $attestation.generatedApplication.sha256
+    try {
+        $boundFiles = @(
+            [pscustomobject]@{
+                Reason = 'ATTESTATION.APPLICATION_ALTERED'
+                Entry = "$archiveRoot/WIN-PCInfo.ps1"
+                Expected = [string] $attestation.generatedApplication.sha256
+            }
+            [pscustomobject]@{
+                Reason = 'ATTESTATION.MANIFEST_ALTERED'
+                Entry = "$archiveRoot/package-manifest.json"
+                Expected = [string] $attestation.resourceManifest.sha256
+            }
+            [pscustomobject]@{
+                Reason = 'ATTESTATION.CHECKSUM_ALTERED'
+                Entry = "$archiveRoot/checksums.sha256"
+                Expected = [string] $attestation.checksums.sha256
+            }
+            [pscustomobject]@{
+                Reason = 'ATTESTATION.PROVENANCE_ALTERED'
+                Entry = "$archiveRoot/provenance.json"
+                Expected = [string] $attestation.buildProvenance.sha256
+            }
+            [pscustomobject]@{
+                Reason = 'ATTESTATION.DEPENDENCY_INVENTORY_ALTERED'
+                Entry = "$archiveRoot/dependency-inventory.json"
+                Expected = [string] $attestation.dependencyInventory.sha256
+            }
+            [pscustomobject]@{
+                Reason = 'ATTESTATION.SBOM_ALTERED'
+                Entry = "$archiveRoot/sbom.spdx.json"
+                Expected = [string] $attestation.sbom.sha256
+            }
+        )
+        $attestedSourceRevision = [string] $attestation.sourceRevision.sha256
+        $attestedApplication = [string] $attestation.generatedApplication.sha256
+        $attestedBuildTool = [string] $attestation.buildProvenance.buildTool.sha256
+        $attestedCandidate = [string] $attestation.candidate.sha256
+    }
+    catch {
+        return [pscustomobject]@{
+            Valid = $false
+            ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
+            Record = (New-AttestedPreviewVerificationRecord -State Rejected `
+                -ReasonCode 'ATTESTATION.CONFLICTING_INPUT')
+            Policy = $policy
         }
-        [pscustomobject]@{
-            Reason = 'ATTESTATION.MANIFEST_ALTERED'
-            Entry = "$archiveRoot/package-manifest.json"
-            Expected = [string] $attestation.resourceManifest.sha256
-        }
-        [pscustomobject]@{
-            Reason = 'ATTESTATION.CHECKSUM_ALTERED'
-            Entry = "$archiveRoot/checksums.sha256"
-            Expected = [string] $attestation.checksums.sha256
-        }
-        [pscustomobject]@{
-            Reason = 'ATTESTATION.PROVENANCE_ALTERED'
-            Entry = "$archiveRoot/provenance.json"
-            Expected = [string] $attestation.buildProvenance.sha256
-        }
-        [pscustomobject]@{
-            Reason = 'ATTESTATION.DEPENDENCY_INVENTORY_ALTERED'
-            Entry = "$archiveRoot/dependency-inventory.json"
-            Expected = [string] $attestation.dependencyInventory.sha256
-        }
-        [pscustomobject]@{
-            Reason = 'ATTESTATION.SBOM_ALTERED'
-            Entry = "$archiveRoot/sbom.spdx.json"
-            Expected = [string] $attestation.sbom.sha256
-        }
-    )
+    }
 
     $entryBytes = @{}
     foreach ($bound in $boundFiles) {
@@ -361,8 +533,25 @@ function Test-AttestedPreviewBundle {
         }
     }
 
-    if ([string] $provenance.sourceRevision.sha256 -ne [string] $attestation.sourceRevision.sha256 -or
-        [string] $manifest.sourceRevision.sha256 -ne [string] $attestation.sourceRevision.sha256) {
+    try {
+        $provenanceSourceRevision = [string] $provenance.sourceRevision.sha256
+        $manifestSourceRevision = [string] $manifest.sourceRevision.sha256
+        $provenanceApplication = [string] $provenance.generatedContent.sha256
+        $manifestApplication = [string] $manifest.unsignedGeneratedContentIdentity.sha256
+        $provenanceBuildTool = [string] $provenance.buildTool.sha256
+    }
+    catch {
+        return [pscustomobject]@{
+            Valid = $false
+            ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
+            Record = (New-AttestedPreviewVerificationRecord -State Rejected `
+                -ReasonCode 'ATTESTATION.CONFLICTING_INPUT' -Attestation $attestation)
+            Policy = $policy
+        }
+    }
+
+    if ($provenanceSourceRevision -ne $attestedSourceRevision -or
+        $manifestSourceRevision -ne $attestedSourceRevision) {
         return [pscustomobject]@{
             Valid = $false
             ReasonCode = 'ATTESTATION.SOURCE_REVISION_ALTERED'
@@ -372,12 +561,9 @@ function Test-AttestedPreviewBundle {
         }
     }
 
-    if ([string] $provenance.generatedContent.sha256 -ne
-        [string] $attestation.generatedApplication.sha256 -or
-        [string] $manifest.unsignedGeneratedContentIdentity.sha256 -ne
-        [string] $attestation.generatedApplication.sha256 -or
-        [string] $provenance.buildTool.sha256 -ne
-        [string] $attestation.buildProvenance.buildTool.sha256) {
+    if ($provenanceApplication -ne $attestedApplication -or
+        $manifestApplication -ne $attestedApplication -or
+        $provenanceBuildTool -ne $attestedBuildTool) {
         return [pscustomobject]@{
             Valid = $false
             ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
@@ -424,8 +610,7 @@ function Test-AttestedPreviewBundle {
     }
 
     $zipBytes = [System.IO.File]::ReadAllBytes($CandidateArchivePath)
-    if ((Get-AttestedPreviewFileDigest -Bytes $zipBytes) -ne
-        [string] $attestation.candidate.sha256) {
+    if ((Get-AttestedPreviewFileDigest -Bytes $zipBytes) -ne $attestedCandidate) {
         return [pscustomobject]@{
             Valid = $false
             ReasonCode = 'ATTESTATION.CANDIDATE_ALTERED'

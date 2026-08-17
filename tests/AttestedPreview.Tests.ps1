@@ -60,6 +60,8 @@ Assert-Equal $false $policy.satisfiesStableSigningGate `
 Assert-Equal 'None' $policy.supportClaim 'the fallback makes no support claim'
 Assert-Equal $true $policy.attestedPackageIsFinalDistributableIdentity `
     'the attested unsigned package is the final distributable identity'
+Assert-Equal 'WIN-PCInfo-2.0.0-preview.1' $policy.archiveRootName `
+    'the fallback names the portable archive root'
 Assert-Equal $true $policy.fallback.neverForConvenience `
     'fallback selection is never permitted for convenience'
 Assert-Equal 'ArtifactSigningNotOperational|VerifiedServiceIncident' `
@@ -125,6 +127,36 @@ Assert-True (
     $convenience -is [System.Management.Automation.ErrorRecord] -or
         $convenience -is [System.Management.Automation.ParameterBindingException]
 ) 'convenience cannot produce an attestation bundle'
+
+$overwriteCandidate = $null
+try {
+    $overwriteCandidate = & (Join-Path $firstRoot 'build/Attest-Preview.ps1') `
+        -FallbackReason 'ArtifactSigningNotOperational' `
+        -CandidateArchivePath $firstZip `
+        -OutputDirectory $firstZip
+}
+catch {
+    $overwriteCandidate = $_
+}
+Assert-True ($overwriteCandidate -is [System.Management.Automation.ErrorRecord]) `
+    'attestation refuses an output path that is the candidate archive'
+Assert-Equal $firstZipBefore (Get-Sha256Hex -Bytes ([System.IO.File]::ReadAllBytes($firstZip))) `
+    'a refused output path leaves the candidate archive unchanged'
+
+$overwriteParent = $null
+try {
+    $overwriteParent = & (Join-Path $firstRoot 'build/Attest-Preview.ps1') `
+        -FallbackReason 'ArtifactSigningNotOperational' `
+        -CandidateArchivePath $firstZip `
+        -OutputDirectory (Split-Path -Parent $firstZip)
+}
+catch {
+    $overwriteParent = $_
+}
+Assert-True ($overwriteParent -is [System.Management.Automation.ErrorRecord]) `
+    'attestation refuses an output directory that contains the candidate archive'
+Assert-Equal $firstZipBefore (Get-Sha256Hex -Bytes ([System.IO.File]::ReadAllBytes($firstZip))) `
+    'a refused parent output directory leaves the candidate archive unchanged'
 
 $firstAttest = & (Join-Path $firstRoot 'build/Attest-Preview.ps1') `
     -FallbackReason 'ArtifactSigningNotOperational' `
@@ -205,6 +237,8 @@ Assert-Equal $true ($attestationJson -match '"created":"1980-01-01T00:00:00Z"') 
     'the attestation uses the frozen precursor timestamp'
 
 $warningText = Get-Content -LiteralPath $warningPath -Raw
+Assert-Equal $true ($warningText -match [regex]::Escape([string] $policy.warning.title)) `
+    'the warning page uses the contract warning title'
 Assert-Equal $true ($warningText -match 'UNSIGNED LIMITED-TRUST WARNING') `
     'the warning page uses the unmistakable banner'
 Assert-Equal $true ($warningText -match 'not Trusted') 'the warning page says the fallback is not Trusted'

@@ -53,7 +53,7 @@ Verification runs through the generated application. The first record is the uns
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow VerifyAttestation -AttestationBundlePath ./artifacts/WIN-PCInfo-2.0.0-preview.1-attested-preview -CandidateArchivePath ./artifacts/WIN-PCInfo-2.0.0-preview.1-portable.zip
 ```
 
-A missing, conflicting, substituted, or altered application, resource, manifest, checksum, provenance, source revision, or dependency inventory returns `NotStarted` with a typed `ATTESTATION.*` reason. There is no run-anyway switch. Preparation fixtures cannot override the result.
+A missing, conflicting, substituted, or altered application, resource, manifest, checksum, provenance, source revision, dependency inventory, SBOM, or limited-trust warning page returns `NotStarted` with a typed `ATTESTATION.*` reason. There is no run-anyway switch. Preparation fixtures cannot override the result. Ordinary Help, About, Verify, and Assessment launches are not this fallback and do not inherit the warning.
 
 ## What this is not
 

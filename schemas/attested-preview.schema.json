@@ -20,6 +20,7 @@
     "previewOrStableClaim",
     "attestedPackageIsFinalDistributableIdentity",
     "candidateIdentityKind",
+    "archiveRootName",
     "fallback",
     "boundInputs",
     "requiredBundleFiles",
@@ -42,6 +43,7 @@
     "previewOrStableClaim": { "const": "None" },
     "attestedPackageIsFinalDistributableIdentity": { "const": true },
     "candidateIdentityKind": { "const": "win-pcinfo.unsigned-portable-package-identity" },
+    "archiveRootName": { "const": "WIN-PCInfo-2.0.0-preview.1" },
     "fallback": {
       "type": "object",
       "additionalProperties": false,

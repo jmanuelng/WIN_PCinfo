@@ -9,7 +9,7 @@ function Get-AttestedPreviewLimitedTrustMarkdown {
     param([Parameter(Mandatory)] $Policy)
 
     @(
-        '# UNSIGNED LIMITED-TRUST WARNING'
+        "# $([string] $Policy.warning.title)"
         ''
         'This Attested Preview is **not Trusted**, **not signed**, **not Supported**,'
         'and **not Authenticode**. It cannot satisfy the Stable signing gate.'
@@ -27,6 +27,31 @@ function Get-AttestedPreviewLimitedTrustMarkdown {
         "Trust class: $($Policy.trustClass)"
         ''
     ) -join "`n"
+}
+
+function Test-AttestedPreviewOutputAvoidsCandidate {
+    param(
+        [Parameter(Mandatory)] [string] $CandidateArchivePath,
+        [Parameter(Mandatory)] [string] $OutputDirectory
+    )
+
+    # The candidate zip is the final distributable identity. The threat is
+    # pointing OutputDirectory at that zip or at a parent folder and deleting
+    # it during sidecar refresh. The mechanism is a full-path comparison
+    # before any Remove-Item. The trust assumption is that the already built
+    # zip must stay byte-identical. Safe failure is to refuse the bundle.
+    if (Test-Path -LiteralPath $OutputDirectory -PathType Leaf) {
+        throw 'The Attested Preview output directory must not be an existing file.'
+    }
+    $candidateFull = [System.IO.Path]::GetFullPath($CandidateArchivePath)
+    $outputFull = [System.IO.Path]::GetFullPath($OutputDirectory)
+    if ($outputFull.Equals($candidateFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The Attested Preview output directory must not be the candidate archive.'
+    }
+    $prefix = $outputFull.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if ($candidateFull.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The Attested Preview output directory must not contain the candidate archive.'
+    }
 }
 
 function Get-AttestedPreviewZipEntryBytes {
@@ -84,6 +109,11 @@ function New-AttestedPreviewBundle {
         'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
     $portablePolicy = Get-Content -LiteralPath $portablePolicyPath -Raw | ConvertFrom-Json -Depth 20
     $archiveRoot = [string] $portablePolicy.archiveRootName
+    if ($archiveRoot -ne [string] $policy.archiveRootName) {
+        throw 'The Attested Preview archive root does not match the portable candidate.'
+    }
+    Test-AttestedPreviewOutputAvoidsCandidate -CandidateArchivePath $CandidateArchivePath `
+        -OutputDirectory $OutputDirectory
     $zipBytes = [System.IO.File]::ReadAllBytes($CandidateArchivePath)
     $candidateDigest = Get-PortableDistributionSha256 -Bytes $zipBytes
 

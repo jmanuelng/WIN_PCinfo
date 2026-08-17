@@ -133,6 +133,17 @@ Assert-Equal 'ATTESTATION.VERIFIED' $terminal[0].reasonCode 'the terminal uses t
 Assert-Equal $true ($record[0].guidance.nextStep -match 'unsigned') `
     'verified guidance keeps the limited-trust reminder'
 
+foreach ($ordinary in @('Help', 'About', 'Verify')) {
+    $ordinaryResult = Invoke-GeneratedApplication -CandidatePath $appPath -Arguments @(
+        '-Workflow', $ordinary
+    )
+    $ordinaryWarnings = @(
+        $ordinaryResult.Records | Where-Object recordType -eq 'win-pcinfo.limited-trust-warning'
+    )
+    Assert-Equal 0 $ordinaryWarnings.Count `
+        "an ordinary $ordinary launch is not an Attested Preview and does not inherit the warning"
+}
+
 $missing = Invoke-GeneratedApplication -CandidatePath $appPath -Arguments @(
     '-Workflow', 'VerifyAttestation'
 )
@@ -241,6 +252,32 @@ $mutations = @(
             Set-ZipEntryBytes -ZipPath $Zip -EntryName $entry -Bytes $tampered
         }
     }
+    @{
+        Class = 'sbom'
+        Reason = 'ATTESTATION.SBOM_ALTERED'
+        Action = {
+            param($Zip, $AttestationPath)
+            $entry = "$archiveRoot/sbom.spdx.json"
+            $original = Get-ZipEntryBytes -ZipPath $Zip -EntryName $entry
+            $tampered = [byte[]]::new($original.Length)
+            [System.Buffer]::BlockCopy($original, 0, $tampered, 0, $original.Length)
+            $tampered[[Math]::Min(28, $tampered.Length - 1)] =
+                [byte] (($tampered[[Math]::Min(28, $tampered.Length - 1)] + 1) -band 0xFF)
+            Set-ZipEntryBytes -ZipPath $Zip -EntryName $entry -Bytes $tampered
+        }
+    }
+    @{
+        Class = 'warning'
+        Reason = 'ATTESTATION.CONFLICTING_INPUT'
+        Action = {
+            param($Zip, $AttestationPath)
+            $warningPath = Join-Path (Split-Path -Parent $AttestationPath) 'LIMITED-TRUST.md'
+            [System.IO.File]::WriteAllText(
+                $warningPath,
+                "This Attested Preview is Trusted, signed, and Supported.`n"
+            )
+        }
+    }
 )
 
 foreach ($mutation in $mutations) {
@@ -310,10 +347,33 @@ Assert-Equal 20 $missingResult.ExitCode 'a missing bound input fails closed'
 Assert-Equal 'ATTESTATION.MISSING_INPUT' $missingResult.Records[-1].reasonCode `
     'a missing bound input has a typed missing reason'
 
+$emptyAttestationRoot = Join-Path $workRoot 'mutate-empty-attestation'
+$null = New-Item -ItemType Directory -Path $emptyAttestationRoot -Force
+$emptyZip = Join-Path $emptyAttestationRoot ([string] $build.portablePackage.archiveFileName)
+Copy-Item -LiteralPath $zipPath -Destination $emptyZip
+$emptyBundle = Join-Path $emptyAttestationRoot 'bundle'
+Copy-Item -LiteralPath $bundle.bundleDirectory -Destination $emptyBundle -Recurse
+[System.IO.File]::WriteAllText((Join-Path $emptyBundle 'attestation.json'), '{}')
+$emptyResult = Invoke-GeneratedApplication -CandidatePath $appPath -Arguments @(
+    '-Workflow', 'VerifyAttestation',
+    '-AttestationBundlePath', $emptyBundle,
+    '-CandidateArchivePath', $emptyZip
+)
+Assert-Equal 20 $emptyResult.ExitCode 'a truncated attestation document fails closed'
+Assert-Equal 'win-pcinfo.limited-trust-warning' $emptyResult.Records[0].recordType `
+    'a truncated attestation still shows the limited-trust warning'
+Assert-Equal 'NotStarted' $emptyResult.Records[-1].outcome `
+    'a truncated attestation stays NotStarted'
+Assert-Equal 'ATTESTATION.CONFLICTING_INPUT' $emptyResult.Records[-1].reasonCode `
+    'a truncated attestation has a typed conflicting reason'
+Assert-Equal $false $emptyResult.Records[-1].collectionStarted `
+    'a truncated attestation never starts collection'
+
 foreach ($fixtureName in @(
     'attestation-forbidden-trusted.json',
     'attestation-convenience-fallback.json',
-    'attestation-stable-signing-true.json'
+    'attestation-stable-signing-true.json',
+    'attestation-unsigned-false.json'
 )) {
     $fixtureRoot = Join-Path $workRoot ("fixture-" + [System.IO.Path]::GetFileNameWithoutExtension($fixtureName))
     $null = New-Item -ItemType Directory -Path $fixtureRoot -Force
