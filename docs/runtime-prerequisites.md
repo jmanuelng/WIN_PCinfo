@@ -56,6 +56,8 @@ The build reads the eleven tracked modules in a fixed order and writes `artifact
 
 The generated file is ignored because it is reproducible. Review and edit files under `src/`, then rebuild; never hand-edit the artifact.
 
+The same command also writes `artifacts/WIN-PCInfo-2.0.0-preview.1-portable.zip`. That archive is the unsigned portable package: the generated application, authenticated supporting resources, beginner documentation, checksums, dependency inventory, SPDX SBOM, and precursor provenance. It does not install PowerShell. First-run verification and the Windows PowerShell helper are documented in [Portable distribution and first-run](portable-distribution.md).
+
 ## Guided launch
 
 ```powershell

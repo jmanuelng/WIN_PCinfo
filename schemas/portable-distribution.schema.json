@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/portable-distribution.schema.json",
+  "title": "WIN-PCInfo portable distribution contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "archiveRootName",
+    "archiveFileName",
+    "installsRuntime",
+    "unsignedPrecursorOnly",
+    "protectedClasses",
+    "requiredPackagePaths",
+    "catalogPaths",
+    "helperSourcePath",
+    "helperPackagePath",
+    "firstRunSourcePath",
+    "firstRunPackagePath"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.portable-distribution-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.portable-distribution/1.0.0" },
+    "archiveRootName": { "const": "WIN-PCInfo-2.0.0-preview.1" },
+    "archiveFileName": { "const": "WIN-PCInfo-2.0.0-preview.1-portable.zip" },
+    "installsRuntime": { "const": false },
+    "unsignedPrecursorOnly": { "const": true },
+    "protectedClasses": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        { "const": "application" },
+        { "const": "schema" },
+        { "const": "catalog" },
+        { "const": "definition" },
+        { "const": "documentation" },
+        { "const": "helper" },
+        { "const": "manifest" }
+      ],
+      "items": false
+    },
+    "requiredPackagePaths": {
+      "type": "array",
+      "minItems": 13,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 8,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9._/-]+$"
+      }
+    },
+    "catalogPaths": {
+      "type": "array",
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 16,
+        "maxLength": 160,
+        "pattern": "^docs/spec/[A-Za-z0-9._/-]+\\.json$"
+      }
+    },
+    "helperSourcePath": { "const": "build/Start-WIN-PCInfo.ps1" },
+    "helperPackagePath": { "const": "Start-WIN-PCInfo.ps1" },
+    "firstRunSourcePath": { "const": "docs/portable-first-run.md" },
+    "firstRunPackagePath": { "const": "FIRST-RUN.md" }
+  }
+}

@@ -22,7 +22,9 @@ pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow About
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Guided
 ```
 
-The tracked code under `src/` is the source of truth. `build/Build.ps1` deterministically assembles it into the ignored `artifacts/WIN-PCInfo.ps1`; do not edit the generated file.
+The tracked code under `src/` is the source of truth. `build/Build.ps1` deterministically assembles it into the ignored `artifacts/WIN-PCInfo.ps1` and the ignored unsigned portable package; do not edit the generated files.
+
+The portable package is a precursor identity, not a signed release. See [Portable distribution and first-run](docs/portable-distribution.md) to extract it, verify every governing resource, and use the Windows PowerShell helper. The package never installs PowerShell.
 
 Before approving anything, read [Preparation Summary and approval](docs/preparation-summary.md). It explains the two network choices, every disclosure in the summary, guided and automation approval, and the exact Device Readiness operation that approval can start.
 

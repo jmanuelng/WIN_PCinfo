@@ -7,7 +7,12 @@ param(
     # Help is a deliberate local choice. Safe failure is to keep Assessment
     # silent about repository and reporting routes.
     [Parameter()]
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About')]
+    # Verify is first-run package authentication. The threat is treating an
+    # adjacent schema or helper as trusted because it sits next to the
+    # application. The mechanism is the embedded governing-resource table.
+    # The trust assumption is that those bytes came from the deterministic
+    # build. Safe failure is NotStarted with no integrity override.
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify')]
     [string] $Workflow = 'Assessment',
 
     [Parameter()]

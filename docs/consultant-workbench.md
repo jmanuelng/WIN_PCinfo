@@ -11,6 +11,7 @@ This workbench is the consultant-oriented companion to the [Guided Runway](guide
 ## Assessment spine
 
 - [Runtime prerequisites and safe launch](runtime-prerequisites.md)
+- [Portable distribution and first-run](portable-distribution.md)
 - [Preparation Summary and approval](preparation-summary.md)
 - [Assessment Run lifecycle](run-lifecycle.md)
 - [Process Supervisor](process-supervisor.md)

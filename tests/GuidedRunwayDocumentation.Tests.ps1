@@ -13,12 +13,12 @@ $policy = Get-Content -LiteralPath (
 
 $headerText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src/ApplicationHeader.ps1') -Raw
 $allowedWorkflows = @(
-    'Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About'
+    'Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify'
 )
 $allowedModes = @('Guided', 'Automation')
 Assert-Equal $true (
-    $headerText.Contains("ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About')")
-) 'Help and About are first-class generated-application workflows'
+    $headerText.Contains("ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify')")
+) 'Help, About, and Verify are first-class generated-application workflows'
 Assert-Equal $true ($headerText.Contains("ValidateSet('Guided', 'Automation')")) `
     'Guided and Automation remain the implemented launch modes'
 
