@@ -1,0 +1,100 @@
+{
+  "kind": "win-pcinfo.guided-runway-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.guided-runway/1.0.0",
+  "presentation": "ConsultantWorkbenchAndGuidedRunway",
+  "runway": [
+    "Choose",
+    "Verify",
+    "Prepare",
+    "Run",
+    "Interpret",
+    "Troubleshoot",
+    "Share"
+  ],
+  "requiredTopics": [
+    "purpose",
+    "learningConsultingBoundary",
+    "prerequisites",
+    "terminology",
+    "safetyReasoning",
+    "expectedOutcomes",
+    "limitations",
+    "troubleshooting",
+    "sharing",
+    "governance",
+    "bestEffortMaintenance"
+  ],
+  "claimSeparations": [
+    "verifyBeforeRun",
+    "runtimeIntegrity",
+    "previewVersusStable",
+    "attestedVersusTrusted",
+    "capabilityMatrices",
+    "supportClaims",
+    "microsoftLifecycle"
+  ],
+  "syntheticExamples": [
+    "missingEvidence",
+    "indeterminateFinding",
+    "tenantSideDiscoveryTask",
+    "restrictedSharing"
+  ],
+  "operatorProcedures": [
+    "recipientSetup",
+    "packageOpening",
+    "staleRecovery",
+    "cancellation",
+    "restrictedReportExport",
+    "prohibitedPublicEvidence"
+  ],
+  "fieldValidation": {
+    "automaticFromOrdinaryUse": false,
+    "requiresDeliberateConsent": true,
+    "consentPhrase": "I CONSENT TO A PRIVACY-SANITIZED FIELD VALIDATION ATTESTATION",
+    "productWorkflowImplemented": false
+  },
+  "discovery": {
+    "passiveOnly": true,
+    "promptDuringAssessment": false,
+    "repository": "https://github.com/jmanuelng/WIN_PCinfo",
+    "feedback": "https://github.com/jmanuelng/WIN_PCinfo/issues",
+    "contribution": "https://github.com/jmanuelng/WIN_PCinfo/blob/main/CONTRIBUTING.md",
+    "vulnerabilityReporting": "https://github.com/jmanuelng/WIN_PCinfo/security/advisories/new"
+  },
+  "help": {
+    "recordType": "win-pcinfo.product-help",
+    "surfaces": ["Help", "About"],
+    "networkRequested": false,
+    "artifactTrustRequired": false,
+    "collectionStarted": false,
+    "feedbackPrompted": false
+  },
+  "documents": [
+    { "id": "guidedRunway", "path": "docs/guided-runway.md" },
+    { "id": "consultantWorkbench", "path": "docs/consultant-workbench.md" },
+    { "id": "fieldValidation", "path": "docs/field-validation.md" },
+    { "id": "syntheticExamples", "path": "docs/examples/synthetic-interpretation.md" },
+    { "id": "security", "path": "SECURITY.md" },
+    { "id": "contributing", "path": "CONTRIBUTING.md" },
+    { "id": "readme", "path": "README.md" },
+    { "id": "validationProjection", "path": "docs/validation/issue-66-guided-runway.md" }
+  ],
+  "documentedCommands": [
+    "pwsh -NoLogo -NoProfile -File ./build/Build.ps1",
+    "pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow Help",
+    "pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow About",
+    "pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Guided",
+    "pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Automation -RequestPath ./tests/fixtures/automation-request.json",
+    "pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow RecipientProfileSetup -RecipientProfileOutputPath C:\\PrivateTransfer\\consultant.recipient.json -RecipientLabel 'Authorized endpoint consultant' -ConfirmRecipientSetup",
+    "pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow RestrictedReportExport -ProtectedPackagePath C:\\PrivateResults\\package-example.winpcinfo -RestrictedReportOutputPath C:\\PrivateTransfer\\restricted-report.html -RestrictedReportWarningAcknowledgment 'I UNDERSTAND THIS IS RESTRICTED DIAGNOSTIC EVIDENCE'"
+  ],
+  "deferredBehaviors": [
+    { "id": "CAP-0021", "name": "Safe public feedback bundle", "status": "not-implemented" },
+    { "id": "CAP-0029", "name": "Community Validation product workflow", "status": "not-implemented" },
+    { "id": "CAP-0032", "name": "Privacy-preserving adoption and outcome measures", "status": "not-implemented" },
+    { "id": "CAP-0039", "name": "Formal accessibility conformance", "status": "not-implemented" },
+    { "id": "CMP-0061", "name": "WinGet package-availability enrichment", "status": "not-implemented" }
+  ]
+}

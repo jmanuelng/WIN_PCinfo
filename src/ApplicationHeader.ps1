@@ -1,7 +1,13 @@
 [CmdletBinding()]
 param(
+    # Help and About are intentional discovery surfaces, not assessment steps.
+    # The threat is turning every run into a feedback or telemetry prompt. The
+    # mechanism is a closed Workflow set: those routes are emitted only when
+    # the operator passes Help or About. The trust assumption is that opening
+    # Help is a deliberate local choice. Safe failure is to keep Assessment
+    # silent about repository and reporting routes.
     [Parameter()]
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport')]
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About')]
     [string] $Workflow = 'Assessment',
 
     [Parameter()]

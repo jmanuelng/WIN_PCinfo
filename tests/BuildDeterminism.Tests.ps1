@@ -54,6 +54,7 @@ $expectedSourcePaths = @(
     'src/RunLifecycle.ps1'
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
+    'src/ProductHelp.ps1'
     'src/ApplicationMain.ps1'
 )
 Assert-True ((@($first.sourceInputs.path | Sort-Object) -join '|') -eq
@@ -93,6 +94,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/certificate-trust.schema.json'
     'schemas/microsoft-connectivity.schema.json'
     'schemas/cross-domain-guidance.schema.json'
+    'schemas/guided-runway.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -113,6 +115,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
     'docs/spec/releases/2.0.0-preview.1-microsoft-connectivity.json'
     'docs/spec/releases/2.0.0-preview.1-cross-domain-guidance.json'
+    'docs/spec/releases/2.0.0-preview.1-guided-runway.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq

@@ -25,6 +25,20 @@ $convertFromJsonCommand = $moduleFacts.convertFromJsonCommand
 $artifactTrustValid = Test-ApplicationArtifactTrust -LiteralPath $PSCommandPath `
     -AuthenticodeCommand $moduleFacts.authenticodeCommand
 
+if ($Workflow -eq 'Help' -or $Workflow -eq 'About') {
+    # Discovery must remain available on an unsigned development artifact.
+    # Requiring Authenticode here would hide the repository from the people
+    # most likely to open Help. The workflow still uses the verified JSON
+    # command, starts no collection, and makes no network request.
+    $helpRecord = Get-ProductHelpRecord -Surface $Workflow
+    Write-ContractRecord $helpRecord -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode 'HELP.DISCOVERY_COMPLETE' -Phase $Workflow
+    $terminal.outcome = 'Completed'
+    $terminal.exitCode = 0
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit 0
+}
+
 if ($Workflow -ne 'Assessment') {
     $workflowRuntime = Test-RuntimeCompatibility -Facts (
         Get-ActiveRuntimeFacts -ModuleFacts $moduleFacts
