@@ -44,9 +44,15 @@ function New-PrivateWorkspace {
 
 function Remove-PrivateWorkspace {
     param([Parameter(Mandatory)] [string] $Path)
-    if (Test-Path -LiteralPath $Path) {
-        Remove-Item -LiteralPath $Path -Recurse -Force
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
     }
+    $item = Get-Item -LiteralPath $Path -Force
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        $item.Delete()
+        return
+    }
+    Remove-Item -LiteralPath $Path -Recurse -Force
 }
 
 function Assert-SanitizedVerdict {
@@ -121,6 +127,28 @@ try {
         'admission does not create a Terraform cache'
     Assert-Equal $false (Test-Path -LiteralPath (Join-Path $repositoryRoot 'generated.auto.tfvars')) `
         'rendered values are not written into the repository'
+    $oneTfvars = [System.IO.File]::ReadAllText((Join-Path $renderedRoot 'generated.auto.tfvars'))
+    Assert-Equal $true ($oneTfvars -match 'sku\s+=\s+"Standard_D2s_v5"') `
+        'the one-client rendered plan binds the admitted SKU'
+    Assert-Equal $true ($oneTfvars -match 'security_type\s+=\s+"TrustedLaunch"') `
+        'the one-client rendered plan binds Trusted Launch'
+    Assert-Equal $true ($oneTfvars -match 'round_correlation_tag\s+=\s+"SYNTHETIC-ROUND-001"') `
+        'the rendered plan binds the required RoundCorrelation tag'
+    Assert-Equal $true ($oneTfvars -match 'created_utc_tag\s+=\s+"2026-01-01T00:00:00Z"') `
+        'the rendered plan binds CreatedUtc'
+    Assert-Equal $true ($oneTfvars -match 'expires_utc_tag\s+=\s+"2026-01-01T03:30:00Z"') `
+        'the rendered plan binds ExpiresUtc'
+    Assert-Equal $true ($oneTfvars -match 'approved_gallery_image_id\s+=\s+"\{\{APPROVED_GALLERY_IMAGE_ID\}\}"') `
+        'the rendered plan keeps the gallery reference as a placeholder'
+    Assert-Equal $false ($oneTfvars -match 'temporary_admin_password') `
+        'the gate does not write a bootstrap password'
+    Assert-Equal $false (Test-Path -LiteralPath (Join-Path $renderedRoot 'generated.auto.tfvars.partial')) `
+        'successful rendering does not leave a partial sibling'
+    $clientModule = [System.IO.File]::ReadAllText(
+        (Join-Path $renderedRoot 'modules/validation-client/main.tf')
+    )
+    Assert-Equal $true ($clientModule -match 'secure_boot_enabled\s+=\s+var\.secure_boot') `
+        'the copied client module is parameterized for Secure Boot'
 
     $fourWorkspace = New-PrivateWorkspace -Name 'four'
     $ownedWorkspaces.Add($fourWorkspace)
@@ -130,6 +158,13 @@ try {
     Assert-Equal 4 $fourVerdict.clientCount 'four-client count is recorded'
     Assert-SanitizedVerdict -Verdict $fourVerdict -Because 'four-client admit' `
         -WorkspacePath $fourWorkspace
+    $fourTfvars = [System.IO.File]::ReadAllText(
+        (Join-Path $fourWorkspace "$($policy.renderedDirectoryName)/generated.auto.tfvars")
+    )
+    foreach ($sku in @('Standard_D2s_v5', 'Standard_D2as_v5', 'Standard_B2ms', 'Standard_B2s')) {
+        Assert-Equal $true ($fourTfvars -match [regex]::Escape("sku           = `"$sku`"")) `
+            "the four-client rendered plan binds $sku"
+    }
 
     $diagWorkspace = New-PrivateWorkspace -Name 'diag'
     $ownedWorkspaces.Add($diagWorkspace)
@@ -143,6 +178,15 @@ try {
         'the claiming Windows 11 client remains distinct'
     Assert-SanitizedVerdict -Verdict $diagVerdict -Because 'non-claiming diagnostic' `
         -WorkspacePath $diagWorkspace
+    $diagTfvars = [System.IO.File]::ReadAllText(
+        (Join-Path $diagWorkspace "$($policy.renderedDirectoryName)/generated.auto.tfvars")
+    )
+    Assert-Equal $true ($diagTfvars -match 'security_type = "Standard"') `
+        'the rendered plan keeps a non-claiming diagnostic on Standard security'
+    Assert-Equal $true ($diagTfvars -match 'claiming      = false') `
+        'the rendered diagnostic client stays non-claiming'
+    Assert-Equal $true ($diagTfvars -match 'security_type = "TrustedLaunch"') `
+        'the claiming Windows 11 client remains Trusted Launch in the rendered plan'
 
     $fiveWorkspace = New-PrivateWorkspace -Name 'five'
     $ownedWorkspaces.Add($fiveWorkspace)
@@ -182,6 +226,36 @@ try {
     Assert-Equal 'VALIDATION.CLEANUP_RESERVE_MISSING' $reserveVerdict.reasonCode `
         'the cleanup-reserve reason is stable'
     Assert-Equal $false $reserveVerdict.rendered 'plans without cleanup reserve are not rendered'
+
+    $expiryWorkspace = New-PrivateWorkspace -Name 'expiry'
+    $ownedWorkspaces.Add($expiryWorkspace)
+    $expiry = Copy-Request -Request $one
+    $expiry.tags.ExpiresUtc = '2026-01-01T05:00:00Z'
+    $expiryVerdict = Invoke-Admission -Request $expiry -WorkspacePath $expiryWorkspace
+    Assert-Equal 'Rejected' $expiryVerdict.state 'an expiry that does not match the lifetime is rejected'
+    Assert-Equal 'VALIDATION.LIFETIME_UNSAFE' $expiryVerdict.reasonCode `
+        'expiry mismatch uses the lifetime reason'
+    Assert-Equal $false $expiryVerdict.rendered 'expiry-mismatch plans are not rendered'
+
+    $kindWorkspace = New-PrivateWorkspace -Name 'kind'
+    $ownedWorkspaces.Add($kindWorkspace)
+    $kind = Copy-Request -Request $one
+    $kind.kind = 'win-pcinfo.assessment-run-request'
+    $kindVerdict = Invoke-Admission -Request $kind -WorkspacePath $kindWorkspace
+    Assert-Equal 'Rejected' $kindVerdict.state 'a wrong request kind is rejected'
+    Assert-Equal 'VALIDATION.REQUEST_INVALID' $kindVerdict.reasonCode `
+        'request identity uses a stable invalid-request reason'
+    Assert-Equal $false $kindVerdict.rendered 'wrong-kind requests are not rendered'
+
+    $imageKindWorkspace = New-PrivateWorkspace -Name 'image-kind'
+    $ownedWorkspaces.Add($imageKindWorkspace)
+    $imageKind = Copy-Request -Request $one
+    $imageKind.clients[0].imageSourceKind = 'AzureMarketplace'
+    $imageKindVerdict = Invoke-Admission -Request $imageKind -WorkspacePath $imageKindWorkspace
+    Assert-Equal 'Rejected' $imageKindVerdict.state 'a marketplace image declaration is rejected'
+    Assert-Equal 'VALIDATION.IMAGE_UNSAFE' $imageKindVerdict.reasonCode `
+        'unsafe image source uses a stable reason'
+    Assert-Equal $false $imageKindVerdict.rendered 'unsafe image plans are not rendered'
 
     $repoVerdict = Invoke-Admission -Request $one -WorkspacePath $repositoryRoot
     Assert-Equal 'Rejected' $repoVerdict.state 'a repository workspace is rejected'
@@ -228,6 +302,21 @@ try {
             'public paths are rejected before rendering'
         Assert-Equal $false $publicVerdict.rendered 'public paths never receive rendered files'
     }
+
+    $junctionRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
+        'win-pcinfo-azure-admission-junction-' + [guid]::NewGuid().ToString('N')
+    )
+    $junctionTarget = New-PrivateWorkspace -Name 'junction-target'
+    $ownedWorkspaces.Add($junctionTarget)
+    $null = New-Item -ItemType Junction -Path $junctionRoot -Target $junctionTarget
+    $ownedWorkspaces.Add($junctionRoot)
+    $junctionVerdict = Invoke-Admission -Request $one -WorkspacePath $junctionRoot
+    Assert-Equal 'Rejected' $junctionVerdict.state 'a redirected workspace is rejected'
+    Assert-Equal 'VALIDATION.WORKSPACE_REPARSE_POINT' $junctionVerdict.reasonCode `
+        'reparse points use a distinct rejection'
+    Assert-Equal $false $junctionVerdict.rendered 'redirected workspaces are not rendered'
+    Assert-Equal 'Rejected' $junctionVerdict.privacyBoundary `
+        'a redirected folder does not invent a privacy boundary'
 
     $uncVerdict = Invoke-Admission -Request $one -WorkspacePath '\\public-share\validation'
     Assert-Equal 'Rejected' $uncVerdict.state 'a UNC path is rejected'

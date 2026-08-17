@@ -38,8 +38,26 @@ variable "temporary_admin_password" {
 }
 
 variable "vm_sku" {
-  type    = string
-  default = "Standard_D2s_v5"
+  type        = string
+  description = "Allowlisted small SKU admitted for this client."
+}
+
+variable "claiming" {
+  type        = bool
+  description = "Whether this client may later support a Preview or Supported claim."
+}
+
+variable "security_type" {
+  type        = string
+  description = "TrustedLaunch for claiming Windows 11 clients; Standard only for non-claiming diagnostics."
+}
+
+variable "secure_boot" {
+  type = bool
+}
+
+variable "vtpm" {
+  type = bool
 }
 
 variable "tags" {

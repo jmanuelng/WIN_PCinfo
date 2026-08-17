@@ -74,6 +74,109 @@ function Test-AzureValidationFloatingVersion {
     $Version -match '[~><^]|,\s*\d'
 }
 
+function Test-AzureValidationReparsePath {
+    param([Parameter(Mandatory)] [string] $Path)
+
+    # A junction or symlink can make a temp path write into the repository
+    # or a network share after the string checks pass. Walk every existing
+    # ancestor the same way Evidence Workspace does. The trust assumption is
+    # that a private workspace is a real local directory. Safe failure is to
+    # reject the path before any rendered file exists.
+    try {
+        $cursor = [System.IO.DirectoryInfo]::new([System.IO.Path]::GetFullPath($Path))
+    }
+    catch {
+        return $true
+    }
+    if (-not $cursor.Exists) {
+        $cursor = $cursor.Parent
+    }
+    while ($null -ne $cursor) {
+        if ($cursor.Exists -and
+            ($cursor.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            return $true
+        }
+        $cursor = $cursor.Parent
+    }
+    $false
+}
+
+function Test-AzureValidationPrivateSourceFile {
+    param(
+        [Parameter(Mandatory)] [string] $RelativePath,
+        [Parameter(Mandatory)] [string] $FileName
+    )
+
+    if ($RelativePath -match '(?i)(^|[\\/])\.terraform([\\/]|$)') {
+        return $false
+    }
+    if ($FileName -eq '.terraform.lock.hcl' -or
+        $FileName -match '(?i)(\.tfstate(\.backup)?$|^crash(\..*)?\.log$|^override\.tf(\.json)?$|_override\.tf(\.json)?$)') {
+        return $false
+    }
+    if ($FileName -match '(?i)\.tfvars(\.json)?$') {
+        return $false
+    }
+    $true
+}
+
+function ConvertTo-AzureValidationHclBoolean {
+    param([Parameter(Mandatory)] [bool] $Value)
+
+    if ($Value) { 'true' } else { 'false' }
+}
+
+function ConvertTo-AzureValidationDateTimeOffset {
+    param([Parameter(Mandatory)] $Value)
+
+    # ConvertFrom-Json turns a Z timestamp into a local DateTime. Casting that
+    # value to string and parsing it again would shift the admitted expiry by
+    # the host offset. Prefer the DateTime/DateTimeOffset form and treat a
+    # remaining string as UTC. Safe failure is LIFETIME_UNSAFE / render throw.
+    if ($Value -is [datetimeoffset]) {
+        return $Value.ToUniversalTime()
+    }
+    if ($Value -is [datetime]) {
+        if ($Value.Kind -eq [System.DateTimeKind]::Unspecified) {
+            return [datetimeoffset]::new($Value, [TimeSpan]::Zero)
+        }
+        return [datetimeoffset] $Value.ToUniversalTime()
+    }
+    [datetimeoffset]::Parse(
+        [string] $Value,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::AssumeUniversal -bor
+            [System.Globalization.DateTimeStyles]::AdjustToUniversal
+    )
+}
+
+function ConvertTo-AzureValidationUtcStamp {
+    param([Parameter(Mandatory)] $Value)
+
+    (ConvertTo-AzureValidationDateTimeOffset -Value $Value).ToString(
+        "yyyy-MM-ddTHH:mm:ss'Z'",
+        [System.Globalization.CultureInfo]::InvariantCulture
+    )
+}
+
+function Get-AzureValidationRequestSchemaPath {
+    param(
+        [Parameter()] [string] $RepositoryRoot,
+        [Parameter()] [string] $ApplicationDirectory
+    )
+
+    foreach ($root in @($ApplicationDirectory, $RepositoryRoot)) {
+        if ([string]::IsNullOrWhiteSpace($root)) {
+            continue
+        }
+        $candidate = Join-Path $root 'schemas/azure-validation-round-request.schema.json'
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return $candidate
+        }
+    }
+    $null
+}
+
 function Test-AzureValidationTagValueSafe {
     param(
         [Parameter(Mandatory)] [string] $Key,
@@ -200,6 +303,9 @@ function Get-AzureValidationWorkspaceRejection {
         (Test-AzureValidationPathUnderRoot -Path $PrivateWorkspacePath -Root $ApplicationDirectory)) {
         return 'VALIDATION.WORKSPACE_REPOSITORY_PATH'
     }
+    if (Test-AzureValidationReparsePath -Path $PrivateWorkspacePath) {
+        return 'VALIDATION.WORKSPACE_REPARSE_POINT'
+    }
     if (-not (Test-Path -LiteralPath $PrivateWorkspacePath -PathType Container)) {
         return 'VALIDATION.PRIVACY_BOUNDARY_MISSING'
     }
@@ -219,6 +325,11 @@ function Get-AzureValidationPlanRejection {
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $Policy
     )
+
+    if ([string] $Request.kind -ne 'win-pcinfo.azure-validation-round-request' -or
+        [string] $Request.contractVersion -ne '1.0.0') {
+        return 'VALIDATION.REQUEST_INVALID'
+    }
 
     if ([string] $Request.azureContact -ne [string] $Policy.azureContact) {
         return 'VALIDATION.AZURE_CONTACT_PROHIBITED'
@@ -258,14 +369,8 @@ function Get-AzureValidationPlanRejection {
         return 'VALIDATION.LIFETIME_UNSAFE'
     }
     try {
-        $created = [datetimeoffset]::Parse(
-            [string] $Request.tags.CreatedUtc,
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
-        $expires = [datetimeoffset]::Parse(
-            [string] $Request.tags.ExpiresUtc,
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
+        $created = ConvertTo-AzureValidationDateTimeOffset -Value $Request.tags.CreatedUtc
+        $expires = ConvertTo-AzureValidationDateTimeOffset -Value $Request.tags.ExpiresUtc
         if ([int] ($expires - $created).TotalMinutes -ne $lifetime) {
             return 'VALIDATION.LIFETIME_UNSAFE'
         }
@@ -302,14 +407,16 @@ function Get-AzureValidationPlanRejection {
         if ([string] $client.sku -notin $allowedSkus) {
             return 'VALIDATION.PLAN_UNSAFE'
         }
+        if ([bool] $client.claiming -and [string] $client.role -ne 'Windows11Validation') {
+            return 'VALIDATION.SECURITY_UNSAFE'
+        }
         $isClaimingWindows11 = [string] $client.role -eq 'Windows11Validation' -and [bool] $client.claiming
         $trustedLaunch = [string] $client.securityType -eq [string] $claiming.securityType -and
             [string] $client.hyperVGeneration -eq [string] $claiming.hyperVGeneration -and
             [bool] $client.secureBoot -eq [bool] $claiming.secureBoot -and
             [bool] $client.vtpm -eq [bool] $claiming.vtpm
         if ($isClaimingWindows11) {
-            if (-not $trustedLaunch -or
-                [string] $client.imageSourceKind -ne [string] $claiming.imageSourceKind) {
+            if (-not $trustedLaunch) {
                 return 'VALIDATION.SECURITY_UNSAFE'
             }
         }
@@ -338,7 +445,7 @@ function Get-AzureValidationTemplateRoot {
     }
 
     $cursor = $RepositoryRoot
-    for ($i = 0; $i -lt 6; $i++) {
+    for ($i = 0; $i -lt 2; $i++) {
         $candidate = Join-Path $cursor ([string] $Policy.templateRootRelativePath)
         if (Test-Path -LiteralPath (Join-Path $candidate 'versions.tf') -PathType Leaf) {
             return $candidate
@@ -352,6 +459,85 @@ function Get-AzureValidationTemplateRoot {
     $null
 }
 
+function ConvertTo-AzureValidationRenderedTfvars {
+    param(
+        [Parameter(Mandatory)] $Request,
+        [Parameter(Mandatory)] $Policy
+    )
+
+    # The threat is writing a live gallery ID, password, or unmatched SKU into
+    # the admitted plan. The mechanism is a closed HCL object built only from
+    # already-validated allowlist tokens, booleans, and reformatted timestamps.
+    # The trust assumption is that Get-AzureValidationPlanRejection already
+    # accepted this request. Safe failure is to throw so the caller deletes the
+    # partial tree and records Rejected with azureContacted=false.
+    $allowedSkus = @($Policy.clients.allowedSkus)
+    $allowedSecurity = @('TrustedLaunch', 'Standard')
+    $clientLines = [System.Collections.Generic.List[string]]::new()
+    $null = $clientLines.Add('clients = [')
+    foreach ($client in @($Request.clients)) {
+        $sku = [string] $client.sku
+        $securityType = [string] $client.securityType
+        if ($sku -notin $allowedSkus -or $securityType -notin $allowedSecurity) {
+            throw 'The admitted client shape could not be rendered from allowlisted values.'
+        }
+        $null = $clientLines.Add('  {')
+        $null = $clientLines.Add(('    sku           = "' + $sku + '"'))
+        $null = $clientLines.Add(('    claiming      = ' + (ConvertTo-AzureValidationHclBoolean -Value ([bool] $client.claiming))))
+        $null = $clientLines.Add(('    security_type = "' + $securityType + '"'))
+        $null = $clientLines.Add(('    secure_boot   = ' + (ConvertTo-AzureValidationHclBoolean -Value ([bool] $client.secureBoot))))
+        $null = $clientLines.Add(('    vtpm          = ' + (ConvertTo-AzureValidationHclBoolean -Value ([bool] $client.vtpm))))
+        $null = $clientLines.Add('  },')
+    }
+    $null = $clientLines.Add(']')
+
+    $createdStamp = ConvertTo-AzureValidationUtcStamp -Value $Request.tags.CreatedUtc
+    $expiresStamp = ConvertTo-AzureValidationUtcStamp -Value $Request.tags.ExpiresUtc
+    $roundCorrelation = [string] $Request.tags.RoundCorrelation
+    if ($roundCorrelation -notmatch '^[A-Z0-9][A-Z0-9._-]{0,31}$') {
+        throw 'The admitted RoundCorrelation token could not be rendered.'
+    }
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in @(
+        '# Generated into a private workspace after offline admission.'
+        '# This file is Restricted environment configuration. Do not commit it.'
+        '# Gallery, host-network, and bootstrap-password values stay placeholders.'
+        'location                    = "{{AZURE_LOCATION}}"'
+        'resource_group_name         = "{{VALIDATION_RESOURCE_GROUP_NAME}}"'
+        'host_vnet_id                = "{{HOST_VNET_ID}}"'
+        'host_vnet_name              = "{{HOST_VNET_NAME}}"'
+        'host_resource_group_name    = "{{HOST_RESOURCE_GROUP_NAME}}"'
+        'approved_gallery_image_id   = "{{APPROVED_GALLERY_IMAGE_ID}}"'
+        ('client_count                = ' + @($Request.clients).Count)
+    )) {
+        $null = $lines.Add($line)
+    }
+    foreach ($line in $clientLines) {
+        $null = $lines.Add($line)
+    }
+    foreach ($line in @(
+        ('maximum_lifetime_minutes    = ' + [int] $Request.round.maximumLifetimeMinutes)
+        ('cleanup_reserve_minutes     = ' + [int] $Request.round.cleanupReserveMinutes)
+        'nat_public_ip_sku           = "Standard"'
+        'os_disk_storage_type        = "StandardSSD_LRS"'
+        'assign_vm_public_ip         = false'
+        'allow_gateway_transit       = false'
+        'allow_forwarded_traffic     = false'
+        'use_remote_gateways         = false'
+        ('purpose_tag                 = "' + [string] $Policy.requiredTagValues.Purpose + '"')
+        ('environment_tag             = "' + [string] $Policy.requiredTagValues.Environment + '"')
+        ('lifecycle_tag               = "' + [string] $Policy.requiredTagValues.Lifecycle + '"')
+        ('managing_tool_tag           = "' + [string] $Policy.requiredTagValues.ManagingTool + '"')
+        ('round_correlation_tag       = "' + $roundCorrelation + '"')
+        ('created_utc_tag             = "' + $createdStamp + '"')
+        ('expires_utc_tag             = "' + $expiresStamp + '"')
+    )) {
+        $null = $lines.Add($line)
+    }
+    ($lines -join "`n") + "`n"
+}
+
 function Write-AzureValidationRenderedPlan {
     param(
         [Parameter(Mandatory)] $Request,
@@ -361,54 +547,50 @@ function Write-AzureValidationRenderedPlan {
     )
 
     # Rendering is a local file copy. The threat is treating this as terraform
-    # init/plan/apply, which would contact Azure and create private caches.
-    # The mechanism is copying only reviewed generic .tf source plus one
-    # tfvars file into the already-admitted private workspace. The trust
-    # assumption is that the generic templates contain placeholders, not one
-    # environment. Safe failure is to throw before a partial rendered tree is
-    # treated as admitted; the caller records Rejected and azureContacted=false.
-    $destination = Join-Path $PrivateWorkspacePath ([string] $Policy.renderedDirectoryName)
-    $null = New-Item -ItemType Directory -Path $destination -Force
-    foreach ($item in @(Get-ChildItem -LiteralPath $TemplateRoot -Recurse -File)) {
-        $relative = $item.FullName.Substring($TemplateRoot.Length).TrimStart('\', '/')
-        if ($relative -match '(?i)(^|[\\/])\.terraform([\\/]|$)') {
-            continue
-        }
-        if ($item.Extension -in @('.tfstate', '.tfstate.backup')) {
-            continue
-        }
-        $target = Join-Path $destination $relative
-        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force
-        Copy-Item -LiteralPath $item.FullName -Destination $target -Force
-    }
-
-    $tfvars = @(
-        '# Generated into a private workspace after offline admission.'
-        '# This file is Restricted environment configuration. Do not commit it.'
-        'location                    = "{{AZURE_LOCATION}}"'
-        'resource_group_name         = "{{VALIDATION_RESOURCE_GROUP_NAME}}"'
-        'host_vnet_id                = "{{HOST_VNET_ID}}"'
-        'host_vnet_name              = "{{HOST_VNET_NAME}}"'
-        'host_resource_group_name    = "{{HOST_RESOURCE_GROUP_NAME}}"'
-        'approved_gallery_image_id   = "{{APPROVED_GALLERY_IMAGE_ID}}"'
-        'temporary_admin_password    = "{{TEMPORARY_ADMIN_PASSWORD}}"'
-        'client_count                = ' + @($Request.clients).Count
-        'maximum_lifetime_minutes    = ' + [int] $Request.round.maximumLifetimeMinutes
-        'cleanup_reserve_minutes     = ' + [int] $Request.round.cleanupReserveMinutes
-        'nat_public_ip_sku           = "Standard"'
-        'os_disk_storage_type        = "StandardSSD_LRS"'
-        'assign_vm_public_ip         = false'
-        'allow_gateway_transit       = false'
-        'allow_forwarded_traffic     = false'
-        'use_remote_gateways         = false'
-    ) -join "`n"
-    $tfvarsPath = Join-Path $destination 'generated.auto.tfvars'
-    [System.IO.File]::WriteAllText(
-        $tfvarsPath,
-        ($tfvars + "`n"),
-        [System.Text.UTF8Encoding]::new($false)
+    # init/plan/apply, which would contact Azure and create private caches, or
+    # leaving a half-written tree after a later throw is reported as
+    # NotStarted. The mechanism is copying only reviewed generic source into a
+    # temporary sibling directory, then renaming it. The trust assumption is
+    # that the generic templates contain placeholders, not one environment.
+    # Safe failure is to delete the partial tree and keep azureContacted=false.
+    $tfvars = ConvertTo-AzureValidationRenderedTfvars -Request $Request -Policy $Policy
+    $finalDestination = Join-Path $PrivateWorkspacePath ([string] $Policy.renderedDirectoryName)
+    $partialDestination = Join-Path $PrivateWorkspacePath (
+        [string] $Policy.renderedDirectoryName + '.partial'
     )
-    $destination
+    if (Test-Path -LiteralPath $partialDestination) {
+        Remove-Item -LiteralPath $partialDestination -Recurse -Force
+    }
+    try {
+        $null = New-Item -ItemType Directory -Path $partialDestination -Force
+        foreach ($item in @(Get-ChildItem -LiteralPath $TemplateRoot -Recurse -File)) {
+            $relative = $item.FullName.Substring($TemplateRoot.Length).TrimStart('\', '/')
+            if (-not (Test-AzureValidationPrivateSourceFile -RelativePath $relative -FileName $item.Name)) {
+                continue
+            }
+            $target = Join-Path $partialDestination $relative
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force
+            Copy-Item -LiteralPath $item.FullName -Destination $target -Force
+        }
+
+        $tfvarsPath = Join-Path $partialDestination 'generated.auto.tfvars'
+        [System.IO.File]::WriteAllText(
+            $tfvarsPath,
+            $tfvars,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        if (Test-Path -LiteralPath $finalDestination) {
+            Remove-Item -LiteralPath $finalDestination -Recurse -Force
+        }
+        Rename-Item -LiteralPath $partialDestination -NewName ([string] $Policy.renderedDirectoryName)
+    }
+    catch {
+        if (Test-Path -LiteralPath $partialDestination) {
+            Remove-Item -LiteralPath $partialDestination -Recurse -Force
+        }
+        throw
+    }
+    $finalDestination
 }
 
 function Invoke-AzureValidationAdmission {
@@ -432,6 +614,30 @@ function Invoke-AzureValidationAdmission {
         $toolingResolved = $false
     }
 
+    $requestSchemaPath = Get-AzureValidationRequestSchemaPath `
+        -RepositoryRoot $RepositoryRoot `
+        -ApplicationDirectory $ApplicationDirectory
+    if (-not [string]::IsNullOrWhiteSpace($requestSchemaPath)) {
+        $requestJson = $Request | ConvertTo-Json -Depth 20 -Compress
+        $requestSchemaValid = $false
+        try {
+            $requestSchemaValid = Test-Json -Json $requestJson -SchemaFile $requestSchemaPath
+        }
+        catch {
+            $requestSchemaValid = $false
+        }
+        if (-not $requestSchemaValid) {
+            return New-AzureValidationAdmissionVerdict -State Rejected `
+                -ReasonCode 'VALIDATION.REQUEST_INVALID' `
+                -ClientCount $facts.Count `
+                -Windows11ClaimingRoute:$facts.Windows11ClaimingRoute `
+                -NonClaimingDiagnosticPresent:$facts.NonClaimingDiagnosticPresent `
+                -RequiredTagsPresent:$tagsPresent `
+                -ToolingResolved:$toolingResolved `
+                -PrivacyBoundary Missing
+        }
+    }
+
     $workspaceReason = Get-AzureValidationWorkspaceRejection `
         -PrivateWorkspacePath $PrivateWorkspacePath `
         -RepositoryRoot $RepositoryRoot `
@@ -439,7 +645,10 @@ function Invoke-AzureValidationAdmission {
         -Policy $policy `
         -Request $Request
     if ($workspaceReason) {
-        $privacy = if ($workspaceReason -eq 'VALIDATION.PRIVACY_BOUNDARY_MISSING') {
+        $privacy = if ($workspaceReason -in @(
+            'VALIDATION.PRIVACY_BOUNDARY_MISSING',
+            'VALIDATION.WORKSPACE_REPARSE_POINT'
+        )) {
             'Rejected'
         }
         elseif ([string] $Request.privacyBoundary -eq [string] $policy.privacy.requiredBoundary) {

@@ -6,7 +6,7 @@ WIN-PCInfo still does not log in to Azure, query Azure, run `terraform plan` aga
 
 ## What this slice does
 
-The generated application can admit a synthetic one-to-four-client round plan. If the plan is safe, it copies the generic Terraform templates from `infra/azure-validation/` into a caller-supplied private workspace and writes placeholder variable values there.
+The generated application can admit a synthetic one-to-four-client round plan. If the plan is safe, it copies the generic Terraform templates from `infra/azure-validation/` into a caller-supplied private workspace and writes `generated.auto.tfvars` there. That file binds the admitted SKUs, Trusted Launch or non-claiming Standard security, lifetime, and required tags. Gallery, host-network, and location values stay placeholders. The gate does not write a bootstrap password.
 
 If the plan is unsafe, admission stops before any rendered file exists.
 
@@ -21,7 +21,7 @@ The only public result is a sanitized verdict. That verdict records counts, bool
 
 ## Safety reasoning
 
-The threat is coupling the public repository to one Azure lab, or accidentally publishing state, identifiers, or a live plan. The mechanism is offline admission that rejects a repository path, a public path, a missing privacy marker, an unresolved tool version, or an unsafe shape before it copies templates. The trust assumption is that the operator chose a private folder they control. Safe failure is `NotStarted` with `azureContacted` remaining false.
+The threat is coupling the public repository to one Azure lab, or accidentally publishing state, identifiers, or a live plan. The mechanism is offline admission that rejects a repository path, a public path, a redirected folder, a missing privacy marker, an unresolved tool version, or an unsafe shape before it copies templates. The trust assumption is that the operator chose a private folder they control. Safe failure is `NotStarted` with `azureContacted` remaining false.
 
 ## What admission requires
 
@@ -45,9 +45,9 @@ Create the private folder and marker first. Then, from a repository checkout:
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow AdmitValidationRound -ValidationRoundRequestPath ./tests/fixtures/azure-validation-round-one-client.json -ValidationPrivateWorkspacePath C:\PrivateValidation\round
 ```
 
-A successful run writes generic `.tf` files and `generated.auto.tfvars` under `rendered\` inside that private folder. It does not create Terraform state, lock files, or a provider cache, and it does not start Azure.
+A successful run writes generic `.tf` files and `generated.auto.tfvars` under `rendered\` inside that private folder. That rendered plan keeps one-to-four admitted SKUs and security settings. It does not create Terraform state, lock files, or a provider cache, and it does not start Azure.
 
-A fifth client, a lifetime over six hours, a missing cleanup reserve, a repository folder, a public folder, a floating provider version, a VM public IP, Premium SSD, or a claiming VM without Trusted Launch returns `NotStarted` and leaves the private folder unrendered.
+A fifth client, a lifetime over six hours, a missing cleanup reserve, a repository folder, a public folder, a redirected folder, a floating provider version, a VM public IP, Premium SSD, or a claiming VM without Trusted Launch returns `NotStarted` and leaves the private folder unrendered.
 
 ## Public versus private
 

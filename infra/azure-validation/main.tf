@@ -6,10 +6,13 @@ locals {
   # in the private workspace. Safe failure is admission rejection before
   # rendering when a tag is missing or identifier-like.
   governance_tags = {
-    Purpose      = var.purpose_tag
-    Environment  = var.environment_tag
-    Lifecycle    = var.lifecycle_tag
-    ManagingTool = var.managing_tool_tag
+    Purpose          = var.purpose_tag
+    Environment      = var.environment_tag
+    Lifecycle        = var.lifecycle_tag
+    ManagingTool     = var.managing_tool_tag
+    RoundCorrelation = var.round_correlation_tag
+    CreatedUtc       = var.created_utc_tag
+    ExpiresUtc       = var.expires_utc_tag
   }
 }
 
@@ -17,6 +20,13 @@ resource "azurerm_resource_group" "round" {
   name     = var.resource_group_name
   location = var.location
   tags     = local.governance_tags
+
+  lifecycle {
+    precondition {
+      condition     = var.client_count == length(var.clients)
+      error_message = "client_count must match the admitted clients list."
+    }
+  }
 }
 
 module "round_network" {
@@ -36,7 +46,7 @@ module "round_network" {
 
 module "validation_clients" {
   source = "./modules/validation-client"
-  count  = var.client_count
+  count  = length(var.clients)
 
   location                   = var.location
   resource_group_name        = azurerm_resource_group.round.name
@@ -47,5 +57,10 @@ module "validation_clients" {
   temporary_admin_username   = var.temporary_admin_username
   temporary_admin_password   = var.temporary_admin_password
   client_index               = count.index
+  vm_sku                     = var.clients[count.index].sku
+  claiming                   = var.clients[count.index].claiming
+  security_type              = var.clients[count.index].security_type
+  secure_boot                = var.clients[count.index].secure_boot
+  vtpm                       = var.clients[count.index].vtpm
   tags                       = local.governance_tags
 }

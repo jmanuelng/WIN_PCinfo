@@ -71,7 +71,12 @@ foreach ($fixtureName in @(
 $templateRoot = Join-Path $repositoryRoot ([string] $policy.templateRootRelativePath)
 Assert-Equal $true (Test-Path -LiteralPath (Join-Path $templateRoot 'versions.tf') -PathType Leaf) `
     'generic Terraform versions are published as source'
-Assert-Equal $true (Test-Path -LiteralPath (Join-Path $templateRoot 'examples/synthetic-round.tfvars.example') -PathType Leaf) `
+$exampleText = Get-Content -LiteralPath (Join-Path $templateRoot 'examples/synthetic-round.tfvars.example') -Raw
+Assert-Equal $true ($exampleText -match 'clients\s*=\s*\[') `
+    'the public example parameterizes per-client SKU and security'
+Assert-Equal $true ($exampleText -match 'round_correlation_tag') `
+    'the public example includes the required RoundCorrelation tag'
+Assert-Equal $true ($exampleText -match '\{\{APPROVED_GALLERY_IMAGE_ID\}\}') `
     'the public example uses only placeholders'
 
 $operatorDoc = Get-Content -LiteralPath (

@@ -1,10 +1,10 @@
 # One fresh validation client. The threat is a reused captured image, a
 # Premium disk, a public IP, or a Gen1 VM that is later treated as Windows 11
 # Trusted Launch evidence. The mechanism is a private NIC, Standard SSD, and
-# Trusted Launch by default. The trust assumption is that approved_gallery_image_id
-# points at a pristine evaluation baseline supplied only in the private
-# workspace. Safe failure is to keep assign_vm_public_ip false and to require
-# Trusted Launch for any claiming route at admission time.
+# per-client Secure Boot/vTPM taken from the admitted plan. The trust
+# assumption is that approved_gallery_image_id points at a pristine evaluation
+# baseline supplied only in the private workspace. Safe failure is to keep
+# assign_vm_public_ip false and to refuse a claiming VM without Trusted Launch.
 
 resource "azurerm_network_interface" "client" {
   name                = format("nic-winpcinfo-%02d", var.client_index)
@@ -34,8 +34,8 @@ resource "azurerm_windows_virtual_machine" "client" {
   admin_username             = var.temporary_admin_username
   admin_password             = var.temporary_admin_password
   network_interface_ids      = [azurerm_network_interface.client.id]
-  secure_boot_enabled        = true
-  vtpm_enabled               = true
+  secure_boot_enabled        = var.secure_boot
+  vtpm_enabled               = var.vtpm
   encryption_at_host_enabled = false
   source_image_id            = var.approved_gallery_image_id
   tags                       = var.tags
@@ -48,5 +48,12 @@ resource "azurerm_windows_virtual_machine" "client" {
 
   additional_capabilities {
     hibernation_enabled = false
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.claiming || (var.security_type == "TrustedLaunch" && var.secure_boot && var.vtpm)
+      error_message = "Claiming clients must use Trusted Launch with Secure Boot and vTPM."
+    }
   }
 }

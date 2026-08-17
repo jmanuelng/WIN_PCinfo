@@ -1,5 +1,5 @@
 output "claiming_security_type" {
-  value = "TrustedLaunch"
+  value = var.security_type
 }
 
 output "os_disk_storage_type" {

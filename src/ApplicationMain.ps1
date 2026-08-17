@@ -121,15 +121,35 @@ if ($Workflow -eq 'AdmitValidationRound') {
             $admissionRequest = & $convertFromJsonCommand -InputObject $admissionRequestText `
                 -ErrorAction Stop
             $admissionRepositoryRoot = Split-Path -Parent $PSCommandPath
+            $admissionApplicationDirectory = Split-Path -Parent $PSCommandPath
             if (-not (Test-Path -LiteralPath (
                 Join-Path $admissionRepositoryRoot 'infra/azure-validation/versions.tf'
             ))) {
                 $admissionRepositoryRoot = Split-Path -Parent $admissionRepositoryRoot
             }
-            Invoke-AzureValidationAdmission -Request $admissionRequest `
-                -PrivateWorkspacePath $ValidationPrivateWorkspacePath `
+            $admissionRequestSchema = Get-AzureValidationRequestSchemaPath `
                 -RepositoryRoot $admissionRepositoryRoot `
-                -ApplicationDirectory (Split-Path -Parent $PSCommandPath)
+                -ApplicationDirectory $admissionApplicationDirectory
+            $admissionRequestSchemaValid = $true
+            if (-not [string]::IsNullOrWhiteSpace($admissionRequestSchema)) {
+                try {
+                    $admissionRequestSchemaValid = Test-Json -Json $admissionRequestText `
+                        -SchemaFile $admissionRequestSchema
+                }
+                catch {
+                    $admissionRequestSchemaValid = $false
+                }
+            }
+            if (-not $admissionRequestSchemaValid) {
+                New-AzureValidationAdmissionVerdict -State Rejected `
+                    -ReasonCode 'VALIDATION.REQUEST_INVALID' -PrivacyBoundary Missing
+            }
+            else {
+                Invoke-AzureValidationAdmission -Request $admissionRequest `
+                    -PrivateWorkspacePath $ValidationPrivateWorkspacePath `
+                    -RepositoryRoot $admissionRepositoryRoot `
+                    -ApplicationDirectory $admissionApplicationDirectory
+            }
         }
         catch {
             New-AzureValidationAdmissionVerdict -State Rejected `

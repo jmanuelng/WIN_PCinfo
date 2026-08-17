@@ -15,6 +15,10 @@ $oneClientPath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-one-cl
 $fiveRequestPath = Join-Path ([System.IO.Path]::GetTempPath()) (
     'win-pcinfo-azure-admission-five-' + [guid]::NewGuid().ToString('N') + '.json'
 )
+$kindRequestPath = Join-Path ([System.IO.Path]::GetTempPath()) (
+    'win-pcinfo-azure-admission-kind-' + [guid]::NewGuid().ToString('N') + '.json'
+)
+$kindWorkspace = $null
 
 $workRoot = Join-Path $repositoryRoot '.test-output/azure-validation-admission-application'
 if (Test-Path -LiteralPath $workRoot) {
@@ -75,6 +79,15 @@ try {
     Assert-Equal $false $terminal[0].collectionStarted 'admission never starts assessment collection'
     Assert-Equal $true (Test-Path -LiteralPath (Join-Path $safeWorkspace "$($policy.renderedDirectoryName)/versions.tf")) `
         'the generated application writes generic Terraform only to the private workspace'
+    $appTfvars = [System.IO.File]::ReadAllText(
+        (Join-Path $safeWorkspace "$($policy.renderedDirectoryName)/generated.auto.tfvars")
+    )
+    Assert-Equal $true ($appTfvars -match 'sku\s+=\s+"Standard_D2s_v5"') `
+        'the generated application binds the admitted SKU in the private plan'
+    Assert-Equal $true ($appTfvars -match 'round_correlation_tag\s+=\s+"SYNTHETIC-ROUND-001"') `
+        'the generated application binds required tags in the private plan'
+    Assert-Equal $false ($appTfvars -match 'temporary_admin_password') `
+        'the generated application does not write a bootstrap password'
 
     $five = Get-Content -LiteralPath $oneClientPath -Raw | ConvertFrom-Json -Depth 20
     $five.clients = @($five.clients[0], $five.clients[0], $five.clients[0], $five.clients[0], $five.clients[0])
@@ -114,6 +127,25 @@ try {
     Assert-Equal $false $repoVerdict[0].rendered 'in-repository workspaces are not rendered'
     Assert-Equal $false (Test-Path -LiteralPath (Join-Path $repoWorkspace $policy.renderedDirectoryName)) `
         'the generated application never writes Terraform into the repository tree'
+
+    $kind = Get-Content -LiteralPath $oneClientPath -Raw | ConvertFrom-Json -Depth 20
+    $kind.kind = 'win-pcinfo.assessment-run-request'
+    [System.IO.File]::WriteAllText(
+        $kindRequestPath,
+        ($kind | ConvertTo-Json -Depth 20),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    $kindWorkspace = New-MarkedWorkspace -Name 'kind'
+    $kindRejected = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'AdmitValidationRound',
+        '-ValidationRoundRequestPath', $kindRequestPath,
+        '-ValidationPrivateWorkspacePath', $kindWorkspace
+    )
+    Assert-Equal 20 $kindRejected.ExitCode 'a wrong request kind ends NotStarted'
+    $kindVerdict = @($kindRejected.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-admission')
+    Assert-Equal 'VALIDATION.REQUEST_INVALID' $kindVerdict[0].reasonCode `
+        'the generated application rejects a request that fails the public schema'
+    Assert-Equal $false $kindVerdict[0].rendered 'wrong-kind application requests are not rendered'
 }
 finally {
     if (Test-Path -LiteralPath $safeWorkspace) {
@@ -121,6 +153,12 @@ finally {
     }
     if (Test-Path -LiteralPath $fiveRequestPath) {
         Remove-Item -LiteralPath $fiveRequestPath -Force
+    }
+    if (-not [string]::IsNullOrWhiteSpace($kindWorkspace) -and (Test-Path -LiteralPath $kindWorkspace)) {
+        Remove-Item -LiteralPath $kindWorkspace -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $kindRequestPath) {
+        Remove-Item -LiteralPath $kindRequestPath -Force
     }
 }
 

@@ -44,11 +44,70 @@ variable "temporary_admin_password" {
 
 variable "client_count" {
   type        = number
-  description = "Number of allowlisted small clients in this round, from 1 to 4."
+  description = "Number of allowlisted small clients in this round, from 1 to 4. Must match length(var.clients)."
 
   validation {
     condition     = var.client_count >= 1 && var.client_count <= 4
     error_message = "A validation round may create only one to four clients."
+  }
+}
+
+variable "clients" {
+  type = list(object({
+    sku           = string
+    claiming      = bool
+    security_type = string
+    secure_boot   = bool
+    vtpm          = bool
+  }))
+  description = "Admitted per-client shape. Gallery IDs and passwords stay out of this list."
+
+  validation {
+    condition     = length(var.clients) >= 1 && length(var.clients) <= 4
+    error_message = "A validation round may create only one to four clients."
+  }
+
+  validation {
+    condition = alltrue([
+      for client in var.clients : contains([
+        "Standard_D2s_v5",
+        "Standard_D2as_v5",
+        "Standard_B2s",
+        "Standard_B2ms",
+      ], client.sku)
+    ])
+    error_message = "Each client must use an allowlisted small SKU."
+  }
+
+  validation {
+    condition = alltrue([
+      for client in var.clients : contains(["TrustedLaunch", "Standard"], client.security_type)
+    ])
+    error_message = "Client security type must be TrustedLaunch or Standard."
+  }
+
+  validation {
+    condition = alltrue([
+      for client in var.clients :
+      !client.claiming || (
+        client.security_type == "TrustedLaunch" &&
+        client.secure_boot &&
+        client.vtpm
+      )
+    ])
+    error_message = "A claiming client must use Trusted Launch with Secure Boot and vTPM."
+  }
+
+  validation {
+    condition = alltrue([
+      for client in var.clients :
+      client.security_type != "Standard" || (
+        !client.claiming &&
+        !client.secure_boot &&
+        !client.vtpm
+      )
+    ])
+    error_message = "A Standard-security client must be non-claiming without Secure Boot or vTPM."
   }
 }
 
@@ -160,4 +219,24 @@ variable "managing_tool_tag" {
   type        = string
   default     = "Terraform"
   description = "Non-sensitive managing-tool tag."
+}
+
+variable "round_correlation_tag" {
+  type        = string
+  description = "Short opaque round token. Never a tenant, subscription, or resource ID."
+
+  validation {
+    condition     = can(regex("^[A-Z0-9][A-Z0-9._-]{0,31}$", var.round_correlation_tag))
+    error_message = "RoundCorrelation must be a short opaque token."
+  }
+}
+
+variable "created_utc_tag" {
+  type        = string
+  description = "Round start timestamp used only as a non-sensitive expiry bound."
+}
+
+variable "expires_utc_tag" {
+  type        = string
+  description = "Round expiry timestamp used only as a non-sensitive expiry bound."
 }
