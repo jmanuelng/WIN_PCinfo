@@ -665,6 +665,25 @@ test("Grok provider uses extra-high reasoning and always-approve", () => {
     }),
   );
   assert.equal(resultHasCompletionSignal({ stdout: "still working" }), false);
+
+  // Sandcastle matches completion against the LAST parsed `result` event, not
+  // the log. A trailing Grok status/result after COMPLETE used to overwrite
+  // that buffer and make a finished implementer look unfinished.
+  let lastResultText = "";
+  for (const line of [
+    '{"type":"assistant","message":{"content":[{"type":"text","text":"committed\\n<promise>COMPLETE</promise>"}]}}',
+    "<promise>COMPLETE</promise>",
+    '{"type":"result","result":"success"}',
+    '{"type":"end","sessionId":"abc","usage":{"input_tokens":1,"output_tokens":2}}',
+  ]) {
+    for (const parsed of parseGrokStreamLine(line)) {
+      if (parsed.type === "result") {
+        lastResultText = parsed.result;
+      }
+    }
+  }
+  assert.match(lastResultText, /<promise>COMPLETE<\/promise>/);
+  assert.ok(resultHasCompletionSignal({ stdout: lastResultText }));
   assert.deepEqual(
     parseGrokStreamLine(
       '{"type":"tool_call","toolName":"read_file","rawInput":{"path":"README.md"}}',
