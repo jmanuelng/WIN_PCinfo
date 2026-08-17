@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/azure-validation-round-request.schema.json",
+  "title": "WIN-PCInfo Azure validation round request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "privacyBoundary",
+    "azureContact",
+    "tooling",
+    "round",
+    "network",
+    "tags",
+    "clients"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.azure-validation-round-request" },
+    "contractVersion": { "const": "1.0.0" },
+    "privacyBoundary": { "type": "string", "minLength": 4, "maxLength": 64 },
+    "azureContact": { "type": "string", "minLength": 3, "maxLength": 16 },
+    "tooling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["terraform", "provider"],
+      "properties": {
+        "terraform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "source"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1, "maxLength": 32 },
+            "version": { "type": "string", "minLength": 1, "maxLength": 32 },
+            "source": { "type": "string", "minLength": 8, "maxLength": 160 }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "source", "version"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1, "maxLength": 32 },
+            "source": { "type": "string", "minLength": 3, "maxLength": 64 },
+            "version": { "type": "string", "minLength": 1, "maxLength": 32 }
+          }
+        }
+      }
+    },
+    "round": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plannedDurationMinutes",
+        "cleanupReserveMinutes",
+        "maximumLifetimeMinutes"
+      ],
+      "properties": {
+        "plannedDurationMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 },
+        "cleanupReserveMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 },
+        "maximumLifetimeMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roundVnet",
+        "roundSubnet",
+        "privateNics",
+        "vmPublicIp",
+        "natGateway",
+        "natPublicIpSku",
+        "peering"
+      ],
+      "properties": {
+        "roundVnet": { "type": "boolean" },
+        "roundSubnet": { "type": "boolean" },
+        "privateNics": { "type": "boolean" },
+        "vmPublicIp": { "type": "boolean" },
+        "natGateway": { "type": "boolean" },
+        "natPublicIpSku": { "type": "string", "minLength": 3, "maxLength": 16 },
+        "peering": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "present",
+            "allowForwardedTraffic",
+            "allowGatewayTransit",
+            "useRemoteGateways"
+          ],
+          "properties": {
+            "present": { "type": "boolean" },
+            "allowForwardedTraffic": { "type": "boolean" },
+            "allowGatewayTransit": { "type": "boolean" },
+            "useRemoteGateways": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 64 },
+      "minProperties": 0,
+      "maxProperties": 16
+    },
+    "clients": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "claiming",
+          "sku",
+          "diskType",
+          "hyperVGeneration",
+          "securityType",
+          "secureBoot",
+          "vtpm",
+          "imageSourceKind",
+          "imageReference"
+        ],
+        "properties": {
+          "role": { "type": "string", "minLength": 4, "maxLength": 64 },
+          "claiming": { "type": "boolean" },
+          "sku": { "type": "string", "minLength": 4, "maxLength": 32 },
+          "diskType": { "type": "string", "minLength": 4, "maxLength": 32 },
+          "hyperVGeneration": { "type": "string", "minLength": 1, "maxLength": 8 },
+          "securityType": { "type": "string", "minLength": 4, "maxLength": 32 },
+          "secureBoot": { "type": "boolean" },
+          "vtpm": { "type": "boolean" },
+          "imageSourceKind": { "type": "string", "minLength": 4, "maxLength": 64 },
+          "imageReference": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 256
+          }
+        }
+      }
+    }
+  }
+}

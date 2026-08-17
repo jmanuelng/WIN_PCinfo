@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/azure-validation-admission-verdict.schema.json",
+  "title": "WIN-PCInfo sanitized Azure validation admission verdict",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordType",
+    "contractVersion",
+    "state",
+    "reasonCode",
+    "admitted",
+    "rendered",
+    "azureContacted",
+    "clientCount",
+    "windows11ClaimingRoute",
+    "nonClaimingDiagnosticPresent",
+    "requiredTagsPresent",
+    "toolingResolved",
+    "privacyBoundary",
+    "supportClaim",
+    "previewOrStableClaim"
+  ],
+  "properties": {
+    "recordType": { "const": "win-pcinfo.azure-validation-admission" },
+    "contractVersion": { "const": "1.0.0" },
+    "state": { "enum": ["Admitted", "Rejected"] },
+    "reasonCode": {
+      "type": "string",
+      "pattern": "^VALIDATION\\.[A-Z0-9_]+$"
+    },
+    "admitted": { "type": "boolean" },
+    "rendered": { "type": "boolean" },
+    "azureContacted": { "const": false },
+    "clientCount": { "type": ["integer", "null"], "minimum": 0, "maximum": 8 },
+    "windows11ClaimingRoute": { "type": "boolean" },
+    "nonClaimingDiagnosticPresent": { "type": "boolean" },
+    "requiredTagsPresent": { "type": "boolean" },
+    "toolingResolved": { "type": "boolean" },
+    "privacyBoundary": {
+      "enum": ["PrivateExternalWorkspace", "Missing", "Rejected"]
+    },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" }
+  }
+}

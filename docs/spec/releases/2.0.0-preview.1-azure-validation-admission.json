@@ -1,0 +1,88 @@
+{
+  "kind": "win-pcinfo.azure-validation-admission-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.azure-validation-admission/1.0.0",
+  "productCapability": "CAP-0028",
+  "sliceDeliversCapability": false,
+  "azureContact": "None",
+  "privacy": {
+    "requiredBoundary": "PrivateExternalWorkspace",
+    "markerFileName": ".win-pcinfo-private-workspace",
+    "markerContent": "win-pcinfo.private-external-workspace",
+    "rejectRepositoryPath": true,
+    "rejectPublicPath": true,
+    "rejectUncPath": true
+  },
+  "tooling": {
+    "terraform": {
+      "name": "terraform",
+      "version": "1.12.2",
+      "source": "https://releases.hashicorp.com/terraform/1.12.2/",
+      "license": "BUSL-1.1",
+      "acquisition": "declared-not-acquired"
+    },
+    "provider": {
+      "name": "azurerm",
+      "source": "hashicorp/azurerm",
+      "version": "4.37.0",
+      "license": "MPL-2.0",
+      "acquisition": "declared-not-acquired"
+    }
+  },
+  "clients": {
+    "minimum": 1,
+    "maximum": 4,
+    "allowedSkus": [
+      "Standard_D2s_v5",
+      "Standard_D2as_v5",
+      "Standard_B2s",
+      "Standard_B2ms"
+    ],
+    "diskType": "StandardSSD_LRS",
+    "windows11ClaimingRoute": {
+      "hyperVGeneration": "V2",
+      "securityType": "TrustedLaunch",
+      "secureBoot": true,
+      "vtpm": true,
+      "imageSourceKind": "ApprovedEvaluationGallery"
+    }
+  },
+  "lifetime": {
+    "maximumMinutes": 360,
+    "minimumCleanupReserveMinutes": 30
+  },
+  "network": {
+    "roundVnet": true,
+    "roundSubnet": true,
+    "privateNics": true,
+    "vmPublicIp": false,
+    "natGateway": true,
+    "natPublicIpSku": "Standard",
+    "peering": {
+      "required": true,
+      "allowForwardedTraffic": false,
+      "allowGatewayTransit": false,
+      "useRemoteGateways": false
+    }
+  },
+  "requiredTagKeys": [
+    "Purpose",
+    "Environment",
+    "Lifecycle",
+    "ManagingTool",
+    "RoundCorrelation",
+    "CreatedUtc",
+    "ExpiresUtc"
+  ],
+  "requiredTagValues": {
+    "Purpose": "WIN-PCInfoValidation",
+    "Environment": "EphemeralLab",
+    "Lifecycle": "Ephemeral",
+    "ManagingTool": "Terraform"
+  },
+  "templateRootRelativePath": "infra/azure-validation",
+  "renderedDirectoryName": "rendered",
+  "supportClaim": "None",
+  "previewOrStableClaim": "None"
+}

@@ -1,0 +1,60 @@
+{
+  "kind": "win-pcinfo.azure-validation-round-request",
+  "contractVersion": "1.0.0",
+  "privacyBoundary": "PrivateExternalWorkspace",
+  "azureContact": "None",
+  "tooling": {
+    "terraform": {
+      "name": "terraform",
+      "version": "1.12.2",
+      "source": "https://releases.hashicorp.com/terraform/1.12.2/"
+    },
+    "provider": {
+      "name": "azurerm",
+      "source": "hashicorp/azurerm",
+      "version": "4.37.0"
+    }
+  },
+  "round": {
+    "plannedDurationMinutes": 180,
+    "cleanupReserveMinutes": 30,
+    "maximumLifetimeMinutes": 210
+  },
+  "network": {
+    "roundVnet": true,
+    "roundSubnet": true,
+    "privateNics": true,
+    "vmPublicIp": false,
+    "natGateway": true,
+    "natPublicIpSku": "Standard",
+    "peering": {
+      "present": true,
+      "allowForwardedTraffic": false,
+      "allowGatewayTransit": false,
+      "useRemoteGateways": false
+    }
+  },
+  "tags": {
+    "Purpose": "WIN-PCInfoValidation",
+    "Environment": "EphemeralLab",
+    "Lifecycle": "Ephemeral",
+    "ManagingTool": "Terraform",
+    "RoundCorrelation": "SYNTHETIC-ROUND-001",
+    "CreatedUtc": "2026-01-01T00:00:00Z",
+    "ExpiresUtc": "2026-01-01T03:30:00Z"
+  },
+  "clients": [
+    {
+      "role": "Windows11Validation",
+      "claiming": true,
+      "sku": "Standard_D2s_v5",
+      "diskType": "StandardSSD_LRS",
+      "hyperVGeneration": "V2",
+      "securityType": "TrustedLaunch",
+      "secureBoot": true,
+      "vtpm": true,
+      "imageSourceKind": "ApprovedEvaluationGallery",
+      "imageReference": "{{APPROVED_GALLERY_IMAGE_ID}}"
+    }
+  ]
+}

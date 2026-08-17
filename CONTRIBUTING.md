@@ -6,7 +6,8 @@ Contributions are welcome when they preserve the public privacy boundary and the
 
 - The repository is MIT licensed, as stated in [README.md](README.md#license).
 - Commits should follow the Developer Certificate of Origin (DCO).
-- Do not commit Assessment Records, Protected Evidence Packages, Recipient Profiles, fingerprints, Terraform state, Azure identifiers, credentials, or other Restricted Diagnostic Evidence.
+- Do not commit Assessment Records, Protected Evidence Packages, Recipient Profiles, fingerprints, Terraform state, rendered Terraform values, Azure identifiers, credentials, or other Restricted Diagnostic Evidence.
+- Offline Azure validation admission is documented in [docs/azure-validation-admission.md](docs/azure-validation-admission.md). Use only a marked private workspace outside this repository. The gate does not contact Azure and does not deliver `CAP-0028`.
 - Do not add floating dependencies or install tools on an assessed device.
 - Public documentation must stay beginner-friendly and must not claim deferred behavior as implemented.
 
