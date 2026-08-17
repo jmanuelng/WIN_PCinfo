@@ -94,13 +94,21 @@ foreach ($example in @($policy.syntheticExamples)) {
 }
 Assert-Equal $true ($exampleText -match 'synthetic') `
     'worked examples identify themselves as synthetic'
+Assert-Equal $true ($exampleText -match 'CONNECTIVITY\.LOCAL_ONLY_NOT_ATTEMPTED') `
+    'missing-evidence example uses the implemented Local Only connectivity coverage reason'
+Assert-Equal $false ($exampleText -match 'FINDING\.NETWORK_REQUESTS_NOT_ATTEMPTED') `
+    'missing-evidence example does not teach the network-topology finding reason as connectivity coverage'
+Assert-Equal $true ($exampleText -match 'device object and intended assignment') `
+    'identity discovery-task example teaches an implemented identity task'
+Assert-Equal $false ($exampleText -match 'Conditional Access and compliant-device') `
+    'identity discovery-task example is not a cross-domain Conditional Access task'
 Assert-Equal $false ($exampleText -match '(?i)\b(tenant id|subscription id|10\.\d+\.\d+\.\d+)\b') `
     'worked examples contain no real tenant, subscription, or host-network facts'
 
 $procedurePhrases = [ordered]@{
     recipientSetup = '-Workflow RecipientProfileSetup'
     packageOpening = 'Evidence Viewing Session'
-    staleRecovery = 'Stale-run Recovery'
+    staleRecovery = 'allowStaleRecovery'
     cancellation = 'Ctrl+C'
     restrictedReportExport = '-Workflow RestrictedReportExport'
     prohibitedPublicEvidence = 'never attach'

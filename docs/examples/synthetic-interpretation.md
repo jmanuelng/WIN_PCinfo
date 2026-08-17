@@ -6,7 +6,7 @@ Use them to practice reading a report before you look at real Restricted Diagnos
 
 ## Example: missing evidence
 
-A synthetic Local Only run records Microsoft connectivity coverage as `NotAttempted` with reason `FINDING.NETWORK_REQUESTS_NOT_ATTEMPTED`.
+A synthetic Local Only run records Microsoft connectivity coverage as `NotAttempted` with reason `CONNECTIVITY.LOCAL_ONLY_NOT_ATTEMPTED`.
 
 How to read it:
 
@@ -30,7 +30,7 @@ Safe next step: review the coverage reason. If elevation was denied, the privile
 
 ## Example: Tenant-side Discovery Task
 
-A synthetic identity section includes a Tenant-side Discovery Task: confirm the approved Conditional Access and compliant-device target in the tenant’s own administration boundary.
+A synthetic identity section includes a Tenant-side Discovery Task: confirm the device object and intended assignment in the authorized Microsoft Entra tenant.
 
 How to read it:
 

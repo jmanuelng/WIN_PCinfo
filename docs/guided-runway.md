@@ -141,7 +141,7 @@ After approval on a trusted artifact, the run continues without further prompts.
 
 Cancel with Ctrl+C. The application acknowledges cancellation, stops owned work, protects recoverable evidence when it is safe to do so, and verifies cleanup. Cancellation does not resume later.
 
-If a previous run crashed, do not delete folders by guesswork. Use the deliberate Stale-run Recovery path described in [Evidence Workspace and Stale-run Recovery](evidence-workspace-recovery.md). Recovery is cleanup-only. It never resumes collection.
+If a previous run crashed, do not delete folders by guesswork. Recovery is cleanup-only. It never resumes collection. Guided launch currently sets `allowStaleRecovery` to false, so it will not authorize cleanup of a previous workspace. To request recovery today, use Automation with `automationChoices.allowStaleRecovery` set to true after you have identified the product-owned residue. The exact safety rules are in [Evidence Workspace and Stale-run Recovery](evidence-workspace-recovery.md).
 
 ## Interpret
 
