@@ -97,6 +97,86 @@ if ($Workflow -eq 'Verify') {
     exit 0
 }
 
+if ($Workflow -eq 'AdmitValidationRound') {
+    # Admission is a local maintainer gate. The threat is hiding the unsigned
+    # precursor behind Authenticode while still needing to test template
+    # rendering. The mechanism is the same trusted JSON commands as Help, with
+    # no Azure, Terraform, or certificate work. The trust assumption is that
+    # the request and private workspace are caller-supplied. Safe failure is
+    # NotStarted without rendering.
+    Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'ValidationAdmission' -State 'Started' `
+        -MessageId 'validation.admission.started' -CompletedUnits 0 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    $admissionResult = if ([string]::IsNullOrWhiteSpace($ValidationRoundRequestPath) -or
+        [string]::IsNullOrWhiteSpace($ValidationPrivateWorkspacePath)) {
+        New-AzureValidationAdmissionVerdict -State Rejected `
+            -ReasonCode 'VALIDATION.REQUEST_INVALID' -PrivacyBoundary Missing
+    }
+    else {
+        try {
+            $admissionRequestText = [System.IO.File]::ReadAllText(
+                $ValidationRoundRequestPath,
+                [System.Text.UTF8Encoding]::new($false, $true)
+            )
+            $admissionRequest = & $convertFromJsonCommand -InputObject $admissionRequestText `
+                -ErrorAction Stop
+            $admissionRepositoryRoot = Split-Path -Parent $PSCommandPath
+            $admissionApplicationDirectory = Split-Path -Parent $PSCommandPath
+            if (-not (Test-Path -LiteralPath (
+                Join-Path $admissionRepositoryRoot 'infra/azure-validation/versions.tf'
+            ))) {
+                $admissionRepositoryRoot = Split-Path -Parent $admissionRepositoryRoot
+            }
+            $admissionRequestSchema = Get-AzureValidationRequestSchemaPath `
+                -RepositoryRoot $admissionRepositoryRoot `
+                -ApplicationDirectory $admissionApplicationDirectory
+            $admissionRequestSchemaValid = $true
+            if (-not [string]::IsNullOrWhiteSpace($admissionRequestSchema)) {
+                try {
+                    $admissionRequestSchemaValid = Test-Json -Json $admissionRequestText `
+                        -SchemaFile $admissionRequestSchema
+                }
+                catch {
+                    $admissionRequestSchemaValid = $false
+                }
+            }
+            if (-not $admissionRequestSchemaValid) {
+                New-AzureValidationAdmissionVerdict -State Rejected `
+                    -ReasonCode 'VALIDATION.REQUEST_INVALID' -PrivacyBoundary Missing
+            }
+            else {
+                Invoke-AzureValidationAdmission -Request $admissionRequest `
+                    -PrivateWorkspacePath $ValidationPrivateWorkspacePath `
+                    -RepositoryRoot $admissionRepositoryRoot `
+                    -ApplicationDirectory $admissionApplicationDirectory
+            }
+        }
+        catch {
+            New-AzureValidationAdmissionVerdict -State Rejected `
+                -ReasonCode 'VALIDATION.REQUEST_INVALID' -PrivacyBoundary Missing
+        }
+    }
+    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'ValidationAdmission' `
+        -State $(if ($admissionResult.admitted) { 'Succeeded' } else { 'Failed' }) `
+        -MessageId $(if ($admissionResult.admitted) {
+            'validation.admission.succeeded'
+        } else {
+            'validation.admission.failed'
+        }) -CompletedUnits 1 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $admissionResult -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode $admissionResult.reasonCode `
+        -Phase ValidationAdmission
+    $exitCode = 20
+    if ($admissionResult.admitted) {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        $exitCode = 0
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $exitCode
+}
+
 if ($Workflow -eq 'Help' -or $Workflow -eq 'About') {
     # Discovery must remain available on an unsigned development artifact.
     # Requiring Authenticode here would hide the repository from the people

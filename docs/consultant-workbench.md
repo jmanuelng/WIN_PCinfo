@@ -46,6 +46,10 @@ These documents explain intended release scope. They are not a support claim for
 - [Capability ledger](spec/capability-ledger.md)
 - [Stable 2.0.0 supported-device matrix](spec/releases/2.0.0-supported-device-matrix.md)
 
+## Maintainer validation admission
+
+- [Offline Azure validation admission](azure-validation-admission.md) admits a synthetic one-to-four-client round plan into a private workspace without contacting Azure. Completing that gate does not deliver `CAP-0028` or create a Preview or Supported claim.
+
 ## Privacy-safe field notes
 
 If you later want to contribute a privacy-sanitized Field Validation attestation, follow [Field Validation](field-validation.md). That human process is optional, requires deliberate consent, and is not a product workflow. Ordinary assessment use never becomes validation evidence automatically.

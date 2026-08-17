@@ -1,0 +1,36 @@
+# Synthetic example only. These placeholders can be shared publicly.
+# Replace them in a private workspace after offline admission. Do not commit
+# the replaced file, a backend path, or Terraform state.
+
+location                   = "{{AZURE_LOCATION}}"
+resource_group_name        = "{{VALIDATION_RESOURCE_GROUP_NAME}}"
+host_vnet_id               = "{{HOST_VNET_ID}}"
+host_vnet_name             = "{{HOST_VNET_NAME}}"
+host_resource_group_name   = "{{HOST_RESOURCE_GROUP_NAME}}"
+approved_gallery_image_id  = "{{APPROVED_GALLERY_IMAGE_ID}}"
+temporary_admin_password   = "{{TEMPORARY_ADMIN_PASSWORD}}"
+client_count               = 1
+clients = [
+  {
+    sku           = "Standard_D2s_v5"
+    claiming      = true
+    security_type = "TrustedLaunch"
+    secure_boot   = true
+    vtpm          = true
+  }
+]
+maximum_lifetime_minutes   = 210
+cleanup_reserve_minutes    = 30
+nat_public_ip_sku          = "Standard"
+os_disk_storage_type       = "StandardSSD_LRS"
+assign_vm_public_ip        = false
+allow_gateway_transit      = false
+allow_forwarded_traffic    = false
+use_remote_gateways        = false
+purpose_tag                = "WIN-PCInfoValidation"
+environment_tag            = "EphemeralLab"
+lifecycle_tag              = "Ephemeral"
+managing_tool_tag          = "Terraform"
+round_correlation_tag      = "SYNTHETIC-ROUND-EXAMPLE"
+created_utc_tag            = "2026-01-01T00:00:00Z"
+expires_utc_tag            = "2026-01-01T03:30:00Z"

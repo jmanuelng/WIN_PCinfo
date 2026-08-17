@@ -18,6 +18,22 @@
 /artifacts/
 /.test-output/
 
+# Instantiated Azure validation workspaces are private. Generic .tf source
+# under infra/azure-validation remains public; rendered values, state, locks,
+# and provider caches must stay outside the repository.
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform/
+.terraform.lock.hcl
+
 # Local Node dependencies used only by the Sandcastle orchestrator.
 /node_modules/
 /.worktrees/

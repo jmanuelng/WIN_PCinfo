@@ -41,6 +41,7 @@ $sourcePaths = @(
     'src/ProductHelp.ps1'
     'src/PortableDistribution.ps1'
     'src/AttestedPreview.ps1'
+    'src/AzureValidationAdmission.ps1'
     'src/ApplicationMain.ps1'
 )
 
@@ -98,6 +99,10 @@ $portableDistributionSchemaPath = Join-Path $repositoryRoot 'schemas/portable-di
 $attestedPreviewPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-attested-preview.json'
 $attestedPreviewSchemaPath = Join-Path $repositoryRoot 'schemas/attested-preview.schema.json'
 $attestedPreviewAttestationSchemaPath = Join-Path $repositoryRoot 'schemas/attested-preview-attestation.schema.json'
+$azureValidationAdmissionPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-azure-validation-admission.json'
+$azureValidationAdmissionSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-admission.schema.json'
+$azureValidationRoundRequestSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-round-request.schema.json'
+$azureValidationAdmissionVerdictSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-admission-verdict.schema.json'
 $softwareRecognitionCatalogPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 $softwareRecognitionCatalogSchemaPath = Join-Path $repositoryRoot 'schemas/software-recognition-catalog.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
@@ -131,6 +136,8 @@ foreach ($requiredDefinitionPath in @(
     $portableDistributionPolicyPath, $portableDistributionSchemaPath,
     $attestedPreviewPolicyPath, $attestedPreviewSchemaPath,
     $attestedPreviewAttestationSchemaPath,
+    $azureValidationAdmissionPolicyPath, $azureValidationAdmissionSchemaPath,
+    $azureValidationRoundRequestSchemaPath, $azureValidationAdmissionVerdictSchemaPath,
     $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
@@ -275,6 +282,12 @@ $attestedPreviewPolicyDigest = Get-Sha256Hex -Bytes $attestedPreviewPolicyBytes
 $attestedPreviewPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $attestedPreviewPolicyBytes
 )
+$azureValidationAdmissionPolicyBytes = Get-Utf8LfBytes -LiteralPath $azureValidationAdmissionPolicyPath
+$azureValidationAdmissionPolicyBase64 = [Convert]::ToBase64String($azureValidationAdmissionPolicyBytes)
+$azureValidationAdmissionPolicyDigest = Get-Sha256Hex -Bytes $azureValidationAdmissionPolicyBytes
+$azureValidationAdmissionPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $azureValidationAdmissionPolicyBytes
+)
 $softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
 $softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
 $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
@@ -351,6 +364,9 @@ if (-not (Test-Json -Json $portableDistributionPolicyJson -SchemaFile $portableD
 if (-not (Test-Json -Json $attestedPreviewPolicyJson -SchemaFile $attestedPreviewSchemaPath)) {
     throw 'The Attested Preview contract does not satisfy its release schema.'
 }
+if (-not (Test-Json -Json $azureValidationAdmissionPolicyJson -SchemaFile $azureValidationAdmissionSchemaPath)) {
+    throw 'The Azure validation admission contract does not satisfy its release schema.'
+}
 if (-not (Test-Json -Json $softwareRecognitionCatalogJson -SchemaFile $softwareRecognitionCatalogSchemaPath)) {
     throw 'The Software Recognition Catalog does not satisfy its release schema.'
 }
@@ -418,6 +434,9 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/portable-distribution.schema.json'
     'schemas/attested-preview.schema.json'
     'schemas/attested-preview-attestation.schema.json'
+    'schemas/azure-validation-admission.schema.json'
+    'schemas/azure-validation-round-request.schema.json'
+    'schemas/azure-validation-admission-verdict.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -441,6 +460,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-guided-runway.json'
     'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
     'docs/spec/releases/2.0.0-preview.1-attested-preview.json'
+    'docs/spec/releases/2.0.0-preview.1-azure-validation-admission.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
@@ -716,6 +736,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__GUIDED_RUNWAY_POLICY_SHA256__', $guidedRunwayPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/AzureValidationAdmission.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__AZURE_VALIDATION_ADMISSION_POLICY_BASE64__', $azureValidationAdmissionPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__AZURE_VALIDATION_ADMISSION_POLICY_SHA256__', $azureValidationAdmissionPolicyDigest
         )
     }
     if ($sourceFile.path -eq 'src/PortableDistribution.ps1') {

@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/azure-validation-admission.schema.json",
+  "title": "WIN-PCInfo Azure validation offline admission policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "productCapability",
+    "sliceDeliversCapability",
+    "azureContact",
+    "privacy",
+    "tooling",
+    "clients",
+    "lifetime",
+    "network",
+    "requiredTagKeys",
+    "requiredTagValues",
+    "templateRootRelativePath",
+    "renderedDirectoryName",
+    "supportClaim",
+    "previewOrStableClaim"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.azure-validation-admission-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.azure-validation-admission/1.0.0" },
+    "productCapability": { "const": "CAP-0028" },
+    "sliceDeliversCapability": { "const": false },
+    "azureContact": { "const": "None" },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredBoundary",
+        "markerFileName",
+        "markerContent",
+        "rejectRepositoryPath",
+        "rejectPublicPath",
+        "rejectUncPath"
+      ],
+      "properties": {
+        "requiredBoundary": { "const": "PrivateExternalWorkspace" },
+        "markerFileName": { "const": ".win-pcinfo-private-workspace" },
+        "markerContent": { "const": "win-pcinfo.private-external-workspace" },
+        "rejectRepositoryPath": { "const": true },
+        "rejectPublicPath": { "const": true },
+        "rejectUncPath": { "const": true }
+      }
+    },
+    "tooling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["terraform", "provider"],
+      "properties": {
+        "terraform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "source", "license", "acquisition"],
+          "properties": {
+            "name": { "const": "terraform" },
+            "version": { "const": "1.12.2" },
+            "source": { "const": "https://releases.hashicorp.com/terraform/1.12.2/" },
+            "license": { "const": "BUSL-1.1" },
+            "acquisition": { "const": "declared-not-acquired" }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "source", "version", "license", "acquisition"],
+          "properties": {
+            "name": { "const": "azurerm" },
+            "source": { "const": "hashicorp/azurerm" },
+            "version": { "const": "4.37.0" },
+            "license": { "const": "MPL-2.0" },
+            "acquisition": { "const": "declared-not-acquired" }
+          }
+        }
+      }
+    },
+    "clients": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum",
+        "maximum",
+        "allowedSkus",
+        "diskType",
+        "windows11ClaimingRoute"
+      ],
+      "properties": {
+        "minimum": { "const": 1 },
+        "maximum": { "const": 4 },
+        "allowedSkus": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            { "const": "Standard_D2s_v5" },
+            { "const": "Standard_D2as_v5" },
+            { "const": "Standard_B2s" },
+            { "const": "Standard_B2ms" }
+          ],
+          "items": false
+        },
+        "diskType": { "const": "StandardSSD_LRS" },
+        "windows11ClaimingRoute": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "hyperVGeneration",
+            "securityType",
+            "secureBoot",
+            "vtpm",
+            "imageSourceKind"
+          ],
+          "properties": {
+            "hyperVGeneration": { "const": "V2" },
+            "securityType": { "const": "TrustedLaunch" },
+            "secureBoot": { "const": true },
+            "vtpm": { "const": true },
+            "imageSourceKind": { "const": "ApprovedEvaluationGallery" }
+          }
+        }
+      }
+    },
+    "lifetime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximumMinutes", "minimumCleanupReserveMinutes"],
+      "properties": {
+        "maximumMinutes": { "const": 360 },
+        "minimumCleanupReserveMinutes": { "const": 30 }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roundVnet",
+        "roundSubnet",
+        "privateNics",
+        "vmPublicIp",
+        "natGateway",
+        "natPublicIpSku",
+        "peering"
+      ],
+      "properties": {
+        "roundVnet": { "const": true },
+        "roundSubnet": { "const": true },
+        "privateNics": { "const": true },
+        "vmPublicIp": { "const": false },
+        "natGateway": { "const": true },
+        "natPublicIpSku": { "const": "Standard" },
+        "peering": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required",
+            "allowForwardedTraffic",
+            "allowGatewayTransit",
+            "useRemoteGateways"
+          ],
+          "properties": {
+            "required": { "const": true },
+            "allowForwardedTraffic": { "const": false },
+            "allowGatewayTransit": { "const": false },
+            "useRemoteGateways": { "const": false }
+          }
+        }
+      }
+    },
+    "requiredTagKeys": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        { "const": "Purpose" },
+        { "const": "Environment" },
+        { "const": "Lifecycle" },
+        { "const": "ManagingTool" },
+        { "const": "RoundCorrelation" },
+        { "const": "CreatedUtc" },
+        { "const": "ExpiresUtc" }
+      ],
+      "items": false
+    },
+    "requiredTagValues": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Purpose", "Environment", "Lifecycle", "ManagingTool"],
+      "properties": {
+        "Purpose": { "const": "WIN-PCInfoValidation" },
+        "Environment": { "const": "EphemeralLab" },
+        "Lifecycle": { "const": "Ephemeral" },
+        "ManagingTool": { "const": "Terraform" }
+      }
+    },
+    "templateRootRelativePath": { "const": "infra/azure-validation" },
+    "renderedDirectoryName": { "const": "rendered" },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" }
+  }
+}

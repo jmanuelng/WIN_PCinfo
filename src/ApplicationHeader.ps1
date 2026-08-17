@@ -19,7 +19,7 @@ param(
     # trust assumption is SHA-256 binding of the reviewed portable
     # candidate, not Windows Authenticode. Safe failure is NotStarted
     # with a typed attestation reason and no bypass.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation')]
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -179,7 +179,19 @@ param(
     # Internal release-validation seam. The fixture selects only one frozen
     # connectivity scenario and cannot supply a host, request, or credential.
     [Parameter(DontShow)]
-    [string] $MicrosoftConnectivityFixturePath
+    [string] $MicrosoftConnectivityFixturePath,
+
+    # AdmitValidationRound is a maintainer offline gate. The threat is writing
+    # a rendered plan into the repository or contacting Azure from an
+    # assessment host. The mechanism is a synthetic request plus an already
+    # marked private workspace. The trust assumption is that the operator
+    # chose a folder outside this checkout. Safe failure is NotStarted with
+    # no Terraform or Azure process.
+    [Parameter()]
+    [string] $ValidationRoundRequestPath,
+
+    [Parameter()]
+    [string] $ValidationPrivateWorkspacePath
 )
 
 Set-StrictMode -Version Latest
