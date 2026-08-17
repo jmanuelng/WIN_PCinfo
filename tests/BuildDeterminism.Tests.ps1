@@ -56,6 +56,7 @@ $expectedSourcePaths = @(
     'src/EntryAdapters.ps1'
     'src/ProductHelp.ps1'
     'src/PortableDistribution.ps1'
+    'src/AttestedPreview.ps1'
     'src/ApplicationMain.ps1'
 )
 Assert-True ((@($first.sourceInputs.path | Sort-Object) -join '|') -eq
@@ -71,6 +72,8 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'build/TextCanonicalization.ps1'
     'build/DeterministicArchive.ps1'
     'build/PortableDistribution.ps1'
+    'build/AttestedPreview.ps1'
+    'build/Attest-Preview.ps1'
     'build/Start-WIN-PCInfo.ps1'
     'schemas/assessment-run-request.schema.json'
     'schemas/preparation-plan.schema.json'
@@ -100,6 +103,8 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/cross-domain-guidance.schema.json'
     'schemas/guided-runway.schema.json'
     'schemas/portable-distribution.schema.json'
+    'schemas/attested-preview.schema.json'
+    'schemas/attested-preview-attestation.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -122,6 +127,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-cross-domain-guidance.json'
     'docs/spec/releases/2.0.0-preview.1-guided-runway.json'
     'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
+    'docs/spec/releases/2.0.0-preview.1-attested-preview.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq

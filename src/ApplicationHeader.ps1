@@ -12,8 +12,23 @@ param(
     # application. The mechanism is the embedded governing-resource table.
     # The trust assumption is that those bytes came from the deterministic
     # build. Safe failure is NotStarted with no integrity override.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify')]
+    # VerifyAttestation is the governed unsigned Preview fallback check.
+    # The threat is treating checksums as Authenticode, or selecting the
+    # fallback for convenience. The mechanism is an exact-candidate
+    # attestation that cannot claim Trusted, signed, or Supported. The
+    # trust assumption is SHA-256 binding of the reviewed portable
+    # candidate, not Windows Authenticode. Safe failure is NotStarted
+    # with a typed attestation reason and no bypass.
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation')]
     [string] $Workflow = 'Assessment',
+
+    # These paths exist only to locate the sidecar bundle and the unchanged
+    # candidate zip. They are never copied into verification records.
+    [Parameter()]
+    [string] $AttestationBundlePath,
+
+    [Parameter()]
+    [string] $CandidateArchivePath,
 
     [Parameter()]
     [ValidateSet('Guided', 'Automation')]

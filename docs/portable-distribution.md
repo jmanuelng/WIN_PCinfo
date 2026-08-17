@@ -57,6 +57,6 @@ Invoking `WIN-PCInfo.ps1` directly with Windows PowerShell still returns `RUNTIM
 
 - Package checksums and the unsigned precursor identities are not Authenticode.
 - An eligible PowerShell host is not a Supported Windows scenario.
-- This local unsigned package is not an Attested Preview and not a trusted release.
+- This local unsigned package is not itself an Attested Preview and not a trusted release. The separately governed fallback is documented in [Attested Preview trust bundle](attested-preview.md).
 
 See the [Guided Runway](guided-runway.md) Verify stage and [Runtime prerequisites](runtime-prerequisites.md) for the remaining trust questions.

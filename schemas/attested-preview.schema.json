@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/attested-preview.schema.json",
+  "title": "WIN-PCInfo Attested Preview contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "trustClass",
+    "unsigned",
+    "limitedTrust",
+    "signed",
+    "trusted",
+    "supported",
+    "satisfiesStableSigningGate",
+    "supportClaim",
+    "previewOrStableClaim",
+    "attestedPackageIsFinalDistributableIdentity",
+    "candidateIdentityKind",
+    "fallback",
+    "boundInputs",
+    "requiredBundleFiles",
+    "warning",
+    "stableSigningGate"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.attested-preview-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.attested-preview/1.0.0" },
+    "trustClass": { "const": "AttestedPreview" },
+    "unsigned": { "const": true },
+    "limitedTrust": { "const": true },
+    "signed": { "const": false },
+    "trusted": { "const": false },
+    "supported": { "const": false },
+    "satisfiesStableSigningGate": { "const": false },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "attestedPackageIsFinalDistributableIdentity": { "const": true },
+    "candidateIdentityKind": { "const": "win-pcinfo.unsigned-portable-package-identity" },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permittedReasons", "neverForConvenience"],
+      "properties": {
+        "permittedReasons": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "const": "ArtifactSigningNotOperational" },
+            { "const": "VerifiedServiceIncident" }
+          ],
+          "items": false
+        },
+        "neverForConvenience": { "const": true }
+      }
+    },
+    "boundInputs": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        { "const": "candidateDigest" },
+        { "const": "sourceRevision" },
+        { "const": "generatedApplication" },
+        { "const": "resourceManifest" },
+        { "const": "checksums" },
+        { "const": "dependencyInventory" },
+        { "const": "sbom" },
+        { "const": "buildProvenance" }
+      ],
+      "items": false
+    },
+    "requiredBundleFiles": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "attestation.json" },
+        { "const": "LIMITED-TRUST.md" }
+      ],
+      "items": false
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recordType", "title", "requiredBeforeLaunch"],
+      "properties": {
+        "recordType": { "const": "win-pcinfo.limited-trust-warning" },
+        "title": {
+          "const": "UNSIGNED LIMITED-TRUST WARNING — NOT TRUSTED, NOT SIGNED, NOT SUPPORTED"
+        },
+        "requiredBeforeLaunch": { "const": true }
+      }
+    },
+    "stableSigningGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredTrustClass", "attestedPreviewSatisfies"],
+      "properties": {
+        "requiredTrustClass": { "const": "TrustedAuthenticode" },
+        "attestedPreviewSatisfies": { "const": false }
+      }
+    }
+  }
+}

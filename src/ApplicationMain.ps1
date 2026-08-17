@@ -56,6 +56,34 @@ if ($Workflow -eq 'Verify') {
     exit 0
 }
 
+if ($Workflow -eq 'VerifyAttestation') {
+    # The warning is an observable launch step, not text hidden in Help.
+    # The threat is launching later smoke or validation without seeing that
+    # this fallback is unsigned and limited-trust. The mechanism is emitting
+    # the warning first, then verifying exact candidate bindings. The trust
+    # assumption is SHA-256 of the reviewed zip, not Authenticode. Safe
+    # failure is NotStarted with a typed attestation reason and no bypass.
+    $attestationPolicy = Get-AttestedPreviewEmbeddedPolicy `
+        -ConvertFromJsonCommand $convertFromJsonCommand
+    Write-ContractRecord (Get-AttestedPreviewLimitedTrustWarning `
+        -Policy $attestationPolicy.Policy) -ConvertToJsonCommand $convertToJsonCommand
+    $attestationResult = Test-AttestedPreviewBundle `
+        -AttestationBundlePath $AttestationBundlePath `
+        -CandidateArchivePath $CandidateArchivePath `
+        -ConvertFromJsonCommand $convertFromJsonCommand
+    Write-ContractRecord $attestationResult.Record -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode $attestationResult.ReasonCode `
+        -Phase 'VerifyAttestation'
+    if ($attestationResult.Valid) {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+        exit 0
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit 20
+}
+
 if ($Workflow -eq 'Help' -or $Workflow -eq 'About') {
     # Discovery must remain available on an unsigned development artifact.
     # Requiring Authenticode here would hide the repository from the people
