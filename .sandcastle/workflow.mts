@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 export const READY_LABEL = "ready-for-agent";
 export const BASE_REF = "origin/main";
@@ -57,11 +59,45 @@ export interface CheckSummary {
 export function resultHasCompletionSignal(result: {
   readonly completionSignal?: string;
   readonly stdout?: string;
+  readonly phaseLog?: string;
 }): boolean {
   if (result.completionSignal) {
     return true;
   }
-  return typeof result.stdout === "string" && result.stdout.includes(COMPLETION_SIGNAL);
+  if (typeof result.stdout === "string" && result.stdout.includes(COMPLETION_SIGNAL)) {
+    return true;
+  }
+  return typeof result.phaseLog === "string" && result.phaseLog.includes(COMPLETION_SIGNAL);
+}
+
+export function latestPhaseLogPath(
+  issueNumber: number,
+  phase: "implementer" | "reviewer" | "integrator",
+): string | undefined {
+  const directory = join(process.cwd(), ".sandcastle", "logs");
+  const suffix = `-issue-${issueNumber}-${phase}.log`;
+  if (!existsSync(directory)) {
+    return undefined;
+  }
+  const matches = readdirSync(directory)
+    .filter((name) => name.endsWith(suffix))
+    .map((name) => {
+      const filePath = join(directory, name);
+      return { filePath, mtimeMs: statSync(filePath).mtimeMs };
+    })
+    .sort((left, right) => right.mtimeMs - left.mtimeMs);
+  return matches[0]?.filePath;
+}
+
+export function readLatestPhaseLog(
+  issueNumber: number,
+  phase: "implementer" | "reviewer" | "integrator",
+): string | undefined {
+  const filePath = latestPhaseLogPath(issueNumber, phase);
+  if (!filePath) {
+    return undefined;
+  }
+  return readFileSync(filePath, "utf8");
 }
 
 export function buildImplementationPhaseOptions<TAgent>(

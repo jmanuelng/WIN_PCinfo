@@ -19,6 +19,7 @@ import {
   requireEligibleIssue,
   refreshBase,
   releaseIssueClaim,
+  readLatestPhaseLog,
   resultHasCompletionSignal,
   runCommand,
   runCommandAsync,
@@ -106,7 +107,12 @@ async function prepareIssue(issue: GitHubIssue, recovery: LaneRecovery) {
     if (implementation.commits.length === 0) {
       throw new Error(`Issue #${issue.number} produced no implementation commit.`);
     }
-    if (!resultHasCompletionSignal(implementation)) {
+    if (
+      !resultHasCompletionSignal({
+        ...implementation,
+        phaseLog: readLatestPhaseLog(issue.number, "implementer"),
+      })
+    ) {
       throw new Error(
         `Issue #${issue.number} implementation did not emit its completion signal.`,
       );
@@ -115,7 +121,12 @@ async function prepareIssue(issue: GitHubIssue, recovery: LaneRecovery) {
     const review = await sandbox.run(
       buildReviewPhaseOptions(agent, issue.number, branch),
     );
-    if (!resultHasCompletionSignal(review)) {
+    if (
+      !resultHasCompletionSignal({
+        ...review,
+        phaseLog: readLatestPhaseLog(issue.number, "reviewer"),
+      })
+    ) {
       throw new Error(
         `Issue #${issue.number} review did not emit its completion signal.`,
       );
@@ -188,7 +199,12 @@ async function integrateLatestBase(
       const integration = await sandbox.run(
         buildIntegrationPhaseOptions(agent, issue.number, branch),
       );
-      if (!resultHasCompletionSignal(integration)) {
+      if (
+        !resultHasCompletionSignal({
+          ...integration,
+          phaseLog: readLatestPhaseLog(issue.number, "integrator"),
+        })
+      ) {
         throw new Error(
           `Issue #${issue.number} integration did not emit its completion signal.`,
         );

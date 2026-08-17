@@ -684,6 +684,19 @@ test("Grok provider uses extra-high reasoning and always-approve", () => {
   }
   assert.match(lastResultText, /<promise>COMPLETE<\/promise>/);
   assert.ok(resultHasCompletionSignal({ stdout: lastResultText }));
+  assert.ok(
+    resultHasCompletionSignal({
+      stdout: "success",
+      phaseLog: "committed\n<promise>COMPLETE</promise>\nAgent stopped\n",
+    }),
+  );
+  assert.equal(
+    resultHasCompletionSignal({
+      stdout: "success",
+      phaseLog: "Agent still working",
+    }),
+    false,
+  );
   assert.deepEqual(
     parseGrokStreamLine(
       '{"type":"tool_call","toolName":"read_file","rawInput":{"path":"README.md"}}',
