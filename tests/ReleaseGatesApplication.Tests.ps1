@@ -86,6 +86,12 @@ try {
         'pre-signing does not qualify a final distributable'
     Assert-Equal $false $manifest[0].collectionStarted 'evaluation never starts assessment collection'
     Assert-Equal 'None' $manifest[0].supportClaim 'the generated application makes no support claim'
+    Assert-Equal 'Derived' $matrix[0].state `
+        'the generated application derives the matrix from the frozen ledger'
+    Assert-Equal $true $matrix[0].derivedFromFrozenLedger `
+        'nested generated-application output still finds the reviewed ledger'
+    Assert-Equal $true ($matrix[0].rows.Count -gt 0) `
+        'derived rows are present when the ledger is found'
     Assert-Equal $true (Test-Json -Json ($manifest[0] | ConvertTo-Json -Compress -Depth 20) `
         -SchemaFile $manifestSchemaPath) 'the application manifest satisfies the public schema'
     Assert-Equal $true (Test-Json -Json ($matrix[0] | ConvertTo-Json -Compress -Depth 20) `

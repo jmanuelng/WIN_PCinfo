@@ -205,18 +205,21 @@ if ($Workflow -eq 'EvaluateReleaseGates') {
                     -Policy $gatePolicy
             }
             else {
-                $gateRepositoryRoot = Split-Path -Parent $PSCommandPath
                 $gateApplicationDirectory = Split-Path -Parent $PSCommandPath
-                if (-not (Test-Path -LiteralPath (
-                    Join-Path $gateRepositoryRoot 'docs/spec/capability-ledger.json'
-                ))) {
-                    $gateRepositoryRoot = Split-Path -Parent $gateRepositoryRoot
+                $gateLedgerPath = Get-ReleaseGatesCatalogPath `
+                    -ApplicationDirectory $gateApplicationDirectory `
+                    -RelativePath 'docs/spec/capability-ledger.json'
+                $gateRepositoryRoot = $gateApplicationDirectory
+                if (-not [string]::IsNullOrWhiteSpace($gateLedgerPath)) {
+                    $gateRepositoryRoot = [System.IO.Path]::GetFullPath(
+                        (Join-Path (Split-Path -Parent $gateLedgerPath) '..\..')
+                    )
                 }
                 $gatePackSchema = Get-ReleaseGatesCatalogPath `
                     -RepositoryRoot $gateRepositoryRoot `
                     -ApplicationDirectory $gateApplicationDirectory `
                     -RelativePath 'schemas/release-evidence-pack.schema.json'
-                $gatePackSchemaValid = $true
+                $gatePackSchemaValid = $false
                 if (-not [string]::IsNullOrWhiteSpace($gatePackSchema)) {
                     try {
                         $gatePackSchemaValid = Test-Json -Json $gatePackText `

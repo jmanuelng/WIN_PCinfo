@@ -108,6 +108,11 @@ function Test-ReleaseGatesPublicPath {
 function Test-ReleaseGatesReparsePath {
     param([Parameter(Mandatory)] [string] $Path)
 
+    # A junction or symlink can make a temp path write into the repository
+    # or a network share after the string checks pass. Walk every existing
+    # ancestor the same way Evidence Workspace does. The trust assumption is
+    # that a ticket-owned gate workspace is a real local directory. Safe
+    # failure is to reject the path before any derived file exists.
     try {
         $cursor = [System.IO.DirectoryInfo]::new([System.IO.Path]::GetFullPath($Path))
     }
@@ -134,16 +139,35 @@ function Get-ReleaseGatesCatalogPath {
         [Parameter(Mandatory)] [string] $RelativePath
     )
 
+    # The generated application may live two or more directories below the
+    # reviewed tree (portable package, artifacts, or a test work root). The
+    # threat is deriving a strongest-case matrix without the frozen ledger, or
+    # skipping schema validation because the sidecar was one extra hop away.
+    # The mechanism walks a bounded ancestor list and returns only an exact
+    # relative file. The trust assumption is that the reviewed ledger and
+    # schemas keep those well-known paths. Safe failure is a missing path so
+    # the caller can fail closed.
+    $seen = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
     $roots = [System.Collections.Generic.List[string]]::new()
-    foreach ($root in @($ApplicationDirectory, $RepositoryRoot)) {
-        if (-not [string]::IsNullOrWhiteSpace($root)) {
-            $roots.Add($root)
+    foreach ($start in @($ApplicationDirectory, $RepositoryRoot)) {
+        if ([string]::IsNullOrWhiteSpace($start)) {
+            continue
         }
-    }
-    if (-not [string]::IsNullOrWhiteSpace($ApplicationDirectory)) {
-        $parent = Split-Path -Parent $ApplicationDirectory
-        if (-not [string]::IsNullOrWhiteSpace($parent)) {
-            $roots.Add($parent)
+        $cursor = $start
+        for ($i = 0; $i -lt 6; $i++) {
+            if ([string]::IsNullOrWhiteSpace($cursor)) {
+                break
+            }
+            if ($seen.Add($cursor)) {
+                $roots.Add($cursor)
+            }
+            $parent = Split-Path -Parent $cursor
+            if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $cursor) {
+                break
+            }
+            $cursor = $parent
         }
     }
     foreach ($root in $roots) {
@@ -160,10 +184,11 @@ function Test-ReleaseGatesPrivacyBoundary {
 
     # Public Release Evidence is a projection, not a dump. The threat is
     # committing or printing a credential, a real cloud identifier, a
-    # Terraform plan, a local user path, or a non-synthetic validation
-    # record. The mechanism is a closed needle list applied to the raw pack
-    # text before any derived file is written. The trust assumption is that
-    # approved fixtures stay synthetic and identifier-free. Safe failure is
+    # Terraform plan, state, cache, a raw log, a local user path, restricted
+    # assessment material, or a non-synthetic validation record. The
+    # mechanism is a closed needle list applied to the raw pack text before
+    # any derived file is written. The trust assumption is that approved
+    # fixtures stay synthetic and identifier-free. Safe failure is
     # GATE.PRIVACY_REJECTED with no workspace residue.
     $needles = @(
         '(?i)clientSecret'
@@ -173,7 +198,13 @@ function Test-ReleaseGatesPrivacyBoundary {
         '(?i)\btenant\b'
         '(?i)\.terraform'
         '(?i)\.tfstate'
+        '(?i)\.tfplan\b'
+        '(?i)tfplan'
+        '(?i)\.cache[\\/]'
         '(?i)crash(\..*)?\.log'
+        '(?i)\.(log|evtx)\b'
+        '(?i)win-pcinfo\.(assessment-record|protected-package)'
+        '(?i)recipientFingerprint'
         '(?i)[A-Z]:\\Users\\[A-Za-z0-9._-]+'
         '(?i)\b\d{1,3}(\.\d{1,3}){3}\b'
         '(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}'
@@ -243,7 +274,7 @@ function Test-ReleaseGatesExpired {
         'PhysicalFirmwareOemBatteryPeripheral' {
             [int] $Policy.freshness.physicalFirmwareOemBatteryPeripheralDays
         }
-        default { [int] $Policy.freshness.clientVmValidationDays }
+        default { return $true }
     }
     try {
         $observed = ConvertTo-ReleaseGatesDateTimeOffset -Value $ObservedAt
@@ -411,46 +442,79 @@ function Resolve-ReleaseGatesEffectiveResult {
         [Parameter(Mandatory)] $Candidates,
         [Parameter(Mandatory)] $Policy,
         [Parameter(Mandatory)] [string] $ExpectedDigest,
-        [Parameter(Mandatory)] [datetimeoffset] $Now
+        [Parameter(Mandatory)] [datetimeoffset] $Now,
+        [Parameter()] [string] $ExpectedFreshnessClass
     )
 
+    # The threat is turning mixed, stale, or wrong-candidate rows into a Pass
+    # by averaging them with a later success, or letting a Client VM row
+    # escape expiry by calling itself Automated. The mechanism is a closed
+    # chronological walk: ProductFail is sticky, any unbound row blocks Pass,
+    # and expiry uses the policy freshness class. The trust assumption is that
+    # the pack is synthetic and that the running candidate digest is the
+    # identity being judged. Safe failure is NotRun when empty and
+    # Invalidated or Expired when the bound evidence cannot support the claim.
     $effective = 'NotRun'
     $reason = 'GATE.NOT_RUN'
     $expired = $false
     $candidateBound = $true
     $runtimeSupported = $true
     $cleanupVerified = $true
-    $freshnessClass = 'Automated'
+    $freshnessClass = if (-not [string]::IsNullOrWhiteSpace($ExpectedFreshnessClass)) {
+        $ExpectedFreshnessClass
+    }
+    else {
+        'Automated'
+    }
     $affected = @('CAP-0030')
     $latestPassAt = $null
 
     foreach ($candidate in @($Candidates | Sort-Object {
         try { ConvertTo-ReleaseGatesDateTimeOffset $_.observedAt } catch { [datetimeoffset]::MinValue }
     })) {
-        $freshnessClass = [string] $candidate.freshnessClass
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedFreshnessClass)) {
+            $freshnessClass = $ExpectedFreshnessClass
+        }
+        else {
+            $freshnessClass = [string] $candidate.freshnessClass
+        }
         $affected = @($candidate.affectedClaimIds)
         $cleanupVerified = $cleanupVerified -and [bool] $candidate.cleanupVerified
         $bound = [string] $candidate.generatedContentSha256 -eq $ExpectedDigest
         if (-not $bound) {
             $candidateBound = $false
-            $effective = 'Invalidated'
-            $reason = 'GATE.CANDIDATE_MISMATCH'
+            if ($effective -ne 'ProductFail') {
+                $effective = 'Invalidated'
+                $reason = 'GATE.CANDIDATE_MISMATCH'
+            }
+            continue
+        }
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedFreshnessClass) -and
+            [string] $candidate.freshnessClass -ne $ExpectedFreshnessClass) {
+            if ($effective -ne 'ProductFail') {
+                $effective = 'Invalidated'
+                $reason = 'GATE.INVALIDATED'
+            }
             continue
         }
         $supported = Test-ReleaseGatesRuntime -Version ([string] $candidate.runtimeVersion) `
             -Architecture ([string] $candidate.architecture) -Policy $Policy
         if (-not $supported) {
             $runtimeSupported = $false
-            $effective = 'Invalidated'
-            $reason = 'GATE.UNSUPPORTED_RUNTIME'
+            if ($effective -ne 'ProductFail') {
+                $effective = 'Invalidated'
+                $reason = 'GATE.UNSUPPORTED_RUNTIME'
+            }
             continue
         }
         $isExpired = Test-ReleaseGatesExpired -ObservedAt $candidate.observedAt `
             -FreshnessClass $freshnessClass -Policy $Policy -Now $Now
         if ($isExpired -and [string] $candidate.result -eq 'Pass') {
-            $expired = $true
-            $effective = 'Expired'
-            $reason = 'GATE.EXPIRED'
+            if ($effective -ne 'ProductFail') {
+                $expired = $true
+                $effective = 'Expired'
+                $reason = 'GATE.EXPIRED'
+            }
             continue
         }
         switch ([string] $candidate.result) {
@@ -467,7 +531,7 @@ function Resolve-ReleaseGatesEffectiveResult {
                 }
             }
             'Pass' {
-                if ($effective -notin @('ProductFail')) {
+                if ($effective -ne 'ProductFail') {
                     $effective = 'Pass'
                     $reason = 'GATE.PASS'
                     $expired = $false
@@ -493,14 +557,18 @@ function Resolve-ReleaseGatesEffectiveResult {
                 }
             }
             default {
-                if ($effective -eq 'NotRun') {
-                    $effective = [string] $candidate.result
-                    $reason = [string] $candidate.reasonCode
+                if ($effective -ne 'ProductFail') {
+                    $effective = 'Invalidated'
+                    $reason = 'GATE.INVALIDATED'
                 }
             }
         }
     }
 
+    if ($effective -eq 'Pass' -and -not $candidateBound) {
+        $effective = 'Invalidated'
+        $reason = 'GATE.CANDIDATE_MISMATCH'
+    }
     if ($effective -eq 'Pass' -and $null -ne $latestPassAt) {
         $expired = $false
     }
@@ -539,6 +607,14 @@ function Test-ReleaseGatesMeasurementPass {
     }
     if ([bool] $provisional.enforced) {
         if ([int] $Measurement.wallTimeMilliseconds -gt [int] $provisional.profileCompletionMilliseconds) {
+            return $false
+        }
+        if ([int] $Measurement.wallTimeMilliseconds -gt [int] $provisional.absoluteDeadlineMilliseconds) {
+            return $false
+        }
+        $cleanupMs = Get-ReleaseGatesProperty $Measurement 'cancellationCleanupMilliseconds'
+        if ($null -eq $cleanupMs -or
+            [int] $cleanupMs -gt [int] $provisional.cancellationCleanupMilliseconds) {
             return $false
         }
         if ([long] $Measurement.peakPrivateMemoryBytes -gt [long] $provisional.peakPrivateMemoryBytes) {
@@ -623,6 +699,13 @@ function Get-ReleaseGatesWorkspaceRejection {
         [Parameter(Mandatory)] $Policy
     )
 
+    # Derived gate files must stay out of the public tree. The threat is
+    # writing a manifest into the repository, a public profile folder, a UNC
+    # share, or a reparse point that later looks like accepted Release
+    # Evidence. The mechanism is a closed path check before any write. The
+    # trust assumption is that a caller-supplied workspace is a real local
+    # directory they control. Safe failure is GATE.PRIVACY_REJECTED or
+    # GATE.PACK_INVALID with no derived residue.
     if ([string]::IsNullOrWhiteSpace($WorkspacePath)) {
         return $null
     }
@@ -752,6 +835,12 @@ function Invoke-ReleaseGateEvaluation {
         return Get-ReleaseGatesRejectedEvaluation -ReasonCode 'GATE.IDENTITY_BINDING_INVALID' `
             -Policy $Policy -Stage $stage
     }
+    # Judge the pack against the running candidate when the caller supplies
+    # that digest. The threat is hiding a mismatch behind NotStarted so the
+    # operator cannot see which gates failed. The mechanism keeps evaluation
+    # and records GATE.CANDIDATE_MISMATCH on every unbound row. The trust
+    # assumption is that these bytes are the unsigned generated content.
+    # Safe failure is an evaluated denial, not a qualified identity rewrite.
     if (-not [string]::IsNullOrWhiteSpace($ExpectedGeneratedContentSha256) -and
         $ExpectedGeneratedContentSha256 -ne $boundDigest) {
         $boundDigest = $ExpectedGeneratedContentSha256
@@ -760,10 +849,29 @@ function Invoke-ReleaseGateEvaluation {
         return Get-ReleaseGatesRejectedEvaluation -ReasonCode 'GATE.QUALITY_BUDGET_FAIL' `
             -Policy $Policy -Stage $stage
     }
-    $ledgerMatched = $true
-    if (-not [string]::IsNullOrWhiteSpace($ExpectedLedgerSha256) -and
-        $ExpectedLedgerSha256 -ne [string] $bindings.ledgerSha256) {
-        $ledgerMatched = $false
+    $sourceRevision = [string] (Get-ReleaseGatesProperty $bindings 'sourceRevision')
+    if ($sourceRevision -notmatch '^[0-9a-f]{40,64}$') {
+        return Get-ReleaseGatesRejectedEvaluation -ReasonCode 'GATE.IDENTITY_BINDING_INVALID' `
+            -Policy $Policy -Stage $stage
+    }
+    foreach ($digestName in @(
+        'resourceManifestSha256', 'definitionsSha256', 'schemasSha256', 'catalogsSha256'
+    )) {
+        $declaredDigest = [string] (Get-ReleaseGatesProperty $bindings $digestName)
+        if ($declaredDigest -notmatch '^[0-9a-f]{64}$') {
+            return Get-ReleaseGatesRejectedEvaluation -ReasonCode 'GATE.IDENTITY_BINDING_INVALID' `
+                -Policy $Policy -Stage $stage
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace([string] (Get-ReleaseGatesProperty $bindings 'toolchainId'))) {
+        return Get-ReleaseGatesRejectedEvaluation -ReasonCode 'GATE.IDENTITY_BINDING_INVALID' `
+            -Policy $Policy -Stage $stage
+    }
+    $ledgerMatched = $false
+    if ($null -ne $Ledger -and
+        -not [string]::IsNullOrWhiteSpace($ExpectedLedgerSha256) -and
+        $ExpectedLedgerSha256 -eq [string] $bindings.ledgerSha256) {
+        $ledgerMatched = $true
     }
 
     $bindingRuntimeOk = Test-ReleaseGatesRuntime `
@@ -795,10 +903,9 @@ function Invoke-ReleaseGateEvaluation {
         }
         else {
             $effective = Resolve-ReleaseGatesEffectiveResult -Candidates $matches `
-                -Policy $Policy -ExpectedDigest $boundDigest -Now $Now
-            if ([string] $effective.freshnessClass -ne [string] $definition.freshnessClass) {
-                $effective.freshnessClass = [string] $definition.freshnessClass
-            }
+                -Policy $Policy -ExpectedDigest $boundDigest -Now $Now `
+                -ExpectedFreshnessClass ([string] $definition.freshnessClass)
+            $effective.freshnessClass = [string] $definition.freshnessClass
         }
         if ([string] $effective.result -ne 'Pass') {
             $allRequiredPass = $false
@@ -917,9 +1024,6 @@ function Invoke-ReleaseGateEvaluation {
         $claimed.evidenceResult = $result
         $claimed.reasonCode = $reason
         $claimed.method = $method
-        if ($result -eq 'Pass') {
-            $claimed.supportState = 'Preview'
-        }
         $scenarioById[$id] = $claimed
         if ($result -ne 'Pass') {
             $allRequiredPass = $false
@@ -986,6 +1090,17 @@ function Invoke-ReleaseGateEvaluation {
     if ($stage -eq 'FinalArtifactValidation') {
         $unsignedQualified = $allRequiredPass
         $finalQualified = $finalQualified -and $unsignedQualified
+    }
+
+    foreach ($scenarioId in @($scenarioById.Keys)) {
+        $claimed = $scenarioById[$scenarioId]
+        if ($unsignedQualified -and [string] $claimed.evidenceResult -eq 'Pass') {
+            $claimed.supportState = 'Preview'
+        }
+        else {
+            $claimed.supportState = 'NotYetSupported'
+        }
+        $scenarioById[$scenarioId] = $claimed
     }
 
     if ([bool] $Policy.syntheticCannotAuthorizePublication) {

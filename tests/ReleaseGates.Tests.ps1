@@ -284,6 +284,23 @@ Assert-Equal $false $averagedResult.Manifest.qualityBudget.threeCleanPassed `
     'two passes and one product failure cannot be averaged'
 Assert-Equal 'ProductFail' $averagedResult.Manifest.qualityBudget.outcome `
     'a product quality failure remains a failure'
+Assert-Equal 0 @($averagedResult.Matrix.scenarioSnapshots | Where-Object supportState -eq 'Preview').Count `
+    'scenario snapshots stay NotYetSupported when applicable gates did not all pass'
+
+$cleanupBudget = Copy-Pack $complete
+$cleanupBudget.qualityMeasurements[0].cancellationCleanupMilliseconds = 120001
+$cleanupBudgetResult = Invoke-Gate -Pack $cleanupBudget
+Assert-PublicProjection $cleanupBudgetResult 'a cancellation-cleanup ceiling miss'
+Assert-Equal $false $cleanupBudgetResult.Manifest.qualityBudget.threeCleanPassed `
+    'the two-minute cancellation cleanup ceiling is enforced'
+Assert-Equal 'ProductFail' $cleanupBudgetResult.Manifest.qualityBudget.outcome `
+    'an over-budget cleanup cannot be a clean measurement'
+
+$deadline = Copy-Pack $complete
+$deadline.qualityMeasurements[0].wallTimeMilliseconds = 3600001
+$deadlineResult = Invoke-Gate -Pack $deadline
+Assert-Equal $false $deadlineResult.Manifest.qualityBudget.threeCleanPassed `
+    'the 60-minute absolute deadline is enforced'
 
 $infra = Copy-Pack $complete
 $infra.qualityMeasurements += [pscustomobject]@{
@@ -293,6 +310,7 @@ $infra.qualityMeasurements += [pscustomobject]@{
     firstProgressMilliseconds = 100
     heartbeatGapMilliseconds = 1000
     cancellationAckMilliseconds = 200
+    cancellationCleanupMilliseconds = 1000
     wallTimeMilliseconds = 120000
     peakPrivateMemoryBytes = 100000000
     peakWorkingSetBytes = 80000000
@@ -335,6 +353,100 @@ Assert-Equal $false $ledgerMismatch.Manifest.unsignedContentQualified `
 Assert-Equal $true (
     'GATE.LEDGER_MISMATCH' -in @($ledgerMismatch.Manifest.promotion.blockingReasons)
 ) 'wrong-ledger evidence is a blocking reason'
+
+$missingLedger = Invoke-ReleaseGateEvaluation -Pack (Set-PackLedgerDigest (Copy-Pack $complete)) `
+    -Policy $policy -Now $now -RepositoryRoot $repositoryRoot
+Assert-Equal $false $missingLedger.Manifest.unsignedContentQualified `
+    'missing ledger binding cannot qualify the candidate'
+Assert-Equal $true (
+    'GATE.LEDGER_MISMATCH' -in @($missingLedger.Manifest.promotion.blockingReasons)
+) 'an unbound ledger is a blocking reason'
+Assert-Equal 'Rejected' $missingLedger.Matrix.state `
+    'the matrix is not derived without the frozen ledger'
+
+$freshnessLie = Copy-Pack $complete
+foreach ($gate in @($freshnessLie.gates)) {
+    if ([string] $gate.freshnessClass -eq 'ClientVmValidation') {
+        $gate.freshnessClass = 'Automated'
+    }
+}
+$freshnessLieResult = Invoke-Gate -Pack $freshnessLie -At $expiredNow
+Assert-PublicProjection $freshnessLieResult 'a misclassified Client VM gate'
+Assert-Equal $false $freshnessLieResult.Manifest.unsignedContentQualified `
+    'a Client VM gate cannot avoid expiry by labeling itself Automated'
+Assert-Equal $true (@($freshnessLieResult.Manifest.gates | Where-Object {
+    $_.freshnessClass -eq 'ClientVmValidation' -and $_.result -eq 'Pass'
+}).Count -eq 0) 'the public record keeps the policy freshness class and does not pass it'
+
+$cloudNow = [datetimeoffset]::Parse(
+    '2026-11-15T00:00:00Z',
+    [System.Globalization.CultureInfo]::InvariantCulture,
+    [System.Globalization.DateTimeStyles]::AssumeUniversal -bor
+        [System.Globalization.DateTimeStyles]::AdjustToUniversal
+)
+$cloudExpired = Invoke-Gate -Pack $complete -At $cloudNow
+Assert-Equal $false $cloudExpired.Manifest.unsignedContentQualified `
+    'cloud and network evidence expires after 90 days'
+Assert-Equal $true (@($cloudExpired.Manifest.gates | Where-Object {
+    $_.freshnessClass -eq 'CloudIdentityManagementSecurityNetwork' -and $_.result -eq 'Expired'
+}).Count -ge 1) 'cloud-class gates expire after 90 days'
+
+$stickyFail = Copy-Pack $complete
+$failedGate = @($stickyFail.gates | Where-Object {
+    $_.gateId -eq 'deterministic-contract-schema-and-artifact-gates'
+})[0]
+$failedGate.result = 'ProductFail'
+$failedGate.reasonCode = 'GATE.PRODUCT_FAIL'
+$failedGate.observedAt = '2026-07-31T00:00:00Z'
+$stickyFail.gates += [pscustomobject]@{
+    gateId = 'deterministic-contract-schema-and-artifact-gates'
+    result = 'Pass'
+    reasonCode = 'GATE.PASS'
+    affectedClaimIds = @('CAP-0030')
+    observedAt = '2026-08-02T00:00:00Z'
+    freshnessClass = 'Automated'
+    generatedContentSha256 = ('f' * 64)
+    runtimeVersion = '7.6.0'
+    architecture = 'x64'
+    locale = 'en-US'
+    cleanupVerified = $true
+}
+$stickyFailResult = Invoke-Gate -Pack $stickyFail
+Assert-Equal 'ProductFail' @($stickyFailResult.Manifest.gates | Where-Object {
+    $_.gateId -eq 'deterministic-contract-schema-and-artifact-gates'
+})[0].result 'a later wrong-candidate row cannot erase ProductFail'
+Assert-Equal $false $stickyFailResult.Manifest.unsignedContentQualified `
+    'ProductFail remains a blocking result'
+
+$mixedCandidate = Copy-Pack $complete
+$mixedCandidate.gates += [pscustomobject]@{
+    gateId = 'privacy-secret-exclusion-and-evidence-protection-gates'
+    result = 'Pass'
+    reasonCode = 'GATE.PASS'
+    affectedClaimIds = @('CAP-0030')
+    observedAt = '2026-08-02T00:00:00Z'
+    freshnessClass = 'Automated'
+    generatedContentSha256 = ('f' * 64)
+    runtimeVersion = '7.6.0'
+    architecture = 'x64'
+    locale = 'en-US'
+    cleanupVerified = $true
+}
+$mixedCandidateResult = Invoke-Gate -Pack $mixedCandidate
+Assert-Equal $false $mixedCandidateResult.Manifest.unsignedContentQualified `
+    'wrong-candidate evidence cannot be averaged with a later Pass'
+Assert-Equal $true (
+    'GATE.CANDIDATE_MISMATCH' -in @($mixedCandidateResult.Manifest.promotion.blockingReasons)
+) 'a mixed-candidate gate set blocks the claim'
+
+$restricted = Copy-Pack $complete
+$restricted | Add-Member -NotePropertyName leak -NotePropertyValue 'win-pcinfo.assessment-record' -Force
+$restrictedResult = Invoke-ReleaseGateEvaluation -Pack $restricted -Policy $policy -Ledger $ledger `
+    -ReleaseDefinition $releaseDefinition -ExpectedLedgerSha256 $ledgerDigest -Now $now `
+    -RepositoryRoot $repositoryRoot
+Assert-Equal 'Rejected' $restrictedResult.State 'restricted evidence fails closed before evaluation'
+Assert-Equal 'GATE.PRIVACY_REJECTED' $restrictedResult.ReasonCode `
+    'Assessment Record material is not public Release Evidence'
 
 $workspace = Join-Path ([System.IO.Path]::GetTempPath()) (
     'win-pcinfo-release-gates-' + [guid]::NewGuid().ToString('N')
