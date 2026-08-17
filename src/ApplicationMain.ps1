@@ -25,6 +25,37 @@ $convertFromJsonCommand = $moduleFacts.convertFromJsonCommand
 $artifactTrustValid = Test-ApplicationArtifactTrust -LiteralPath $PSCommandPath `
     -AuthenticodeCommand $moduleFacts.authenticodeCommand
 
+# A portable package keeps schemas, catalogs, helpers, and documentation as
+# explicit files. The threat is a substituted adjacent file that keeps the
+# authentic script name. The mechanism is the embedded governing-resource
+# table plus the package manifest. The trust assumption is that those bytes
+# came from the deterministic build. Safe failure is NotStarted with no
+# integrity override, including when a preparation fixture is supplied.
+$packageManifestPresence = if ($Workflow -eq 'Verify') { 'Required' } else { 'Optional' }
+$packageIntegrity = Test-PortableDistributionIntegrity `
+    -PackageRoot (Split-Path -Parent $PSCommandPath) `
+    -ManifestPresence $packageManifestPresence `
+    -ConvertFromJsonCommand $convertFromJsonCommand
+if (-not $packageIntegrity.Valid) {
+    Write-ContractRecord (New-TerminalRecord -ReasonCode 'PREPARATION.INTEGRITY_FAILED' `
+        -Phase 'Preparation') -ConvertToJsonCommand $convertToJsonCommand
+    exit 20
+}
+
+if ($Workflow -eq 'Verify') {
+    $generatedBytes = [System.IO.File]::ReadAllBytes($PSCommandPath)
+    $generatedDigest = Get-PortableDistributionFileDigest -Bytes $generatedBytes
+    $resourceCount = @($packageIntegrity.Manifest.resources).Count
+    Write-ContractRecord (New-PortableDistributionVerificationRecord `
+        -GeneratedContentSha256 $generatedDigest `
+        -ResourceCount $resourceCount) -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode 'PACKAGE.VERIFIED' -Phase 'Verify'
+    $terminal.outcome = 'Completed'
+    $terminal.exitCode = 0
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit 0
+}
+
 if ($Workflow -eq 'Help' -or $Workflow -eq 'About') {
     # Discovery must remain available on an unsigned development artifact.
     # Requiring Authenticode here would hide the repository from the people

@@ -1,0 +1,44 @@
+{
+  "kind": "win-pcinfo.portable-distribution-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.portable-distribution/1.0.0",
+  "archiveRootName": "WIN-PCInfo-2.0.0-preview.1",
+  "archiveFileName": "WIN-PCInfo-2.0.0-preview.1-portable.zip",
+  "installsRuntime": false,
+  "unsignedPrecursorOnly": true,
+  "protectedClasses": [
+    "application",
+    "schema",
+    "catalog",
+    "definition",
+    "documentation",
+    "helper",
+    "manifest"
+  ],
+  "requiredPackagePaths": [
+    "WIN-PCInfo.ps1",
+    "Start-WIN-PCInfo.ps1",
+    "FIRST-RUN.md",
+    "NOTICE.txt",
+    "package-manifest.json",
+    "checksums.sha256",
+    "dependency-inventory.json",
+    "sbom.spdx.json",
+    "provenance.json",
+    "docs/portable-distribution.md",
+    "docs/guided-runway.md",
+    "docs/runtime-prerequisites.md",
+    "schemas/portable-distribution.schema.json"
+  ],
+  "catalogPaths": [
+    "docs/spec/capability-ledger.json",
+    "docs/spec/releases/2.0.0-preview.1-approved-collectors.json",
+    "docs/spec/releases/2.0.0-preview.1-contract-set.json",
+    "docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json"
+  ],
+  "helperSourcePath": "build/Start-WIN-PCInfo.ps1",
+  "helperPackagePath": "Start-WIN-PCInfo.ps1",
+  "firstRunSourcePath": "docs/portable-first-run.md",
+  "firstRunPackagePath": "FIRST-RUN.md"
+}

@@ -9,6 +9,8 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TextCanonicalization.ps1')
+. (Join-Path $PSScriptRoot 'DeterministicArchive.ps1')
+. (Join-Path $PSScriptRoot 'PortableDistribution.ps1')
 $sourcePaths = @(
     'src/ApplicationHeader.ps1'
     'src/Contracts.ps1'
@@ -37,6 +39,7 @@ $sourcePaths = @(
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
     'src/ProductHelp.ps1'
+    'src/PortableDistribution.ps1'
     'src/ApplicationMain.ps1'
 )
 
@@ -89,6 +92,8 @@ $crossDomainGuidancePolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2
 $crossDomainGuidanceSchemaPath = Join-Path $repositoryRoot 'schemas/cross-domain-guidance.schema.json'
 $guidedRunwayPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-guided-runway.json'
 $guidedRunwaySchemaPath = Join-Path $repositoryRoot 'schemas/guided-runway.schema.json'
+$portableDistributionPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
+$portableDistributionSchemaPath = Join-Path $repositoryRoot 'schemas/portable-distribution.schema.json'
 $softwareRecognitionCatalogPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 $softwareRecognitionCatalogSchemaPath = Join-Path $repositoryRoot 'schemas/software-recognition-catalog.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
@@ -119,6 +124,7 @@ foreach ($requiredDefinitionPath in @(
     $microsoftConnectivityPolicyPath, $microsoftConnectivitySchemaPath,
     $crossDomainGuidancePolicyPath, $crossDomainGuidanceSchemaPath,
     $guidedRunwayPolicyPath, $guidedRunwaySchemaPath,
+    $portableDistributionPolicyPath, $portableDistributionSchemaPath,
     $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
@@ -253,6 +259,10 @@ $guidedRunwayPolicyDigest = Get-Sha256Hex -Bytes $guidedRunwayPolicyBytes
 $guidedRunwayPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $guidedRunwayPolicyBytes
 )
+$portableDistributionPolicyBytes = Get-Utf8LfBytes -LiteralPath $portableDistributionPolicyPath
+$portableDistributionPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $portableDistributionPolicyBytes
+)
 $softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
 $softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
 $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
@@ -323,6 +333,9 @@ if (-not (Test-Json -Json $crossDomainGuidancePolicyJson -SchemaFile $crossDomai
 if (-not (Test-Json -Json $guidedRunwayPolicyJson -SchemaFile $guidedRunwaySchemaPath)) {
     throw 'The Guided Runway content contract does not satisfy its release schema.'
 }
+if (-not (Test-Json -Json $portableDistributionPolicyJson -SchemaFile $portableDistributionSchemaPath)) {
+    throw 'The portable distribution contract does not satisfy its release schema.'
+}
 if (-not (Test-Json -Json $softwareRecognitionCatalogJson -SchemaFile $softwareRecognitionCatalogSchemaPath)) {
     throw 'The Software Recognition Catalog does not satisfy its release schema.'
 }
@@ -355,6 +368,9 @@ $resolvedCapabilities = foreach ($capabilityId in $releaseEnabledIds) {
 $applicationResourcePaths = @($sourcePaths) + @(
     'build/Build.ps1'
     'build/TextCanonicalization.ps1'
+    'build/DeterministicArchive.ps1'
+    'build/PortableDistribution.ps1'
+    'build/Start-WIN-PCInfo.ps1'
     'schemas/assessment-run-request.schema.json'
     'schemas/preparation-plan.schema.json'
     'schemas/assessment-record.schema.json'
@@ -382,6 +398,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/microsoft-connectivity.schema.json'
     'schemas/cross-domain-guidance.schema.json'
     'schemas/guided-runway.schema.json'
+    'schemas/portable-distribution.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -403,6 +420,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-microsoft-connectivity.json'
     'docs/spec/releases/2.0.0-preview.1-cross-domain-guidance.json'
     'docs/spec/releases/2.0.0-preview.1-guided-runway.json'
+    'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
@@ -459,6 +477,16 @@ $preparationJson = $preparationDefinition | ConvertTo-Json -Compress -Depth 30
 $preparationBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($preparationJson)
 $preparationBase64 = [System.Convert]::ToBase64String($preparationBytes)
 $preparationDigest = Get-Sha256Hex -Bytes $preparationBytes
+
+$buildToolDigestForPackage = Get-Sha256Hex -Bytes (Get-Utf8LfBytes -LiteralPath $PSCommandPath)
+$portablePolicy = $portableDistributionPolicyJson | ConvertFrom-Json -Depth 20
+$portableGoverning = Get-PortableGoverningResources -RepositoryRoot $repositoryRoot `
+    -Policy $portablePolicy -BuildToolDigest $buildToolDigestForPackage
+$portableGoverningBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
+    ($portableGoverning.EmbeddedTable | ConvertTo-Json -Compress -Depth 30)
+)
+$portableGoverningBase64 = [System.Convert]::ToBase64String($portableGoverningBytes)
+$portableGoverningDigest = Get-Sha256Hex -Bytes $portableGoverningBytes
 
 $sourceFiles = foreach ($relativePath in $sourcePaths) {
     $literalPath = Join-Path $repositoryRoot $relativePath
@@ -670,6 +698,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
             '__GUIDED_RUNWAY_POLICY_SHA256__', $guidedRunwayPolicyDigest
         )
     }
+    if ($sourceFile.path -eq 'src/PortableDistribution.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__PORTABLE_GOVERNING_RESOURCES_BASE64__', $portableGoverningBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__PORTABLE_GOVERNING_RESOURCES_SHA256__', $portableGoverningDigest
+        )
+    }
     if ($sourceFile.path -eq 'src/SoftwareRecognition.ps1') {
         $normalizedSource = $normalizedSource.Replace(
             '__SOFTWARE_RECOGNITION_CATALOG_BASE64__', $softwareRecognitionCatalogBase64
@@ -703,14 +739,42 @@ $null = New-Item -ItemType Directory -Path $outputDirectory -Force
 $utf8WithBom = [System.Text.UTF8Encoding]::new($true)
 [System.IO.File]::WriteAllText($resolvedOutput, $generated, $utf8WithBom)
 
-$digest = Get-Sha256Hex -Bytes ([System.IO.File]::ReadAllBytes($resolvedOutput))
+$applicationBytes = [System.IO.File]::ReadAllBytes($resolvedOutput)
+$digest = Get-Sha256Hex -Bytes $applicationBytes
 $buildToolPath = 'build/Build.ps1'
-$buildToolDigest = Get-Sha256Hex -Bytes ([System.IO.File]::ReadAllBytes($PSCommandPath))
+$buildToolDigest = $buildToolDigestForPackage
+$portablePackage = New-PortableDistributionPackage `
+    -OutputDirectory $outputDirectory `
+    -ApplicationBytes $applicationBytes `
+    -ApplicationDigest $digest `
+    -Governing $portableGoverning `
+    -BuildTool ([pscustomobject][ordered]@{
+        path = $buildToolPath
+        sha256 = $buildToolDigest
+    })
 
 [pscustomobject]@{
     buildContract = 'win-pcinfo.build-evidence/1.0.0'
     outputPath = $resolvedOutput
     sha256 = $digest
+    generatedContentIdentity = [pscustomobject][ordered]@{
+        kind = 'win-pcinfo.unsigned-generated-content-identity'
+        sha256 = $digest
+        encoding = 'utf-8-bom'
+        lineEndings = 'crlf'
+    }
+    portablePackageIdentity = [pscustomobject][ordered]@{
+        kind = 'win-pcinfo.unsigned-portable-package-identity'
+        sha256 = [string] $portablePackage.sha256
+        archiveFormat = 'zip'
+        compression = 'store'
+    }
+    portablePackage = [pscustomobject][ordered]@{
+        installsRuntime = $false
+        archiveFileName = [string] $portablePackage.archiveFileName
+        unpackedRootName = [string] $portablePackage.unpackedRootName
+        sourceRevisionSha256 = [string] $portablePackage.sourceRevisionSha256
+    }
     buildTool = [pscustomobject][ordered]@{
         path = $buildToolPath
         sha256 = $buildToolDigest

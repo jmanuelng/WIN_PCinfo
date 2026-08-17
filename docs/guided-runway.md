@@ -91,6 +91,8 @@ pwsh -NoLogo -NoProfile -File ./build/Build.ps1
 
 Review `src/` rather than editing `artifacts/WIN-PCInfo.ps1`. The generated file is reproducible and ignored.
 
+The same build also writes an unsigned portable zip. That archive has a second precursor identity: the SHA-256 of the zip bytes. Extract it and run first-run verification through the generated application as described in [Portable distribution and first-run](portable-distribution.md). A missing or altered governing resource returns `NotStarted` with no integrity override.
+
 This local development artifact is unsigned. That is an honest trust result, not a bypass. A later trusted Authenticode release or Attested Preview bundle is a separate publication path and is not implemented here.
 
 ### Runtime integrity
