@@ -20,8 +20,10 @@ grok models
 
 Git authentication in an IDE does not replace either CLI login.
 
-`grok-agent.mts` invokes headless Grok with `--output-format streaming-json`
-and a temp `--prompt-file`. It does not use Codex.
+`grok-agent.mts` invokes headless Grok with `--output-format streaming-json`,
+`--no-leader`, and a temp `--prompt-file`. Plain completion-marker lines are
+treated as agent text so review can start after a successful implementer
+commit. It does not use Codex.
 
 ## Eligibility
 

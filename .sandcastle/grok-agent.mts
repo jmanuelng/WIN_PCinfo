@@ -7,11 +7,15 @@ export const GROK_MODEL = "grok-4.6";
 export const GROK_REASONING_EFFORT = "xhigh";
 
 export interface GrokStreamEvent {
-  readonly type: string;
+  readonly type?: string;
   readonly data?: unknown;
+  readonly text?: unknown;
+  readonly result?: unknown;
+  readonly content?: unknown;
   readonly toolName?: unknown;
   readonly rawInput?: unknown;
   readonly sessionId?: unknown;
+  readonly session_id?: unknown;
   readonly usage?: unknown;
   readonly message?: unknown;
 }
@@ -66,26 +70,90 @@ function usageFromUnknown(value: unknown): {
   };
 }
 
+function textEvents(text: string): ReturnType<AgentProvider["parseStreamLine"]> {
+  return [
+    { type: "text", text },
+    { type: "result", result: text },
+  ];
+}
+
+function firstString(
+  ...candidates: readonly unknown[]
+): string | undefined {
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function textFromAssistantMessage(message: unknown): string | undefined {
+  if (!message || typeof message !== "object") {
+    return undefined;
+  }
+
+  const content = (message as { readonly content?: unknown }).content;
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const parts = content
+    .map((block) => {
+      if (!block || typeof block !== "object") {
+        return "";
+      }
+      const item = block as { readonly type?: unknown; readonly text?: unknown };
+      return item.type === "text" && typeof item.text === "string"
+        ? item.text
+        : "";
+    })
+    .join("");
+  return parts.length > 0 ? parts : undefined;
+}
+
 export function parseGrokStreamLine(line: string): ReturnType<
   AgentProvider["parseStreamLine"]
 > {
   const trimmed = line.trim();
-  if (!trimmed.startsWith("{")) {
+  if (!trimmed) {
     return [];
+  }
+
+  // Grok often prints the completion marker as a plain stdout line. The
+  // previous adapter ignored non-JSON, so Sandcastle logged COMPLETE and
+  // still reported no completion signal.
+  if (!trimmed.startsWith("{")) {
+    return textEvents(trimmed);
   }
 
   let event: GrokStreamEvent;
   try {
     event = JSON.parse(trimmed) as GrokStreamEvent;
   } catch {
-    return [];
+    return textEvents(trimmed);
   }
 
-  if (event.type === "text" && typeof event.data === "string") {
-    return [
-      { type: "text", text: event.data },
-      { type: "result", result: event.data },
-    ];
+  const jsonText = firstString(
+    event.type === "text" ? event.data : undefined,
+    event.type === "text" ? event.text : undefined,
+    event.type === "text" ? event.content : undefined,
+    event.type === "result" ? event.result : undefined,
+    event.type === "result" ? event.text : undefined,
+    event.type === undefined ? event.text : undefined,
+  );
+  if (jsonText !== undefined) {
+    return textEvents(jsonText);
+  }
+
+  if (event.type === "assistant") {
+    const assistantText = textFromAssistantMessage(event.message);
+    if (assistantText) {
+      return textEvents(assistantText);
+    }
   }
 
   if (event.type === "tool_call" && typeof event.toolName === "string") {
@@ -100,24 +168,24 @@ export function parseGrokStreamLine(line: string): ReturnType<
 
   if (event.type === "end") {
     const events: ReturnType<AgentProvider["parseStreamLine"]> = [];
-    if (typeof event.sessionId === "string") {
-      events.push({ type: "session_id", sessionId: event.sessionId });
+    const sessionId = firstString(event.sessionId, event.session_id);
+    if (sessionId) {
+      events.push({ type: "session_id", sessionId });
     }
     const usage = usageFromUnknown(event.usage);
     if (usage) {
       events.push({ type: "usage", usage });
     }
+    const endText = firstString(event.text, event.result);
+    if (endText) {
+      events.push(...textEvents(endText));
+    }
     return events;
   }
 
   if (event.type === "error") {
-    const message =
-      typeof event.message === "string"
-        ? event.message
-        : event.data && typeof event.data === "string"
-          ? event.data
-          : undefined;
-    return message ? [{ type: "result", result: message }] : [];
+    const message = firstString(event.message, event.data, event.text);
+    return message ? textEvents(message) : [];
   }
 
   return [];
@@ -135,6 +203,8 @@ export function buildGrokPrintCommand(prompt: string): {
     "--output-format",
     "streaming-json",
     "--always-approve",
+    "--no-leader",
+    "--no-alt-screen",
     "--no-plan",
     "--verbatim",
     "--reasoning-effort",

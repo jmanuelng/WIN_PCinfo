@@ -29,6 +29,7 @@ import {
   parseMaxIterations,
   parseMaxParallel,
   requireEligibleIssue,
+  resultHasCompletionSignal,
   listEligibleIssues,
   releaseIssueClaim,
   runCommandAsync,
@@ -639,13 +640,31 @@ test("Grok provider uses extra-high reasoning and always-approve", () => {
   assert.match(command, new RegExp(`(?:^| )-m ${GROK_MODEL}(?: |$)`));
   assert.match(command, /(?:^| )--output-format streaming-json(?: |$)/);
   assert.match(command, /(?:^| )--prompt-file(?: |$)/);
+  assert.match(command, /(?:^| )--no-leader(?: |$)/);
   assert.doesNotMatch(command, /'/);
   assert.equal(GROK_REASONING_EFFORT, "xhigh");
 
+  assert.deepEqual(parseGrokStreamLine("<promise>COMPLETE</promise>"), [
+    { type: "text", text: "<promise>COMPLETE</promise>" },
+    { type: "result", result: "<promise>COMPLETE</promise>" },
+  ]);
   assert.deepEqual(parseGrokStreamLine('{"type":"text","data":"<promise>COMPLETE</promise>"}'), [
     { type: "text", text: "<promise>COMPLETE</promise>" },
     { type: "result", result: "<promise>COMPLETE</promise>" },
   ]);
+  assert.deepEqual(
+    parseGrokStreamLine('{"text":"done\\n<promise>COMPLETE</promise>"}'),
+    [
+      { type: "text", text: "done\n<promise>COMPLETE</promise>" },
+      { type: "result", result: "done\n<promise>COMPLETE</promise>" },
+    ],
+  );
+  assert.ok(
+    resultHasCompletionSignal({
+      stdout: "summary\n<promise>COMPLETE</promise>\n",
+    }),
+  );
+  assert.equal(resultHasCompletionSignal({ stdout: "still working" }), false);
   assert.deepEqual(
     parseGrokStreamLine(
       '{"type":"tool_call","toolName":"read_file","rawInput":{"path":"README.md"}}',
@@ -706,6 +725,8 @@ test("Grok provider uses extra-high reasoning and always-approve", () => {
       "--output-format",
       "streaming-json",
       "--always-approve",
+      "--no-leader",
+      "--no-alt-screen",
       "--no-plan",
       "--verbatim",
       "--reasoning-effort",

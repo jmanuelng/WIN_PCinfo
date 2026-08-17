@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 
 export const READY_LABEL = "ready-for-agent";
 export const BASE_REF = "origin/main";
+export const COMPLETION_SIGNAL = "<promise>COMPLETE</promise>";
 export const MAX_ALLOWED_ITERATIONS = 10;
 export const DEFAULT_MAX_PARALLEL_ISSUES = 2;
 export const MAX_ALLOWED_PARALLEL_ISSUES = 2;
@@ -51,6 +52,16 @@ export interface CheckSummary {
   readonly failed: readonly string[];
   readonly pending: readonly string[];
   readonly passed: readonly string[];
+}
+
+export function resultHasCompletionSignal(result: {
+  readonly completionSignal?: string;
+  readonly stdout?: string;
+}): boolean {
+  if (result.completionSignal) {
+    return true;
+  }
+  return typeof result.stdout === "string" && result.stdout.includes(COMPLETION_SIGNAL);
 }
 
 export function buildImplementationPhaseOptions<TAgent>(
