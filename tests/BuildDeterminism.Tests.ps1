@@ -59,6 +59,7 @@ $expectedSourcePaths = @(
     'src/AttestedPreview.ps1'
     'src/AzureValidationAdmission.ps1'
     'src/ReleaseGates.ps1'
+    'src/SigningBoundary.ps1'
     'src/ApplicationMain.ps1'
 )
 Assert-True ((@($first.sourceInputs.path | Sort-Object) -join '|') -eq
@@ -111,6 +112,9 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'schemas/azure-validation-round-request.schema.json'
     'schemas/azure-validation-admission-verdict.schema.json'
     'schemas/release-gates.schema.json'
+    'schemas/signing-boundary.schema.json'
+    'schemas/signing-session-request.schema.json'
+    'schemas/signing-session-result.schema.json'
     'schemas/release-evidence-pack.schema.json'
     'schemas/release-evidence-manifest.schema.json'
     'schemas/preview-capability-matrix.schema.json'
@@ -139,6 +143,7 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-attested-preview.json'
     'docs/spec/releases/2.0.0-preview.1-azure-validation-admission.json'
     'docs/spec/releases/2.0.0-preview.1-release-gates.json'
+    'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 Assert-True ((@($first.applicationManifest.resources.path | Sort-Object) -join '|') -eq

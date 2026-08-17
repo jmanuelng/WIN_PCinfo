@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/signing-boundary.schema.json",
+  "title": "WIN-PCInfo Signing Boundary policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "productCapability",
+    "relatedCapabilityIds",
+    "sliceDeliversCapability",
+    "supportClaim",
+    "previewOrStableClaim",
+    "publicationAuthorized",
+    "trustedPublicationPermitted",
+    "syntheticCannotAuthorizePublication",
+    "identity",
+    "publisher",
+    "humanApproval",
+    "session",
+    "azure",
+    "attestedFallback",
+    "smoke",
+    "scenarios",
+    "privacy",
+    "workspace"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.signing-boundary-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.signing-boundary/1.0.0" },
+    "productCapability": { "const": "CAP-0025" },
+    "relatedCapabilityIds": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "CAP-0030" },
+        { "const": "CAP-0027" }
+      ],
+      "items": false
+    },
+    "sliceDeliversCapability": { "const": false },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "publicationAuthorized": { "const": false },
+    "trustedPublicationPermitted": { "const": false },
+    "syntheticCannotAuthorizePublication": { "const": true },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unsignedContentKind",
+        "signedPrimaryScriptKind",
+        "finalSignedKind",
+        "finalMustBeDistinct",
+        "finalMustLinkUnsignedContent",
+        "timestampedSigningByteReproducible"
+      ],
+      "properties": {
+        "unsignedContentKind": { "const": "win-pcinfo.unsigned-generated-content-identity" },
+        "signedPrimaryScriptKind": { "const": "win-pcinfo.signed-primary-script-identity" },
+        "finalSignedKind": { "const": "win-pcinfo.authenticode-signed-package-identity" },
+        "finalMustBeDistinct": { "const": true },
+        "finalMustLinkUnsignedContent": { "const": true },
+        "timestampedSigningByteReproducible": { "const": false }
+      }
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "displayName", "resourceScopeKind"],
+      "properties": {
+        "kind": { "const": "IndividualPublisher" },
+        "displayName": { "const": "WIN-PCInfo Individual Publisher" },
+        "resourceScopeKind": { "const": "DedicatedSigningResourceScope" }
+      }
+    },
+    "humanApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmationPhrase", "cannotBeInferred"],
+      "properties": {
+        "confirmationPhrase": { "const": "CONFIRM-CANDIDATE-DIGEST" },
+        "cannotBeInferred": { "const": true }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityName",
+        "leastPrivilege",
+        "timeBounded",
+        "sessionSpecific",
+        "maximumMinutes",
+        "removeAfterTransaction"
+      ],
+      "properties": {
+        "capabilityName": { "const": "ReleaseSigningSession" },
+        "leastPrivilege": { "const": true },
+        "timeBounded": { "const": true },
+        "sessionSpecific": { "const": true },
+        "maximumMinutes": { "const": 15 },
+        "removeAfterTransaction": { "const": true }
+      }
+    },
+    "azure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contact",
+        "persistentResourceChange",
+        "livePathWithoutSetupAuthority"
+      ],
+      "properties": {
+        "contact": { "const": "None" },
+        "persistentResourceChange": { "const": "Prohibited" },
+        "livePathWithoutSetupAuthority": { "const": "NotStarted" }
+      }
+    },
+    "attestedFallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "permittedReasons",
+        "neverForConvenience",
+        "satisfiesStableSigningGate",
+        "doesNotWeakenStableRequirements"
+      ],
+      "properties": {
+        "permittedReasons": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "const": "ArtifactSigningNotOperational" },
+            { "const": "VerifiedServiceIncident" }
+          ],
+          "items": false
+        },
+        "neverForConvenience": { "const": true },
+        "satisfiesStableSigningGate": { "const": false },
+        "doesNotWeakenStableRequirements": { "const": true }
+      }
+    },
+    "smoke": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflow", "collectionProhibited", "requiredAfterVerification"],
+      "properties": {
+        "workflow": { "const": "Help" },
+        "collectionProhibited": { "const": true },
+        "requiredAfterVerification": { "const": true }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 13,
+      "maxItems": 13,
+      "prefixItems": [
+        { "const": "EligibleSign" },
+        { "const": "WrongDigest" },
+        { "const": "ChangedContent" },
+        { "const": "InvalidSignature" },
+        { "const": "MissingSignature" },
+        { "const": "TimestampFailure" },
+        { "const": "PermissionDenied" },
+        { "const": "ServiceUnavailable" },
+        { "const": "UnexpectedlySigned" },
+        { "const": "WrongCandidate" },
+        { "const": "GatesNotPassed" },
+        { "const": "ApprovalMissing" },
+        { "const": "SetupAuthorityMissing" }
+      ],
+      "items": false
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rejectNonSynthetic",
+        "rejectCredentialsAndSecrets",
+        "rejectRealIdentifiers",
+        "rejectRestrictedEvidence",
+        "rejectLocalUserPaths"
+      ],
+      "properties": {
+        "rejectNonSynthetic": { "const": true },
+        "rejectCredentialsAndSecrets": { "const": true },
+        "rejectRealIdentifiers": { "const": true },
+        "rejectRestrictedEvidence": { "const": true },
+        "rejectLocalUserPaths": { "const": true }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredBoundary",
+        "markerFileName",
+        "markerContent",
+        "rejectRepositoryPath",
+        "rejectPublicPath",
+        "rejectUncPath",
+        "cleanupRequired"
+      ],
+      "properties": {
+        "requiredBoundary": { "const": "PrivateSigningWorkspace" },
+        "markerFileName": { "const": ".win-pcinfo-signing-workspace" },
+        "markerContent": { "const": "win-pcinfo.private-signing-workspace" },
+        "rejectRepositoryPath": { "const": true },
+        "rejectPublicPath": { "const": true },
+        "rejectUncPath": { "const": true },
+        "cleanupRequired": { "const": true }
+      }
+    }
+  }
+}

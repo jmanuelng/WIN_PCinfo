@@ -43,6 +43,7 @@ $sourcePaths = @(
     'src/AttestedPreview.ps1'
     'src/AzureValidationAdmission.ps1'
     'src/ReleaseGates.ps1'
+    'src/SigningBoundary.ps1'
     'src/ApplicationMain.ps1'
 )
 
@@ -106,6 +107,10 @@ $azureValidationRoundRequestSchemaPath = Join-Path $repositoryRoot 'schemas/azur
 $azureValidationAdmissionVerdictSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-admission-verdict.schema.json'
 $releaseGatesPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-release-gates.json'
 $releaseGatesSchemaPath = Join-Path $repositoryRoot 'schemas/release-gates.schema.json'
+$signingBoundaryPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
+$signingBoundarySchemaPath = Join-Path $repositoryRoot 'schemas/signing-boundary.schema.json'
+$signingSessionRequestSchemaPath = Join-Path $repositoryRoot 'schemas/signing-session-request.schema.json'
+$signingSessionResultSchemaPath = Join-Path $repositoryRoot 'schemas/signing-session-result.schema.json'
 $releaseEvidencePackSchemaPath = Join-Path $repositoryRoot 'schemas/release-evidence-pack.schema.json'
 $releaseEvidenceManifestSchemaPath = Join-Path $repositoryRoot 'schemas/release-evidence-manifest.schema.json'
 $previewCapabilityMatrixSchemaPath = Join-Path $repositoryRoot 'schemas/preview-capability-matrix.schema.json'
@@ -145,6 +150,8 @@ foreach ($requiredDefinitionPath in @(
     $azureValidationAdmissionPolicyPath, $azureValidationAdmissionSchemaPath,
     $azureValidationRoundRequestSchemaPath, $azureValidationAdmissionVerdictSchemaPath,
     $releaseGatesPolicyPath, $releaseGatesSchemaPath,
+    $signingBoundaryPolicyPath, $signingBoundarySchemaPath,
+    $signingSessionRequestSchemaPath, $signingSessionResultSchemaPath,
     $releaseEvidencePackSchemaPath, $releaseEvidenceManifestSchemaPath,
     $previewCapabilityMatrixSchemaPath,
     $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
@@ -303,6 +310,12 @@ $releaseGatesPolicyDigest = Get-Sha256Hex -Bytes $releaseGatesPolicyBytes
 $releaseGatesPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $releaseGatesPolicyBytes
 )
+$signingBoundaryPolicyBytes = Get-Utf8LfBytes -LiteralPath $signingBoundaryPolicyPath
+$signingBoundaryPolicyBase64 = [Convert]::ToBase64String($signingBoundaryPolicyBytes)
+$signingBoundaryPolicyDigest = Get-Sha256Hex -Bytes $signingBoundaryPolicyBytes
+$signingBoundaryPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $signingBoundaryPolicyBytes
+)
 $softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
 $softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
 $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
@@ -385,6 +398,9 @@ if (-not (Test-Json -Json $azureValidationAdmissionPolicyJson -SchemaFile $azure
 if (-not (Test-Json -Json $releaseGatesPolicyJson -SchemaFile $releaseGatesSchemaPath)) {
     throw 'The release-gate contract does not satisfy its release schema.'
 }
+if (-not (Test-Json -Json $signingBoundaryPolicyJson -SchemaFile $signingBoundarySchemaPath)) {
+    throw 'The Signing Boundary contract does not satisfy its release schema.'
+}
 if (-not (Test-Json -Json $softwareRecognitionCatalogJson -SchemaFile $softwareRecognitionCatalogSchemaPath)) {
     throw 'The Software Recognition Catalog does not satisfy its release schema.'
 }
@@ -456,6 +472,9 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/azure-validation-round-request.schema.json'
     'schemas/azure-validation-admission-verdict.schema.json'
     'schemas/release-gates.schema.json'
+    'schemas/signing-boundary.schema.json'
+    'schemas/signing-session-request.schema.json'
+    'schemas/signing-session-result.schema.json'
     'schemas/release-evidence-pack.schema.json'
     'schemas/release-evidence-manifest.schema.json'
     'schemas/preview-capability-matrix.schema.json'
@@ -484,6 +503,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-attested-preview.json'
     'docs/spec/releases/2.0.0-preview.1-azure-validation-admission.json'
     'docs/spec/releases/2.0.0-preview.1-release-gates.json'
+    'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
@@ -775,6 +795,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__RELEASE_GATES_POLICY_SHA256__', $releaseGatesPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/SigningBoundary.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__SIGNING_BOUNDARY_POLICY_BASE64__', $signingBoundaryPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__SIGNING_BOUNDARY_POLICY_SHA256__', $signingBoundaryPolicyDigest
         )
     }
     if ($sourceFile.path -eq 'src/PortableDistribution.ps1') {

@@ -335,6 +335,101 @@ if ($Workflow -eq 'EvaluateReleaseGates') {
     exit $exitCode
 }
 
+if ($Workflow -eq 'SignAndVerifyCandidate') {
+    # Signing must run on the unsigned generated candidate. The threat is
+    # treating a synthetic trailer as a published Trusted release, or hiding
+    # a failed gate behind Authenticode. The mechanism is the same trusted
+    # JSON commands as Help, with no Azure account or assessment work. The
+    # trust assumption is that the request is synthetic. Safe failure is
+    # NotStarted without a Trusted label.
+    Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'SigningBoundary' -State 'Started' `
+        -MessageId 'signing.session.started' -CompletedUnits 0 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    $signingResult = $null
+    if ([string]::IsNullOrWhiteSpace($SigningSessionRequestPath) -or
+        [string]::IsNullOrWhiteSpace($SigningWorkspacePath)) {
+        $signingResult = New-SigningBoundaryResult -State Rejected `
+            -ReasonCode 'SIGNING.REQUEST_MISSING'
+    }
+    else {
+        try {
+            $signingRequestText = [System.IO.File]::ReadAllText(
+                $SigningSessionRequestPath,
+                [System.Text.UTF8Encoding]::new($false, $true)
+            )
+            $signingPrivacy = Test-SigningBoundaryPrivacyBoundary -Text $signingRequestText
+            if ($signingPrivacy) {
+                $signingResult = New-SigningBoundaryResult -State Rejected `
+                    -ReasonCode $signingPrivacy
+            }
+            else {
+                $signingApplicationDirectory = Split-Path -Parent $PSCommandPath
+                $signingRepositoryRoot = $signingApplicationDirectory
+                $signingPolicyPath = Get-SigningBoundaryCatalogPath `
+                    -ApplicationDirectory $signingApplicationDirectory `
+                    -RelativePath 'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
+                if (-not [string]::IsNullOrWhiteSpace($signingPolicyPath)) {
+                    $signingRepositoryRoot = [System.IO.Path]::GetFullPath(
+                        (Join-Path (Split-Path -Parent $signingPolicyPath) '..\..')
+                    )
+                }
+                $signingRequestSchema = Get-SigningBoundaryCatalogPath `
+                    -RepositoryRoot $signingRepositoryRoot `
+                    -ApplicationDirectory $signingApplicationDirectory `
+                    -RelativePath 'schemas/signing-session-request.schema.json'
+                $signingRequestSchemaValid = $false
+                if (-not [string]::IsNullOrWhiteSpace($signingRequestSchema)) {
+                    try {
+                        $signingRequestSchemaValid = Test-Json -Json $signingRequestText `
+                            -SchemaFile $signingRequestSchema
+                    }
+                    catch {
+                        $signingRequestSchemaValid = $false
+                    }
+                }
+                if (-not $signingRequestSchemaValid) {
+                    $signingResult = New-SigningBoundaryResult -State Rejected `
+                        -ReasonCode 'SIGNING.REQUEST_INVALID'
+                }
+                else {
+                    $signingRequest = & $convertFromJsonCommand -InputObject $signingRequestText `
+                        -ErrorAction Stop
+                    $signingResult = Invoke-SigningBoundarySession -Request $signingRequest `
+                        -RequestText $signingRequestText `
+                        -CandidatePath $PSCommandPath `
+                        -PrivateWorkspacePath $SigningWorkspacePath `
+                        -RepositoryRoot $signingRepositoryRoot `
+                        -ApplicationDirectory $signingApplicationDirectory
+                }
+            }
+        }
+        catch {
+            $signingResult = New-SigningBoundaryResult -State Rejected `
+                -ReasonCode 'SIGNING.REQUEST_INVALID'
+        }
+    }
+    $signingSucceeded = $signingResult.state -eq 'SignedAndVerified'
+    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'SigningBoundary' `
+        -State $(if ($signingSucceeded) { 'Succeeded' } else { 'Failed' }) `
+        -MessageId $(if ($signingSucceeded) {
+            'signing.session.succeeded'
+        } else {
+            'signing.session.failed'
+        }) -CompletedUnits 1 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $signingResult -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode $signingResult.reasonCode `
+        -Phase SigningBoundary
+    $exitCode = 20
+    if ($signingSucceeded) {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        $exitCode = 0
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $exitCode
+}
+
 if ($Workflow -eq 'Help' -or $Workflow -eq 'About') {
     # Discovery must remain available on an unsigned development artifact.
     # Requiring Authenticode here would hide the repository from the people

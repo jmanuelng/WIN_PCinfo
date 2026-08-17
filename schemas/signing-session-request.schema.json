@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/signing-session-request.schema.json",
+  "title": "WIN-PCInfo synthetic signing-session request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "synthetic",
+    "scenario",
+    "privacyBoundary",
+    "azureContact",
+    "publisherKind",
+    "resourceScopeKind",
+    "setupAuthorityPresent",
+    "bindings"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.signing-session-request" },
+    "contractVersion": { "const": "1.0.0" },
+    "synthetic": { "const": true },
+    "scenario": {
+      "enum": [
+        "EligibleSign",
+        "WrongDigest",
+        "ChangedContent",
+        "InvalidSignature",
+        "MissingSignature",
+        "TimestampFailure",
+        "PermissionDenied",
+        "ServiceUnavailable",
+        "UnexpectedlySigned",
+        "WrongCandidate",
+        "GatesNotPassed",
+        "ApprovalMissing",
+        "SetupAuthorityMissing"
+      ]
+    },
+    "privacyBoundary": { "const": "PrivateSigningWorkspace" },
+    "azureContact": { "const": "None" },
+    "publisherKind": { "const": "IndividualPublisher" },
+    "resourceScopeKind": { "const": "DedicatedSigningResourceScope" },
+    "setupAuthorityPresent": { "type": "boolean" },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generatedContentSha256",
+        "unsignedContentQualified",
+        "humanApproval"
+      ],
+      "properties": {
+        "generatedContentSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "unsignedContentQualified": { "type": "boolean" },
+        "humanApproval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["approved", "digestSha256", "confirmation"],
+          "properties": {
+            "approved": { "type": "boolean" },
+            "digestSha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "confirmation": { "type": "string", "minLength": 8, "maxLength": 64 }
+          }
+        }
+      }
+    }
+  }
+}

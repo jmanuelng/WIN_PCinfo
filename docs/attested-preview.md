@@ -6,7 +6,7 @@ This guide explains the governed unsigned Preview fallback. Completing these ste
 
 This Attested Preview is **not Trusted**, **not signed**, **not Supported**, and **not Authenticode**. It cannot satisfy the Stable signing gate.
 
-Use it only when Azure Artifact Signing is genuinely not operational or during a recorded verified service incident. Never select this fallback for convenience.
+Use it only when Azure Artifact Signing is genuinely not operational or during a recorded verified service incident. Never select this fallback for convenience. The [Signing Boundary](signing-boundary.md) is the governed signing path; a genuine outage follows this Attested Preview contract and never silently weakens Stable.
 
 ## What the bundle is
 

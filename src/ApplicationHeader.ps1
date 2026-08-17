@@ -19,7 +19,13 @@ param(
     # trust assumption is SHA-256 binding of the reviewed portable
     # candidate, not Windows Authenticode. Safe failure is NotStarted
     # with a typed attestation reason and no bypass.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'EvaluateReleaseGates')]
+    # SignAndVerifyCandidate is the governed Signing Boundary. The threat
+    # is signing the wrong digest or treating a synthetic session as a
+    # Trusted release. The mechanism is exact-digest eligibility plus
+    # fail-closed verification. The trust assumption is that the request
+    # is synthetic and live Azure setup is absent. Safe failure is
+    # NotStarted with no Trusted label.
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -204,7 +210,19 @@ param(
     [string] $ReleaseEvidencePackPath,
 
     [Parameter()]
-    [string] $ReleaseGateWorkspacePath
+    [string] $ReleaseGateWorkspacePath,
+
+    # SignAndVerifyCandidate is a maintainer Signing Boundary. The threat is
+    # signing the wrong digest, leaving a standing role, or contacting Azure
+    # from an assessment host. The mechanism is a synthetic request plus an
+    # already marked private workspace. The trust assumption is that live
+    # Artifact Signing setup authority is absent. Safe failure is NotStarted
+    # with no Trusted label and the session capability removed.
+    [Parameter()]
+    [string] $SigningSessionRequestPath,
+
+    [Parameter()]
+    [string] $SigningWorkspacePath
 )
 
 Set-StrictMode -Version Latest
