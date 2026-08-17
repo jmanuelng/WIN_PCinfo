@@ -1,0 +1,92 @@
+{
+  "kind": "win-pcinfo.signing-boundary-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.signing-boundary/1.0.0",
+  "productCapability": "CAP-0025",
+  "relatedCapabilityIds": [
+    "CAP-0030",
+    "CAP-0027"
+  ],
+  "sliceDeliversCapability": false,
+  "supportClaim": "None",
+  "previewOrStableClaim": "None",
+  "publicationAuthorized": false,
+  "trustedPublicationPermitted": false,
+  "syntheticCannotAuthorizePublication": true,
+  "identity": {
+    "unsignedContentKind": "win-pcinfo.unsigned-generated-content-identity",
+    "signedPrimaryScriptKind": "win-pcinfo.signed-primary-script-identity",
+    "finalSignedKind": "win-pcinfo.authenticode-signed-package-identity",
+    "finalMustBeDistinct": true,
+    "finalMustLinkUnsignedContent": true,
+    "timestampedSigningByteReproducible": false
+  },
+  "publisher": {
+    "kind": "IndividualPublisher",
+    "displayName": "WIN-PCInfo Individual Publisher",
+    "resourceScopeKind": "DedicatedSigningResourceScope"
+  },
+  "humanApproval": {
+    "confirmationPhrase": "CONFIRM-CANDIDATE-DIGEST",
+    "cannotBeInferred": true
+  },
+  "session": {
+    "capabilityName": "ReleaseSigningSession",
+    "leastPrivilege": true,
+    "timeBounded": true,
+    "sessionSpecific": true,
+    "maximumMinutes": 15,
+    "removeAfterTransaction": true
+  },
+  "azure": {
+    "contact": "None",
+    "persistentResourceChange": "Prohibited",
+    "livePathWithoutSetupAuthority": "NotStarted"
+  },
+  "attestedFallback": {
+    "permittedReasons": [
+      "ArtifactSigningNotOperational",
+      "VerifiedServiceIncident"
+    ],
+    "neverForConvenience": true,
+    "satisfiesStableSigningGate": false,
+    "doesNotWeakenStableRequirements": true
+  },
+  "smoke": {
+    "workflow": "Help",
+    "collectionProhibited": true,
+    "requiredAfterVerification": true
+  },
+  "scenarios": [
+    "EligibleSign",
+    "WrongDigest",
+    "ChangedContent",
+    "InvalidSignature",
+    "MissingSignature",
+    "TimestampFailure",
+    "PermissionDenied",
+    "ServiceUnavailable",
+    "UnexpectedlySigned",
+    "WrongCandidate",
+    "GatesNotPassed",
+    "ApprovalMissing",
+    "SetupAuthorityMissing"
+  ],
+  "privacy": {
+    "rejectNonSynthetic": true,
+    "rejectCredentialsAndSecrets": true,
+    "rejectRealIdentifiers": true,
+    "rejectRestrictedEvidence": true,
+    "rejectLocalUserPaths": true
+  },
+  "workspace": {
+    "requiredBoundary": "PrivateSigningWorkspace",
+    "markerFileName": ".win-pcinfo-signing-workspace",
+    "markerContent": "win-pcinfo.private-signing-workspace",
+    "rejectRepositoryPath": true,
+    "rejectPublicPath": true,
+    "rejectUncPath": true,
+    "cleanupRequired": true
+  }
+}

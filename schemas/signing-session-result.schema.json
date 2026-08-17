@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/signing-session-result.schema.json",
+  "title": "WIN-PCInfo sanitized signing-session result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordType",
+    "contractVersion",
+    "state",
+    "reasonCode",
+    "signed",
+    "verified",
+    "smoked",
+    "sessionCapabilityRemoved",
+    "sessionLeastPrivilege",
+    "sessionTimeBounded",
+    "sessionSpecific",
+    "unsignedContentIdentityKind",
+    "signedPrimaryScriptIdentityKind",
+    "finalSignedDistributableIdentityKind",
+    "unsignedContentSha256",
+    "signedPrimaryScriptSha256",
+    "finalSignedDistributableSha256",
+    "identitiesDistinct",
+    "timestampedSigningByteReproducible",
+    "publisherKind",
+    "publisherDisplayName",
+    "signatureStatus",
+    "timestampStatus",
+    "chainStatus",
+    "publisherThumbprint",
+    "attestedFallbackEligible",
+    "fallbackReason",
+    "satisfiesStableSigningGate",
+    "trustedPublicationPermitted",
+    "publicationAuthorized",
+    "supportClaim",
+    "previewOrStableClaim",
+    "sliceDeliversCapability",
+    "collectionStarted",
+    "synthetic",
+    "azureContacted",
+    "trustClass"
+  ],
+  "properties": {
+    "recordType": { "const": "win-pcinfo.signing-session-result" },
+    "contractVersion": { "const": "1.0.0" },
+    "state": {
+      "enum": [
+        "SignedAndVerified",
+        "Rejected",
+        "AttestedFallbackEligible",
+        "SetupRequired"
+      ]
+    },
+    "reasonCode": {
+      "type": "string",
+      "pattern": "^SIGNING\\.[A-Z0-9_]+$"
+    },
+    "signed": { "type": "boolean" },
+    "verified": { "type": "boolean" },
+    "smoked": { "type": "boolean" },
+    "sessionCapabilityRemoved": { "type": "boolean" },
+    "sessionLeastPrivilege": { "const": true },
+    "sessionTimeBounded": { "const": true },
+    "sessionSpecific": { "const": true },
+    "unsignedContentIdentityKind": {
+      "const": "win-pcinfo.unsigned-generated-content-identity"
+    },
+    "signedPrimaryScriptIdentityKind": {
+      "const": "win-pcinfo.signed-primary-script-identity"
+    },
+    "finalSignedDistributableIdentityKind": {
+      "const": "win-pcinfo.authenticode-signed-package-identity"
+    },
+    "unsignedContentSha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "signedPrimaryScriptSha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "finalSignedDistributableSha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "identitiesDistinct": { "type": "boolean" },
+    "timestampedSigningByteReproducible": { "const": false },
+    "publisherKind": { "const": "IndividualPublisher" },
+    "publisherDisplayName": { "const": "WIN-PCInfo Individual Publisher" },
+    "signatureStatus": {
+      "enum": ["Valid", "NotSigned", "Invalid", "HashMismatch", "NotEvaluated"]
+    },
+    "timestampStatus": {
+      "enum": ["Valid", "Missing", "Invalid", "NotEvaluated"]
+    },
+    "chainStatus": {
+      "enum": ["Valid", "Incomplete", "Untrusted", "NotEvaluated"]
+    },
+    "publisherThumbprint": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "attestedFallbackEligible": { "type": "boolean" },
+    "fallbackReason": {
+      "enum": [
+        "None",
+        "ArtifactSigningNotOperational",
+        "VerifiedServiceIncident"
+      ]
+    },
+    "satisfiesStableSigningGate": { "const": false },
+    "trustedPublicationPermitted": { "const": false },
+    "publicationAuthorized": { "const": false },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "sliceDeliversCapability": { "const": false },
+    "collectionStarted": { "const": false },
+    "synthetic": { "type": "boolean" },
+    "azureContacted": { "const": false },
+    "trustClass": {
+      "enum": ["None", "SyntheticSigningContract", "AttestedPreview"]
+    }
+  }
+}

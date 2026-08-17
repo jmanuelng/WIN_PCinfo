@@ -13,12 +13,12 @@ $policy = Get-Content -LiteralPath (
 
 $headerText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src/ApplicationHeader.ps1') -Raw
 $allowedWorkflows = @(
-    'Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'EvaluateReleaseGates'
+    'Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate'
 )
 $allowedModes = @('Guided', 'Automation')
 Assert-Equal $true (
-    $headerText.Contains("ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'EvaluateReleaseGates')")
-) 'Help, About, Verify, VerifyAttestation, AdmitValidationRound, and EvaluateReleaseGates are first-class generated-application workflows'
+    $headerText.Contains("ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate')")
+) 'Help, About, Verify, VerifyAttestation, AdmitValidationRound, EvaluateReleaseGates, and SignAndVerifyCandidate are first-class generated-application workflows'
 Assert-Equal $true ($headerText.Contains("ValidateSet('Guided', 'Automation')")) `
     'Guided and Automation remain the implemented launch modes'
 

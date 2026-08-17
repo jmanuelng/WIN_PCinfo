@@ -1,0 +1,20 @@
+{
+  "kind": "win-pcinfo.signing-session-request",
+  "contractVersion": "1.0.0",
+  "synthetic": true,
+  "scenario": "EligibleSign",
+  "privacyBoundary": "PrivateSigningWorkspace",
+  "azureContact": "None",
+  "publisherKind": "IndividualPublisher",
+  "resourceScopeKind": "DedicatedSigningResourceScope",
+  "setupAuthorityPresent": false,
+  "bindings": {
+    "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "unsignedContentQualified": true,
+    "humanApproval": {
+      "approved": true,
+      "digestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "confirmation": "CONFIRM-CANDIDATE-DIGEST"
+    }
+  }
+}
