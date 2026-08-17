@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/attested-preview-attestation.schema.json",
+  "title": "WIN-PCInfo Attested Preview attestation document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "trustClass",
+    "unsigned",
+    "limitedTrust",
+    "signed",
+    "trusted",
+    "supported",
+    "satisfiesStableSigningGate",
+    "supportClaim",
+    "previewOrStableClaim",
+    "fallback",
+    "candidate",
+    "generatedApplication",
+    "sourceRevision",
+    "resourceManifest",
+    "checksums",
+    "dependencyInventory",
+    "sbom",
+    "buildProvenance",
+    "warning",
+    "created"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.attested-preview-attestation" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.attested-preview/1.0.0" },
+    "trustClass": { "const": "AttestedPreview" },
+    "unsigned": { "const": true },
+    "limitedTrust": { "const": true },
+    "signed": { "const": false },
+    "trusted": { "const": false },
+    "supported": { "const": false },
+    "satisfiesStableSigningGate": { "const": false },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selected", "permittedReasons", "neverForConvenience", "reason"],
+      "properties": {
+        "selected": { "const": true },
+        "permittedReasons": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "const": "ArtifactSigningNotOperational" },
+            { "const": "VerifiedServiceIncident" }
+          ],
+          "items": false
+        },
+        "neverForConvenience": { "const": true },
+        "reason": {
+          "enum": ["ArtifactSigningNotOperational", "VerifiedServiceIncident"]
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "archiveFileName", "sha256", "identityRole"],
+      "properties": {
+        "kind": { "const": "win-pcinfo.unsigned-portable-package-identity" },
+        "archiveFileName": { "const": "WIN-PCInfo-2.0.0-preview.1-portable.zip" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "identityRole": { "const": "final-distributable-when-fallback-selected" }
+      }
+    },
+    "generatedApplication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "WIN-PCInfo.ps1" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "sourceRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sha256"],
+      "properties": {
+        "kind": { "const": "content-tree" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "resourceManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "package-manifest.json" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "checksums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "checksums.sha256" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "dependencyInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "dependency-inventory.json" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "sbom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "sbom.spdx.json" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "buildProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "buildTool"],
+      "properties": {
+        "path": { "const": "provenance.json" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "buildTool": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": { "const": "build/Build.ps1" },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "id", "path"],
+      "properties": {
+        "required": { "const": true },
+        "id": { "const": "UNSIGNED_LIMITED_TRUST" },
+        "path": { "const": "LIMITED-TRUST.md" }
+      }
+    },
+    "created": { "const": "1980-01-01T00:00:00Z" }
+  }
+}

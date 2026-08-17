@@ -40,6 +40,7 @@ $sourcePaths = @(
     'src/EntryAdapters.ps1'
     'src/ProductHelp.ps1'
     'src/PortableDistribution.ps1'
+    'src/AttestedPreview.ps1'
     'src/ApplicationMain.ps1'
 )
 
@@ -94,6 +95,9 @@ $guidedRunwayPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-pr
 $guidedRunwaySchemaPath = Join-Path $repositoryRoot 'schemas/guided-runway.schema.json'
 $portableDistributionPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
 $portableDistributionSchemaPath = Join-Path $repositoryRoot 'schemas/portable-distribution.schema.json'
+$attestedPreviewPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-attested-preview.json'
+$attestedPreviewSchemaPath = Join-Path $repositoryRoot 'schemas/attested-preview.schema.json'
+$attestedPreviewAttestationSchemaPath = Join-Path $repositoryRoot 'schemas/attested-preview-attestation.schema.json'
 $softwareRecognitionCatalogPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 $softwareRecognitionCatalogSchemaPath = Join-Path $repositoryRoot 'schemas/software-recognition-catalog.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
@@ -125,6 +129,8 @@ foreach ($requiredDefinitionPath in @(
     $crossDomainGuidancePolicyPath, $crossDomainGuidanceSchemaPath,
     $guidedRunwayPolicyPath, $guidedRunwaySchemaPath,
     $portableDistributionPolicyPath, $portableDistributionSchemaPath,
+    $attestedPreviewPolicyPath, $attestedPreviewSchemaPath,
+    $attestedPreviewAttestationSchemaPath,
     $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
@@ -263,6 +269,12 @@ $portableDistributionPolicyBytes = Get-Utf8LfBytes -LiteralPath $portableDistrib
 $portableDistributionPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $portableDistributionPolicyBytes
 )
+$attestedPreviewPolicyBytes = Get-Utf8LfBytes -LiteralPath $attestedPreviewPolicyPath
+$attestedPreviewPolicyBase64 = [Convert]::ToBase64String($attestedPreviewPolicyBytes)
+$attestedPreviewPolicyDigest = Get-Sha256Hex -Bytes $attestedPreviewPolicyBytes
+$attestedPreviewPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $attestedPreviewPolicyBytes
+)
 $softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
 $softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
 $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
@@ -336,6 +348,9 @@ if (-not (Test-Json -Json $guidedRunwayPolicyJson -SchemaFile $guidedRunwaySchem
 if (-not (Test-Json -Json $portableDistributionPolicyJson -SchemaFile $portableDistributionSchemaPath)) {
     throw 'The portable distribution contract does not satisfy its release schema.'
 }
+if (-not (Test-Json -Json $attestedPreviewPolicyJson -SchemaFile $attestedPreviewSchemaPath)) {
+    throw 'The Attested Preview contract does not satisfy its release schema.'
+}
 if (-not (Test-Json -Json $softwareRecognitionCatalogJson -SchemaFile $softwareRecognitionCatalogSchemaPath)) {
     throw 'The Software Recognition Catalog does not satisfy its release schema.'
 }
@@ -370,6 +385,8 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'build/TextCanonicalization.ps1'
     'build/DeterministicArchive.ps1'
     'build/PortableDistribution.ps1'
+    'build/AttestedPreview.ps1'
+    'build/Attest-Preview.ps1'
     'build/Start-WIN-PCInfo.ps1'
     'schemas/assessment-run-request.schema.json'
     'schemas/preparation-plan.schema.json'
@@ -399,6 +416,8 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/cross-domain-guidance.schema.json'
     'schemas/guided-runway.schema.json'
     'schemas/portable-distribution.schema.json'
+    'schemas/attested-preview.schema.json'
+    'schemas/attested-preview-attestation.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -421,6 +440,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-cross-domain-guidance.json'
     'docs/spec/releases/2.0.0-preview.1-guided-runway.json'
     'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
+    'docs/spec/releases/2.0.0-preview.1-attested-preview.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
@@ -704,6 +724,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__PORTABLE_GOVERNING_RESOURCES_SHA256__', $portableGoverningDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/AttestedPreview.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__ATTESTED_PREVIEW_POLICY_BASE64__', $attestedPreviewPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__ATTESTED_PREVIEW_POLICY_SHA256__', $attestedPreviewPolicyDigest
         )
     }
     if ($sourceFile.path -eq 'src/SoftwareRecognition.ps1') {

@@ -25,6 +25,47 @@ $convertFromJsonCommand = $moduleFacts.convertFromJsonCommand
 $artifactTrustValid = Test-ApplicationArtifactTrust -LiteralPath $PSCommandPath `
     -AuthenticodeCommand $moduleFacts.authenticodeCommand
 
+if ($Workflow -eq 'VerifyAttestation') {
+    # The warning is an observable launch step of this fallback, not text
+    # hidden in Help and not a label for an ordinary unsigned local build.
+    # The threat is launching later smoke or validation without seeing that
+    # this fallback is unsigned and limited-trust, or treating a later
+    # package-integrity failure as a reason to skip the warning. The
+    # mechanism is emitting the warning first, then verifying exact
+    # candidate bindings. The trust assumption is SHA-256 of the reviewed
+    # zip, not Authenticode. Safe failure is NotStarted with a typed
+    # attestation reason and no bypass.
+    $attestationPolicy = Get-AttestedPreviewEmbeddedPolicy `
+        -ConvertFromJsonCommand $convertFromJsonCommand
+    Write-ContractRecord (Get-AttestedPreviewLimitedTrustWarning `
+        -Policy $attestationPolicy.Policy) -ConvertToJsonCommand $convertToJsonCommand
+    try {
+        $attestationResult = Test-AttestedPreviewBundle `
+            -AttestationBundlePath $AttestationBundlePath `
+            -CandidateArchivePath $CandidateArchivePath `
+            -ConvertFromJsonCommand $convertFromJsonCommand
+    }
+    catch {
+        $attestationResult = [pscustomobject]@{
+            Valid = $false
+            ReasonCode = 'ATTESTATION.CONFLICTING_INPUT'
+            Record = (New-AttestedPreviewVerificationRecord -State Rejected `
+                -ReasonCode 'ATTESTATION.CONFLICTING_INPUT')
+        }
+    }
+    Write-ContractRecord $attestationResult.Record -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode $attestationResult.ReasonCode `
+        -Phase 'VerifyAttestation'
+    if ($attestationResult.Valid) {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+        exit 0
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit 20
+}
+
 # A portable package keeps schemas, catalogs, helpers, and documentation as
 # explicit files. The threat is a substituted adjacent file that keeps the
 # authentic script name. The mechanism is the embedded governing-resource

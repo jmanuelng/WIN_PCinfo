@@ -1,0 +1,48 @@
+{
+  "kind": "win-pcinfo.attested-preview-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.attested-preview/1.0.0",
+  "trustClass": "AttestedPreview",
+  "unsigned": true,
+  "limitedTrust": true,
+  "signed": false,
+  "trusted": false,
+  "supported": false,
+  "satisfiesStableSigningGate": false,
+  "supportClaim": "None",
+  "previewOrStableClaim": "None",
+  "attestedPackageIsFinalDistributableIdentity": true,
+  "candidateIdentityKind": "win-pcinfo.unsigned-portable-package-identity",
+  "archiveRootName": "WIN-PCInfo-2.0.0-preview.1",
+  "fallback": {
+    "permittedReasons": [
+      "ArtifactSigningNotOperational",
+      "VerifiedServiceIncident"
+    ],
+    "neverForConvenience": true
+  },
+  "boundInputs": [
+    "candidateDigest",
+    "sourceRevision",
+    "generatedApplication",
+    "resourceManifest",
+    "checksums",
+    "dependencyInventory",
+    "sbom",
+    "buildProvenance"
+  ],
+  "requiredBundleFiles": [
+    "attestation.json",
+    "LIMITED-TRUST.md"
+  ],
+  "warning": {
+    "recordType": "win-pcinfo.limited-trust-warning",
+    "title": "UNSIGNED LIMITED-TRUST WARNING — NOT TRUSTED, NOT SIGNED, NOT SUPPORTED",
+    "requiredBeforeLaunch": true
+  },
+  "stableSigningGate": {
+    "requiredTrustClass": "TrustedAuthenticode",
+    "attestedPreviewSatisfies": false
+  }
+}

@@ -12,6 +12,7 @@ This workbench is the consultant-oriented companion to the [Guided Runway](guide
 
 - [Runtime prerequisites and safe launch](runtime-prerequisites.md)
 - [Portable distribution and first-run](portable-distribution.md)
+- [Attested Preview trust bundle](attested-preview.md)
 - [Preparation Summary and approval](preparation-summary.md)
 - [Assessment Run lifecycle](run-lifecycle.md)
 - [Process Supervisor](process-supervisor.md)

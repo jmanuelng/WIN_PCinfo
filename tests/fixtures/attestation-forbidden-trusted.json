@@ -1,0 +1,40 @@
+{
+  "kind": "win-pcinfo.attested-preview-attestation",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.attested-preview/1.0.0",
+  "trustClass": "Trusted",
+  "unsigned": false,
+  "limitedTrust": false,
+  "signed": true,
+  "trusted": true,
+  "supported": true,
+  "satisfiesStableSigningGate": false,
+  "supportClaim": "Supported",
+  "previewOrStableClaim": "Stable",
+  "fallback": {
+    "selected": true,
+    "permittedReasons": ["ArtifactSigningNotOperational", "VerifiedServiceIncident"],
+    "neverForConvenience": true,
+    "reason": "ArtifactSigningNotOperational"
+  },
+  "candidate": {
+    "kind": "win-pcinfo.unsigned-portable-package-identity",
+    "archiveFileName": "WIN-PCInfo-2.0.0-preview.1-portable.zip",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "identityRole": "final-distributable-when-fallback-selected"
+  },
+  "generatedApplication": { "path": "WIN-PCInfo.ps1", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+  "sourceRevision": { "kind": "content-tree", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+  "resourceManifest": { "path": "package-manifest.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+  "checksums": { "path": "checksums.sha256", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+  "dependencyInventory": { "path": "dependency-inventory.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+  "sbom": { "path": "sbom.spdx.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+  "buildProvenance": {
+    "path": "provenance.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "buildTool": { "path": "build/Build.ps1", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" }
+  },
+  "warning": { "required": true, "id": "UNSIGNED_LIMITED_TRUST", "path": "LIMITED-TRUST.md" },
+  "created": "1980-01-01T00:00:00Z"
+}

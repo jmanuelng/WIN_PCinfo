@@ -93,7 +93,7 @@ Review `src/` rather than editing `artifacts/WIN-PCInfo.ps1`. The generated file
 
 The same build also writes an unsigned portable zip. That archive has a second precursor identity: the SHA-256 of the zip bytes. Extract it and run first-run verification through the generated application as described in [Portable distribution and first-run](portable-distribution.md). A missing or altered governing resource returns `NotStarted` with no integrity override.
 
-This local development artifact is unsigned. That is an honest trust result, not a bypass. A later trusted Authenticode release or Attested Preview bundle is a separate publication path and is not implemented here.
+This local development artifact is unsigned. That is an honest trust result, not a bypass. A later trusted Authenticode release is a separate publication path and is not implemented here. The governed Attested Preview fallback is documented in [Attested Preview trust bundle](attested-preview.md) and remains unsigned, limited-trust, and unable to satisfy the Stable signing gate.
 
 ### Runtime integrity
 
@@ -105,7 +105,7 @@ Before assessment work, WIN-PCInfo checks that the active host is PowerShell Cor
 
 ### Attested versus trusted
 
-Trusted Authenticode signing is the target for Stable. An Attested Preview is a governed unsigned fallback that still requires checksums, provenance, and an explicit unsigned warning. Neither the signed release path nor the Attested Preview trust bundle is implemented in this slice. A local unsigned build is simply unsigned.
+Trusted Authenticode signing is the target for Stable and is not implemented here. An Attested Preview is a governed unsigned fallback: it binds one exact portable candidate to checksums, the resource manifest, dependency inventory, SBOM, source revision, and build provenance. Verifying that fallback through `-Workflow VerifyAttestation` always shows an **UNSIGNED LIMITED-TRUST WARNING** as the first record before any later smoke or validation work. It is never Trusted, never signed, and never Supported, and it cannot satisfy the Stable signing gate. Fallback selection is allowed only when Artifact Signing is not operational or during a verified service incident, never for convenience. A local unsigned build without that governed selection is simply unsigned and does not inherit this warning. See [Attested Preview trust bundle](attested-preview.md).
 
 ### Capability matrices
 

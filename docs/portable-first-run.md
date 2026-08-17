@@ -30,4 +30,4 @@ If no eligible host is installed, the helper ends at `RUNTIME.HOST_MISSING` and 
 
 ## Next step
 
-After verification succeeds, open Help or start guided preparation from the same folder. Ordinary assessment on this unsigned package still fails the Authenticode trust gate until a later signed or attested release exists.
+After verification succeeds, open Help or start guided preparation from the same folder. Ordinary assessment on this unsigned package still fails the Authenticode trust gate. An Attested Preview is a separately governed unsigned fallback described in docs/attested-preview.md. It is never Trusted, signed, or Supported.
