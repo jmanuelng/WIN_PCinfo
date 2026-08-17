@@ -604,11 +604,33 @@ export function listEligibleIssues(
   }
 }
 
-export function claimIssue(issue: GitHubIssue): void {
-  const viewer = runCommand("gh", ["api", "user", "--jq", ".login"]).stdout;
-  if (!viewer) {
-    throw new Error("GitHub CLI did not return the authenticated login.");
+export function loginFromGitHubAuthStatus(text: string): string | undefined {
+  const match = text.match(/Logged in to github\.com account (\S+)/i);
+  return match?.[1];
+}
+
+export function authenticatedGitHubLogin(): string {
+  const api = runCommand("gh", ["api", "user", "--jq", ".login"], {
+    allowFailure: true,
+  });
+  const fromApi = api.stdout.trim();
+  if (api.exitCode === 0 && fromApi.length > 0 && !fromApi.startsWith("{")) {
+    return fromApi;
   }
+
+  const status = runCommand("gh", ["auth", "status"], { allowFailure: true });
+  const fromStatus = loginFromGitHubAuthStatus(
+    `${status.stdout}\n${status.stderr}`,
+  );
+  if (fromStatus) {
+    return fromStatus;
+  }
+
+  throw new Error("GitHub CLI did not return the authenticated login.");
+}
+
+export function claimIssue(issue: GitHubIssue): void {
+  const viewer = authenticatedGitHubLogin();
 
   runCommand("gh", [
     "issue",

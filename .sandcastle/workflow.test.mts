@@ -19,6 +19,7 @@ import {
 import {
   AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   DEFAULT_MAX_PARALLEL_ISSUES,
+  loginFromGitHubAuthStatus,
   analyzeChecks,
   buildImplementationPhaseOptions,
   buildIntegrationPhaseOptions,
@@ -119,6 +120,16 @@ function frontierNode(
     ...overrides,
   };
 }
+
+test("claim identity can be read from gh auth status when /user is unavailable", () => {
+  assert.equal(
+    loginFromGitHubAuthStatus(
+      "github.com\n  ✓ Logged in to github.com account jmanuelng (keyring)\n  - Active account: true",
+    ),
+    "jmanuelng",
+  );
+  assert.equal(loginFromGitHubAuthStatus("error: HTTP 503"), undefined);
+});
 
 test("selectNextIssue chooses the oldest eligible frontier issue", () => {
   const selected = selectNextIssue([
