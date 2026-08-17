@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -625,6 +625,12 @@ test("all agent phases tolerate the repository's long full-suite silence", () =>
   assert.equal(review.name, "issue-54-reviewer");
   assert.equal(integration.name, "issue-54-integrator");
   assert.equal(integration.promptFile, "./.sandcastle/integration-prompt.md");
+});
+
+test("the independent full-suite harness switches the host to UTF-8 first", () => {
+  const harness = readFileSync(join(process.cwd(), "tests", "Run-Tests.ps1"), "utf8");
+  assert.match(harness, /chcp 65001/);
+  assert.match(harness, /UTF8Encoding/);
 });
 
 test("Grok provider uses extra-high reasoning and always-approve", () => {
