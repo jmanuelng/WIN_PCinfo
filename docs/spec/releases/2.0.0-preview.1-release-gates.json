@@ -1,0 +1,194 @@
+{
+  "kind": "win-pcinfo.release-gates-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.release-gates/1.0.0",
+  "productCapability": "CAP-0030",
+  "relatedCapabilityIds": [
+    "CAP-0026",
+    "CAP-0027"
+  ],
+  "sliceDeliversCapability": false,
+  "supportClaim": "None",
+  "previewOrStableClaim": "None",
+  "publicationAuthorized": false,
+  "supportedPromotionPermitted": false,
+  "attestedPreviewSatisfiesStableSigning": false,
+  "syntheticCannotAuthorizePublication": true,
+  "identity": {
+    "preSigningKind": "win-pcinfo.unsigned-generated-content-identity",
+    "finalUnsignedKind": "win-pcinfo.unsigned-portable-package-identity",
+    "finalSignedKind": "win-pcinfo.authenticode-signed-package-identity",
+    "finalMustBeDistinct": true,
+    "finalMustDeriveFromQualifiedContent": true
+  },
+  "evidenceResults": [
+    "Pass",
+    "ProductFail",
+    "InfrastructureInconclusive",
+    "NotRun",
+    "Expired",
+    "Invalidated"
+  ],
+  "requiredGates": [
+    "deterministic-contract-schema-and-artifact-gates",
+    "privacy-secret-exclusion-and-evidence-protection-gates",
+    "lifecycle-terminal-honesty-cancellation-and-cleanup-gates",
+    "language-neutral-and-basic-primary-path-operability-gates",
+    "three-clean-full-profile-quality-budget-measurements",
+    "fresh-client-validation-for-each-claimed-windows-scenario",
+    "standard-elevated-denied-and-system-context-validation",
+    "microsoft-connectivity-enabled-and-local-only-validation",
+    "protected-package-recipient-export-corruption-and-recovery-validation",
+    "failure-injection-and-stale-run-recovery-validation",
+    "zero-round-residue",
+    "final-artifact-trust-launch-collection-package-open-and-cleanup-validation"
+  ],
+  "gateDefinitions": [
+    {
+      "gateId": "deterministic-contract-schema-and-artifact-gates",
+      "freshnessClass": "Automated",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "privacy-secret-exclusion-and-evidence-protection-gates",
+      "freshnessClass": "Automated",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "lifecycle-terminal-honesty-cancellation-and-cleanup-gates",
+      "freshnessClass": "Automated",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "language-neutral-and-basic-primary-path-operability-gates",
+      "freshnessClass": "Automated",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "three-clean-full-profile-quality-budget-measurements",
+      "freshnessClass": "Automated",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "fresh-client-validation-for-each-claimed-windows-scenario",
+      "freshnessClass": "ClientVmValidation",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "standard-elevated-denied-and-system-context-validation",
+      "freshnessClass": "ClientVmValidation",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "microsoft-connectivity-enabled-and-local-only-validation",
+      "freshnessClass": "CloudIdentityManagementSecurityNetwork",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "protected-package-recipient-export-corruption-and-recovery-validation",
+      "freshnessClass": "Automated",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "failure-injection-and-stale-run-recovery-validation",
+      "freshnessClass": "Automated",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "zero-round-residue",
+      "freshnessClass": "ClientVmValidation",
+      "stages": ["PreSigning", "FinalArtifactValidation"]
+    },
+    {
+      "gateId": "final-artifact-trust-launch-collection-package-open-and-cleanup-validation",
+      "freshnessClass": "Automated",
+      "stages": ["FinalArtifactValidation"]
+    }
+  ],
+  "freshness": {
+    "clientVmValidationDays": 30,
+    "cloudIdentityManagementSecurityNetworkDays": 90,
+    "physicalFirmwareOemBatteryPeripheralDays": 365,
+    "automatedDoesNotExpireByAge": true
+  },
+  "qualityBudget": {
+    "version": "1.0.0",
+    "previewCleanMeasurementCount": 3,
+    "infrastructureReplacementAttempts": 1,
+    "binding": {
+      "firstProgressMilliseconds": 5000,
+      "heartbeatGapMilliseconds": 10000,
+      "cancellationAckMilliseconds": 2000
+    },
+    "provisional": {
+      "enforced": true,
+      "profileCompletionMilliseconds": 1800000,
+      "absoluteDeadlineMilliseconds": 3600000,
+      "cancellationCleanupMilliseconds": 120000,
+      "peakPrivateMemoryBytes": 805306368,
+      "peakWorkingSetBytes": 536870912,
+      "peakWorkspaceBytes": 268435456,
+      "packageBytes": 104857600,
+      "reportBytes": 26214400
+    }
+  },
+  "runtime": {
+    "product": "PowerShell",
+    "edition": "Core",
+    "minimumVersion": "7.6.0",
+    "maximumMajorExclusive": 8,
+    "claimArchitecture": "x64"
+  },
+  "locales": [
+    "en-US",
+    "es-MX",
+    "tr-TR",
+    "ja-JP",
+    "ar-SA"
+  ],
+  "claimedScenarios": [
+    {
+      "scenarioId": "windows-10-enterprise-x64",
+      "windowsFamily": "Windows 10",
+      "edition": "Enterprise",
+      "architecture": "x64"
+    },
+    {
+      "scenarioId": "windows-11-enterprise-x64",
+      "windowsFamily": "Windows 11",
+      "edition": "Enterprise",
+      "architecture": "x64"
+    }
+  ],
+  "requiredPrivilegePaths": [
+    "StandardLaunchWithOneElevation",
+    "AlreadyElevated",
+    "ElevationDenied",
+    "SystemContext"
+  ],
+  "requiredNetworkBehaviors": [
+    "LocalOnly",
+    "MicrosoftConnectivityEnabled"
+  ],
+  "waiver": {
+    "manualPromotionAllowed": false,
+    "averagingAllowed": false
+  },
+  "privacy": {
+    "rejectNonSynthetic": true,
+    "rejectCredentialsAndSecrets": true,
+    "rejectRealIdentifiers": true,
+    "rejectRestrictedEvidence": true,
+    "rejectRawLogs": true,
+    "rejectInstantiatedAzureConfiguration": true,
+    "rejectPlansStateAndCache": true,
+    "rejectLocalUserPaths": true
+  },
+  "workspace": {
+    "rejectRepositoryPath": true,
+    "rejectPublicPath": true,
+    "rejectUncPath": true,
+    "cleanupRequired": true
+  }
+}

@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/release-evidence-manifest.schema.json",
+  "title": "WIN-PCInfo public Release Evidence Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordType",
+    "contractVersion",
+    "state",
+    "reasonCode",
+    "syntheticEvidenceOnly",
+    "supportClaim",
+    "previewOrStableClaim",
+    "sliceDeliversCapability",
+    "collectionStarted",
+    "stage",
+    "unsignedContentQualified",
+    "finalArtifactQualified",
+    "qualityBudget",
+    "gates",
+    "promotion",
+    "limitations",
+    "cleanupVerified"
+  ],
+  "properties": {
+    "recordType": { "const": "win-pcinfo.release-evidence-manifest" },
+    "contractVersion": { "const": "1.0.0" },
+    "state": { "enum": ["Evaluated", "Rejected"] },
+    "reasonCode": { "type": "string", "pattern": "^GATE\\.[A-Z0-9_]+$" },
+    "syntheticEvidenceOnly": { "type": "boolean" },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "sliceDeliversCapability": { "const": false },
+    "collectionStarted": { "const": false },
+    "stage": {
+      "enum": ["PreSigning", "FinalArtifactValidation", "None"]
+    },
+    "unsignedContentQualified": { "type": "boolean" },
+    "finalArtifactQualified": { "type": "boolean" },
+    "qualityBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "provisional",
+        "threeCleanPassed",
+        "attemptCount",
+        "passCount",
+        "infrastructureInconclusiveCount",
+        "outcome",
+        "knownLimitations"
+      ],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "provisional": { "type": "boolean" },
+        "threeCleanPassed": { "type": "boolean" },
+        "attemptCount": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "passCount": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "infrastructureInconclusiveCount": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "outcome": {
+          "enum": [
+            "Pass",
+            "ProductFail",
+            "InfrastructureInconclusive",
+            "NotRun",
+            "Expired",
+            "Invalidated"
+          ]
+        },
+        "knownLimitations": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 4, "maxLength": 96 }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gateId",
+          "result",
+          "reasonCode",
+          "affectedClaimIds",
+          "freshnessClass",
+          "expired",
+          "candidateBound",
+          "runtimeSupported",
+          "cleanupVerified"
+        ],
+        "properties": {
+          "gateId": { "type": "string", "minLength": 8, "maxLength": 96 },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": { "type": "string", "pattern": "^GATE\\.[A-Z0-9_]+$" },
+          "affectedClaimIds": {
+            "type": "array",
+            "maxItems": 8,
+            "items": { "type": "string", "pattern": "^CAP-[0-9]{4}$" }
+          },
+          "freshnessClass": {
+            "enum": [
+              "Automated",
+              "ClientVmValidation",
+              "CloudIdentityManagementSecurityNetwork",
+              "PhysicalFirmwareOemBatteryPeripheral"
+            ]
+          },
+          "expired": { "type": "boolean" },
+          "candidateBound": { "type": "boolean" },
+          "runtimeSupported": { "type": "boolean" },
+          "cleanupVerified": { "type": "boolean" }
+        }
+      }
+    },
+    "promotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publicationAuthorized",
+        "previewPromotionReady",
+        "supportedPromotionReady",
+        "unsignedContentQualified",
+        "finalArtifactQualified",
+        "derivedClaimState",
+        "waiverApplied",
+        "blockingReasons"
+      ],
+      "properties": {
+        "publicationAuthorized": { "const": false },
+        "previewPromotionReady": { "type": "boolean" },
+        "supportedPromotionReady": { "const": false },
+        "unsignedContentQualified": { "type": "boolean" },
+        "finalArtifactQualified": { "type": "boolean" },
+        "derivedClaimState": {
+          "enum": ["Preview", "NotYetSupported", "None"]
+        },
+        "waiverApplied": { "const": false },
+        "blockingReasons": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "type": "string", "pattern": "^GATE\\.[A-Z0-9_]+$" }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "type": "string", "minLength": 4, "maxLength": 96 }
+    },
+    "cleanupVerified": { "type": "boolean" }
+  }
+}

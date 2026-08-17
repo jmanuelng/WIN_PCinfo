@@ -19,7 +19,7 @@ param(
     # trust assumption is SHA-256 binding of the reviewed portable
     # candidate, not Windows Authenticode. Safe failure is NotStarted
     # with a typed attestation reason and no bypass.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound')]
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'EvaluateReleaseGates')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -191,7 +191,20 @@ param(
     [string] $ValidationRoundRequestPath,
 
     [Parameter()]
-    [string] $ValidationPrivateWorkspacePath
+    [string] $ValidationPrivateWorkspacePath,
+
+    # EvaluateReleaseGates is a maintainer offline gate. The threat is treating
+    # a synthetic pack, a waived failure, or the unsigned generated script as a
+    # published Preview or Supported release. The mechanism is exact-candidate
+    # binding plus a public identifier-free projection. The trust assumption is
+    # that the pack is synthetic and that these bytes are the candidate. Safe
+    # failure is NotStarted, or an evaluated denial that cannot authorize
+    # publication.
+    [Parameter()]
+    [string] $ReleaseEvidencePackPath,
+
+    [Parameter()]
+    [string] $ReleaseGateWorkspacePath
 )
 
 Set-StrictMode -Version Latest

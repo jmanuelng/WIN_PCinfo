@@ -177,6 +177,161 @@ if ($Workflow -eq 'AdmitValidationRound') {
     exit $exitCode
 }
 
+if ($Workflow -eq 'EvaluateReleaseGates') {
+    # Pre-signing gates must run on the unsigned generated candidate. The
+    # threat is hiding a failed or private pack behind Authenticode, or
+    # treating this workflow as collection. The mechanism is the same trusted
+    # JSON commands as Help, with no Azure, signing, or assessment work. The
+    # trust assumption is that the pack is synthetic. Safe failure is
+    # NotStarted without derived residue.
+    Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'ReleaseGates' -State 'Started' `
+        -MessageId 'release.gates.started' -CompletedUnits 0 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    $gatePolicy = Get-ReleaseGatesPolicy
+    $gateEvaluation = $null
+    if ([string]::IsNullOrWhiteSpace($ReleaseEvidencePackPath)) {
+        $gateEvaluation = Get-ReleaseGatesRejectedEvaluation -ReasonCode 'GATE.PACK_MISSING' `
+            -Policy $gatePolicy
+    }
+    else {
+        try {
+            $gatePackText = [System.IO.File]::ReadAllText(
+                $ReleaseEvidencePackPath,
+                [System.Text.UTF8Encoding]::new($false, $true)
+            )
+            $gatePrivacy = Test-ReleaseGatesPrivacyBoundary -Text $gatePackText
+            if ($gatePrivacy) {
+                $gateEvaluation = Get-ReleaseGatesRejectedEvaluation -ReasonCode $gatePrivacy `
+                    -Policy $gatePolicy
+            }
+            else {
+                $gateRepositoryRoot = Split-Path -Parent $PSCommandPath
+                $gateApplicationDirectory = Split-Path -Parent $PSCommandPath
+                if (-not (Test-Path -LiteralPath (
+                    Join-Path $gateRepositoryRoot 'docs/spec/capability-ledger.json'
+                ))) {
+                    $gateRepositoryRoot = Split-Path -Parent $gateRepositoryRoot
+                }
+                $gatePackSchema = Get-ReleaseGatesCatalogPath `
+                    -RepositoryRoot $gateRepositoryRoot `
+                    -ApplicationDirectory $gateApplicationDirectory `
+                    -RelativePath 'schemas/release-evidence-pack.schema.json'
+                $gatePackSchemaValid = $true
+                if (-not [string]::IsNullOrWhiteSpace($gatePackSchema)) {
+                    try {
+                        $gatePackSchemaValid = Test-Json -Json $gatePackText `
+                            -SchemaFile $gatePackSchema
+                    }
+                    catch {
+                        $gatePackSchemaValid = $false
+                    }
+                }
+                if (-not $gatePackSchemaValid) {
+                    $gateEvaluation = Get-ReleaseGatesRejectedEvaluation `
+                        -ReasonCode 'GATE.PACK_INVALID' -Policy $gatePolicy
+                }
+                else {
+                    $gatePack = & $convertFromJsonCommand -InputObject $gatePackText `
+                        -ErrorAction Stop
+                    $gateCandidateBytes = [System.IO.File]::ReadAllBytes($PSCommandPath)
+                    $gateCandidateDigest = Get-ReleaseGatesSha256 -Bytes $gateCandidateBytes
+                    $gateLedgerPath = Get-ReleaseGatesCatalogPath `
+                        -RepositoryRoot $gateRepositoryRoot `
+                        -ApplicationDirectory $gateApplicationDirectory `
+                        -RelativePath 'docs/spec/capability-ledger.json'
+                    $gateReleasePath = Get-ReleaseGatesCatalogPath `
+                        -RepositoryRoot $gateRepositoryRoot `
+                        -ApplicationDirectory $gateApplicationDirectory `
+                        -RelativePath 'docs/spec/releases/2.0.0-preview.1.json'
+                    $gateLedger = $null
+                    $gateReleaseDefinition = $null
+                    $gateLedgerDigest = $null
+                    if (-not [string]::IsNullOrWhiteSpace($gateLedgerPath)) {
+                        $gateLedgerBytes = [System.IO.File]::ReadAllBytes($gateLedgerPath)
+                        $gateLedgerDigest = Get-ReleaseGatesSha256 -Bytes $gateLedgerBytes
+                        $gateLedgerText = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+                            $gateLedgerBytes
+                        )
+                        $gateLedger = & $convertFromJsonCommand -InputObject $gateLedgerText `
+                            -ErrorAction Stop
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace($gateReleasePath)) {
+                        $gateReleaseText = [System.IO.File]::ReadAllText(
+                            $gateReleasePath,
+                            [System.Text.UTF8Encoding]::new($false, $true)
+                        )
+                        $gateReleaseDefinition = & $convertFromJsonCommand `
+                            -InputObject $gateReleaseText -ErrorAction Stop
+                    }
+                    $gateWorkspace = $ReleaseGateWorkspacePath
+                    $gateOwnedWorkspace = $false
+                    if ([string]::IsNullOrWhiteSpace($gateWorkspace)) {
+                        $gateWorkspace = Join-Path ([System.IO.Path]::GetTempPath()) (
+                            'win-pcinfo-release-gates-' + [guid]::NewGuid().ToString('N')
+                        )
+                        $null = New-Item -ItemType Directory -Path $gateWorkspace -Force
+                        $gateOwnedWorkspace = $true
+                    }
+                    try {
+                        $gateEvaluation = Invoke-ReleaseGateEvaluation -Pack $gatePack `
+                            -Policy $gatePolicy -Ledger $gateLedger `
+                            -ReleaseDefinition $gateReleaseDefinition `
+                            -PackText $gatePackText `
+                            -ExpectedGeneratedContentSha256 $gateCandidateDigest `
+                            -ExpectedLedgerSha256 $gateLedgerDigest `
+                            -WorkspacePath $gateWorkspace `
+                            -RepositoryRoot $gateRepositoryRoot `
+                            -ApplicationDirectory $gateApplicationDirectory
+                    }
+                    finally {
+                        if ($gateOwnedWorkspace -and (Test-Path -LiteralPath $gateWorkspace)) {
+                            Remove-Item -LiteralPath $gateWorkspace -Recurse -Force `
+                                -ErrorAction SilentlyContinue
+                        }
+                    }
+                }
+            }
+        }
+        catch {
+            $gateEvaluation = Get-ReleaseGatesRejectedEvaluation -ReasonCode 'GATE.PACK_INVALID' `
+                -Policy $gatePolicy
+        }
+    }
+    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'ReleaseGates' `
+        -State $(if ($gateEvaluation.State -eq 'Evaluated') { 'Succeeded' } else { 'Failed' }) `
+        -MessageId $(if ($gateEvaluation.State -eq 'Evaluated') {
+            'release.gates.succeeded'
+        } else {
+            'release.gates.failed'
+        }) -CompletedUnits 1 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $gateEvaluation.Manifest -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $gateEvaluation.Matrix -ConvertToJsonCommand $convertToJsonCommand
+    $terminalReason = if ($gateEvaluation.State -eq 'Evaluated' -and
+        $gateEvaluation.ExitKind -eq 'Completed') {
+        'RELEASE.GATES_EVALUATED'
+    }
+    else {
+        $gateEvaluation.ReasonCode
+    }
+    $terminal = New-TerminalRecord -ReasonCode $terminalReason -Phase ReleaseGates
+    $exitCode = 20
+    if ($gateEvaluation.ExitKind -eq 'Completed') {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        $exitCode = 0
+    }
+    elseif ($gateEvaluation.ExitKind -eq 'CleanupIncomplete') {
+        $terminal.outcome = 'CleanupIncomplete'
+        $terminal.exitCode = 60
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $false
+        $exitCode = 60
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $exitCode
+}
+
 if ($Workflow -eq 'Help' -or $Workflow -eq 'About') {
     # Discovery must remain available on an unsigned development artifact.
     # Requiring Authenticode here would hide the repository from the people
