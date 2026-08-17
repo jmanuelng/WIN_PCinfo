@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/release-gates.schema.json",
+  "title": "WIN-PCInfo automated release-gate policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "productCapability",
+    "relatedCapabilityIds",
+    "sliceDeliversCapability",
+    "supportClaim",
+    "previewOrStableClaim",
+    "publicationAuthorized",
+    "supportedPromotionPermitted",
+    "attestedPreviewSatisfiesStableSigning",
+    "syntheticCannotAuthorizePublication",
+    "identity",
+    "evidenceResults",
+    "requiredGates",
+    "gateDefinitions",
+    "freshness",
+    "qualityBudget",
+    "runtime",
+    "locales",
+    "claimedScenarios",
+    "requiredPrivilegePaths",
+    "requiredNetworkBehaviors",
+    "waiver",
+    "privacy",
+    "workspace"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.release-gates-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.release-gates/1.0.0" },
+    "productCapability": { "const": "CAP-0030" },
+    "relatedCapabilityIds": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "CAP-0026" },
+        { "const": "CAP-0027" }
+      ],
+      "items": false
+    },
+    "sliceDeliversCapability": { "const": false },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "publicationAuthorized": { "const": false },
+    "supportedPromotionPermitted": { "const": false },
+    "attestedPreviewSatisfiesStableSigning": { "const": false },
+    "syntheticCannotAuthorizePublication": { "const": true },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preSigningKind",
+        "finalUnsignedKind",
+        "finalSignedKind",
+        "finalMustBeDistinct",
+        "finalMustDeriveFromQualifiedContent"
+      ],
+      "properties": {
+        "preSigningKind": { "const": "win-pcinfo.unsigned-generated-content-identity" },
+        "finalUnsignedKind": { "const": "win-pcinfo.unsigned-portable-package-identity" },
+        "finalSignedKind": { "const": "win-pcinfo.authenticode-signed-package-identity" },
+        "finalMustBeDistinct": { "const": true },
+        "finalMustDeriveFromQualifiedContent": { "const": true }
+      }
+    },
+    "evidenceResults": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        { "const": "Pass" },
+        { "const": "ProductFail" },
+        { "const": "InfrastructureInconclusive" },
+        { "const": "NotRun" },
+        { "const": "Expired" },
+        { "const": "Invalidated" }
+      ],
+      "items": false
+    },
+    "requiredGates": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "type": "string",
+        "minLength": 8,
+        "maxLength": 96
+      }
+    },
+    "gateDefinitions": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gateId", "freshnessClass", "stages"],
+        "properties": {
+          "gateId": { "type": "string", "minLength": 8, "maxLength": 96 },
+          "freshnessClass": {
+            "enum": [
+              "Automated",
+              "ClientVmValidation",
+              "CloudIdentityManagementSecurityNetwork",
+              "PhysicalFirmwareOemBatteryPeripheral"
+            ]
+          },
+          "stages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {
+              "enum": ["PreSigning", "FinalArtifactValidation"]
+            }
+          }
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientVmValidationDays",
+        "cloudIdentityManagementSecurityNetworkDays",
+        "physicalFirmwareOemBatteryPeripheralDays",
+        "automatedDoesNotExpireByAge"
+      ],
+      "properties": {
+        "clientVmValidationDays": { "const": 30 },
+        "cloudIdentityManagementSecurityNetworkDays": { "const": 90 },
+        "physicalFirmwareOemBatteryPeripheralDays": { "const": 365 },
+        "automatedDoesNotExpireByAge": { "const": true }
+      }
+    },
+    "qualityBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "previewCleanMeasurementCount",
+        "infrastructureReplacementAttempts",
+        "binding",
+        "provisional"
+      ],
+      "properties": {
+        "version": { "const": "1.0.0" },
+        "previewCleanMeasurementCount": { "const": 3 },
+        "infrastructureReplacementAttempts": { "const": 1 },
+        "binding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "firstProgressMilliseconds",
+            "heartbeatGapMilliseconds",
+            "cancellationAckMilliseconds"
+          ],
+          "properties": {
+            "firstProgressMilliseconds": { "const": 5000 },
+            "heartbeatGapMilliseconds": { "const": 10000 },
+            "cancellationAckMilliseconds": { "const": 2000 }
+          }
+        },
+        "provisional": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enforced",
+            "profileCompletionMilliseconds",
+            "absoluteDeadlineMilliseconds",
+            "cancellationCleanupMilliseconds",
+            "peakPrivateMemoryBytes",
+            "peakWorkingSetBytes",
+            "peakWorkspaceBytes",
+            "packageBytes",
+            "reportBytes"
+          ],
+          "properties": {
+            "enforced": { "const": true },
+            "profileCompletionMilliseconds": { "const": 1800000 },
+            "absoluteDeadlineMilliseconds": { "const": 3600000 },
+            "cancellationCleanupMilliseconds": { "const": 120000 },
+            "peakPrivateMemoryBytes": { "const": 805306368 },
+            "peakWorkingSetBytes": { "const": 536870912 },
+            "peakWorkspaceBytes": { "const": 268435456 },
+            "packageBytes": { "const": 104857600 },
+            "reportBytes": { "const": 26214400 }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product",
+        "edition",
+        "minimumVersion",
+        "maximumMajorExclusive",
+        "claimArchitecture"
+      ],
+      "properties": {
+        "product": { "const": "PowerShell" },
+        "edition": { "const": "Core" },
+        "minimumVersion": { "const": "7.6.0" },
+        "maximumMajorExclusive": { "const": 8 },
+        "claimArchitecture": { "const": "x64" }
+      }
+    },
+    "locales": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        { "const": "en-US" },
+        { "const": "es-MX" },
+        { "const": "tr-TR" },
+        { "const": "ja-JP" },
+        { "const": "ar-SA" }
+      ],
+      "items": false
+    },
+    "claimedScenarios": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenarioId", "windowsFamily", "edition", "architecture"],
+        "properties": {
+          "scenarioId": {
+            "enum": [
+              "windows-10-enterprise-x64",
+              "windows-11-enterprise-x64"
+            ]
+          },
+          "windowsFamily": { "enum": ["Windows 10", "Windows 11"] },
+          "edition": { "const": "Enterprise" },
+          "architecture": { "const": "x64" }
+        }
+      }
+    },
+    "requiredPrivilegePaths": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        { "const": "StandardLaunchWithOneElevation" },
+        { "const": "AlreadyElevated" },
+        { "const": "ElevationDenied" },
+        { "const": "SystemContext" }
+      ],
+      "items": false
+    },
+    "requiredNetworkBehaviors": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "LocalOnly" },
+        { "const": "MicrosoftConnectivityEnabled" }
+      ],
+      "items": false
+    },
+    "waiver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manualPromotionAllowed", "averagingAllowed"],
+      "properties": {
+        "manualPromotionAllowed": { "const": false },
+        "averagingAllowed": { "const": false }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rejectNonSynthetic",
+        "rejectCredentialsAndSecrets",
+        "rejectRealIdentifiers",
+        "rejectRestrictedEvidence",
+        "rejectRawLogs",
+        "rejectInstantiatedAzureConfiguration",
+        "rejectPlansStateAndCache",
+        "rejectLocalUserPaths"
+      ],
+      "properties": {
+        "rejectNonSynthetic": { "const": true },
+        "rejectCredentialsAndSecrets": { "const": true },
+        "rejectRealIdentifiers": { "const": true },
+        "rejectRestrictedEvidence": { "const": true },
+        "rejectRawLogs": { "const": true },
+        "rejectInstantiatedAzureConfiguration": { "const": true },
+        "rejectPlansStateAndCache": { "const": true },
+        "rejectLocalUserPaths": { "const": true }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rejectRepositoryPath",
+        "rejectPublicPath",
+        "rejectUncPath",
+        "cleanupRequired"
+      ],
+      "properties": {
+        "rejectRepositoryPath": { "const": true },
+        "rejectPublicPath": { "const": true },
+        "rejectUncPath": { "const": true },
+        "cleanupRequired": { "const": true }
+      }
+    }
+  }
+}

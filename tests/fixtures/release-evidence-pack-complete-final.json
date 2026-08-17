@@ -1,0 +1,341 @@
+{
+  "kind": "win-pcinfo.release-evidence-pack",
+  "contractVersion": "1.0.0",
+  "synthetic": true,
+  "stage": "FinalArtifactValidation",
+  "observedAt": "2026-08-01T00:00:00Z",
+  "waiverRequested": false,
+  "bindings": {
+    "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "generatedContentIdentityKind": "win-pcinfo.unsigned-generated-content-identity",
+    "sourceRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "resourceManifestSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "definitionsSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schemasSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "catalogsSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "ledgerSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "qualityBudgetVersion": "1.0.0",
+    "toolchainId": "pwsh-7.6.0",
+    "runtime": {
+      "product": "PowerShell",
+      "edition": "Core",
+      "version": "7.6.0",
+      "architecture": "x64"
+    }
+  },
+  "finalDistributable": {
+    "present": true,
+    "identityKind": "win-pcinfo.unsigned-portable-package-identity",
+    "packageSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "derivedFromGeneratedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "gates": [
+    {
+      "gateId": "deterministic-contract-schema-and-artifact-gates",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "Automated",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "privacy-secret-exclusion-and-evidence-protection-gates",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "Automated",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "lifecycle-terminal-honesty-cancellation-and-cleanup-gates",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "Automated",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "language-neutral-and-basic-primary-path-operability-gates",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "Automated",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "three-clean-full-profile-quality-budget-measurements",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "Automated",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "fresh-client-validation-for-each-claimed-windows-scenario",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "ClientVmValidation",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "standard-elevated-denied-and-system-context-validation",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "ClientVmValidation",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "microsoft-connectivity-enabled-and-local-only-validation",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "CloudIdentityManagementSecurityNetwork",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "protected-package-recipient-export-corruption-and-recovery-validation",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "Automated",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "failure-injection-and-stale-run-recovery-validation",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "Automated",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "zero-round-residue",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "ClientVmValidation",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    },
+    {
+      "gateId": "final-artifact-trust-launch-collection-package-open-and-cleanup-validation",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "affectedClaimIds": [
+        "CAP-0030"
+      ],
+      "observedAt": "2026-08-01T00:00:00Z",
+      "freshnessClass": "Automated",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0",
+      "architecture": "x64",
+      "locale": "en-US",
+      "cleanupVerified": true
+    }
+  ],
+  "qualityMeasurements": [
+    {
+      "attempt": 1,
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "firstProgressMilliseconds": 100,
+      "heartbeatGapMilliseconds": 1000,
+      "cancellationAckMilliseconds": 200,
+      "cancellationCleanupMilliseconds": 1000,
+      "wallTimeMilliseconds": 120000,
+      "peakPrivateMemoryBytes": 100000000,
+      "peakWorkingSetBytes": 80000000,
+      "peakWorkspaceBytes": 10000000,
+      "packageBytes": 5000000,
+      "reportBytes": 1000000,
+      "cleanupVerified": true,
+      "localeNeutral": true,
+      "deterministicDerivation": true
+    },
+    {
+      "attempt": 2,
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "firstProgressMilliseconds": 100,
+      "heartbeatGapMilliseconds": 1000,
+      "cancellationAckMilliseconds": 200,
+      "cancellationCleanupMilliseconds": 1000,
+      "wallTimeMilliseconds": 120000,
+      "peakPrivateMemoryBytes": 100000000,
+      "peakWorkingSetBytes": 80000000,
+      "peakWorkspaceBytes": 10000000,
+      "packageBytes": 5000000,
+      "reportBytes": 1000000,
+      "cleanupVerified": true,
+      "localeNeutral": true,
+      "deterministicDerivation": true
+    },
+    {
+      "attempt": 3,
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "firstProgressMilliseconds": 100,
+      "heartbeatGapMilliseconds": 1000,
+      "cancellationAckMilliseconds": 200,
+      "cancellationCleanupMilliseconds": 1000,
+      "wallTimeMilliseconds": 120000,
+      "peakPrivateMemoryBytes": 100000000,
+      "peakWorkingSetBytes": 80000000,
+      "peakWorkspaceBytes": 10000000,
+      "packageBytes": 5000000,
+      "reportBytes": 1000000,
+      "cleanupVerified": true,
+      "localeNeutral": true,
+      "deterministicDerivation": true
+    }
+  ],
+  "scenarios": [
+    {
+      "scenarioId": "windows-10-enterprise-x64",
+      "windowsFamily": "Windows 10",
+      "edition": "Enterprise",
+      "architecture": "x64",
+      "requestedSupportState": "Preview",
+      "method": "ClientVmValidation",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "observedAt": "2026-08-01T00:00:00Z",
+      "locale": "en-US",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0"
+    },
+    {
+      "scenarioId": "windows-11-enterprise-x64",
+      "windowsFamily": "Windows 11",
+      "edition": "Enterprise",
+      "architecture": "x64",
+      "requestedSupportState": "Preview",
+      "method": "ClientVmValidation",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS",
+      "observedAt": "2026-08-01T00:00:00Z",
+      "locale": "en-US",
+      "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeVersion": "7.6.0"
+    }
+  ],
+  "privilegePaths": [
+    {
+      "pathId": "StandardLaunchWithOneElevation",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS"
+    },
+    {
+      "pathId": "AlreadyElevated",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS"
+    },
+    {
+      "pathId": "ElevationDenied",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS"
+    },
+    {
+      "pathId": "SystemContext",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS"
+    }
+  ],
+  "networkBehaviors": [
+    {
+      "behavior": "LocalOnly",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS"
+    },
+    {
+      "behavior": "MicrosoftConnectivityEnabled",
+      "result": "Pass",
+      "reasonCode": "GATE.PASS"
+    }
+  ],
+  "locales": [
+    "en-US",
+    "es-MX",
+    "tr-TR",
+    "ja-JP",
+    "ar-SA"
+  ]
+}

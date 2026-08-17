@@ -1,0 +1,332 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/release-evidence-pack.schema.json",
+  "title": "WIN-PCInfo synthetic release-evidence pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "synthetic",
+    "stage",
+    "observedAt",
+    "waiverRequested",
+    "bindings",
+    "finalDistributable",
+    "gates",
+    "qualityMeasurements",
+    "scenarios",
+    "privilegePaths",
+    "networkBehaviors",
+    "locales"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.release-evidence-pack" },
+    "contractVersion": { "const": "1.0.0" },
+    "synthetic": { "type": "boolean" },
+    "stage": { "enum": ["PreSigning", "FinalArtifactValidation"] },
+    "observedAt": { "type": "string", "minLength": 20, "maxLength": 40 },
+    "waiverRequested": { "type": "boolean" },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generatedContentSha256",
+        "generatedContentIdentityKind",
+        "sourceRevision",
+        "resourceManifestSha256",
+        "definitionsSha256",
+        "schemasSha256",
+        "catalogsSha256",
+        "ledgerSha256",
+        "qualityBudgetVersion",
+        "toolchainId",
+        "runtime"
+      ],
+      "properties": {
+        "generatedContentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "generatedContentIdentityKind": {
+          "const": "win-pcinfo.unsigned-generated-content-identity"
+        },
+        "sourceRevision": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "resourceManifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "definitionsSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "schemasSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "catalogsSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "ledgerSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "qualityBudgetVersion": { "const": "1.0.0" },
+        "toolchainId": { "type": "string", "minLength": 4, "maxLength": 64 },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["product", "edition", "version", "architecture"],
+          "properties": {
+            "product": { "type": "string", "minLength": 2, "maxLength": 32 },
+            "edition": { "type": "string", "minLength": 2, "maxLength": 16 },
+            "version": { "type": "string", "minLength": 3, "maxLength": 32 },
+            "architecture": { "enum": ["x64", "x86", "ARM64"] }
+          }
+        }
+      }
+    },
+    "finalDistributable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "present",
+        "identityKind",
+        "packageSha256",
+        "derivedFromGeneratedContentSha256"
+      ],
+      "properties": {
+        "present": { "type": "boolean" },
+        "identityKind": {
+          "type": ["string", "null"],
+          "enum": [
+            null,
+            "win-pcinfo.unsigned-portable-package-identity",
+            "win-pcinfo.authenticode-signed-package-identity"
+          ]
+        },
+        "packageSha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "derivedFromGeneratedContentSha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gateId",
+          "result",
+          "reasonCode",
+          "affectedClaimIds",
+          "observedAt",
+          "freshnessClass",
+          "generatedContentSha256",
+          "runtimeVersion",
+          "architecture",
+          "locale",
+          "cleanupVerified"
+        ],
+        "properties": {
+          "gateId": { "type": "string", "minLength": 8, "maxLength": 96 },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": { "type": "string", "pattern": "^GATE\\.[A-Z0-9_]+$" },
+          "affectedClaimIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": { "type": "string", "pattern": "^CAP-[0-9]{4}$" }
+          },
+          "observedAt": { "type": "string", "minLength": 20, "maxLength": 40 },
+          "freshnessClass": {
+            "enum": [
+              "Automated",
+              "ClientVmValidation",
+              "CloudIdentityManagementSecurityNetwork",
+              "PhysicalFirmwareOemBatteryPeripheral"
+            ]
+          },
+          "generatedContentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "runtimeVersion": { "type": "string", "minLength": 3, "maxLength": 32 },
+          "architecture": { "enum": ["x64", "x86", "ARM64"] },
+          "locale": { "type": "string", "pattern": "^[A-Za-z]{2}-[A-Za-z]{2}$" },
+          "cleanupVerified": { "type": "boolean" }
+        }
+      }
+    },
+    "qualityMeasurements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attempt",
+          "result",
+          "reasonCode",
+          "firstProgressMilliseconds",
+          "heartbeatGapMilliseconds",
+          "cancellationAckMilliseconds",
+          "cancellationCleanupMilliseconds",
+          "wallTimeMilliseconds",
+          "peakPrivateMemoryBytes",
+          "peakWorkingSetBytes",
+          "peakWorkspaceBytes",
+          "packageBytes",
+          "reportBytes",
+          "cleanupVerified",
+          "localeNeutral",
+          "deterministicDerivation"
+        ],
+        "properties": {
+          "attempt": { "type": "integer", "minimum": 1, "maximum": 8 },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": { "type": "string", "pattern": "^GATE\\.[A-Z0-9_]+$" },
+          "firstProgressMilliseconds": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+          "heartbeatGapMilliseconds": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+          "cancellationAckMilliseconds": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+          "cancellationCleanupMilliseconds": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+          "wallTimeMilliseconds": { "type": "integer", "minimum": 0, "maximum": 7200000 },
+          "peakPrivateMemoryBytes": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+          "peakWorkingSetBytes": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+          "peakWorkspaceBytes": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+          "packageBytes": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+          "reportBytes": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+          "cleanupVerified": { "type": "boolean" },
+          "localeNeutral": { "type": "boolean" },
+          "deterministicDerivation": { "type": "boolean" }
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scenarioId",
+          "windowsFamily",
+          "edition",
+          "architecture",
+          "requestedSupportState",
+          "method",
+          "result",
+          "reasonCode",
+          "observedAt",
+          "locale",
+          "generatedContentSha256",
+          "runtimeVersion"
+        ],
+        "properties": {
+          "scenarioId": {
+            "enum": [
+              "windows-10-enterprise-x64",
+              "windows-11-enterprise-x64"
+            ]
+          },
+          "windowsFamily": { "enum": ["Windows 10", "Windows 11"] },
+          "edition": { "const": "Enterprise" },
+          "architecture": { "enum": ["x64", "x86", "ARM64"] },
+          "requestedSupportState": { "enum": ["Preview", "Supported", "NotYetSupported"] },
+          "method": {
+            "enum": [
+              "ClientVmValidation",
+              "PhysicalValidation",
+              "CommunityValidation"
+            ]
+          },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": { "type": "string", "pattern": "^GATE\\.[A-Z0-9_]+$" },
+          "observedAt": { "type": "string", "minLength": 20, "maxLength": 40 },
+          "locale": { "type": "string", "pattern": "^[A-Za-z]{2}-[A-Za-z]{2}$" },
+          "generatedContentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "runtimeVersion": { "type": "string", "minLength": 3, "maxLength": 32 }
+        }
+      }
+    },
+    "privilegePaths": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pathId", "result", "reasonCode"],
+        "properties": {
+          "pathId": {
+            "enum": [
+              "StandardLaunchWithOneElevation",
+              "AlreadyElevated",
+              "ElevationDenied",
+              "SystemContext"
+            ]
+          },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": { "type": "string", "pattern": "^GATE\\.[A-Z0-9_]+$" }
+        }
+      }
+    },
+    "networkBehaviors": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["behavior", "result", "reasonCode"],
+        "properties": {
+          "behavior": {
+            "enum": ["LocalOnly", "MicrosoftConnectivityEnabled"]
+          },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": { "type": "string", "pattern": "^GATE\\.[A-Z0-9_]+$" }
+        }
+      }
+    },
+    "locales": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "items": { "type": "string", "pattern": "^[A-Za-z]{2}-[A-Za-z]{2}$" }
+    }
+  }
+}

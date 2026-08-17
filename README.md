@@ -66,6 +66,8 @@ To understand why one device-level Windows MDM WMI Bridge source requires LocalS
 
 To understand the maintainer-only offline gate that copies generic Azure validation templates into a private workspace without contacting Azure, read [Offline Azure validation admission](docs/azure-validation-admission.md). It does not deliver a Preview or Supported claim.
 
+To understand the maintainer-only release-gate workflow that binds an exact unsigned candidate, scores Pass through Invalidated results, derives the Preview Capability Matrix, and refuses to waive or publish from synthetic evidence, read [Automated release gates and evidence manifests](docs/release-gates.md). It does not deliver a Preview or Supported claim.
+
 ## Legacy script
 
 `ComputerInfo.ps1` is the legacy implementation and remains available as an outcome and migration reference. It gathers Windows information, but it does **not** implement the v2 safety, privacy, lifecycle, evidence-protection, or runtime contracts. Do not treat its behavior as the v2 launch path.
