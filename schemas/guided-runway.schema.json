@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/guided-runway.schema.json",
+  "title": "WIN-PCInfo Guided Runway content contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "presentation",
+    "runway",
+    "requiredTopics",
+    "claimSeparations",
+    "syntheticExamples",
+    "operatorProcedures",
+    "fieldValidation",
+    "discovery",
+    "help",
+    "documents",
+    "documentedCommands",
+    "deferredBehaviors"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.guided-runway-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.guided-runway/1.0.0" },
+    "presentation": { "const": "ConsultantWorkbenchAndGuidedRunway" },
+    "runway": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        { "const": "Choose" },
+        { "const": "Verify" },
+        { "const": "Prepare" },
+        { "const": "Run" },
+        { "const": "Interpret" },
+        { "const": "Troubleshoot" },
+        { "const": "Share" }
+      ],
+      "items": false
+    },
+    "requiredTopics": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "prefixItems": [
+        { "const": "purpose" },
+        { "const": "learningConsultingBoundary" },
+        { "const": "prerequisites" },
+        { "const": "terminology" },
+        { "const": "safetyReasoning" },
+        { "const": "expectedOutcomes" },
+        { "const": "limitations" },
+        { "const": "troubleshooting" },
+        { "const": "sharing" },
+        { "const": "governance" },
+        { "const": "bestEffortMaintenance" }
+      ],
+      "items": false
+    },
+    "claimSeparations": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        { "const": "verifyBeforeRun" },
+        { "const": "runtimeIntegrity" },
+        { "const": "previewVersusStable" },
+        { "const": "attestedVersusTrusted" },
+        { "const": "capabilityMatrices" },
+        { "const": "supportClaims" },
+        { "const": "microsoftLifecycle" }
+      ],
+      "items": false
+    },
+    "syntheticExamples": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        { "const": "missingEvidence" },
+        { "const": "indeterminateFinding" },
+        { "const": "tenantSideDiscoveryTask" },
+        { "const": "restrictedSharing" }
+      ],
+      "items": false
+    },
+    "operatorProcedures": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        { "const": "recipientSetup" },
+        { "const": "packageOpening" },
+        { "const": "staleRecovery" },
+        { "const": "cancellation" },
+        { "const": "restrictedReportExport" },
+        { "const": "prohibitedPublicEvidence" }
+      ],
+      "items": false
+    },
+    "fieldValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "automaticFromOrdinaryUse",
+        "requiresDeliberateConsent",
+        "consentPhrase",
+        "productWorkflowImplemented"
+      ],
+      "properties": {
+        "automaticFromOrdinaryUse": { "const": false },
+        "requiresDeliberateConsent": { "const": true },
+        "consentPhrase": {
+          "const": "I CONSENT TO A PRIVACY-SANITIZED FIELD VALIDATION ATTESTATION"
+        },
+        "productWorkflowImplemented": { "const": false }
+      }
+    },
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passiveOnly",
+        "promptDuringAssessment",
+        "repository",
+        "feedback",
+        "contribution",
+        "vulnerabilityReporting"
+      ],
+      "properties": {
+        "passiveOnly": { "const": true },
+        "promptDuringAssessment": { "const": false },
+        "repository": { "const": "https://github.com/jmanuelng/WIN_PCinfo" },
+        "feedback": { "const": "https://github.com/jmanuelng/WIN_PCinfo/issues" },
+        "contribution": {
+          "const": "https://github.com/jmanuelng/WIN_PCinfo/blob/main/CONTRIBUTING.md"
+        },
+        "vulnerabilityReporting": {
+          "const": "https://github.com/jmanuelng/WIN_PCinfo/security/advisories/new"
+        }
+      }
+    },
+    "help": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recordType",
+        "surfaces",
+        "networkRequested",
+        "artifactTrustRequired",
+        "collectionStarted",
+        "feedbackPrompted"
+      ],
+      "properties": {
+        "recordType": { "const": "win-pcinfo.product-help" },
+        "surfaces": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [{ "const": "Help" }, { "const": "About" }],
+          "items": false
+        },
+        "networkRequested": { "const": false },
+        "artifactTrustRequired": { "const": false },
+        "collectionStarted": { "const": false },
+        "feedbackPrompted": { "const": false }
+      }
+    },
+    "documents": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "guidedRunway",
+              "consultantWorkbench",
+              "fieldValidation",
+              "syntheticExamples",
+              "security",
+              "contributing",
+              "readme",
+              "validationProjection"
+            ]
+          },
+          "path": { "type": "string", "minLength": 8, "maxLength": 128 }
+        }
+      }
+    },
+    "documentedCommands": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "type": "string", "minLength": 20, "maxLength": 400 }
+    },
+    "deferredBehaviors": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status"],
+        "properties": {
+          "id": { "type": "string", "minLength": 3, "maxLength": 16 },
+          "name": { "type": "string", "minLength": 3, "maxLength": 128 },
+          "status": { "const": "not-implemented" }
+        }
+      }
+    }
+  }
+}

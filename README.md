@@ -7,12 +7,18 @@ WIN-PCInfo is being rebuilt as a safe, modular Windows assessment application. T
 
 ## Try the v2 launch safely
 
-You need stable PowerShell Core 7.6 or a later 7.x version. WIN-PCInfo does not install, repair, or change PowerShell for you. See [Runtime prerequisites and safe launch](docs/runtime-prerequisites.md) for beginner-friendly installation, verification, guided and automation examples, troubleshooting, and the complete compatibility boundary.
+Start with the [Guided Runway](docs/guided-runway.md). It teaches Choose, Verify, Prepare, Run, Interpret, Troubleshoot, and Share using the behavior that is actually implemented. Consultants can continue with the [Consultant Workbench](docs/consultant-workbench.md).
+
+You need stable PowerShell Core 7.6 or a later 7.x version. WIN-PCInfo does not install, repair, or change PowerShell for you. See [Runtime prerequisites and safe launch](docs/runtime-prerequisites.md) for installation, verification, guided and automation examples, troubleshooting, and the complete compatibility boundary.
+
+Open Help or About only when you want the repository, feedback, contribution, or private vulnerability-reporting routes. Assessment runs do not prompt for feedback.
 
 From a PowerShell 7.6-or-later console:
 
 ```powershell
 pwsh -NoLogo -NoProfile -File ./build/Build.ps1
+pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow Help
+pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow About
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Guided
 ```
 

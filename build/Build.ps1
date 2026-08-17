@@ -36,6 +36,7 @@ $sourcePaths = @(
     'src/RunLifecycle.ps1'
     'src/LaunchEngine.ps1'
     'src/EntryAdapters.ps1'
+    'src/ProductHelp.ps1'
     'src/ApplicationMain.ps1'
 )
 
@@ -86,6 +87,8 @@ $microsoftConnectivityPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases
 $microsoftConnectivitySchemaPath = Join-Path $repositoryRoot 'schemas/microsoft-connectivity.schema.json'
 $crossDomainGuidancePolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-cross-domain-guidance.json'
 $crossDomainGuidanceSchemaPath = Join-Path $repositoryRoot 'schemas/cross-domain-guidance.schema.json'
+$guidedRunwayPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-guided-runway.json'
+$guidedRunwaySchemaPath = Join-Path $repositoryRoot 'schemas/guided-runway.schema.json'
 $softwareRecognitionCatalogPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 $softwareRecognitionCatalogSchemaPath = Join-Path $repositoryRoot 'schemas/software-recognition-catalog.schema.json'
 $protectedPackageEnvelopeSchemaPath = Join-Path $repositoryRoot 'schemas/protected-package-envelope.schema.json'
@@ -115,6 +118,7 @@ foreach ($requiredDefinitionPath in @(
     $certificateTrustPolicyPath, $certificateTrustSchemaPath,
     $microsoftConnectivityPolicyPath, $microsoftConnectivitySchemaPath,
     $crossDomainGuidancePolicyPath, $crossDomainGuidanceSchemaPath,
+    $guidedRunwayPolicyPath, $guidedRunwaySchemaPath,
     $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredDefinitionPath -PathType Leaf)) {
@@ -243,6 +247,12 @@ $crossDomainGuidancePolicyDigest = Get-Sha256Hex -Bytes $crossDomainGuidancePoli
 $crossDomainGuidancePolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $crossDomainGuidancePolicyBytes
 )
+$guidedRunwayPolicyBytes = Get-Utf8LfBytes -LiteralPath $guidedRunwayPolicyPath
+$guidedRunwayPolicyBase64 = [Convert]::ToBase64String($guidedRunwayPolicyBytes)
+$guidedRunwayPolicyDigest = Get-Sha256Hex -Bytes $guidedRunwayPolicyBytes
+$guidedRunwayPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $guidedRunwayPolicyBytes
+)
 $softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
 $softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
 $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
@@ -310,6 +320,9 @@ if (-not (Test-Json -Json $microsoftConnectivityPolicyJson -SchemaFile $microsof
 if (-not (Test-Json -Json $crossDomainGuidancePolicyJson -SchemaFile $crossDomainGuidanceSchemaPath)) {
     throw 'The Cross-domain Guidance policy does not satisfy its release schema.'
 }
+if (-not (Test-Json -Json $guidedRunwayPolicyJson -SchemaFile $guidedRunwaySchemaPath)) {
+    throw 'The Guided Runway content contract does not satisfy its release schema.'
+}
 if (-not (Test-Json -Json $softwareRecognitionCatalogJson -SchemaFile $softwareRecognitionCatalogSchemaPath)) {
     throw 'The Software Recognition Catalog does not satisfy its release schema.'
 }
@@ -368,6 +381,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/certificate-trust.schema.json'
     'schemas/microsoft-connectivity.schema.json'
     'schemas/cross-domain-guidance.schema.json'
+    'schemas/guided-runway.schema.json'
     'schemas/software-recognition-catalog.schema.json'
     'docs/spec/releases/2.0.0-preview.1-contract-set.json'
     'docs/spec/releases/2.0.0-preview.1-approved-collectors.json'
@@ -388,6 +402,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-certificate-trust.json'
     'docs/spec/releases/2.0.0-preview.1-microsoft-connectivity.json'
     'docs/spec/releases/2.0.0-preview.1-cross-domain-guidance.json'
+    'docs/spec/releases/2.0.0-preview.1-guided-runway.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
@@ -645,6 +660,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__CROSS_DOMAIN_GUIDANCE_POLICY_SHA256__', $crossDomainGuidancePolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/ProductHelp.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__GUIDED_RUNWAY_POLICY_BASE64__', $guidedRunwayPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__GUIDED_RUNWAY_POLICY_SHA256__', $guidedRunwayPolicyDigest
         )
     }
     if ($sourceFile.path -eq 'src/SoftwareRecognition.ps1') {
