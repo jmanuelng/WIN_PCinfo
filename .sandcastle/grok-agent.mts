@@ -70,11 +70,19 @@ function usageFromUnknown(value: unknown): {
   };
 }
 
+const COMPLETION_SIGNAL = "<promise>COMPLETE</promise>";
+
 function textEvents(text: string): ReturnType<AgentProvider["parseStreamLine"]> {
-  return [
+  // Sandcastle keeps only the last `result` event as the run stdout used for
+  // completion matching. Emitting result for every text line let a later Grok
+  // status such as {"type":"result","result":"success"} hide COMPLETE.
+  const events: ReturnType<AgentProvider["parseStreamLine"]> = [
     { type: "text", text },
-    { type: "result", result: text },
   ];
+  if (text.includes(COMPLETION_SIGNAL)) {
+    events.push({ type: "result", result: text });
+  }
+  return events;
 }
 
 function firstString(
@@ -123,9 +131,8 @@ export function parseGrokStreamLine(line: string): ReturnType<
     return [];
   }
 
-  // Grok often prints the completion marker as a plain stdout line. The
-  // previous adapter ignored non-JSON, so Sandcastle logged COMPLETE and
-  // still reported no completion signal.
+  // Grok often prints the completion marker as a plain stdout line. Treat
+  // non-JSON as agent text so COMPLETE can become a result event.
   if (!trimmed.startsWith("{")) {
     return textEvents(trimmed);
   }
