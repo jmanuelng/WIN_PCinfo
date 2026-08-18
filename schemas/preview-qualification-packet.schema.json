@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/preview-qualification-packet.schema.json",
+  "title": "WIN-PCInfo sanitized Preview qualification decision packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordType",
+    "contractVersion",
+    "state",
+    "decision",
+    "reasonCode",
+    "syntheticEvidenceOnly",
+    "supportClaim",
+    "previewOrStableClaim",
+    "sliceDeliversCapability",
+    "publicationAuthorized",
+    "humanApprovalRequired",
+    "trustPath",
+    "attestedPreviewSatisfiesStableSigning",
+    "unsignedContentQualified",
+    "finalArtifactQualified",
+    "candidateBound",
+    "cleanupVerified",
+    "zeroResidueVerified",
+    "azureIdentityAvailable",
+    "liveAzureStarted",
+    "collectionStarted",
+    "qualityThreeCleanPassed",
+    "smokes",
+    "coverage",
+    "claimedScenarios",
+    "impactReview",
+    "blockingReasons",
+    "limitations"
+  ],
+  "properties": {
+    "recordType": { "const": "win-pcinfo.preview-qualification-packet" },
+    "contractVersion": { "const": "1.0.0" },
+    "state": {
+      "enum": ["Approved", "Denied", "Rejected"]
+    },
+    "decision": {
+      "enum": ["Qualify", "Deny", "NotStarted"]
+    },
+    "reasonCode": {
+      "type": "string",
+      "pattern": "^QUALIFY\\.[A-Z0-9_]+$"
+    },
+    "syntheticEvidenceOnly": { "type": "boolean" },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "sliceDeliversCapability": { "const": false },
+    "publicationAuthorized": { "const": false },
+    "humanApprovalRequired": { "const": true },
+    "trustPath": {
+      "enum": ["AuthenticodeSigned", "AttestedPreview", "None"]
+    },
+    "attestedPreviewSatisfiesStableSigning": { "const": false },
+    "unsignedContentQualified": { "type": "boolean" },
+    "finalArtifactQualified": { "type": "boolean" },
+    "candidateBound": { "type": "boolean" },
+    "cleanupVerified": { "type": "boolean" },
+    "zeroResidueVerified": { "type": "boolean" },
+    "azureIdentityAvailable": { "type": "boolean" },
+    "liveAzureStarted": { "const": false },
+    "collectionStarted": { "const": false },
+    "qualityThreeCleanPassed": { "type": "boolean" },
+    "smokes": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["smokeId", "result", "reasonCode"],
+        "properties": {
+          "smokeId": {
+            "enum": ["trust", "launch", "final-artifact"]
+          },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "pattern": "^QUALIFY\\.[A-Z0-9_]+$"
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gatesComplete",
+        "privilegeComplete",
+        "networkComplete",
+        "localeComplete",
+        "validationControlComplete",
+        "failureInjectionComplete",
+        "packageExerciseComplete",
+        "recoveryComplete"
+      ],
+      "properties": {
+        "gatesComplete": { "type": "boolean" },
+        "privilegeComplete": { "type": "boolean" },
+        "networkComplete": { "type": "boolean" },
+        "localeComplete": { "type": "boolean" },
+        "validationControlComplete": { "type": "boolean" },
+        "failureInjectionComplete": { "type": "boolean" },
+        "packageExerciseComplete": { "type": "boolean" },
+        "recoveryComplete": { "type": "boolean" }
+      }
+    },
+    "claimedScenarios": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scenarioId",
+          "windowsFamily",
+          "edition",
+          "architecture",
+          "result",
+          "sanitizedDescription"
+        ],
+        "properties": {
+          "scenarioId": {
+            "enum": [
+              "windows-10-enterprise-x64",
+              "windows-11-enterprise-x64"
+            ]
+          },
+          "windowsFamily": { "enum": ["Windows 10", "Windows 11"] },
+          "edition": { "const": "Enterprise" },
+          "architecture": { "const": "x64" },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "sanitizedDescription": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 96
+          }
+        }
+      }
+    },
+    "impactReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "completed", "notes"],
+      "properties": {
+        "required": { "const": true },
+        "completed": { "const": false },
+        "notes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "type": "string", "minLength": 8, "maxLength": 96 }
+        }
+      }
+    },
+    "blockingReasons": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "pattern": "^(QUALIFY|GATE)\\.[A-Z0-9_]+$"
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "type": "string", "minLength": 4, "maxLength": 96 }
+    }
+  }
+}

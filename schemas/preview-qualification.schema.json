@@ -1,0 +1,335 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/preview-qualification.schema.json",
+  "title": "WIN-PCInfo Preview candidate qualification policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "productCapability",
+    "relatedCapabilityIds",
+    "sliceDeliversCapability",
+    "supportClaim",
+    "previewOrStableClaim",
+    "publicationAuthorized",
+    "supportedPromotionPermitted",
+    "attestedPreviewSatisfiesStableSigning",
+    "syntheticCannotAuthorizePublication",
+    "humanApprovalRequired",
+    "identity",
+    "trustPaths",
+    "attestedFallback",
+    "evidenceKinds",
+    "liveValidationInThisSlice",
+    "azure",
+    "requiredGates",
+    "requiredPrivilegePaths",
+    "requiredNetworkBehaviors",
+    "requiredLocales",
+    "requiredValidationControls",
+    "requiredFailureInjections",
+    "requiredPackageExercises",
+    "requiredRecoveryExercises",
+    "smokes",
+    "decision",
+    "scenarios",
+    "privacy",
+    "workspace"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.preview-qualification-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.preview-qualification/1.0.0" },
+    "productCapability": { "const": "CAP-0027" },
+    "relatedCapabilityIds": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        { "const": "CAP-0026" },
+        { "const": "CAP-0028" },
+        { "const": "CAP-0030" }
+      ],
+      "items": false
+    },
+    "sliceDeliversCapability": { "const": false },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "publicationAuthorized": { "const": false },
+    "supportedPromotionPermitted": { "const": false },
+    "attestedPreviewSatisfiesStableSigning": { "const": false },
+    "syntheticCannotAuthorizePublication": { "const": true },
+    "humanApprovalRequired": { "const": true },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unsignedContentKind",
+        "finalUnsignedKind",
+        "finalSignedKind",
+        "finalMustBeDistinct",
+        "finalMustDeriveFromQualifiedContent"
+      ],
+      "properties": {
+        "unsignedContentKind": { "const": "win-pcinfo.unsigned-generated-content-identity" },
+        "finalUnsignedKind": { "const": "win-pcinfo.unsigned-portable-package-identity" },
+        "finalSignedKind": { "const": "win-pcinfo.authenticode-signed-package-identity" },
+        "finalMustBeDistinct": { "const": true },
+        "finalMustDeriveFromQualifiedContent": { "const": true }
+      }
+    },
+    "trustPaths": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "AuthenticodeSigned" },
+        { "const": "AttestedPreview" }
+      ],
+      "items": false
+    },
+    "attestedFallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "permittedReasons",
+        "neverForConvenience",
+        "satisfiesStableSigningGate"
+      ],
+      "properties": {
+        "permittedReasons": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "const": "ArtifactSigningNotOperational" },
+            { "const": "VerifiedServiceIncident" }
+          ],
+          "items": false
+        },
+        "neverForConvenience": { "const": true },
+        "satisfiesStableSigningGate": { "const": false }
+      }
+    },
+    "evidenceKinds": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "SyntheticProjection" },
+        { "const": "LiveValidation" }
+      ],
+      "items": false
+    },
+    "liveValidationInThisSlice": { "const": "NotStarted" },
+    "azure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contact",
+        "livePathWithoutIdentity",
+        "overclaimRejected"
+      ],
+      "properties": {
+        "contact": { "const": "None" },
+        "livePathWithoutIdentity": { "const": "NotStarted" },
+        "overclaimRejected": { "const": true }
+      }
+    },
+    "requiredGates": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": { "type": "string", "minLength": 8, "maxLength": 96 }
+    },
+    "requiredPrivilegePaths": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        { "const": "StandardLaunchWithOneElevation" },
+        { "const": "AlreadyElevated" },
+        { "const": "ElevationDenied" },
+        { "const": "SystemContext" }
+      ],
+      "items": false
+    },
+    "requiredNetworkBehaviors": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "LocalOnly" },
+        { "const": "MicrosoftConnectivityEnabled" }
+      ],
+      "items": false
+    },
+    "requiredLocales": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        { "const": "en-US" },
+        { "const": "es-MX" },
+        { "const": "tr-TR" },
+        { "const": "ja-JP" },
+        { "const": "ar-SA" }
+      ],
+      "items": false
+    },
+    "requiredValidationControls": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "RestrictedOutbound" },
+        { "const": "FullOutbound" }
+      ],
+      "items": false
+    },
+    "requiredFailureInjections": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        { "const": "Cancellation" },
+        { "const": "Timeout" },
+        { "const": "Crash" },
+        { "const": "DiskPressure" },
+        { "const": "CorruptEvidence" }
+      ],
+      "items": false
+    },
+    "requiredPackageExercises": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        { "const": "LocalOpen" },
+        { "const": "RecipientOpen" },
+        { "const": "RestrictedExport" },
+        { "const": "ViewingCleanup" }
+      ],
+      "items": false
+    },
+    "requiredRecoveryExercises": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "prefixItems": [
+        { "const": "StaleRecovery" }
+      ],
+      "items": false
+    },
+    "smokes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["launch", "collectionProhibited"],
+      "properties": {
+        "launch": { "const": "Help" },
+        "collectionProhibited": { "const": true }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approvalRequiresAllPass",
+        "missingDenies",
+        "failedDenies",
+        "expiredDenies",
+        "invalidatedDenies",
+        "wrongCandidateDenies",
+        "privacyUnsafeDenies",
+        "cleanupPendingDenies",
+        "waiverDenies",
+        "manualPromotionAllowed"
+      ],
+      "properties": {
+        "approvalRequiresAllPass": { "const": true },
+        "missingDenies": { "const": true },
+        "failedDenies": { "const": true },
+        "expiredDenies": { "const": true },
+        "invalidatedDenies": { "const": true },
+        "wrongCandidateDenies": { "const": true },
+        "privacyUnsafeDenies": { "const": true },
+        "cleanupPendingDenies": { "const": true },
+        "waiverDenies": { "const": true },
+        "manualPromotionAllowed": { "const": false }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 14,
+      "maxItems": 14,
+      "items": {
+        "enum": [
+          "CompleteSignedCandidate",
+          "CompleteAttestedFallback",
+          "MissingEvidence",
+          "ProductFail",
+          "ExpiredEvidence",
+          "InvalidatedEvidence",
+          "WrongCandidate",
+          "PrivacyUnsafe",
+          "CleanupPending",
+          "WaiverRequested",
+          "AzureOverclaim",
+          "AttestedConvenience",
+          "UnsignedAsFinal",
+          "LiveValidation"
+        ]
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rejectNonSynthetic",
+        "rejectCredentialsAndSecrets",
+        "rejectRealIdentifiers",
+        "rejectRestrictedEvidence",
+        "rejectRawLogs",
+        "rejectInstantiatedAzureConfiguration",
+        "rejectPlansStateAndCache",
+        "rejectLocalUserPaths"
+      ],
+      "properties": {
+        "rejectNonSynthetic": { "const": true },
+        "rejectCredentialsAndSecrets": { "const": true },
+        "rejectRealIdentifiers": { "const": true },
+        "rejectRestrictedEvidence": { "const": true },
+        "rejectRawLogs": { "const": true },
+        "rejectInstantiatedAzureConfiguration": { "const": true },
+        "rejectPlansStateAndCache": { "const": true },
+        "rejectLocalUserPaths": { "const": true }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredBoundary",
+        "markerFileName",
+        "markerContent",
+        "rejectRepositoryPath",
+        "rejectPublicPath",
+        "rejectUncPath",
+        "cleanupRequired"
+      ],
+      "properties": {
+        "requiredBoundary": { "const": "PrivateQualificationWorkspace" },
+        "markerFileName": { "const": ".win-pcinfo-qualification-workspace" },
+        "markerContent": { "const": "win-pcinfo.private-qualification-workspace" },
+        "rejectRepositoryPath": { "const": true },
+        "rejectPublicPath": { "const": true },
+        "rejectUncPath": { "const": true },
+        "cleanupRequired": { "const": true }
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ Contributions are welcome when they preserve the public privacy boundary and the
 - Offline Azure validation admission is documented in [docs/azure-validation-admission.md](docs/azure-validation-admission.md). Use only a marked private workspace outside this repository. The gate does not contact Azure and does not deliver `CAP-0028`.
 - One fresh Azure validation round is documented in [docs/azure-validation-round.md](docs/azure-validation-round.md). Use only a marked private workspace. The controller admits at most four clients, rejects a fifth, and recovers from cancellation or host loss. Live Azure stays `NotStarted` without the approved managed identity and without acquired pinned tooling. Completing a controller tracer does not deliver `CAP-0028`.
 - Automated release gates are documented in [docs/release-gates.md](docs/release-gates.md). Use only synthetic, identifier-free evidence packs. The gate cannot waive missing evidence and does not deliver `CAP-0030`.
+- Exact Preview-candidate qualification is documented in [docs/preview-qualification.md](docs/preview-qualification.md). Use only a marked private workspace and a synthetic request. Completing that workflow does not deliver `CAP-0027` or create a Preview or Supported claim.
 - Do not add floating dependencies or install tools on an assessed device.
 - Public documentation must stay beginner-friendly and must not claim deferred behavior as implemented.
 

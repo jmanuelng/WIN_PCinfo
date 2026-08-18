@@ -45,6 +45,7 @@ $sourcePaths = @(
     'src/AzureValidationRound.ps1'
     'src/ReleaseGates.ps1'
     'src/SigningBoundary.ps1'
+    'src/PreviewQualification.ps1'
     'src/ApplicationMain.ps1'
 )
 
@@ -116,6 +117,10 @@ $signingBoundaryPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0
 $signingBoundarySchemaPath = Join-Path $repositoryRoot 'schemas/signing-boundary.schema.json'
 $signingSessionRequestSchemaPath = Join-Path $repositoryRoot 'schemas/signing-session-request.schema.json'
 $signingSessionResultSchemaPath = Join-Path $repositoryRoot 'schemas/signing-session-result.schema.json'
+$previewQualificationPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-preview-qualification.json'
+$previewQualificationSchemaPath = Join-Path $repositoryRoot 'schemas/preview-qualification.schema.json'
+$previewQualificationRequestSchemaPath = Join-Path $repositoryRoot 'schemas/preview-qualification-request.schema.json'
+$previewQualificationPacketSchemaPath = Join-Path $repositoryRoot 'schemas/preview-qualification-packet.schema.json'
 $releaseEvidencePackSchemaPath = Join-Path $repositoryRoot 'schemas/release-evidence-pack.schema.json'
 $releaseEvidenceManifestSchemaPath = Join-Path $repositoryRoot 'schemas/release-evidence-manifest.schema.json'
 $previewCapabilityMatrixSchemaPath = Join-Path $repositoryRoot 'schemas/preview-capability-matrix.schema.json'
@@ -159,6 +164,8 @@ foreach ($requiredDefinitionPath in @(
     $releaseGatesPolicyPath, $releaseGatesSchemaPath,
     $signingBoundaryPolicyPath, $signingBoundarySchemaPath,
     $signingSessionRequestSchemaPath, $signingSessionResultSchemaPath,
+    $previewQualificationPolicyPath, $previewQualificationSchemaPath,
+    $previewQualificationRequestSchemaPath, $previewQualificationPacketSchemaPath,
     $releaseEvidencePackSchemaPath, $releaseEvidenceManifestSchemaPath,
     $previewCapabilityMatrixSchemaPath,
     $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
@@ -329,6 +336,12 @@ $signingBoundaryPolicyDigest = Get-Sha256Hex -Bytes $signingBoundaryPolicyBytes
 $signingBoundaryPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $signingBoundaryPolicyBytes
 )
+$previewQualificationPolicyBytes = Get-Utf8LfBytes -LiteralPath $previewQualificationPolicyPath
+$previewQualificationPolicyBase64 = [Convert]::ToBase64String($previewQualificationPolicyBytes)
+$previewQualificationPolicyDigest = Get-Sha256Hex -Bytes $previewQualificationPolicyBytes
+$previewQualificationPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $previewQualificationPolicyBytes
+)
 $softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
 $softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
 $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
@@ -494,6 +507,9 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/signing-boundary.schema.json'
     'schemas/signing-session-request.schema.json'
     'schemas/signing-session-result.schema.json'
+    'schemas/preview-qualification.schema.json'
+    'schemas/preview-qualification-request.schema.json'
+    'schemas/preview-qualification-packet.schema.json'
     'schemas/release-evidence-pack.schema.json'
     'schemas/release-evidence-manifest.schema.json'
     'schemas/preview-capability-matrix.schema.json'
@@ -524,6 +540,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-azure-validation-round.json'
     'docs/spec/releases/2.0.0-preview.1-release-gates.json'
     'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
+    'docs/spec/releases/2.0.0-preview.1-preview-qualification.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
@@ -831,6 +848,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__SIGNING_BOUNDARY_POLICY_SHA256__', $signingBoundaryPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/PreviewQualification.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__PREVIEW_QUALIFICATION_POLICY_BASE64__', $previewQualificationPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__PREVIEW_QUALIFICATION_POLICY_SHA256__', $previewQualificationPolicyDigest
         )
     }
     if ($sourceFile.path -eq 'src/PortableDistribution.ps1') {

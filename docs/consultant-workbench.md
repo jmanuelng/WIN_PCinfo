@@ -52,6 +52,7 @@ These documents explain intended release scope. They are not a support claim for
 - [One fresh Azure validation round](azure-validation-round.md) walks one to four private Windows 11 clients through synthetic VM Agent control, exclusive-lease admission, cancellation and expiry recovery, and Zero Round Residue. Live create stays `NotStarted` on this host. Completing that controller does not deliver `CAP-0028` or create a Preview or Supported claim.
 - [Automated release gates and evidence manifests](release-gates.md) evaluate a synthetic evidence pack, derive the Preview Capability Matrix, and emit promotion-denial inputs. Completing that gate does not deliver `CAP-0030` or create a Preview or Supported claim.
 - [Signing Boundary](signing-boundary.md) signs a frozen eligible candidate only after release gates and human digest confirmation, verifies the signature contract, finalizes the outer package, and smoke-runs Help. Completing that workflow does not deliver `CAP-0025` or create a Trusted, Preview, or Supported claim.
+- [Qualify the exact Preview candidate](preview-qualification.md) binds the frozen signed or attested distributable, walks the complete Preview.1 scenario plan, and emits an identifier-free approval or denial packet. Completing that workflow does not deliver `CAP-0027` or create a Preview or Supported claim.
 
 ## Privacy-safe field notes
 

@@ -70,6 +70,8 @@ To understand the maintainer-only controller that walks one to four private Wind
 
 To understand the maintainer-only release-gate workflow that binds an exact unsigned candidate, scores Pass through Invalidated results, derives the Preview Capability Matrix, and refuses to waive or publish from synthetic evidence, read [Automated release gates and evidence manifests](docs/release-gates.md). It does not deliver a Preview or Supported claim.
 
+To understand the maintainer-only qualification workflow that binds the exact signed or attested Preview candidate, walks the frozen scenario plan, and emits an approval or denial packet a human must still accept, read [Qualify the exact Preview candidate](docs/preview-qualification.md). It does not deliver a Preview or Supported claim.
+
 ## Legacy script
 
 `ComputerInfo.ps1` is the legacy implementation and remains available as an outcome and migration reference. It gathers Windows information, but it does **not** implement the v2 safety, privacy, lifecycle, evidence-protection, or runtime contracts. Do not treat its behavior as the v2 launch path.
