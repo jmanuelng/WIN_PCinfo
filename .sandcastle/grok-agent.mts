@@ -71,6 +71,31 @@ function usageFromUnknown(value: unknown): {
 }
 
 const COMPLETION_SIGNAL = "<promise>COMPLETE</promise>";
+export const GROK_AUTH_RETRY_ATTEMPTS = 3;
+export const GROK_AUTH_RETRY_DELAYS_MS = [5_000, 15_000, 45_000] as const;
+
+export function isTransientGrokAuthFailure(output: string): boolean {
+  return (
+    /Unauthorized \(401\)/i.test(output) ||
+    /no auth context/i.test(output) ||
+    /Invalid or expired credentials/i.test(output) ||
+    /auth_kind=none/i.test(output) ||
+    /Authentication is temporarily unavailable/i.test(output)
+  );
+}
+
+export function grokRetryRunnerPath(): string {
+  return join(process.cwd(), ".sandcastle", "grok-retry.mts");
+}
+
+export function tsxCliPath(): string {
+  return join(
+    process.cwd(),
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? "tsx.cmd" : "tsx",
+  );
+}
 
 function textEvents(text: string): ReturnType<AgentProvider["parseStreamLine"]> {
   // Sandcastle keeps only the last `result` event as the run stdout used for
@@ -229,8 +254,14 @@ export function createGrokAgent(): AgentProvider {
     env: {},
     captureSessions: false,
     buildPrintCommand(options) {
+      const built = buildGrokPrintCommand(options.prompt);
+      const grokArgs = built.command.replace(/^grok\s+/, "");
       return {
-        command: buildGrokPrintCommand(options.prompt).command,
+        command: [
+          quoteWindowsArg(tsxCliPath()),
+          quoteWindowsArg(grokRetryRunnerPath()),
+          grokArgs,
+        ].join(" "),
       };
     },
     parseStreamLine: parseGrokStreamLine,

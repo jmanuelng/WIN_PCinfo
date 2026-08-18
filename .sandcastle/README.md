@@ -90,3 +90,18 @@ available for inspection as reported by the failing lane. Each lane failure
 reconciles and prints its exact local branch, worktree disposition, remote
 branch, pull-request/merge state, issue state, and local-versus-remote `main`
 sync state.
+
+## Fault tolerance (same gates)
+
+These retries do not change eligibility, phase order, or `--max-parallel`.
+
+- Headless Grok retries transient `401` / `no auth context` failures a few
+  times before the lane fails. Access tokens last about six hours and refresh
+  automatically; a headless child used to exit 1 on a blip.
+- `gh` retries HTTP 502/503. Login falls back from `gh api user` to
+  `gh auth status`.
+- A self-claim with **no** local worktree is released before the next batch
+  (rollback before work). A self-claim **with** a preserved worktree is
+  resumed on that same branch: skip a phase only when its log already contains
+  `<promise>COMPLETE</promise>`, then still run the independent full suite.
+- Host start ignores untracked `.sandcastle/notes/` and `.sandcastle/logs/`.

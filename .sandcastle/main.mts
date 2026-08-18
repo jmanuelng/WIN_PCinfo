@@ -7,27 +7,33 @@ import {
   buildImplementationPhaseOptions,
   buildIntegrationPhaseOptions,
   buildReviewPhaseOptions,
+  authenticatedGitHubLogin,
   claimIssue,
   createSerializedExecutor,
   ensureIssueClosed,
-  listEligibleIssues,
+  isSafelyClaimedIssue,
+  listLocalIssueLanes,
+  listReadyIssues,
+  loadIssue,
   mergePullRequest,
   parseIssueNumber,
   parseMaxIterations,
   parseMaxParallel,
   pushAndCreatePullRequest,
-  requireEligibleIssue,
   refreshBase,
   releaseIssueClaim,
+  releaseOrphanSelfClaims,
   readLatestPhaseLog,
+  requireStartableIssue,
   resultHasCompletionSignal,
   runCommand,
   runCommandAsync,
   runWithRequiredCleanup,
-  selectNextIssues,
+  selectStartableIssues,
   syncLocalMain,
   waitForPullRequestChecks,
   type GitHubIssue,
+  type LocalIssueLane,
 } from "./workflow.mts";
 import { createGrokAgent } from "./grok-agent.mts";
 import {
@@ -90,8 +96,42 @@ function assertCleanDeliverable(worktreePath: string, branch: string): void {
   }
 }
 
-async function prepareIssue(issue: GitHubIssue, recovery: LaneRecovery) {
+function localLaneForIssue(
+  issueNumber: number,
+  lanes: readonly LocalIssueLane[],
+): LocalIssueLane | undefined {
+  return lanes.find((lane) => lane.issueNumber === issueNumber);
+}
+
+function branchAheadOfBase(worktreePath: string): number {
+  const ahead = Number.parseInt(
+    runCommand(
+      "git",
+      ["rev-list", "--count", `${BASE_REF}..HEAD`],
+      { cwd: worktreePath },
+    ).stdout,
+    10,
+  );
+  return Number.isInteger(ahead) ? ahead : 0;
+}
+
+function phaseAlreadyComplete(
+  issueNumber: number,
+  phase: "implementer" | "reviewer",
+): boolean {
+  return resultHasCompletionSignal({
+    phaseLog: readLatestPhaseLog(issueNumber, phase),
+  });
+}
+
+async function prepareIssue(
+  issue: GitHubIssue,
+  recovery: LaneRecovery,
+  resume: boolean,
+) {
   const branch = recovery.branch;
+  // This host has no container boundary. Agents run on the dedicated Windows
+  // machine because the product suite is PowerShell.
   const sandbox = await sandcastle.createSandbox({
     branch,
     baseBranch: BASE_REF,
@@ -101,35 +141,52 @@ async function prepareIssue(issue: GitHubIssue, recovery: LaneRecovery) {
   recovery.worktreeDisposition = "active";
 
   try {
-    const implementation = await sandbox.run(
-      buildImplementationPhaseOptions(agent, issue.number, issue.title),
-    );
-    if (implementation.commits.length === 0) {
-      throw new Error(`Issue #${issue.number} produced no implementation commit.`);
-    }
-    if (
-      !resultHasCompletionSignal({
-        ...implementation,
-        phaseLog: readLatestPhaseLog(issue.number, "implementer"),
-      })
-    ) {
-      throw new Error(
-        `Issue #${issue.number} implementation did not emit its completion signal.`,
+    const implementerDone =
+      resume &&
+      phaseAlreadyComplete(issue.number, "implementer") &&
+      branchAheadOfBase(sandbox.worktreePath) >= 1;
+    if (implementerDone) {
+      console.log(
+        `Resuming #${issue.number}: implementer already completed on ${branch}.`,
       );
+    } else {
+      const implementation = await sandbox.run(
+        buildImplementationPhaseOptions(agent, issue.number, issue.title),
+      );
+      if (implementation.commits.length === 0) {
+        throw new Error(`Issue #${issue.number} produced no implementation commit.`);
+      }
+      if (
+        !resultHasCompletionSignal({
+          ...implementation,
+          phaseLog: readLatestPhaseLog(issue.number, "implementer"),
+        })
+      ) {
+        throw new Error(
+          `Issue #${issue.number} implementation did not emit its completion signal.`,
+        );
+      }
     }
 
-    const review = await sandbox.run(
-      buildReviewPhaseOptions(agent, issue.number, branch),
-    );
-    if (
-      !resultHasCompletionSignal({
-        ...review,
-        phaseLog: readLatestPhaseLog(issue.number, "reviewer"),
-      })
-    ) {
-      throw new Error(
-        `Issue #${issue.number} review did not emit its completion signal.`,
+    const reviewerDone = resume && phaseAlreadyComplete(issue.number, "reviewer");
+    if (reviewerDone) {
+      console.log(
+        `Resuming #${issue.number}: reviewer already completed on ${branch}.`,
       );
+    } else {
+      const review = await sandbox.run(
+        buildReviewPhaseOptions(agent, issue.number, branch),
+      );
+      if (
+        !resultHasCompletionSignal({
+          ...review,
+          phaseLog: readLatestPhaseLog(issue.number, "reviewer"),
+        })
+      ) {
+        throw new Error(
+          `Issue #${issue.number} review did not emit its completion signal.`,
+        );
+      }
     }
 
     console.log(`Running independent full PowerShell test gate for #${issue.number}...`);
@@ -247,10 +304,18 @@ async function deliverIssue(
   console.log(`Issue #${issue.number} delivered and closed.`);
 }
 
-async function claimBatch(issues: readonly GitHubIssue[]): Promise<void> {
+async function claimBatch(
+  issues: readonly GitHubIssue[],
+  viewer: string,
+): Promise<void> {
   const claimed: GitHubIssue[] = [];
   try {
     for (const issue of issues) {
+      const current = loadIssue(issue.number);
+      if (isSafelyClaimedIssue(current, viewer)) {
+        console.log(`Resuming claimed #${issue.number}: ${issue.title}`);
+        continue;
+      }
       console.log(`Claiming #${issue.number}: ${issue.title}`);
       claimIssue(issue);
       claimed.push(issue);
@@ -296,33 +361,53 @@ async function run(): Promise<void> {
     refreshBase();
     const remaining = maxIterations - attemptedIssues;
     const desiredBatchSize = Math.min(maxParallel, remaining);
+    const viewer = authenticatedGitHubLogin();
+    const localLanes = listLocalIssueLanes();
+    const readyIssues = listReadyIssues();
+    const released = releaseOrphanSelfClaims(readyIssues, viewer, localLanes);
+    for (const issueNumber of released) {
+      console.log(
+        `Released orphan self-claim for #${issueNumber} (no local worktree).`,
+      );
+    }
+    const startableLanes = listLocalIssueLanes();
+    const startableReady = released.length > 0 ? listReadyIssues() : readyIssues;
     const issues =
       requestedIssueNumber === undefined
-        ? selectNextIssues(
-            listEligibleIssues(desiredBatchSize),
+        ? selectStartableIssues(
+            startableReady,
+            viewer,
+            startableLanes,
             desiredBatchSize,
           )
         : attemptedIssues === 0
-          ? [requireEligibleIssue(requestedIssueNumber)]
+          ? [
+              requireStartableIssue(
+                requestedIssueNumber,
+                viewer,
+                startableLanes,
+              ),
+            ]
           : [];
     if (issues.length === 0) {
       console.log("No unassigned, unblocked ready-for-agent issues remain.");
       return;
     }
 
-    await claimBatch(issues);
+    await claimBatch(issues, viewer);
     attemptedIssues += issues.length;
 
     const delivery = createSerializedExecutor();
     const lanes = await Promise.allSettled(
       issues.map(async (issue) => {
+        const existing = localLaneForIssue(issue.number, startableLanes);
         const recovery = createLaneRecovery(
           issue.number,
-          `sandcastle/issue-${issue.number}-${Date.now()}`,
+          existing?.branch ?? `sandcastle/issue-${issue.number}-${Date.now()}`,
         );
         let prepared: Awaited<ReturnType<typeof prepareIssue>>;
         try {
-          prepared = await prepareIssue(issue, recovery);
+          prepared = await prepareIssue(issue, recovery, Boolean(existing));
         } catch (error) {
           delivery.stop(error);
           throw laneFailure("preparation", recovery, error);
