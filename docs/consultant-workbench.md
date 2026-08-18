@@ -53,6 +53,7 @@ These documents explain intended release scope. They are not a support claim for
 - [Automated release gates and evidence manifests](release-gates.md) evaluate a synthetic evidence pack, derive the Preview Capability Matrix, and emit promotion-denial inputs. Completing that gate does not deliver `CAP-0030` or create a Preview or Supported claim.
 - [Signing Boundary](signing-boundary.md) signs a frozen eligible candidate only after release gates and human digest confirmation, verifies the signature contract, finalizes the outer package, and smoke-runs Help. Completing that workflow does not deliver `CAP-0025` or create a Trusted, Preview, or Supported claim.
 - [Qualify the exact Preview candidate](preview-qualification.md) binds the frozen signed or attested distributable, walks the complete Preview.1 scenario plan, and emits an identifier-free approval or denial packet. Completing that workflow does not deliver `CAP-0027` or create a Preview or Supported claim.
+- [Publish the approved Preview.1 release](preview-publication.md) stages the exact public assets, previews the GitHub release record, requires human confirmation of the candidate digest, and independently verifies a one-time synthetic publish. Completing that workflow does not deliver `CAP-0026`, create a live GitHub release, or create a Preview or Supported claim.
 
 ## Privacy-safe field notes
 

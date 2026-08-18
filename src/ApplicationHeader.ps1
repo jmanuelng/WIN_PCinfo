@@ -50,7 +50,14 @@ param(
     # approval or denial packet. The trust assumption is that the
     # request is synthetic and live Azure is absent. Safe failure is
     # NotStarted, or an evaluated denial that cannot be waived.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate')]
+    # PublishPreviewRelease is the maintainer publication rehearsal.
+    # The threat is publishing the wrong bytes, replacing a tag, or
+    # treating a synthetic store as the public GitHub Preview. The
+    # mechanism is exact-digest binding, required human approval, and
+    # an immutable-tag rule. The trust assumption is that the request
+    # is synthetic. Safe failure is NotStarted, or an evaluated
+    # denial that cannot create a GitHub release.
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -271,7 +278,20 @@ param(
     [string] $QualificationRequestPath,
 
     [Parameter()]
-    [string] $QualificationWorkspacePath
+    [string] $QualificationWorkspacePath,
+
+    # PublishPreviewRelease is a maintainer publication rehearsal. The
+    # threat is publishing the wrong digest, replacing a published
+    # tag, or creating a live GitHub release from synthetic evidence.
+    # The mechanism is exact-candidate binding plus a required human
+    # confirmation phrase. The trust assumption is that the request
+    # is synthetic. Safe failure is NotStarted, or an evaluated
+    # denial that cannot create a GitHub release.
+    [Parameter()]
+    [string] $PublicationRequestPath,
+
+    [Parameter()]
+    [string] $PublicationWorkspacePath
 )
 
 Set-StrictMode -Version Latest

@@ -106,6 +106,6 @@ Prohibited Secret Material is never a template.
 
 ## Limitations
 
-This slice does not publish, sign, or promote a release. It does not create Azure clients. It does not start collection on the maintainer host. A later human accepts or rejects the packet; that choice cannot turn a product failure into a pass.
+This slice does not publish, sign, or promote a release. It does not create Azure clients. It does not start collection on the maintainer host. A later human accepts or rejects the packet; that choice cannot turn a product failure into a pass. The later [publication workflow](preview-publication.md) still cannot create a live GitHub release from synthetic evidence.
 
 See the [Consultant Workbench](consultant-workbench.md) for the rest of the implemented product path.

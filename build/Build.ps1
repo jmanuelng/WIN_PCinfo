@@ -46,6 +46,7 @@ $sourcePaths = @(
     'src/ReleaseGates.ps1'
     'src/SigningBoundary.ps1'
     'src/PreviewQualification.ps1'
+    'src/PreviewPublication.ps1'
     'src/ApplicationMain.ps1'
 )
 
@@ -121,6 +122,11 @@ $previewQualificationPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/
 $previewQualificationSchemaPath = Join-Path $repositoryRoot 'schemas/preview-qualification.schema.json'
 $previewQualificationRequestSchemaPath = Join-Path $repositoryRoot 'schemas/preview-qualification-request.schema.json'
 $previewQualificationPacketSchemaPath = Join-Path $repositoryRoot 'schemas/preview-qualification-packet.schema.json'
+$previewPublicationPolicyPath = Join-Path $repositoryRoot 'docs/spec/releases/2.0.0-preview.1-preview-publication.json'
+$previewPublicationSchemaPath = Join-Path $repositoryRoot 'schemas/preview-publication.schema.json'
+$previewPublicationRequestSchemaPath = Join-Path $repositoryRoot 'schemas/preview-publication-request.schema.json'
+$previewPublicationPreviewSchemaPath = Join-Path $repositoryRoot 'schemas/preview-publication-preview.schema.json'
+$previewPublicationResultSchemaPath = Join-Path $repositoryRoot 'schemas/preview-publication-result.schema.json'
 $releaseEvidencePackSchemaPath = Join-Path $repositoryRoot 'schemas/release-evidence-pack.schema.json'
 $releaseEvidenceManifestSchemaPath = Join-Path $repositoryRoot 'schemas/release-evidence-manifest.schema.json'
 $previewCapabilityMatrixSchemaPath = Join-Path $repositoryRoot 'schemas/preview-capability-matrix.schema.json'
@@ -166,6 +172,9 @@ foreach ($requiredDefinitionPath in @(
     $signingSessionRequestSchemaPath, $signingSessionResultSchemaPath,
     $previewQualificationPolicyPath, $previewQualificationSchemaPath,
     $previewQualificationRequestSchemaPath, $previewQualificationPacketSchemaPath,
+    $previewPublicationPolicyPath, $previewPublicationSchemaPath,
+    $previewPublicationRequestSchemaPath, $previewPublicationPreviewSchemaPath,
+    $previewPublicationResultSchemaPath,
     $releaseEvidencePackSchemaPath, $releaseEvidenceManifestSchemaPath,
     $previewCapabilityMatrixSchemaPath,
     $softwareRecognitionCatalogPath, $softwareRecognitionCatalogSchemaPath
@@ -342,6 +351,12 @@ $previewQualificationPolicyDigest = Get-Sha256Hex -Bytes $previewQualificationPo
 $previewQualificationPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
     $previewQualificationPolicyBytes
 )
+$previewPublicationPolicyBytes = Get-Utf8LfBytes -LiteralPath $previewPublicationPolicyPath
+$previewPublicationPolicyBase64 = [Convert]::ToBase64String($previewPublicationPolicyBytes)
+$previewPublicationPolicyDigest = Get-Sha256Hex -Bytes $previewPublicationPolicyBytes
+$previewPublicationPolicyJson = [Text.UTF8Encoding]::new($false,$true).GetString(
+    $previewPublicationPolicyBytes
+)
 $softwareRecognitionCatalogBytes = Get-Utf8LfBytes -LiteralPath $softwareRecognitionCatalogPath
 $softwareRecognitionCatalogBase64 = [Convert]::ToBase64String($softwareRecognitionCatalogBytes)
 $softwareRecognitionCatalogDigest = Get-Sha256Hex -Bytes $softwareRecognitionCatalogBytes
@@ -430,6 +445,9 @@ if (-not (Test-Json -Json $releaseGatesPolicyJson -SchemaFile $releaseGatesSchem
 if (-not (Test-Json -Json $signingBoundaryPolicyJson -SchemaFile $signingBoundarySchemaPath)) {
     throw 'The Signing Boundary contract does not satisfy its release schema.'
 }
+if (-not (Test-Json -Json $previewPublicationPolicyJson -SchemaFile $previewPublicationSchemaPath)) {
+    throw 'The Preview publication contract does not satisfy its release schema.'
+}
 if (-not (Test-Json -Json $softwareRecognitionCatalogJson -SchemaFile $softwareRecognitionCatalogSchemaPath)) {
     throw 'The Software Recognition Catalog does not satisfy its release schema.'
 }
@@ -510,6 +528,10 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'schemas/preview-qualification.schema.json'
     'schemas/preview-qualification-request.schema.json'
     'schemas/preview-qualification-packet.schema.json'
+    'schemas/preview-publication.schema.json'
+    'schemas/preview-publication-request.schema.json'
+    'schemas/preview-publication-preview.schema.json'
+    'schemas/preview-publication-result.schema.json'
     'schemas/release-evidence-pack.schema.json'
     'schemas/release-evidence-manifest.schema.json'
     'schemas/preview-capability-matrix.schema.json'
@@ -541,6 +563,7 @@ $applicationResourcePaths = @($sourcePaths) + @(
     'docs/spec/releases/2.0.0-preview.1-release-gates.json'
     'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
     'docs/spec/releases/2.0.0-preview.1-preview-qualification.json'
+    'docs/spec/releases/2.0.0-preview.1-preview-publication.json'
     'docs/spec/releases/2.0.0-preview.1-software-recognition-catalog.json'
 )
 $applicationResources = @(
@@ -856,6 +879,14 @@ $sections = foreach ($sourceFile in $sourceFiles) {
         )
         $normalizedSource = $normalizedSource.Replace(
             '__PREVIEW_QUALIFICATION_POLICY_SHA256__', $previewQualificationPolicyDigest
+        )
+    }
+    if ($sourceFile.path -eq 'src/PreviewPublication.ps1') {
+        $normalizedSource = $normalizedSource.Replace(
+            '__PREVIEW_PUBLICATION_POLICY_BASE64__', $previewPublicationPolicyBase64
+        )
+        $normalizedSource = $normalizedSource.Replace(
+            '__PREVIEW_PUBLICATION_POLICY_SHA256__', $previewPublicationPolicyDigest
         )
     }
     if ($sourceFile.path -eq 'src/PortableDistribution.ps1') {

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/preview-publication-preview.schema.json",
+  "title": "WIN-PCInfo sanitized Preview public-release preview",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordType",
+    "contractVersion",
+    "release",
+    "tag",
+    "title",
+    "channel",
+    "prerelease",
+    "supportClaim",
+    "previewOrStableClaim",
+    "maintenance",
+    "microsoftLifecycleSeparated",
+    "attestedPreviewWarning",
+    "silentReplacementForbidden",
+    "trustPath",
+    "assets",
+    "limitations",
+    "notes"
+  ],
+  "properties": {
+    "recordType": { "const": "win-pcinfo.preview-publication-preview" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "tag": { "const": "v2.0.0-preview.1" },
+    "title": { "const": "WIN-PCInfo 2.0.0-preview.1" },
+    "channel": { "const": "Preview" },
+    "prerelease": { "const": true },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "maintenance": { "const": "BestEffortNoSla" },
+    "microsoftLifecycleSeparated": { "const": true },
+    "attestedPreviewWarning": { "type": "boolean" },
+    "silentReplacementForbidden": { "const": true },
+    "trustPath": {
+      "enum": ["AuthenticodeSigned", "AttestedPreview", "None"]
+    },
+    "assets": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["assetId", "fileName", "sha256", "role"],
+        "properties": {
+          "assetId": {
+            "enum": [
+              "portable-package",
+              "checksums",
+              "sbom",
+              "provenance",
+              "dependency-inventory",
+              "beginner-documentation",
+              "preview-capability-matrix",
+              "limitations",
+              "sanitized-release-evidence"
+            ]
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 96
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "role": {
+            "enum": [
+              "final-distributable",
+              "checksums",
+              "sbom",
+              "provenance",
+              "dependency-inventory",
+              "beginner-documentation",
+              "capability-matrix",
+              "limitations",
+              "sanitized-evidence"
+            ]
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "type": "string", "minLength": 4, "maxLength": 96 }
+    },
+    "notes": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 16,
+      "items": { "type": "string", "minLength": 8, "maxLength": 160 }
+    }
+  }
+}
