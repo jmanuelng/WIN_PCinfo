@@ -41,6 +41,40 @@
     "ExclusiveLease",
     "ArmedRecovery"
   ],
+  "clients": {
+    "minimum": 1,
+    "maximum": 4
+  },
+  "lifetime": {
+    "maximumMinutes": 360,
+    "minimumCleanupReserveMinutes": 30,
+    "completedRecordRetentionDays": 7
+  },
+  "lease": {
+    "exclusive": true,
+    "serializeAdmission": true,
+    "recountLiveTaggedVms": true
+  },
+  "cleanup": {
+    "modeIrreversible": true,
+    "idempotent": true,
+    "neverDeleteUnresolved": true,
+    "neverDeleteUnrelated": true,
+    "pendingBlocksAdmission": true,
+    "cancelPhases": [
+      "Create",
+      "Readiness",
+      "Transfer",
+      "Execution",
+      "Retrieval",
+      "Teardown"
+    ]
+  },
+  "recovery": {
+    "azureResidentRecord": true,
+    "independentOfInitiator": true,
+    "independentOfLocalFiles": true
+  },
   "lifecycle": {
     "cleanupFirst": true,
     "testingFailureCannotBlockCleanup": true,
@@ -70,7 +104,21 @@
     "AdmissionDenied",
     "ResidueRemains",
     "CaptureAttempted",
-    "CredentialExposed"
+    "CredentialExposed",
+    "CancelDuringCreate",
+    "CancelDuringReadiness",
+    "CancelDuringTransfer",
+    "CancelDuringExecution",
+    "CancelDuringRetrieval",
+    "CancelDuringTeardown",
+    "HostLoss",
+    "Expiry",
+    "CleanupReserve",
+    "PartialProvisioning",
+    "SharedSafetyFailure",
+    "IndependentRecovery",
+    "CleanupPending",
+    "LeaseBusy"
   ],
   "privacy": {
     "requiredBoundary": "PrivateExternalWorkspace",

@@ -25,13 +25,24 @@ param(
     # fail-closed verification. The trust assumption is that the request
     # is synthetic and live Azure setup is absent. Safe failure is
     # NotStarted with no Trusted label.
-    # RunValidationRound is the maintainer controller for one private
-    # Windows 11 client. The threat is leaving residue or treating a
-    # controller tracer as qualifying Preview evidence. The mechanism is
-    # cleanup-first admission, VM Agent control, and independent absence
-    # checks. The trust assumption is the approved managed identity. Safe
-    # failure is NotStarted, or CleanupIncomplete while residue remains.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate')]
+    # RunValidationRound is the maintainer controller for one to four
+    # private Windows 11 clients. The threat is leaving residue, admitting
+    # a fifth live VM, or treating a controller tracer as qualifying
+    # Preview evidence. The mechanism is an exclusive lease, cleanup-first
+    # admission, VM Agent control, irreversible Round Cleanup Mode, and
+    # independent absence checks. The trust assumption is the approved
+    # managed identity. Safe failure is NotStarted, or CleanupIncomplete
+    # while residue remains.
+    # RecoverValidationRound is the cleanup worker that uses the private
+    # Round Recovery Record. The threat is being unable to finish
+    # teardown after host loss, or deleting whatever remains in a
+    # subscription. The mechanism is the privately recorded token list
+    # without the initiating process or its local journal. The trust
+    # assumption is that the record lists only privately recorded
+    # tokens and that the operator chose a marked private workspace.
+    # Safe failure is CleanupIncomplete while any exact owned target
+    # remains, or NotStarted when the workspace is missing.
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -210,7 +221,9 @@ param(
     # through guest control. The mechanism is a closed scenario name plus
     # the same marked private workspace as admission. The trust assumption
     # is that live Azure uses the approved managed identity. Safe failure
-    # is NotStarted with no create.
+    # is NotStarted with no create. RecoverValidationRound reuses the
+    # same fixture and private-workspace parameters and does not need
+    # the original request or local recovery journal.
     [Parameter(DontShow)]
     [string] $ValidationRoundFixturePath,
 

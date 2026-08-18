@@ -18,6 +18,11 @@
     "azure",
     "guest",
     "admissionProbes",
+    "clients",
+    "lifetime",
+    "lease",
+    "cleanup",
+    "recovery",
     "lifecycle",
     "zeroResidue",
     "networkBehaviors",
@@ -97,6 +102,90 @@
       ],
       "items": false
     },
+    "clients": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum", "maximum"],
+      "properties": {
+        "minimum": { "const": 1 },
+        "maximum": { "const": 4 }
+      }
+    },
+    "lifetime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximumMinutes",
+        "minimumCleanupReserveMinutes",
+        "completedRecordRetentionDays"
+      ],
+      "properties": {
+        "maximumMinutes": { "const": 360 },
+        "minimumCleanupReserveMinutes": { "const": 30 },
+        "completedRecordRetentionDays": { "const": 7 }
+      }
+    },
+    "lease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exclusive",
+        "serializeAdmission",
+        "recountLiveTaggedVms"
+      ],
+      "properties": {
+        "exclusive": { "const": true },
+        "serializeAdmission": { "const": true },
+        "recountLiveTaggedVms": { "const": true }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modeIrreversible",
+        "idempotent",
+        "neverDeleteUnresolved",
+        "neverDeleteUnrelated",
+        "pendingBlocksAdmission",
+        "cancelPhases"
+      ],
+      "properties": {
+        "modeIrreversible": { "const": true },
+        "idempotent": { "const": true },
+        "neverDeleteUnresolved": { "const": true },
+        "neverDeleteUnrelated": { "const": true },
+        "pendingBlocksAdmission": { "const": true },
+        "cancelPhases": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "prefixItems": [
+            { "const": "Create" },
+            { "const": "Readiness" },
+            { "const": "Transfer" },
+            { "const": "Execution" },
+            { "const": "Retrieval" },
+            { "const": "Teardown" }
+          ],
+          "items": false
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "azureResidentRecord",
+        "independentOfInitiator",
+        "independentOfLocalFiles"
+      ],
+      "properties": {
+        "azureResidentRecord": { "const": true },
+        "independentOfInitiator": { "const": true },
+        "independentOfLocalFiles": { "const": true }
+      }
+    },
     "lifecycle": {
       "type": "object",
       "additionalProperties": false,
@@ -151,8 +240,8 @@
     },
     "scenarios": {
       "type": "array",
-      "minItems": 8,
-      "maxItems": 8,
+      "minItems": 22,
+      "maxItems": 22,
       "uniqueItems": true,
       "prefixItems": [
         { "const": "CompleteZeroResidue" },
@@ -162,7 +251,21 @@
         { "const": "AdmissionDenied" },
         { "const": "ResidueRemains" },
         { "const": "CaptureAttempted" },
-        { "const": "CredentialExposed" }
+        { "const": "CredentialExposed" },
+        { "const": "CancelDuringCreate" },
+        { "const": "CancelDuringReadiness" },
+        { "const": "CancelDuringTransfer" },
+        { "const": "CancelDuringExecution" },
+        { "const": "CancelDuringRetrieval" },
+        { "const": "CancelDuringTeardown" },
+        { "const": "HostLoss" },
+        { "const": "Expiry" },
+        { "const": "CleanupReserve" },
+        { "const": "PartialProvisioning" },
+        { "const": "SharedSafetyFailure" },
+        { "const": "IndependentRecovery" },
+        { "const": "CleanupPending" },
+        { "const": "LeaseBusy" }
       ],
       "items": false
     },

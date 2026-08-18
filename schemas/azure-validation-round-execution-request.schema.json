@@ -27,7 +27,21 @@
         "AdmissionDenied",
         "ResidueRemains",
         "CaptureAttempted",
-        "CredentialExposed"
+        "CredentialExposed",
+        "CancelDuringCreate",
+        "CancelDuringReadiness",
+        "CancelDuringTransfer",
+        "CancelDuringExecution",
+        "CancelDuringRetrieval",
+        "CancelDuringTeardown",
+        "HostLoss",
+        "Expiry",
+        "CleanupReserve",
+        "PartialProvisioning",
+        "SharedSafetyFailure",
+        "IndependentRecovery",
+        "CleanupPending",
+        "LeaseBusy"
       ]
     },
     "privacyBoundary": { "const": "PrivateExternalWorkspace" },

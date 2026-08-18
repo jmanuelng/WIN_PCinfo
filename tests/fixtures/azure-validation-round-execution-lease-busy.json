@@ -1,0 +1,10 @@
+{
+  "kind": "win-pcinfo.azure-validation-round-fixture",
+  "contractVersion": "1.0.0",
+  "synthetic": true,
+  "scenario": "LeaseBusy",
+  "privacyBoundary": "PrivateExternalWorkspace",
+  "azureContact": "ManagedIdentity",
+  "guestControl": "VmAgentRunCommand",
+  "trustClass": "ControllerDevTracer"
+}
