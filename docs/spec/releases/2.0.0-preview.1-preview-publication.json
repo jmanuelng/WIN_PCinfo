@@ -1,0 +1,143 @@
+{
+  "kind": "win-pcinfo.preview-publication-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.preview-publication/1.0.0",
+  "productCapability": "CAP-0026",
+  "relatedCapabilityIds": [
+    "CAP-0025",
+    "CAP-0027",
+    "CAP-0030"
+  ],
+  "sliceDeliversCapability": false,
+  "supportClaim": "None",
+  "previewOrStableClaim": "None",
+  "publicationAuthorized": false,
+  "supportedPromotionPermitted": false,
+  "attestedPreviewSatisfiesStableSigning": false,
+  "syntheticCannotAuthorizePublication": true,
+  "humanApprovalRequired": true,
+  "silentReplacementProhibited": true,
+  "immutableTag": "v2.0.0-preview.1",
+  "releaseChannel": "Preview",
+  "confirmationPhrase": "APPROVE-PREVIEW-PUBLICATION",
+  "identity": {
+    "unsignedContentKind": "win-pcinfo.unsigned-generated-content-identity",
+    "finalUnsignedKind": "win-pcinfo.unsigned-portable-package-identity",
+    "finalSignedKind": "win-pcinfo.authenticode-signed-package-identity",
+    "finalMustBeDistinct": true,
+    "finalMustDeriveFromQualifiedContent": true
+  },
+  "trustPaths": [
+    "AuthenticodeSigned",
+    "AttestedPreview"
+  ],
+  "attestedFallback": {
+    "permittedReasons": [
+      "ArtifactSigningNotOperational",
+      "VerifiedServiceIncident"
+    ],
+    "neverForConvenience": true,
+    "satisfiesStableSigningGate": false
+  },
+  "github": {
+    "contact": "None",
+    "livePathWithoutApproval": "NotStarted",
+    "livePathWithoutAuthentication": "NotStarted",
+    "livePublicationInThisSlice": "NotStarted"
+  },
+  "requiredAssets": [
+    "portable-package",
+    "checksums",
+    "sbom",
+    "provenance",
+    "dependency-inventory",
+    "beginner-documentation",
+    "preview-capability-matrix",
+    "limitations",
+    "sanitized-release-evidence"
+  ],
+  "requiredLimitations": [
+    "preview-not-supported",
+    "best-effort-maintenance-no-sla",
+    "microsoft-lifecycle-separated",
+    "known-limitations-apply",
+    "no-silent-replacement",
+    "human-approval-required-before-github",
+    "synthetic-cannot-create-preview-claim"
+  ],
+  "publicReleaseNotes": {
+    "mustStatePreview": true,
+    "mustDenySupportedClaim": true,
+    "mustStateBestEffortMaintenance": true,
+    "mustStateKnownLimitations": true,
+    "mustSeparateMicrosoftLifecycle": true,
+    "mustWarnAttestedPreviewWhenApplicable": true,
+    "mustForbidSilentReplacement": true
+  },
+  "humanApproval": {
+    "requiredFields": [
+      "candidateDigest",
+      "qualificationPacketDigest",
+      "limitationsDigest",
+      "trustPath",
+      "publicAssetListDigest"
+    ],
+    "requiredStatements": [
+      "candidate-digest",
+      "qualification-packet",
+      "limitations",
+      "signing-or-attestation-state",
+      "complete-public-asset-list"
+    ],
+    "mustMatchStagedPreview": true
+  },
+  "smokes": {
+    "launch": "Help",
+    "collectionProhibited": true,
+    "postPublicationDownload": true
+  },
+  "decision": {
+    "approvalRequiresAllPass": true,
+    "missingApprovalDeniesPublication": true,
+    "mismatchedApprovalDenies": true,
+    "wrongCandidateDenies": true,
+    "qualificationDeniedDenies": true,
+    "privacyUnsafeDenies": true,
+    "silentReplacementDenies": true,
+    "syntheticCannotPublishGithub": true,
+    "manualPromotionAllowed": false
+  },
+  "scenarios": [
+    "CompleteApprovedSigned",
+    "CompleteApprovedAttested",
+    "HumanApprovalMissing",
+    "ApprovalMismatch",
+    "QualificationDenied",
+    "WrongCandidate",
+    "PrivacyUnsafe",
+    "SilentReplacement",
+    "GithubAuthUnavailable",
+    "ImmutableTagExists",
+    "DownloadDigestMismatch"
+  ],
+  "privacy": {
+    "rejectNonSynthetic": true,
+    "rejectCredentialsAndSecrets": true,
+    "rejectRealIdentifiers": true,
+    "rejectRestrictedEvidence": true,
+    "rejectRawLogs": true,
+    "rejectInstantiatedAzureConfiguration": true,
+    "rejectPlansStateAndCache": true,
+    "rejectLocalUserPaths": true
+  },
+  "workspace": {
+    "requiredBoundary": "PrivatePublicationWorkspace",
+    "markerFileName": ".win-pcinfo-publication-workspace",
+    "markerContent": "win-pcinfo.private-publication-workspace",
+    "rejectRepositoryPath": true,
+    "rejectPublicPath": true,
+    "rejectUncPath": true,
+    "cleanupRequired": true
+  }
+}

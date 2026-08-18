@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/preview-publication.schema.json",
+  "title": "WIN-PCInfo Preview publication policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "release",
+    "policyId",
+    "productCapability",
+    "relatedCapabilityIds",
+    "sliceDeliversCapability",
+    "supportClaim",
+    "previewOrStableClaim",
+    "publicationAuthorized",
+    "supportedPromotionPermitted",
+    "attestedPreviewSatisfiesStableSigning",
+    "syntheticCannotAuthorizePublication",
+    "humanApprovalRequired",
+    "silentReplacementProhibited",
+    "immutableTag",
+    "releaseChannel",
+    "confirmationPhrase",
+    "identity",
+    "trustPaths",
+    "attestedFallback",
+    "github",
+    "requiredAssets",
+    "requiredLimitations",
+    "publicReleaseNotes",
+    "humanApproval",
+    "smokes",
+    "decision",
+    "scenarios",
+    "privacy",
+    "workspace"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.preview-publication-policy" },
+    "contractVersion": { "const": "1.0.0" },
+    "release": { "const": "2.0.0-preview.1" },
+    "policyId": { "const": "win-pcinfo.preview-publication/1.0.0" },
+    "productCapability": { "const": "CAP-0026" },
+    "relatedCapabilityIds": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        { "const": "CAP-0025" },
+        { "const": "CAP-0027" },
+        { "const": "CAP-0030" }
+      ],
+      "items": false
+    },
+    "sliceDeliversCapability": { "const": false },
+    "supportClaim": { "const": "None" },
+    "previewOrStableClaim": { "const": "None" },
+    "publicationAuthorized": { "const": false },
+    "supportedPromotionPermitted": { "const": false },
+    "attestedPreviewSatisfiesStableSigning": { "const": false },
+    "syntheticCannotAuthorizePublication": { "const": true },
+    "humanApprovalRequired": { "const": true },
+    "silentReplacementProhibited": { "const": true },
+    "immutableTag": { "const": "v2.0.0-preview.1" },
+    "releaseChannel": { "const": "Preview" },
+    "confirmationPhrase": { "const": "APPROVE-PREVIEW-PUBLICATION" },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unsignedContentKind",
+        "finalUnsignedKind",
+        "finalSignedKind",
+        "finalMustBeDistinct",
+        "finalMustDeriveFromQualifiedContent"
+      ],
+      "properties": {
+        "unsignedContentKind": { "const": "win-pcinfo.unsigned-generated-content-identity" },
+        "finalUnsignedKind": { "const": "win-pcinfo.unsigned-portable-package-identity" },
+        "finalSignedKind": { "const": "win-pcinfo.authenticode-signed-package-identity" },
+        "finalMustBeDistinct": { "const": true },
+        "finalMustDeriveFromQualifiedContent": { "const": true }
+      }
+    },
+    "trustPaths": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "const": "AuthenticodeSigned" },
+        { "const": "AttestedPreview" }
+      ],
+      "items": false
+    },
+    "attestedFallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "permittedReasons",
+        "neverForConvenience",
+        "satisfiesStableSigningGate"
+      ],
+      "properties": {
+        "permittedReasons": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "const": "ArtifactSigningNotOperational" },
+            { "const": "VerifiedServiceIncident" }
+          ],
+          "items": false
+        },
+        "neverForConvenience": { "const": true },
+        "satisfiesStableSigningGate": { "const": false }
+      }
+    },
+    "github": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contact",
+        "livePathWithoutApproval",
+        "livePathWithoutAuthentication",
+        "livePublicationInThisSlice"
+      ],
+      "properties": {
+        "contact": { "const": "None" },
+        "livePathWithoutApproval": { "const": "NotStarted" },
+        "livePathWithoutAuthentication": { "const": "NotStarted" },
+        "livePublicationInThisSlice": { "const": "NotStarted" }
+      }
+    },
+    "requiredAssets": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "prefixItems": [
+        { "const": "portable-package" },
+        { "const": "checksums" },
+        { "const": "sbom" },
+        { "const": "provenance" },
+        { "const": "dependency-inventory" },
+        { "const": "beginner-documentation" },
+        { "const": "preview-capability-matrix" },
+        { "const": "limitations" },
+        { "const": "sanitized-release-evidence" }
+      ],
+      "items": false
+    },
+    "requiredLimitations": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        { "const": "preview-not-supported" },
+        { "const": "best-effort-maintenance-no-sla" },
+        { "const": "microsoft-lifecycle-separated" },
+        { "const": "known-limitations-apply" },
+        { "const": "no-silent-replacement" },
+        { "const": "human-approval-required-before-github" },
+        { "const": "synthetic-cannot-create-preview-claim" }
+      ],
+      "items": false
+    },
+    "publicReleaseNotes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mustStatePreview",
+        "mustDenySupportedClaim",
+        "mustStateBestEffortMaintenance",
+        "mustStateKnownLimitations",
+        "mustSeparateMicrosoftLifecycle",
+        "mustWarnAttestedPreviewWhenApplicable",
+        "mustForbidSilentReplacement"
+      ],
+      "properties": {
+        "mustStatePreview": { "const": true },
+        "mustDenySupportedClaim": { "const": true },
+        "mustStateBestEffortMaintenance": { "const": true },
+        "mustStateKnownLimitations": { "const": true },
+        "mustSeparateMicrosoftLifecycle": { "const": true },
+        "mustWarnAttestedPreviewWhenApplicable": { "const": true },
+        "mustForbidSilentReplacement": { "const": true }
+      }
+    },
+    "humanApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredFields",
+        "requiredStatements",
+        "mustMatchStagedPreview"
+      ],
+      "properties": {
+        "requiredFields": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "const": "candidateDigest" },
+            { "const": "qualificationPacketDigest" },
+            { "const": "limitationsDigest" },
+            { "const": "trustPath" },
+            { "const": "publicAssetListDigest" }
+          ],
+          "items": false
+        },
+        "requiredStatements": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "const": "candidate-digest" },
+            { "const": "qualification-packet" },
+            { "const": "limitations" },
+            { "const": "signing-or-attestation-state" },
+            { "const": "complete-public-asset-list" }
+          ],
+          "items": false
+        },
+        "mustMatchStagedPreview": { "const": true }
+      }
+    },
+    "smokes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["launch", "collectionProhibited", "postPublicationDownload"],
+      "properties": {
+        "launch": { "const": "Help" },
+        "collectionProhibited": { "const": true },
+        "postPublicationDownload": { "const": true }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approvalRequiresAllPass",
+        "missingApprovalDeniesPublication",
+        "mismatchedApprovalDenies",
+        "wrongCandidateDenies",
+        "qualificationDeniedDenies",
+        "privacyUnsafeDenies",
+        "silentReplacementDenies",
+        "syntheticCannotPublishGithub",
+        "manualPromotionAllowed"
+      ],
+      "properties": {
+        "approvalRequiresAllPass": { "const": true },
+        "missingApprovalDeniesPublication": { "const": true },
+        "mismatchedApprovalDenies": { "const": true },
+        "wrongCandidateDenies": { "const": true },
+        "qualificationDeniedDenies": { "const": true },
+        "privacyUnsafeDenies": { "const": true },
+        "silentReplacementDenies": { "const": true },
+        "syntheticCannotPublishGithub": { "const": true },
+        "manualPromotionAllowed": { "const": false }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": {
+        "enum": [
+          "CompleteApprovedSigned",
+          "CompleteApprovedAttested",
+          "HumanApprovalMissing",
+          "ApprovalMismatch",
+          "QualificationDenied",
+          "WrongCandidate",
+          "PrivacyUnsafe",
+          "SilentReplacement",
+          "GithubAuthUnavailable",
+          "ImmutableTagExists",
+          "DownloadDigestMismatch"
+        ]
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rejectNonSynthetic",
+        "rejectCredentialsAndSecrets",
+        "rejectRealIdentifiers",
+        "rejectRestrictedEvidence",
+        "rejectRawLogs",
+        "rejectInstantiatedAzureConfiguration",
+        "rejectPlansStateAndCache",
+        "rejectLocalUserPaths"
+      ],
+      "properties": {
+        "rejectNonSynthetic": { "const": true },
+        "rejectCredentialsAndSecrets": { "const": true },
+        "rejectRealIdentifiers": { "const": true },
+        "rejectRestrictedEvidence": { "const": true },
+        "rejectRawLogs": { "const": true },
+        "rejectInstantiatedAzureConfiguration": { "const": true },
+        "rejectPlansStateAndCache": { "const": true },
+        "rejectLocalUserPaths": { "const": true }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredBoundary",
+        "markerFileName",
+        "markerContent",
+        "rejectRepositoryPath",
+        "rejectPublicPath",
+        "rejectUncPath",
+        "cleanupRequired"
+      ],
+      "properties": {
+        "requiredBoundary": { "const": "PrivatePublicationWorkspace" },
+        "markerFileName": { "const": ".win-pcinfo-publication-workspace" },
+        "markerContent": { "const": "win-pcinfo.private-publication-workspace" },
+        "rejectRepositoryPath": { "const": true },
+        "rejectPublicPath": { "const": true },
+        "rejectUncPath": { "const": true },
+        "cleanupRequired": { "const": true }
+      }
+    }
+  }
+}

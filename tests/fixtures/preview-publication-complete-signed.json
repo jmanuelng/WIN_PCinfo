@@ -1,0 +1,187 @@
+{
+  "kind": "win-pcinfo.preview-publication-request",
+  "contractVersion": "1.0.0",
+  "synthetic": true,
+  "scenario": "CompleteApprovedSigned",
+  "privacyBoundary": "PrivatePublicationWorkspace",
+  "trustPath": "AuthenticodeSigned",
+  "signingUnavailability": "None",
+  "waiverRequested": false,
+  "bindings": {
+    "generatedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "generatedContentIdentityKind": "win-pcinfo.unsigned-generated-content-identity",
+    "finalDistributableSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "finalDistributableIdentityKind": "win-pcinfo.authenticode-signed-package-identity",
+    "derivedFromGeneratedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "qualificationPacket": {
+    "recordType": "win-pcinfo.preview-qualification-packet",
+    "contractVersion": "1.0.0",
+    "state": "Approved",
+    "decision": "Qualify",
+    "reasonCode": "QUALIFY.APPROVED",
+    "syntheticEvidenceOnly": true,
+    "supportClaim": "None",
+    "previewOrStableClaim": "None",
+    "sliceDeliversCapability": false,
+    "publicationAuthorized": false,
+    "humanApprovalRequired": true,
+    "trustPath": "AuthenticodeSigned",
+    "attestedPreviewSatisfiesStableSigning": false,
+    "unsignedContentQualified": true,
+    "finalArtifactQualified": true,
+    "candidateBound": true,
+    "cleanupVerified": true,
+    "zeroResidueVerified": true,
+    "azureIdentityAvailable": false,
+    "liveAzureStarted": false,
+    "collectionStarted": false,
+    "qualityThreeCleanPassed": true,
+    "smokes": [
+      {
+        "smokeId": "launch",
+        "result": "Pass",
+        "reasonCode": "QUALIFY.PASS"
+      },
+      {
+        "smokeId": "trust",
+        "result": "Pass",
+        "reasonCode": "QUALIFY.PASS"
+      },
+      {
+        "smokeId": "final-artifact",
+        "result": "NotRun",
+        "reasonCode": "QUALIFY.FINAL_ARTIFACT_NOT_LAUNCHED"
+      }
+    ],
+    "coverage": {
+      "gatesComplete": true,
+      "privilegeComplete": true,
+      "networkComplete": true,
+      "localeComplete": true,
+      "validationControlComplete": true,
+      "failureInjectionComplete": true,
+      "packageExerciseComplete": true,
+      "recoveryComplete": true
+    },
+    "claimedScenarios": [
+      {
+        "scenarioId": "windows-10-enterprise-x64",
+        "windowsFamily": "Windows 10",
+        "edition": "Enterprise",
+        "architecture": "x64",
+        "result": "Pass",
+        "sanitizedDescription": "Windows 10 Enterprise x64 Preview scenario"
+      },
+      {
+        "scenarioId": "windows-11-enterprise-x64",
+        "windowsFamily": "Windows 11",
+        "edition": "Enterprise",
+        "architecture": "x64",
+        "result": "Pass",
+        "sanitizedDescription": "Windows 11 Enterprise x64 Preview scenario"
+      }
+    ],
+    "impactReview": {
+      "required": true,
+      "completed": false,
+      "notes": [
+        "human-approval-required"
+      ]
+    },
+    "blockingReasons": [],
+    "limitations": [
+      "synthetic-evidence-not-promotable",
+      "human-approval-required",
+      "final-artifact-bytes-not-launched"
+    ]
+  },
+  "humanApproval": {
+    "present": true,
+    "confirmationPhrase": "APPROVE-PREVIEW-PUBLICATION",
+    "candidateDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualificationPacketDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "limitationsDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "trustPath": "AuthenticodeSigned",
+    "publicAssetListDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "confirmedStatements": [
+      "candidate-digest",
+      "qualification-packet",
+      "limitations",
+      "signing-or-attestation-state",
+      "complete-public-asset-list"
+    ]
+  },
+  "publisher": {
+    "channel": "Synthetic",
+    "githubAuthAvailable": false,
+    "existingTag": false,
+    "replaceRequested": false,
+    "fault": "None"
+  },
+  "assets": [
+    {
+      "assetId": "portable-package",
+      "fileName": "WIN-PCInfo-2.0.0-preview.1.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "role": "final-distributable"
+    },
+    {
+      "assetId": "checksums",
+      "fileName": "SHA256SUMS.txt",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "role": "checksums"
+    },
+    {
+      "assetId": "sbom",
+      "fileName": "sbom.json",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "role": "sbom"
+    },
+    {
+      "assetId": "provenance",
+      "fileName": "provenance.json",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "role": "provenance"
+    },
+    {
+      "assetId": "dependency-inventory",
+      "fileName": "dependency-inventory.json",
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "role": "dependency-inventory"
+    },
+    {
+      "assetId": "beginner-documentation",
+      "fileName": "beginner-guidance.md",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "role": "beginner-documentation"
+    },
+    {
+      "assetId": "preview-capability-matrix",
+      "fileName": "preview-capability-matrix.json",
+      "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "role": "capability-matrix"
+    },
+    {
+      "assetId": "limitations",
+      "fileName": "limitations.md",
+      "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "role": "limitations"
+    },
+    {
+      "assetId": "sanitized-release-evidence",
+      "fileName": "sanitized-release-evidence.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01",
+      "role": "sanitized-evidence"
+    }
+  ],
+  "limitations": [
+    "preview-not-supported",
+    "best-effort-maintenance-no-sla",
+    "microsoft-lifecycle-separated",
+    "known-limitations-apply",
+    "no-silent-replacement",
+    "human-approval-required-before-github",
+    "synthetic-cannot-create-preview-claim"
+  ]
+}

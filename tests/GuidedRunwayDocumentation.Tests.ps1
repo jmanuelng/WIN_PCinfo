@@ -13,12 +13,12 @@ $policy = Get-Content -LiteralPath (
 
 $headerText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src/ApplicationHeader.ps1') -Raw
 $allowedWorkflows = @(
-    'Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate'
+    'Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease'
 )
 $allowedModes = @('Guided', 'Automation')
 Assert-Equal $true (
-    $headerText.Contains("ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate')")
-) 'Help, About, Verify, VerifyAttestation, AdmitValidationRound, RunValidationRound, RecoverValidationRound, EvaluateReleaseGates, SignAndVerifyCandidate, and QualifyPreviewCandidate are first-class generated-application workflows'
+    $headerText.Contains("ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')")
+) 'Help, About, Verify, VerifyAttestation, AdmitValidationRound, RunValidationRound, RecoverValidationRound, EvaluateReleaseGates, SignAndVerifyCandidate, QualifyPreviewCandidate, and PublishPreviewRelease are first-class generated-application workflows'
 Assert-Equal $true ($headerText.Contains("ValidateSet('Guided', 'Automation')")) `
     'Guided and Automation remain the implemented launch modes'
 

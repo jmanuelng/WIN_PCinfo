@@ -867,6 +867,112 @@ if ($Workflow -eq 'QualifyPreviewCandidate') {
     exit $exitCode
 }
 
+if ($Workflow -eq 'PublishPreviewRelease') {
+    # Publication must run on the exact generated candidate. The
+    # threat is hiding a failed or private pack behind Authenticode,
+    # treating this workflow as collection, or creating a live GitHub
+    # release from synthetic evidence. The mechanism is the same
+    # trusted JSON commands as Help, with no GitHub write and no
+    # assessment work. The trust assumption is that the request is
+    # synthetic. Safe failure is NotStarted without derived residue.
+    Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'PreviewPublication' `
+        -State 'Started' -MessageId 'publication.started' -CompletedUnits 0 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    $publishPolicy = Get-PreviewPublicationPolicy
+    $publishEvaluation = $null
+    if ([string]::IsNullOrWhiteSpace($PublicationRequestPath) -or
+        [string]::IsNullOrWhiteSpace($PublicationWorkspacePath)) {
+        $publishEvaluation = Get-PreviewPublicationRejectedEvaluation `
+            -ReasonCode 'PUBLISH.REQUEST_MISSING' -Policy $publishPolicy
+    }
+    else {
+        try {
+            $publishRequestText = [System.IO.File]::ReadAllText(
+                $PublicationRequestPath,
+                [System.Text.UTF8Encoding]::new($false, $true)
+            )
+            $publishPrivacy = Test-PreviewPublicationPrivacyBoundary -Text $publishRequestText
+            if ($publishPrivacy) {
+                $publishEvaluation = Get-PreviewPublicationRejectedEvaluation `
+                    -ReasonCode $publishPrivacy -Policy $publishPolicy
+            }
+            else {
+                $publishApplicationDirectory = Split-Path -Parent $PSCommandPath
+                $publishLedgerPath = Get-PreviewPublicationCatalogPath `
+                    -ApplicationDirectory $publishApplicationDirectory `
+                    -RelativePath 'docs/spec/capability-ledger.json'
+                $publishRepositoryRoot = $publishApplicationDirectory
+                if (-not [string]::IsNullOrWhiteSpace($publishLedgerPath)) {
+                    $publishRepositoryRoot = [System.IO.Path]::GetFullPath(
+                        (Join-Path (Split-Path -Parent $publishLedgerPath) '..\..')
+                    )
+                }
+                $publishRequestSchema = Get-PreviewPublicationCatalogPath `
+                    -RepositoryRoot $publishRepositoryRoot `
+                    -ApplicationDirectory $publishApplicationDirectory `
+                    -RelativePath 'schemas/preview-publication-request.schema.json'
+                $publishRequestSchemaValid = $false
+                if (-not [string]::IsNullOrWhiteSpace($publishRequestSchema)) {
+                    try {
+                        $publishRequestSchemaValid = Test-Json -Json $publishRequestText `
+                            -SchemaFile $publishRequestSchema
+                    }
+                    catch {
+                        $publishRequestSchemaValid = $false
+                    }
+                }
+                if (-not $publishRequestSchemaValid) {
+                    $publishEvaluation = Get-PreviewPublicationRejectedEvaluation `
+                        -ReasonCode 'PUBLISH.REQUEST_INVALID' -Policy $publishPolicy
+                }
+                else {
+                    $publishRequest = & $convertFromJsonCommand -InputObject $publishRequestText `
+                        -ErrorAction Stop
+                    $publishEvaluation = Invoke-PreviewPublication -Request $publishRequest `
+                        -RequestText $publishRequestText -CandidatePath $PSCommandPath `
+                        -PrivateWorkspacePath $PublicationWorkspacePath `
+                        -RepositoryRoot $publishRepositoryRoot `
+                        -ApplicationDirectory $publishApplicationDirectory
+                }
+            }
+        }
+        catch {
+            $publishEvaluation = Get-PreviewPublicationRejectedEvaluation `
+                -ReasonCode 'PUBLISH.REQUEST_INVALID' -Policy $publishPolicy
+        }
+    }
+    $publishSucceeded = $publishEvaluation.State -in @(
+        'Previewed', 'PublishedAndVerified', 'Denied'
+    ) -and $publishEvaluation.ExitKind -eq 'Completed'
+    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'PreviewPublication' `
+        -State $(if ($publishSucceeded) { 'Succeeded' } else { 'Failed' }) `
+        -MessageId $(if ($publishSucceeded) {
+            'publication.succeeded'
+        } else {
+            'publication.failed'
+        }) -CompletedUnits 1 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $publishEvaluation.Preview -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $publishEvaluation.Result -ConvertToJsonCommand $convertToJsonCommand
+    $publishTerminalReason = $publishEvaluation.ReasonCode
+    $terminal = New-TerminalRecord -ReasonCode $publishTerminalReason -Phase PreviewPublication
+    $exitCode = 20
+    if ($publishEvaluation.ExitKind -eq 'Completed') {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        $exitCode = 0
+    }
+    elseif ($publishEvaluation.ExitKind -eq 'CleanupIncomplete') {
+        $terminal.outcome = 'CleanupIncomplete'
+        $terminal.exitCode = 60
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $false
+        $exitCode = 60
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $exitCode
+}
+
 if ($Workflow -eq 'Help' -or $Workflow -eq 'About') {
     # Discovery must remain available on an unsigned development artifact.
     # Requiring Authenticode here would hide the repository from the people
