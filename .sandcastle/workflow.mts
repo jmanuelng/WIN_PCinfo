@@ -9,6 +9,9 @@ export const MAX_ALLOWED_ITERATIONS = 10;
 export const DEFAULT_MAX_PARALLEL_ISSUES = 2;
 export const MAX_ALLOWED_PARALLEL_ISSUES = 2;
 export const AGENT_PHASE_IDLE_TIMEOUT_SECONDS = 2 * 60 * 60;
+export const GITHUB_CLI_RETRY_ATTEMPTS = 3;
+export const GITHUB_CLI_RETRY_DELAYS_MS = [2_000, 6_000, 18_000] as const;
+const SANDCASTLE_LANE_BRANCH = /^sandcastle\/issue-(\d+)-\d+$/;
 
 export interface GitHubActor {
   readonly login: string;
@@ -27,6 +30,12 @@ export interface SubIssuesSummary {
   readonly completed: number;
   readonly percentCompleted?: number;
   readonly total: number;
+}
+
+export interface LocalIssueLane {
+  readonly issueNumber: number;
+  readonly branch: string;
+  readonly worktreePath: string;
 }
 
 export interface GitHubIssue {
@@ -268,6 +277,44 @@ export interface WorkflowCommandAdapter {
   ) => T;
 }
 
+export function isTransientGitHubCliFailure(
+  stdout: string,
+  stderr = "",
+): boolean {
+  const text = `${stdout}\n${stderr}`;
+  return (
+    /HTTP 50[23]\b/i.test(text) ||
+    /No server is currently available/i.test(text) ||
+    /Something went wrong while executing your query/i.test(text)
+  );
+}
+
+function sleepSync(milliseconds: number): void {
+  spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ${Math.max(0, milliseconds)})`,
+    ],
+    { windowsHide: true },
+  );
+}
+
+function spawnCommandSync(
+  command: string,
+  args: readonly string[],
+  options: RunOptions,
+) {
+  const invocation = commandInvocation(command, args);
+  return spawnSync(invocation.command, invocation.args, {
+    cwd: options.cwd,
+    encoding: "utf8",
+    stdio: options.stream ? "inherit" : "pipe",
+    timeout: options.timeoutMs,
+    windowsHide: true,
+  });
+}
+
 function finalizeCommandResult(
   command: string,
   args: readonly string[],
@@ -297,30 +344,43 @@ export function runCommand(
   args: readonly string[],
   options: RunOptions = {},
 ): CommandResult {
-  const invocation = commandInvocation(command, args);
-  const result = spawnSync(invocation.command, invocation.args, {
-    cwd: options.cwd,
-    encoding: "utf8",
-    stdio: options.stream ? "inherit" : "pipe",
-    timeout: options.timeoutMs,
-    windowsHide: true,
-  });
+  const attempts = command === "gh" ? GITHUB_CLI_RETRY_ATTEMPTS : 1;
+  let lastStdout = "";
+  let lastStderr = "";
+  let lastExit = 1;
 
-  if (result.error) {
-    throw new Error(
-      `Unable to run ${command}: ${result.error.message}`,
-      { cause: result.error },
-    );
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = spawnCommandSync(command, args, options);
+    if (result.error) {
+      throw new Error(
+        `Unable to run ${command}: ${result.error.message}`,
+        { cause: result.error },
+      );
+    }
+
+    lastStdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+    lastStderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+    lastExit = result.status ?? 1;
+    const retryable =
+      command === "gh" &&
+      attempt < attempts &&
+      lastExit !== 0 &&
+      isTransientGitHubCliFailure(lastStdout, lastStderr);
+    if (!retryable) {
+      break;
+    }
+    const delay =
+      GITHUB_CLI_RETRY_DELAYS_MS[attempt - 1] ??
+      GITHUB_CLI_RETRY_DELAYS_MS[GITHUB_CLI_RETRY_DELAYS_MS.length - 1];
+    sleepSync(delay);
   }
 
-  const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
-  const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
   return finalizeCommandResult(
     command,
     args,
-    result.status ?? 1,
-    stdout,
-    stderr,
+    lastExit,
+    lastStdout,
+    lastStderr,
     options.allowFailure,
   );
 }
@@ -492,6 +552,72 @@ export function selectNextIssues(
     .slice(0, limit);
 }
 
+export function parseWorktreeLanes(porcelain: string): readonly LocalIssueLane[] {
+  const lanes: LocalIssueLane[] = [];
+  for (const block of porcelain.split(/\r?\n\r?\n/)) {
+    const lines = block.split(/\r?\n/);
+    const pathLine = lines.find((line) => line.startsWith("worktree "));
+    const branchLine = lines.find((line) => line.startsWith("branch refs/heads/"));
+    if (!pathLine || !branchLine) {
+      continue;
+    }
+    const branch = branchLine.slice("branch refs/heads/".length);
+    const match = SANDCASTLE_LANE_BRANCH.exec(branch);
+    if (!match) {
+      continue;
+    }
+    lanes.push({
+      issueNumber: Number.parseInt(match[1] ?? "", 10),
+      branch,
+      worktreePath: pathLine.slice("worktree ".length),
+    });
+  }
+  return lanes.filter((lane) => Number.isInteger(lane.issueNumber));
+}
+
+export function listLocalIssueLanes(
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): readonly LocalIssueLane[] {
+  const listed = commands.run("git", ["worktree", "list", "--porcelain"], {
+    allowFailure: true,
+  });
+  if (listed.exitCode !== 0) {
+    return [];
+  }
+  return parseWorktreeLanes(listed.stdout);
+}
+
+export function selectStartableIssues(
+  issues: readonly GitHubIssue[],
+  viewer: string,
+  lanes: readonly LocalIssueLane[],
+  limit: number,
+): readonly GitHubIssue[] {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error("Issue selection limit must be a positive integer.");
+  }
+
+  const laneNumbers = new Set(lanes.map((lane) => lane.issueNumber));
+  return [...issues]
+    .filter(
+      (issue) =>
+        isEligibleIssue(issue) ||
+        (isSafelyClaimedIssue(issue, viewer) && laneNumbers.has(issue.number)),
+    )
+    .sort((left, right) => left.number - right.number)
+    .slice(0, limit);
+}
+
+export function hostWorktreeIsClean(porcelain: string): boolean {
+  return porcelain.split(/\r?\n/).every((line) => {
+    const trimmed = line.trim();
+    return (
+      trimmed.length === 0 ||
+      /^\?\? \.sandcastle\/(notes|logs)(\/|$)/.test(trimmed)
+    );
+  });
+}
+
 interface FrontierIssueNode {
   readonly number: number;
   readonly title: string;
@@ -543,14 +669,10 @@ const FRONTIER_QUERY = `
   }
 `;
 
-export function listEligibleIssues(
-  desiredCount = MAX_ALLOWED_PARALLEL_ISSUES,
-  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
-): readonly GitHubIssue[] {
-  if (!Number.isInteger(desiredCount) || desiredCount < 1) {
-    throw new Error("Desired frontier count must be a positive integer.");
-  }
-
+function collectReadyIssues(
+  commands: WorkflowCommandAdapter,
+  shouldStop: (issues: readonly GitHubIssue[]) => boolean,
+): GitHubIssue[] {
   const repository = commands.run(
     "gh",
     ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
@@ -591,10 +713,7 @@ export function listEligibleIssues(
       })),
     );
 
-    if (selectNextIssues(issues, desiredCount).length >= desiredCount) {
-      return issues;
-    }
-    if (!connection.pageInfo.hasNextPage) {
+    if (shouldStop(issues) || !connection.pageInfo.hasNextPage) {
       return issues;
     }
     cursor = connection.pageInfo.endCursor;
@@ -604,13 +723,35 @@ export function listEligibleIssues(
   }
 }
 
+export function listEligibleIssues(
+  desiredCount = MAX_ALLOWED_PARALLEL_ISSUES,
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): readonly GitHubIssue[] {
+  if (!Number.isInteger(desiredCount) || desiredCount < 1) {
+    throw new Error("Desired frontier count must be a positive integer.");
+  }
+
+  return collectReadyIssues(
+    commands,
+    (issues) => selectNextIssues(issues, desiredCount).length >= desiredCount,
+  );
+}
+
+export function listReadyIssues(
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): readonly GitHubIssue[] {
+  return collectReadyIssues(commands, () => false);
+}
+
 export function loginFromGitHubAuthStatus(text: string): string | undefined {
   const match = text.match(/Logged in to github\.com account (\S+)/i);
   return match?.[1];
 }
 
-export function authenticatedGitHubLogin(): string {
-  const api = runCommand("gh", ["api", "user", "--jq", ".login"], {
+export function resolveGitHubLogin(
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): string {
+  const api = commands.run("gh", ["api", "user", "--jq", ".login"], {
     allowFailure: true,
   });
   const fromApi = api.stdout.trim();
@@ -618,7 +759,7 @@ export function authenticatedGitHubLogin(): string {
     return fromApi;
   }
 
-  const status = runCommand("gh", ["auth", "status"], { allowFailure: true });
+  const status = commands.run("gh", ["auth", "status"], { allowFailure: true });
   const fromStatus = loginFromGitHubAuthStatus(
     `${status.stdout}\n${status.stderr}`,
   );
@@ -627,6 +768,10 @@ export function authenticatedGitHubLogin(): string {
   }
 
   throw new Error("GitHub CLI did not return the authenticated login.");
+}
+
+export function authenticatedGitHubLogin(): string {
+  return resolveGitHubLogin();
 }
 
 export function claimIssue(issue: GitHubIssue): void {
@@ -659,14 +804,29 @@ export function claimIssue(issue: GitHubIssue): void {
   }
 }
 
+export function releaseOrphanSelfClaims(
+  issues: readonly GitHubIssue[],
+  viewer: string,
+  lanes: readonly LocalIssueLane[],
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): readonly number[] {
+  const laneNumbers = new Set(lanes.map((lane) => lane.issueNumber));
+  const released: number[] = [];
+  for (const issue of issues) {
+    if (!isSafelyClaimedIssue(issue, viewer) || laneNumbers.has(issue.number)) {
+      continue;
+    }
+    releaseIssueClaim(issue.number, commands);
+    released.push(issue.number);
+  }
+  return released;
+}
+
 export function releaseIssueClaim(
   issueNumber: number,
   commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
 ): void {
-  const viewer = commands.run(
-    "gh",
-    ["api", "user", "--jq", ".login"],
-  ).stdout;
+  const viewer = resolveGitHubLogin(commands);
   if (!viewer) {
     throw new Error("GitHub CLI did not return the authenticated login.");
   }
@@ -710,7 +870,7 @@ export function assertAuthentication(): void {
 
 export function assertHostReady(): void {
   const status = runCommand("git", ["status", "--porcelain"]).stdout;
-  if (status) {
+  if (!hostWorktreeIsClean(status)) {
     throw new Error(
       `The host worktree must be clean before Sandcastle starts:\n${status}`,
     );
@@ -960,6 +1120,27 @@ export function requireEligibleIssue(
     );
   }
   return issue;
+}
+
+export function requireStartableIssue(
+  issueNumber: number,
+  viewer: string,
+  lanes: readonly LocalIssueLane[],
+  commands: WorkflowCommandAdapter = DEFAULT_WORKFLOW_COMMANDS,
+): GitHubIssue {
+  const issue = loadIssue(issueNumber, commands);
+  if (isEligibleIssue(issue)) {
+    return issue;
+  }
+  if (
+    isSafelyClaimedIssue(issue, viewer) &&
+    lanes.some((lane) => lane.issueNumber === issueNumber)
+  ) {
+    return issue;
+  }
+  throw new Error(
+    `Issue #${issueNumber} is not an unassigned or resumable ready-for-agent ticket.`,
+  );
 }
 
 export function parseMaxParallel(args: readonly string[]): number {

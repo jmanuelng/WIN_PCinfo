@@ -1,9 +1,11 @@
 import {
   assertAuthentication,
   assertHostReady,
+  authenticatedGitHubLogin,
   listEligibleIssues,
+  listLocalIssueLanes,
   parseIssueNumber,
-  requireEligibleIssue,
+  requireStartableIssue,
   selectNextIssue,
 } from "./workflow.mts";
 
@@ -19,7 +21,11 @@ function run(): void {
   const issue =
     requestedIssueNumber === undefined
       ? selectNextIssue(listEligibleIssues())
-      : requireEligibleIssue(requestedIssueNumber);
+      : requireStartableIssue(
+          requestedIssueNumber,
+          authenticatedGitHubLogin(),
+          listLocalIssueLanes(),
+        );
   if (!issue) {
     console.log("PASS: no unassigned, unblocked ready-for-agent issue is available.");
     return;
