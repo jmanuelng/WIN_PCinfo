@@ -64,7 +64,8 @@
           "fileName": {
             "type": "string",
             "minLength": 8,
-            "maxLength": 96
+            "maxLength": 96,
+            "pattern": "^[A-Za-z0-9._-]+$"
           },
           "sha256": {
             "type": "string",

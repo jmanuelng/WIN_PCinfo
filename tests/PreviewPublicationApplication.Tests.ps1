@@ -44,8 +44,21 @@ function New-BoundPublicationPath {
     $request.humanApproval.candidateDigest = $candidateDigest
     $request.humanApproval.qualificationPacketDigest =
         Get-PreviewPublicationPacketDigest -Packet $request.qualificationPacket
+    $mergedLimitations = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in @($policy.requiredLimitations)) {
+        $mergedLimitations.Add([string] $item)
+    }
+    foreach ($item in @($request.limitations)) {
+        if ([string] $item -notin @($mergedLimitations)) {
+            $mergedLimitations.Add([string] $item)
+        }
+    }
+    if ([string] $request.trustPath -eq 'AttestedPreview' -and
+        'attested-preview-not-trusted' -notin @($mergedLimitations)) {
+        $mergedLimitations.Add('attested-preview-not-trusted')
+    }
     $request.humanApproval.limitationsDigest =
-        Get-PreviewPublicationLimitationsDigest -Limitations $request.limitations
+        Get-PreviewPublicationLimitationsDigest -Limitations @($mergedLimitations)
     $request.humanApproval.publicAssetListDigest =
         Get-PreviewPublicationAssetListDigest -Assets $request.assets
     $request.humanApproval.trustPath = [string] $request.trustPath

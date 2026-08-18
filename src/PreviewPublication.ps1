@@ -301,6 +301,50 @@ function Get-PreviewPublicationSyntheticAssetBytes {
     )
 }
 
+function Test-PreviewPublicationSafeFileName {
+    param([Parameter(Mandatory)] [string] $FileName)
+
+    # Request-controlled names are written under the private workspace.
+    # The threat is a `..` or separator that stages bytes outside
+    # staged-assets, then survives cleanup. The mechanism is the same
+    # closed charset as the request schema, plus a length bound. The
+    # trust assumption is that schema validation may be skipped when
+    # this module is sourced directly. Safe failure is to refuse the
+    # name before any derived file exists.
+    if ([string]::IsNullOrWhiteSpace($FileName)) {
+        return $false
+    }
+    if ($FileName.Length -lt 8 -or $FileName.Length -gt 96) {
+        return $false
+    }
+    if ($FileName -eq '.' -or $FileName -eq '..') {
+        return $false
+    }
+    $FileName -match '^[A-Za-z0-9._-]+$'
+}
+
+function Get-PreviewPublicationChildPath {
+    param(
+        [Parameter(Mandatory)] [string] $Root,
+        [Parameter(Mandatory)] [string] $Name
+    )
+
+    if (-not (Test-PreviewPublicationSafeFileName -FileName $Name)) {
+        return $null
+    }
+    try {
+        $fullRoot = [System.IO.Path]::GetFullPath($Root)
+        $combined = [System.IO.Path]::GetFullPath((Join-Path $fullRoot $Name))
+    }
+    catch {
+        return $null
+    }
+    if (-not (Test-PreviewPublicationPathUnderRoot -Path $combined -Root $fullRoot)) {
+        return $null
+    }
+    $combined
+}
+
 function Get-PreviewPublicationCanonicalTextBytes {
     param([Parameter(Mandatory)] [string] $Text)
 
@@ -570,7 +614,12 @@ function Invoke-PreviewPublicationWorkspaceCleanup {
         -not (Test-Path -LiteralPath $WorkspacePath -PathType Container)) {
         return $true
     }
-    foreach ($name in @('staged-assets', 'synthetic-publisher', 'derived-publication-preview.json')) {
+    foreach ($name in @(
+        'staged-assets',
+        'synthetic-publisher',
+        'downloaded-assets',
+        'derived-publication-preview.json'
+    )) {
         $target = Join-Path $WorkspacePath $name
         if (Test-Path -LiteralPath $target) {
             Remove-Item -LiteralPath $target -Recurse -Force
@@ -737,6 +786,8 @@ function Invoke-PreviewPublication {
         $qualificationApproved = $packetState -eq 'Approved' -and
             $packetDecision -eq 'Qualify' -and
             $packetReason -eq 'QUALIFY.APPROVED' -and
+            [bool] (Get-PreviewPublicationProperty $packet 'candidateBound') -and
+            [bool] (Get-PreviewPublicationProperty $packet 'unsignedContentQualified') -and
             [bool] (Get-PreviewPublicationProperty $packet 'finalArtifactQualified')
         if (-not $qualificationApproved) {
             $blocking.Add('PUBLISH.QUALIFICATION_DENIED')
@@ -748,10 +799,37 @@ function Invoke-PreviewPublication {
         [string] (Get-PreviewPublicationProperty $_ 'assetId')
     })
     $assetsVerified = $true
+    $assetsSafeToStage = $true
+    $seenAssetIds = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::Ordinal
+    )
+    $seenFileNames = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($asset in $assets) {
+        $assetId = [string] (Get-PreviewPublicationProperty $asset 'assetId')
+        $fileName = [string] (Get-PreviewPublicationProperty $asset 'fileName')
+        if (-not $seenAssetIds.Add($assetId)) {
+            $assetsVerified = $false
+            if ('PUBLISH.ASSET_INCOMPLETE' -notin $blocking) {
+                $blocking.Add('PUBLISH.ASSET_INCOMPLETE')
+            }
+        }
+        if (-not (Test-PreviewPublicationSafeFileName -FileName $fileName) -or
+            -not $seenFileNames.Add($fileName)) {
+            $assetsVerified = $false
+            $assetsSafeToStage = $false
+            if ('PUBLISH.ASSET_INVALID' -notin $blocking) {
+                $blocking.Add('PUBLISH.ASSET_INVALID')
+            }
+        }
+    }
     foreach ($requiredAsset in @($policy.requiredAssets)) {
         if ($requiredAsset -notin $assetIds) {
             $assetsVerified = $false
-            $blocking.Add('PUBLISH.ASSET_INCOMPLETE')
+            if ('PUBLISH.ASSET_INCOMPLETE' -notin $blocking) {
+                $blocking.Add('PUBLISH.ASSET_INCOMPLETE')
+            }
             break
         }
     }
@@ -774,6 +852,9 @@ function Invoke-PreviewPublication {
     }
     else {
         $assetsVerified = $false
+        if ('PUBLISH.ASSET_INCOMPLETE' -notin $blocking) {
+            $blocking.Add('PUBLISH.ASSET_INCOMPLETE')
+        }
     }
 
     foreach ($asset in $assets) {
@@ -790,8 +871,17 @@ function Invoke-PreviewPublication {
         }
     }
 
+    $previewLimitationList = @($limitations | Select-Object -Unique)
+    $previewAssets = @(
+        foreach ($asset in $assets) {
+            $previewName = [string] (Get-PreviewPublicationProperty $asset 'fileName')
+            if (Test-PreviewPublicationSafeFileName -FileName $previewName) {
+                $asset
+            }
+        }
+    )
     $preview = New-PreviewPublicationPreview -Policy $policy -TrustPath $trustPath `
-        -Assets $assets -Limitations @($limitations | Select-Object -Unique)
+        -Assets $previewAssets -Limitations $previewLimitationList
     $notesOk = Test-PreviewPublicationNotes -Preview $preview `
         -Attested:($trustPath -eq 'AttestedPreview')
     if (-not $notesOk) {
@@ -804,8 +894,9 @@ function Invoke-PreviewPublication {
     else {
         ''
     }
-    $expectedLimitationsDigest = Get-PreviewPublicationLimitationsDigest -Limitations $requestLimitations
-    $expectedAssetListDigest = Get-PreviewPublicationAssetListDigest -Assets $assets
+    $expectedLimitationsDigest = Get-PreviewPublicationLimitationsDigest `
+        -Limitations $previewLimitationList
+    $expectedAssetListDigest = Get-PreviewPublicationAssetListDigest -Assets $previewAssets
 
     if ($approvalPresent) {
         $phrase = [string] (Get-PreviewPublicationProperty $humanApproval 'confirmationPhrase')
@@ -851,6 +942,9 @@ function Invoke-PreviewPublication {
             $blocking.Add('PUBLISH.SYNTHETIC_CANNOT_PUBLISH_GITHUB')
         }
     }
+    elseif ($channel -ne 'Synthetic') {
+        $blocking.Add('PUBLISH.REQUEST_INVALID')
+    }
     if ($replaceRequested) {
         $blocking.Add('PUBLISH.SILENT_REPLACEMENT_REJECTED')
     }
@@ -866,6 +960,7 @@ function Invoke-PreviewPublication {
 
     $canPreview = $candidateBound -and $qualificationApproved -and $assetsVerified -and $notesOk -and
         ('PUBLISH.ASSET_INCOMPLETE' -notin $uniqueBlocking) -and
+        ('PUBLISH.ASSET_INVALID' -notin $uniqueBlocking) -and
         ('PUBLISH.LIMITATIONS_INCOMPLETE' -notin $uniqueBlocking) -and
         ('PUBLISH.FINAL_IDENTITY_NOT_DISTINCT' -notin $uniqueBlocking) -and
         ('PUBLISH.FINAL_IDENTITY_NOT_DERIVED' -notin $uniqueBlocking) -and
@@ -874,7 +969,8 @@ function Invoke-PreviewPublication {
         ('PUBLISH.ATTESTED_UNSIGNED_REQUIRED' -notin $uniqueBlocking) -and
         ('PUBLISH.WAIVER_REJECTED' -notin $uniqueBlocking) -and
         ('PUBLISH.QUALIFICATION_DENIED' -notin $uniqueBlocking) -and
-        ('PUBLISH.QUALIFICATION_OVERCLAIM' -notin $uniqueBlocking)
+        ('PUBLISH.QUALIFICATION_OVERCLAIM' -notin $uniqueBlocking) -and
+        ('PUBLISH.REQUEST_INVALID' -notin $uniqueBlocking)
 
     $publicationBlockers = @(
         'PUBLISH.APPROVAL_MISMATCH'
@@ -898,12 +994,22 @@ function Invoke-PreviewPublication {
     try {
         $stageRoot = Join-Path $PrivateWorkspacePath 'staged-assets'
         $publisherRoot = Join-Path $PrivateWorkspacePath 'synthetic-publisher'
-        $null = New-Item -ItemType Directory -Path $stageRoot -Force
-        foreach ($asset in $assets) {
-            $assetId = [string] (Get-PreviewPublicationProperty $asset 'assetId')
-            $fileName = [string] (Get-PreviewPublicationProperty $asset 'fileName')
-            $bytes = Get-PreviewPublicationSyntheticAssetBytes -AssetId $assetId
-            [System.IO.File]::WriteAllBytes((Join-Path $stageRoot $fileName), $bytes)
+        if ($assetsSafeToStage) {
+            $null = New-Item -ItemType Directory -Path $stageRoot -Force
+            foreach ($asset in $assets) {
+                $assetId = [string] (Get-PreviewPublicationProperty $asset 'assetId')
+                $fileName = [string] (Get-PreviewPublicationProperty $asset 'fileName')
+                $stagePath = Get-PreviewPublicationChildPath -Root $stageRoot -Name $fileName
+                if ([string]::IsNullOrWhiteSpace($stagePath)) {
+                    $assetsSafeToStage = $false
+                    if ('PUBLISH.ASSET_INVALID' -notin $uniqueBlocking) {
+                        $uniqueBlocking.Add('PUBLISH.ASSET_INVALID')
+                    }
+                    continue
+                }
+                $bytes = Get-PreviewPublicationSyntheticAssetBytes -AssetId $assetId
+                [System.IO.File]::WriteAllBytes($stagePath, $bytes)
+            }
         }
         $derived = Join-Path $PrivateWorkspacePath 'derived-publication-preview.json'
         [System.IO.File]::WriteAllText(
@@ -913,7 +1019,12 @@ function Invoke-PreviewPublication {
         )
 
         if (-not $canPreview) {
-            $primary = [string] $uniqueBlocking[0]
+            $primary = if ($uniqueBlocking.Count -gt 0) {
+                [string] $uniqueBlocking[0]
+            }
+            else {
+                'PUBLISH.DENIED'
+            }
         }
         elseif (-not $approvalPresent -and -not $hasPublicationBlocker) {
             $state = 'Previewed'
@@ -939,35 +1050,70 @@ function Invoke-PreviewPublication {
             }
             else {
                 $null = New-Item -ItemType Directory -Path $releaseRoot -Force
+                $publishCopiesOk = $true
                 foreach ($asset in $assets) {
                     $fileName = [string] (Get-PreviewPublicationProperty $asset 'fileName')
-                    $source = Join-Path $stageRoot $fileName
-                    Copy-Item -LiteralPath $source -Destination (Join-Path $releaseRoot $fileName)
-                }
-                $downloadOk = $true
-                foreach ($asset in $assets) {
-                    $fileName = [string] (Get-PreviewPublicationProperty $asset 'fileName')
-                    $expected = [string] (Get-PreviewPublicationProperty $asset 'sha256')
-                    $downloaded = Join-Path $releaseRoot $fileName
-                    if ($fault -eq 'TamperDownload') {
-                        [System.IO.File]::WriteAllBytes(
-                            $downloaded,
-                            [System.Text.UTF8Encoding]::new($false).GetBytes('tampered')
-                        )
-                    }
-                    if (-not (Test-Path -LiteralPath $downloaded -PathType Leaf)) {
-                        $downloadOk = $false
+                    $source = Get-PreviewPublicationChildPath -Root $stageRoot -Name $fileName
+                    $published = Get-PreviewPublicationChildPath -Root $releaseRoot -Name $fileName
+                    if ([string]::IsNullOrWhiteSpace($source) -or
+                        [string]::IsNullOrWhiteSpace($published) -or
+                        -not (Test-Path -LiteralPath $source -PathType Leaf)) {
+                        $publishCopiesOk = $false
+                        $assetsVerified = $false
+                        if ('PUBLISH.ASSET_INVALID' -notin $uniqueBlocking) {
+                            $uniqueBlocking.Add('PUBLISH.ASSET_INVALID')
+                        }
+                        $primary = 'PUBLISH.ASSET_INVALID'
                         continue
                     }
-                    $actual = Get-PreviewPublicationSha256 -Bytes (
-                        [System.IO.File]::ReadAllBytes($downloaded)
-                    )
-                    if ($actual -ne $expected) {
-                        $downloadOk = $false
+                    Copy-Item -LiteralPath $source -Destination $published
+                }
+                # Independent download is a second tree, not a reread of
+                # the published store. The threat is treating a write
+                # confirmation as a download, or overwriting published
+                # bytes to "repair" a digest. The mechanism copies once
+                # into downloaded-assets and hashes only those copies.
+                # A TamperDownload fault mutates the download copy only.
+                $downloadOk = $false
+                if ($publishCopiesOk) {
+                    $downloadRoot = Join-Path $PrivateWorkspacePath 'downloaded-assets'
+                    $null = New-Item -ItemType Directory -Path $downloadRoot -Force
+                    $downloadOk = $true
+                    foreach ($asset in $assets) {
+                        $fileName = [string] (Get-PreviewPublicationProperty $asset 'fileName')
+                        $expected = [string] (Get-PreviewPublicationProperty $asset 'sha256')
+                        $published = Get-PreviewPublicationChildPath -Root $releaseRoot -Name $fileName
+                        $downloaded = Get-PreviewPublicationChildPath -Root $downloadRoot -Name $fileName
+                        if ([string]::IsNullOrWhiteSpace($published) -or
+                            [string]::IsNullOrWhiteSpace($downloaded) -or
+                            -not (Test-Path -LiteralPath $published -PathType Leaf)) {
+                            $downloadOk = $false
+                            continue
+                        }
+                        Copy-Item -LiteralPath $published -Destination $downloaded
+                        if ($fault -eq 'TamperDownload') {
+                            [System.IO.File]::WriteAllBytes(
+                                $downloaded,
+                                [System.Text.UTF8Encoding]::new($false).GetBytes('tampered')
+                            )
+                        }
+                        if (-not (Test-Path -LiteralPath $downloaded -PathType Leaf)) {
+                            $downloadOk = $false
+                            continue
+                        }
+                        $actual = Get-PreviewPublicationSha256 -Bytes (
+                            [System.IO.File]::ReadAllBytes($downloaded)
+                        )
+                        if ($actual -ne $expected) {
+                            $downloadOk = $false
+                        }
                     }
                 }
                 $downloadVerified = $downloadOk
-                if (-not $downloadOk) {
+                if (-not $publishCopiesOk) {
+                    $assetsVerified = $false
+                }
+                elseif (-not $downloadOk) {
                     $uniqueBlocking.Add('PUBLISH.DOWNLOAD_MISMATCH')
                     $primary = 'PUBLISH.DOWNLOAD_MISMATCH'
                     $assetsVerified = $false
@@ -1059,7 +1205,7 @@ function Invoke-PreviewPublication {
         -DownloadVerified:$downloadVerified `
         -Smokes @($smokes) `
         -BlockingReasons @($uniqueBlocking) `
-        -Limitations @($limitations | Select-Object -Unique)
+        -Limitations $previewLimitationList
 
     $cleanupVerified = Invoke-PreviewPublicationWorkspaceCleanup `
         -WorkspacePath $PrivateWorkspacePath

@@ -62,8 +62,21 @@ function Set-BoundPublicationRequest {
     $Request.humanApproval.candidateDigest = $ContentDigest
     $Request.humanApproval.qualificationPacketDigest =
         Get-PreviewPublicationPacketDigest -Packet $Request.qualificationPacket
+    $mergedLimitations = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in @($policy.requiredLimitations)) {
+        $mergedLimitations.Add([string] $item)
+    }
+    foreach ($item in @($Request.limitations)) {
+        if ([string] $item -notin @($mergedLimitations)) {
+            $mergedLimitations.Add([string] $item)
+        }
+    }
+    if ([string] $Request.trustPath -eq 'AttestedPreview' -and
+        'attested-preview-not-trusted' -notin @($mergedLimitations)) {
+        $mergedLimitations.Add('attested-preview-not-trusted')
+    }
     $Request.humanApproval.limitationsDigest =
-        Get-PreviewPublicationLimitationsDigest -Limitations $Request.limitations
+        Get-PreviewPublicationLimitationsDigest -Limitations @($mergedLimitations)
     $Request.humanApproval.publicAssetListDigest =
         Get-PreviewPublicationAssetListDigest -Assets $Request.assets
     $Request.humanApproval.trustPath = [string] $Request.trustPath
@@ -333,6 +346,23 @@ Assert-Equal 'Denied' $convenienceResult.Result.state `
 Assert-Equal 'PUBLISH.ATTESTED_CONVENIENCE' $convenienceResult.ReasonCode `
     'convenience uses a stable reason'
 
+$waiver = Copy-Request $complete
+$waiver.waiverRequested = $true
+$waiverResult = Invoke-Publish -Request $waiver
+Assert-PublicPublication $waiverResult 'a requested waiver'
+Assert-Equal 'Denied' $waiverResult.Result.state 'a waiver cannot publish'
+Assert-Equal 'PUBLISH.WAIVER_REJECTED' $waiverResult.ReasonCode `
+    'a waiver uses a stable reason'
+
+$unboundPacket = Copy-Request $complete
+$unboundPacket.qualificationPacket.candidateBound = $false
+$unboundResult = Invoke-Publish -Request $unboundPacket
+Assert-PublicPublication $unboundResult 'an approved packet that is not candidate-bound'
+Assert-Equal 'Denied' $unboundResult.Result.state `
+    'an unbound qualification packet cannot publish'
+Assert-Equal 'PUBLISH.QUALIFICATION_DENIED' $unboundResult.ReasonCode `
+    'an unbound packet uses a stable reason'
+
 $repoWorkspace = Join-Path $repositoryRoot '.test-output/preview-publication-repo-ws'
 if (Test-Path -LiteralPath $repoWorkspace) {
     Remove-Item -LiteralPath $repoWorkspace -Recurse -Force
@@ -392,9 +422,43 @@ Assert-Equal $false (Test-Path -LiteralPath (
 Assert-Equal $false (Test-Path -LiteralPath (
     Join-Path $residueWorkspace 'synthetic-publisher'
 )) 'the synthetic publisher store does not remain'
+Assert-Equal $false (Test-Path -LiteralPath (
+    Join-Path $residueWorkspace 'downloaded-assets'
+)) 'the independent download folder does not remain'
 $residueLeft = @(Get-ChildItem -LiteralPath $residueWorkspace -Force | Where-Object {
     $_.Name -ne [string] $policy.workspace.markerFileName
 })
 Assert-Equal 0 $residueLeft.Count 'only the operator marker remains after publication'
+
+$duplicate = Copy-Request $complete
+$duplicate.assets = @($duplicate.assets + @($duplicate.assets[0]))
+$duplicateResult = Invoke-Publish -Request $duplicate
+Assert-PublicPublication $duplicateResult 'a request with a duplicated public asset'
+Assert-Equal 'Denied' $duplicateResult.Result.state 'a duplicated asset cannot publish'
+Assert-Equal 'PUBLISH.ASSET_INCOMPLETE' $duplicateResult.ReasonCode `
+    'a duplicated asset uses a stable reason'
+
+$escapeWorkspace = New-MarkedWorkspace -Name 'escape'
+$escape = Invoke-Publish -Request $complete -WorkspacePath $escapeWorkspace -Mutate {
+    param($Prepared)
+    $Prepared.assets[0].fileName = '..\escape.txt'
+}
+Assert-PublicPublication $escape 'a path-escaping asset file name'
+Assert-Equal 'Denied' $escape.Result.state 'a path-escaping file name is denied'
+Assert-Equal 'PUBLISH.ASSET_INVALID' $escape.ReasonCode `
+    'a path-escaping file name uses a stable reason'
+Assert-Equal $false (Test-Path -LiteralPath (Join-Path $escapeWorkspace 'escape.txt')) `
+    'a path-escaping name does not write beside the workspace marker'
+Assert-Equal $false (Test-Path -LiteralPath (
+    Join-Path $escapeWorkspace 'staged-assets\..\escape.txt'
+)) 'a path-escaping name does not write through staged-assets'
+
+$unknownChannel = Copy-Request $complete
+$unknownChannel.publisher.channel = 'FileShare'
+$unknownResult = Invoke-Publish -Request $unknownChannel
+Assert-PublicPublication $unknownResult 'an unknown publisher channel'
+Assert-Equal 'Denied' $unknownResult.Result.state 'an unknown channel cannot publish'
+Assert-Equal 'PUBLISH.REQUEST_INVALID' $unknownResult.ReasonCode `
+    'an unknown channel uses a stable reason'
 
 Write-Output 'PASS: Preview publication evaluates staging, approval, immutability, and download verification.'

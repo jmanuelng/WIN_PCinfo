@@ -72,7 +72,7 @@ To understand the maintainer-only release-gate workflow that binds an exact unsi
 
 To understand the maintainer-only qualification workflow that binds the exact signed or attested Preview candidate, walks the frozen scenario plan, and emits an approval or denial packet a human must still accept, read [Qualify the exact Preview candidate](docs/preview-qualification.md). It does not deliver a Preview or Supported claim.
 
-To understand the maintainer-only publication workflow that stages the exact public assets, previews the GitHub release record, requires the human confirmation phrase, publishes once to a synthetic store, and independently downloads the bytes without replacing a tag, read [Publish the approved Preview.1 release](docs/preview-publication.md). It does not create a live GitHub release or deliver a Preview or Supported claim.
+To understand the maintainer-only publication workflow that binds the candidate digest, stages synthetic stand-ins for the required public assets, previews the GitHub release record, requires the human confirmation phrase, publishes once to a synthetic store, and independently downloads those bytes without replacing a tag, read [Publish the approved Preview.1 release](docs/preview-publication.md). It does not create a live GitHub release or deliver a Preview or Supported claim.
 
 ## Legacy script
 

@@ -6,7 +6,7 @@ WIN-PCInfo still does not create a live GitHub release from a synthetic request,
 
 ## What this slice does
 
-The generated application can stage the exact qualified public assets, verify every digest and trust status again, and preview the public GitHub release record. After a human confirms the exact candidate digest, qualification packet, limitations, signing or attestation state, and complete public asset list, the workflow can publish **once** to a synthetic publisher and independently download the published bytes.
+The generated application binds the running candidate digest, stages a closed synthetic stand-in for every required public asset, verifies every declared digest and trust path again, and previews the public GitHub release record. After a human confirms the exact candidate digest, qualification packet, staged limitations, signing or attestation state, and complete public asset list, the workflow can publish **once** to a synthetic publisher and independently download those published bytes into a second folder.
 
 The live GitHub path stays `NotStarted` in this slice. A synthetic rehearsal cannot authorize the public tag. Completing this workflow does not deliver a Product Capability.
 
@@ -91,7 +91,7 @@ The fallback is allowed only for `ArtifactSigningNotOperational` or `VerifiedSer
 
 The public tag is `v2.0.0-preview.1`. If that tag already exists, publication stops. Asking to replace the tag or any asset is `PUBLISH.SILENT_REPLACEMENT_REJECTED`. Suspected compromise or error follows a new version or the Release Signing Incident process.
 
-After a synthetic publish, the workflow independently downloads each asset and compares SHA-256. A mismatch is a denial. It never overwrites the published store to "fix" the digest.
+After a synthetic publish, the workflow copies each asset into a separate download folder and compares SHA-256 there. A mismatch is a denial. It never overwrites the published store to "fix" the digest.
 
 ## Public versus private
 
