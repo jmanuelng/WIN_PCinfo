@@ -15,6 +15,7 @@ $oneClientPath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-one-cl
 $completeFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-complete.json'
 $failedFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-assessment-failed.json'
 $identityFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-identity-unavailable.json'
+$residueFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-residue-remains.json'
 
 $workRoot = Join-Path $repositoryRoot '.test-output/azure-validation-round-application'
 if (Test-Path -LiteralPath $workRoot) {
@@ -64,6 +65,11 @@ try {
     Assert-Equal $false $outcome[0].qualifyingEvidence `
         'the generated application does not treat this tracer as qualifying evidence'
     Assert-Equal $false $outcome[0].collectionStarted 'the round never starts host assessment collection'
+    Assert-Equal $false $outcome[0].azureContacted `
+        'the generated synthetic fixture does not contact Azure'
+    Assert-Equal $false (Test-Path -LiteralPath (
+        Join-Path $safeWorkspace $policy.workspace.renderedDirectoryName
+    )) 'the generated application removes rendered admission files after zero residue'
     Assert-Equal $true (Test-Json -Json ($outcome[0] | ConvertTo-Json -Compress -Depth 20) `
         -SchemaFile $outcomeSchemaPath) 'the application outcome satisfies the public schema'
     Assert-Equal $false (($outcome[0] | ConvertTo-Json -Compress -Depth 20) -match [regex]::Escape($safeWorkspace)) `
@@ -111,18 +117,53 @@ try {
         'the generated application uses the typed identity reason'
     Remove-Item -LiteralPath $identityWorkspace -Recurse -Force
 
+    $residueWorkspace = New-MarkedWorkspace -Name 'residue'
+    $residue = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RunValidationRound',
+        '-ValidationRoundRequestPath', $oneClientPath,
+        '-ValidationPrivateWorkspacePath', $residueWorkspace,
+        '-ValidationRoundFixturePath', $residueFixturePath
+    )
+    Assert-Equal 60 $residue.ExitCode 'remaining residue ends CleanupIncomplete'
+    $residueOutcome = @($residue.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    $residueTerminal = @($residue.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 'ResidueRemains' $residueOutcome[0].state `
+        'the generated application does not complete while residue remains'
+    Assert-Equal $false $residueOutcome[0].zeroResidue `
+        'the generated application does not invent zero residue'
+    Assert-Equal $false $residueOutcome[0].terraformStateRemoved `
+        'the generated application keeps private state while residue remains'
+    Assert-Equal $false $residueOutcome[0].azureContacted `
+        'the generated residue fixture does not contact Azure'
+    Assert-Equal 'CleanupIncomplete' $residueTerminal[0].outcome `
+        'remaining residue is CleanupIncomplete'
+    Assert-Equal 'VALIDATION.RESIDUE_REMAINS' $residueTerminal[0].reasonCode `
+        'the terminal reason keeps remaining residue visible'
+    Assert-Equal $true (Test-Path -LiteralPath (
+        Join-Path $residueWorkspace $policy.workspace.renderedDirectoryName
+    )) 'the generated application keeps rendered admission files while residue remains'
+    Remove-Item -LiteralPath $residueWorkspace -Recurse -Force
+
     $liveWorkspace = New-MarkedWorkspace -Name 'live'
     $live = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Workflow', 'RunValidationRound',
         '-ValidationRoundRequestPath', $oneClientPath,
         '-ValidationPrivateWorkspacePath', $liveWorkspace
     )
-    Assert-Equal 20 $live.ExitCode 'live Azure without identity ends NotStarted'
+    $expectedLiveReason = if ([string]::IsNullOrWhiteSpace([string] $env:IDENTITY_ENDPOINT)) {
+        'VALIDATION.IDENTITY_UNAVAILABLE'
+    }
+    else {
+        'VALIDATION.TOOLING_UNRESOLVED'
+    }
+    Assert-Equal 20 $live.ExitCode 'live Azure without acquired tooling ends NotStarted'
     $liveOutcome = @($live.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
     $liveTerminal = @($live.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
-    Assert-Equal 'VALIDATION.IDENTITY_UNAVAILABLE' $liveOutcome[0].reasonCode `
-        'the generated live path stays NotStarted without managed identity'
+    Assert-Equal $expectedLiveReason $liveOutcome[0].reasonCode `
+        'the generated live path stays NotStarted without identity and acquired tooling'
     Assert-Equal $false $liveOutcome[0].created 'the generated live path never creates'
+    Assert-Equal $false $liveOutcome[0].azureContacted `
+        'the generated live path does not contact Azure'
     Assert-Equal 'NotStarted' $liveTerminal[0].outcome 'the generated live path stays NotStarted'
     Remove-Item -LiteralPath $liveWorkspace -Recurse -Force
 

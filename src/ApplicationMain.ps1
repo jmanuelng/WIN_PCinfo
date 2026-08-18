@@ -233,7 +233,7 @@ if ($Workflow -eq 'RunValidationRound') {
                             -RepositoryRoot $roundRepositoryRoot `
                             -ApplicationDirectory $roundApplicationDirectory `
                             -RelativePath 'schemas/azure-validation-round-execution-request.schema.json'
-                        $roundFixtureValid = $true
+                        $roundFixtureValid = $false
                         if (-not [string]::IsNullOrWhiteSpace($roundFixtureSchema)) {
                             try {
                                 $roundFixtureValid = Test-Json -Json $roundFixtureText `

@@ -6,16 +6,16 @@ A passing infrastructure round is a **controller or DEV tracer**. It becomes qua
 
 ## What this slice does
 
-The generated application can run `-Workflow RunValidationRound` against an already reviewed one-client plan. The controller:
+The generated application can run `-Workflow RunValidationRound` against an already reviewed one-client plan. A synthetic fixture walks this lifecycle without contacting Azure. This slice does not apply Terraform, call Azure APIs, or create a VM. Live create stays `NotStarted` without the approved managed identity, and it also stays `NotStarted` when only `IDENTITY_ENDPOINT` is visible because the pinned tools stay declared-not-acquired. The controller:
 
-1. Reuses [offline admission](azure-validation-admission.md) so the plan is still one small Trusted Launch client, Standard SSD, no VM public IP, and a marked private workspace.
-2. Runs cleanup-first live admission probes: managed-identity authority, policy, locks, quota, image, SKU, Standard SSD, tags, expiry, subnet capacity, VM count, cleanup rights, empty transient scope, exclusive lease, and armed recovery.
-3. Creates one fresh client from an approved pristine Azure Compute Gallery baseline on the round-scoped private network and NAT.
-4. Controls the guest only through VM Agent Run Command. The bootstrap password never enters WIN-PCInfo, the operator console, or the sanitized outcome.
-5. Reverifies the exact candidate and payload manifest inside the guest, then runs Local Only and approved egress checks before the assessment payload.
-6. Returns only privacy-sanitized counts and booleans.
+1. Reuses [offline admission](azure-validation-admission.md) so the plan is still one small Trusted Launch client, Standard SSD, no VM public IP, and a marked private workspace. A four-client or non-claiming diagnostic plan is refused before create.
+2. Runs cleanup-first admission probes (synthetic flags on a fixture; live Azure stays `NotStarted` without identity and acquired tooling): managed-identity authority, policy, locks, quota, image, SKU, Standard SSD, tags, expiry, subnet capacity, VM count, cleanup rights, empty transient scope, exclusive lease, and armed recovery.
+3. Records one fresh client from an approved pristine Azure Compute Gallery baseline on the round-scoped private network and NAT. A synthetic fixture records that create without contacting Azure.
+4. Controls the guest only through closed VM Agent Run Command operation names. The bootstrap password never enters WIN-PCInfo, the operator console, or the sanitized outcome.
+5. Records candidate and payload re-verification, then Local Only and approved egress checks, before the assessment payload. A synthetic fixture uses those closed operation names and does not reach a guest.
+6. Returns only privacy-sanitized counts and booleans. A synthetic fixture reports `azureContacted` as false.
 7. Tears down every round-created resource even when the product payload fails.
-8. Proves Zero Round Residue before it removes private Terraform state or allows another round.
+8. Proves Zero Round Residue before it removes private Terraform state, rendered admission files, the recovery journal, or allows another round. On a synthetic fixture those proofs are separate predicates over the privately recorded token list and local folders, not live Azure queries.
 
 If the approved managed identity is missing, Terraform is still only a declared identity, or any admission probe fails, the workflow ends `NotStarted` and creates nothing.
 
@@ -41,7 +41,7 @@ The threat is leaving a billed VM, a host-network peering, a captured image, a p
 | Tool installation | None. This slice does not download Terraform, Azure CLI, or providers. |
 | Elevation | None. |
 | Authentication | The approved credentialless managed identity is unavailable on this controller host. Live Azure stays `NotStarted`. Tests use a synthetic platform that never carries a credential. |
-| Azure resource change | None in this host. Creation is authorized only after identity, tooling, and every admission probe pass. |
+| Azure resource change | None. This slice never applies Terraform or creates Azure resources. |
 | Other external-service changes | None beyond the admitted Validation Round contract. |
 | Push, merge, or release publication | Not performed by this implementation slice. |
 | Destructive cleanup | Ticket-owned temporary private workspaces and synthetic residue only. |
@@ -55,7 +55,7 @@ Create the private folder and marker first. After `build/Build.ps1`:
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow RunValidationRound -ValidationRoundRequestPath ./tests/fixtures/azure-validation-round-one-client.json -ValidationPrivateWorkspacePath C:\PrivateValidation\round -ValidationRoundFixturePath ./tests/fixtures/azure-validation-round-execution-complete.json
 ```
 
-A complete synthetic fixture finishes with `VALIDATION.ZERO_RESIDUE_PROVEN`. A bounded product failure still tears down and ends `CompletedWithGaps` with `VALIDATION.ASSESSMENT_FAILED`. The live command without a fixture ends `NotStarted` with `VALIDATION.IDENTITY_UNAVAILABLE` on a host that lacks the approved managed identity.
+A complete synthetic fixture finishes with `VALIDATION.ZERO_RESIDUE_PROVEN`. A bounded product failure still tears down and ends `CompletedWithGaps` with `VALIDATION.ASSESSMENT_FAILED`. Remaining residue ends `CleanupIncomplete` with `VALIDATION.RESIDUE_REMAINS` and keeps the private recovery journal plus rendered admission files. The live command without a fixture ends `NotStarted` with `VALIDATION.IDENTITY_UNAVAILABLE` on a host that lacks the approved managed identity.
 
 A fifth client, a repository folder, a public folder, or a missing privacy marker still fails in offline admission before any platform probe runs.
 
@@ -70,7 +70,7 @@ Zero residue is proven only when all of the following are independently true:
 - the tag sweep is empty
 - unprotected local working material is absent
 
-The persistent Validation Resource Scope, Control Plane, budget, governance, and gallery baselines remain. Only after those checks pass may private Terraform state be removed and the next round become eligible.
+The persistent Validation Resource Scope, Control Plane, budget, governance, and gallery baselines remain. Only after those checks pass may private Terraform state, rendered admission files, and the recovery journal be removed and the next round become eligible. A private restricted operations record may be retained by the operator for up to seven days outside this repository. This controller never commits that record. It keeps the recovery journal in the private workspace while residue remains and deletes the journal after Zero Round Residue.
 
 ## Public versus private
 
@@ -91,6 +91,6 @@ Private and never committed:
 
 ## Limitations
 
-This slice does not mark `CAP-0028` delivered, publish a Preview or Supported claim, or treat a passing infrastructure round as release-qualification evidence. Live create stays `NotStarted` until the approved managed identity and separately acquired pinned tooling are present.
+This slice does not mark `CAP-0028` delivered, publish a Preview or Supported claim, or treat a passing infrastructure round as release-qualification evidence. It does not apply Terraform, invoke Azure APIs, or create a VM. Live create stays `NotStarted` without the approved managed identity, and it also stays `NotStarted` when identity is visible because this slice does not acquire or invoke the pinned tools.
 
 See the [Consultant Workbench](consultant-workbench.md) for the rest of the implemented product path.

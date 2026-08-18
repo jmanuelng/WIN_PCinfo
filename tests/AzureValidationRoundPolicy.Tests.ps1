@@ -89,6 +89,7 @@ foreach ($fixtureName in @(
     'azure-validation-round-execution-complete.json'
     'azure-validation-round-execution-assessment-failed.json'
     'azure-validation-round-execution-identity-unavailable.json'
+    'azure-validation-round-execution-residue-remains.json'
 )) {
     $fixturePath = Join-Path $PSScriptRoot "fixtures/$fixtureName"
     $fixtureJson = Get-Content -LiteralPath $fixturePath -Raw
@@ -118,12 +119,18 @@ Assert-Equal $true ($operatorDoc -match 'RunValidationRound') `
     'operator documentation names the generated-application workflow'
 Assert-Equal $true ($operatorDoc -match 'Zero Round Residue|zero residue') `
     'operator documentation teaches Zero Round Residue'
+Assert-Equal $true ($operatorDoc -match 'CleanupIncomplete|RESIDUE_REMAINS') `
+    'operator documentation teaches remaining residue'
+Assert-Equal $true ($operatorDoc -match 'seven-day|seven day') `
+    'operator documentation teaches the operations-record retention bound'
 Assert-Equal $true ($operatorDoc -match 'VM Agent|Run Command') `
     'operator documentation names the guest-control path'
 Assert-Equal $true ($operatorDoc -match 'managed identity') `
     'operator documentation names the credentialless identity'
 Assert-Equal $true ($operatorDoc -match 'ControllerDevTracer|controller/DEV tracer|controller or DEV tracer') `
     'operator documentation states this is a controller tracer'
+Assert-Equal $true ($operatorDoc -match 'does not apply Terraform') `
+    'operator documentation does not claim this slice applies Terraform'
 Assert-Equal $false ($operatorDoc -match '(?i)/subscriptions/') `
     'operator documentation contains no Azure subscription path'
 Assert-Equal $false ($operatorDoc -match 'this slice delivers CAP-0028') `

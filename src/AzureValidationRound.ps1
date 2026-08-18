@@ -47,10 +47,27 @@ function Get-AzureValidationRoundCatalogPath {
         [Parameter(Mandatory)] [string] $RelativePath
     )
 
-    foreach ($root in @($ApplicationDirectory, $RepositoryRoot)) {
-        if ([string]::IsNullOrWhiteSpace($root)) {
+    # The generated application test and a portable extract may sit two
+    # folders below the reviewed schemas. Walk a bounded ancestor list
+    # rather than treating a missing sidecar as a valid fixture.
+    $roots = [System.Collections.Generic.List[string]]::new()
+    foreach ($start in @($ApplicationDirectory, $RepositoryRoot)) {
+        if ([string]::IsNullOrWhiteSpace($start)) {
             continue
         }
+        $cursor = $start
+        for ($i = 0; $i -lt 4; $i++) {
+            if (-not $roots.Contains($cursor)) {
+                $null = $roots.Add($cursor)
+            }
+            $parent = Split-Path -Parent $cursor
+            if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $cursor) {
+                break
+            }
+            $cursor = $parent
+        }
+    }
+    foreach ($root in $roots) {
         $candidate = Join-Path $root $RelativePath
         if (Test-Path -LiteralPath $candidate -PathType Leaf) {
             return $candidate
@@ -132,9 +149,9 @@ function New-AzureValidationRoundOutcome {
         [Parameter()] [bool] $TerraformStateRemoved = $false,
         [Parameter()] [bool] $NextRoundEligible = $false,
         [Parameter()] [bool] $PersistentScopePreserved = $true,
-        [Parameter()] [bool] $HostPeeringAbsent = $true,
-        [Parameter()] [bool] $TagSweepEmpty = $true,
-        [Parameter()] [bool] $UnprotectedLocalMaterialAbsent = $true,
+        [Parameter()] [bool] $HostPeeringAbsent = $false,
+        [Parameter()] [bool] $TagSweepEmpty = $false,
+        [Parameter()] [bool] $UnprotectedLocalMaterialAbsent = $false,
         [Parameter()] [ValidateSet('VmAgentRunCommand', 'None')]
         [string] $GuestControl = 'None',
         [Parameter()] [bool] $BootstrapCredentialExposed = $false,
@@ -215,7 +232,16 @@ function Test-AzureValidationRoundLiveIdentity {
 
 function New-AzureValidationRoundPlatform {
     param(
-        [Parameter()] [string] $Scenario = 'CompleteZeroResidue'
+        [Parameter()] [ValidateSet(
+            'CompleteZeroResidue',
+            'CleanupFirst',
+            'AssessmentFailed',
+            'IdentityUnavailable',
+            'AdmissionDenied',
+            'ResidueRemains',
+            'CaptureAttempted',
+            'CredentialExposed'
+        )] [string] $Scenario = 'CompleteZeroResidue'
     )
 
     $probes = @{}
@@ -373,6 +399,20 @@ function Invoke-AzureValidationRoundGuest {
     }
 }
 
+function Get-AzureValidationRoundLocalAbsence {
+    param(
+        [Parameter(Mandatory)] [string] $PrivateWorkspacePath,
+        [Parameter(Mandatory)] $Policy
+    )
+
+    $empty = [pscustomobject]@{
+        Resources = [System.Collections.Generic.List[string]]::new()
+        PersistentPresent = $true
+    }
+    Get-AzureValidationRoundAbsence -Platform $empty `
+        -PrivateWorkspacePath $PrivateWorkspacePath -Policy $Policy
+}
+
 function Get-AzureValidationRoundAbsence {
     param(
         [Parameter(Mandatory)] $Platform,
@@ -380,13 +420,25 @@ function Get-AzureValidationRoundAbsence {
         [Parameter(Mandatory)] $Policy
     )
 
+    # Zero Round Residue is a set of predicates, not a destroy exit code.
+    # The threat is reporting absence from one leftover token or inventing
+    # a live Azure sweep. The mechanism is separate checks over the
+    # privately recorded token list and local folders. The trust
+    # assumption is that only round-owned tokens were recorded. Safe
+    # failure is to keep residue visible rather than infer emptiness.
     $tokens = @($Platform.Resources)
     $peeringPresent = @($tokens | Where-Object { $_ -match 'peering' }).Count -gt 0
     $transferPresent = @($tokens | Where-Object { $_ -match 'transfer|coordination' }).Count -gt 0
     $workingPath = Join-Path $PrivateWorkspacePath ([string] $Policy.workspace.workingDirectoryName)
     $recoveryPath = Join-Path $PrivateWorkspacePath ([string] $Policy.workspace.recoveryDirectoryName)
+    $renderedName = [string] $Policy.workspace.renderedDirectoryName
+    $renderedPath = Join-Path $PrivateWorkspacePath $renderedName
+    $partialRenderedPath = Join-Path $PrivateWorkspacePath ($renderedName + '.partial')
+    # Recovery is protected until Zero Round Residue. Rendered admission
+    # files and round-work are unprotected local working material.
     $unprotectedPresent = (Test-Path -LiteralPath $workingPath) -or
-        (Test-Path -LiteralPath $recoveryPath)
+        (Test-Path -LiteralPath $renderedPath) -or
+        (Test-Path -LiteralPath $partialRenderedPath)
 
     [pscustomobject][ordered]@{
         TransientEmpty = ($tokens.Count -eq 0)
@@ -396,6 +448,7 @@ function Get-AzureValidationRoundAbsence {
         TagSweepEmpty = ($tokens.Count -eq 0)
         PersistentPresent = [bool] $Platform.PersistentPresent
         UnprotectedAbsent = -not $unprotectedPresent
+        RecoveryAbsent = -not (Test-Path -LiteralPath $recoveryPath)
     }
 }
 
@@ -414,6 +467,13 @@ function Remove-AzureValidationRoundLocalMaterial {
         $recoveryPath = Join-Path $PrivateWorkspacePath ([string] $Policy.workspace.recoveryDirectoryName)
         if (Test-Path -LiteralPath $recoveryPath) {
             Remove-Item -LiteralPath $recoveryPath -Recurse -Force
+        }
+        $renderedName = [string] $Policy.workspace.renderedDirectoryName
+        foreach ($relative in @($renderedName, ($renderedName + '.partial'))) {
+            $localPath = Join-Path $PrivateWorkspacePath $relative
+            if (Test-Path -LiteralPath $localPath) {
+                Remove-Item -LiteralPath $localPath -Recurse -Force
+            }
         }
     }
 }
@@ -457,7 +517,18 @@ function Write-AzureValidationRoundRecovery {
 function Invoke-AzureValidationRound {
     param(
         [Parameter(Mandatory)] $Plan,
-        [Parameter()] [string] $Scenario,
+        [Parameter()]
+        [ValidateSet(
+            'CompleteZeroResidue',
+            'CleanupFirst',
+            'AssessmentFailed',
+            'IdentityUnavailable',
+            'AdmissionDenied',
+            'ResidueRemains',
+            'CaptureAttempted',
+            'CredentialExposed'
+        )]
+        [string] $Scenario,
         [Parameter(Mandatory)] [string] $PrivateWorkspacePath,
         [Parameter(Mandatory)] [string] $RepositoryRoot,
         [Parameter()] [string] $ApplicationDirectory,
@@ -479,7 +550,13 @@ function Invoke-AzureValidationRound {
         Windows11ClaimingRoute = [bool] $facts.Windows11ClaimingRoute
         TrustClass = 'ControllerDevTracer'
         PersistentScopePreserved = $true
+        HostPeeringAbsent = $false
+        TagSweepEmpty = $false
+        UnprotectedLocalMaterialAbsent = $false
     }
+    $localAbsence = Get-AzureValidationRoundLocalAbsence `
+        -PrivateWorkspacePath $PrivateWorkspacePath -Policy $policy
+    $common.UnprotectedLocalMaterialAbsent = [bool] $localAbsence.UnprotectedAbsent
 
     if (-not [string]::IsNullOrWhiteSpace($FixtureText)) {
         $privacy = Test-AzureValidationRoundPrivacyBoundary -Text $FixtureText
@@ -494,9 +571,35 @@ function Invoke-AzureValidationRound {
         -RepositoryRoot $RepositoryRoot `
         -ApplicationDirectory $ApplicationDirectory
     $privacyBoundary = [string] $admission.privacyBoundary
+    $localAbsence = Get-AzureValidationRoundLocalAbsence `
+        -PrivateWorkspacePath $PrivateWorkspacePath -Policy $policy
+    $common.UnprotectedLocalMaterialAbsent = [bool] $localAbsence.UnprotectedAbsent
     if (-not $admission.admitted) {
         return New-AzureValidationRoundOutcome -State Rejected `
             -ReasonCode ([string] $admission.reasonCode) `
+            -PrivacyBoundary $privacyBoundary `
+            -Synthetic:(-not [string]::IsNullOrWhiteSpace($Scenario)) `
+            -PlatformKind $(if ([string]::IsNullOrWhiteSpace($Scenario)) { 'Unavailable' } else { 'Synthetic' }) `
+            @common
+    }
+
+    # This slice runs one Windows 11 claiming client. Admission still
+    # accepts one-to-four-client plans for later tickets. The threat is
+    # reporting a four-client or non-claiming diagnostic as this tracer.
+    # Safe failure is to stop after admission and create nothing.
+    if ($facts.Count -ne 1) {
+        return New-AzureValidationRoundOutcome -State Rejected `
+            -ReasonCode 'VALIDATION.VM_COUNT_UNSAFE' `
+            -Admitted:$true `
+            -PrivacyBoundary $privacyBoundary `
+            -Synthetic:(-not [string]::IsNullOrWhiteSpace($Scenario)) `
+            -PlatformKind $(if ([string]::IsNullOrWhiteSpace($Scenario)) { 'Unavailable' } else { 'Synthetic' }) `
+            @common
+    }
+    if (-not [bool] $facts.Windows11ClaimingRoute) {
+        return New-AzureValidationRoundOutcome -State Rejected `
+            -ReasonCode 'VALIDATION.PLAN_UNSAFE' `
+            -Admitted:$true `
             -PrivacyBoundary $privacyBoundary `
             -Synthetic:(-not [string]::IsNullOrWhiteSpace($Scenario)) `
             -PlatformKind $(if ([string]::IsNullOrWhiteSpace($Scenario)) { 'Unavailable' } else { 'Synthetic' }) `
@@ -509,34 +612,35 @@ function Invoke-AzureValidationRound {
             if (-not $live.Available) {
                 return New-AzureValidationRoundOutcome -State Blocked `
                     -ReasonCode 'VALIDATION.IDENTITY_UNAVAILABLE' `
-                    -Admitted:$true -CleanupFirst:$true `
+                    -Admitted:$true `
                     -PrivacyBoundary $privacyBoundary `
                     -PlatformKind Unavailable @common
             }
 
             # Live identity is present, but this slice never acquires
             # Terraform or the provider. The threat is an opportunistic
-            # download or an unpinned binary from PATH. Safe failure is
+            # download or an unpinned binary from PATH. Seeing
+            # IDENTITY_ENDPOINT is not Azure contact. Safe failure is
             # NotStarted with the declared tooling still not acquired.
             return New-AzureValidationRoundOutcome -State Blocked `
                 -ReasonCode 'VALIDATION.TOOLING_UNRESOLVED' `
-                -Admitted:$true -CleanupFirst:$true `
+                -Admitted:$true `
                 -PrivacyBoundary $privacyBoundary `
                 -PlatformKind ManagedIdentity `
-                -AzureContacted:$true @common
+                -AzureContacted:$false @common
         }
 
         $Platform = New-AzureValidationRoundPlatform -Scenario $Scenario
     }
 
     $synthetic = [string] $Platform.Kind -eq 'Synthetic'
-    $azureContacted = $synthetic
+    # A synthetic fixture stands in for Azure. It never contacts Azure.
+    $azureContacted = $false
     $common.Synthetic = $synthetic
     $common.PlatformKind = [string] $Platform.Kind
     $common.AzureContacted = $azureContacted
     $common.PrivacyBoundary = $privacyBoundary
     $common.Admitted = $true
-    $common.CleanupFirst = $true
 
     if (-not [bool] $Platform.Probes['EmptyTransientScope']) {
         if ([bool] $Platform.CleanupFirstSucceeds) {
@@ -548,6 +652,7 @@ function Invoke-AzureValidationRound {
                 -ReasonCode 'VALIDATION.TRANSIENT_SCOPE_NOT_EMPTY' @common
         }
     }
+    $common.CleanupFirst = $true
 
     foreach ($probe in @($policy.admissionProbes)) {
         if (-not [bool] $Platform.Probes[$probe]) {
@@ -564,12 +669,8 @@ function Invoke-AzureValidationRound {
         }
     }
 
-    Initialize-AzureValidationRoundResources -Platform $Platform
-    Write-AzureValidationRoundRecovery -PrivateWorkspacePath $PrivateWorkspacePath `
-        -Policy $policy -Platform $Platform
-
-    $created = $true
-    $guestControl = 'VmAgentRunCommand'
+    $created = $false
+    $guestControl = 'None'
     $fresh = $true
     $captured = $false
     $publicIp = $false
@@ -586,6 +687,13 @@ function Invoke-AzureValidationRound {
     $reason = 'VALIDATION.ZERO_RESIDUE_PROVEN'
 
     try {
+        # Create and the private recovery map are inside the same try as
+        # guest work so a journal write failure still enters teardown.
+        Initialize-AzureValidationRoundResources -Platform $Platform
+        $created = $true
+        Write-AzureValidationRoundRecovery -PrivateWorkspacePath $PrivateWorkspacePath `
+            -Policy $policy -Platform $Platform
+
         if ([bool] $Platform.PublicIp) {
             $publicIp = $true
             $reason = 'VALIDATION.PUBLIC_IP_PROHIBITED'
@@ -600,6 +708,7 @@ function Invoke-AzureValidationRound {
         }
         else {
             $guestReady = $true
+            $guestControl = 'VmAgentRunCommand'
             foreach ($step in @(
                 @{ Operation = 'VerifyCandidate'; Flag = 'candidate' }
                 @{ Operation = 'VerifyPayload'; Flag = 'payload' }
@@ -661,15 +770,37 @@ function Invoke-AzureValidationRound {
             }
         }
     }
+    catch {
+        # After create, a journal or guest fault must not escape as
+        # REQUEST_INVALID. Teardown still runs in finally. Safe failure is
+        # FailedCleaned or ResidueRemains after independent absence checks.
+        if (-not $created) {
+            throw
+        }
+        if ($reason -eq 'VALIDATION.ZERO_RESIDUE_PROVEN') {
+            $reason = 'VALIDATION.GUEST_NOT_READY'
+        }
+    }
     finally {
         # A testing failure cannot prevent cleanup-first transition. The
         # finally block is the only create-to-teardown seam. The trust
         # assumption is that destroy names only privately recorded tokens.
-        # Safe failure is ResidueRemains, never Completed.
-        $null = Invoke-AzureValidationRoundDestroy -Platform $Platform
-        $teardownCompleted = $true
-        Remove-AzureValidationRoundLocalMaterial -PrivateWorkspacePath $PrivateWorkspacePath `
-            -Policy $policy
+        # Safe failure is ResidueRemains, never Completed, and never a
+        # throw that ApplicationMain would map to REQUEST_INVALID.
+        if ($created) {
+            try {
+                $teardownCompleted = [bool] (Invoke-AzureValidationRoundDestroy -Platform $Platform)
+            }
+            catch {
+                $teardownCompleted = $false
+            }
+            try {
+                Remove-AzureValidationRoundLocalMaterial -PrivateWorkspacePath $PrivateWorkspacePath `
+                    -Policy $policy
+            }
+            catch {
+            }
+        }
     }
 
     $absence = Get-AzureValidationRoundAbsence -Platform $Platform `
@@ -698,7 +829,8 @@ function Invoke-AzureValidationRound {
             -PrivateWorkspacePath $PrivateWorkspacePath -Policy $policy
         $zeroResidue = [bool] $absence.TransientEmpty -and
             [bool] $absence.HostPeeringAbsent -and
-            [bool] $absence.UnprotectedAbsent
+            [bool] $absence.UnprotectedAbsent -and
+            [bool] $absence.RecoveryAbsent
         if ($zeroResidue) {
             $stateRemoved = $true
             $nextEligible = $true
@@ -736,6 +868,10 @@ function Invoke-AzureValidationRound {
         $reason = 'VALIDATION.RESIDUE_REMAINS'
     }
 
+    $common.HostPeeringAbsent = [bool] $absence.HostPeeringAbsent
+    $common.TagSweepEmpty = [bool] $absence.TagSweepEmpty
+    $common.UnprotectedLocalMaterialAbsent = [bool] $absence.UnprotectedAbsent
+
     New-AzureValidationRoundOutcome -State $state -ReasonCode $reason `
         -Created:$created -GuestReady:$guestReady `
         -CandidateVerified:$candidateVerified -PayloadVerified:$payloadVerified `
@@ -743,9 +879,6 @@ function Invoke-AzureValidationRound {
         -AssessmentExecuted:$assessmentExecuted -SanitizedRetrieval:$sanitizedRetrieval `
         -TeardownCompleted:$teardownCompleted -ZeroResidue:$zeroResidue `
         -TerraformStateRemoved:$stateRemoved -NextRoundEligible:$nextEligible `
-        -HostPeeringAbsent:([bool] $absence.HostPeeringAbsent) `
-        -TagSweepEmpty:([bool] $absence.TagSweepEmpty) `
-        -UnprotectedLocalMaterialAbsent:([bool] $absence.UnprotectedAbsent) `
         -GuestControl $guestControl `
         -BootstrapCredentialExposed:$credentialExposed `
         -ClientCapturedOrReused:$captured -VmPublicIpAssigned:$publicIp `

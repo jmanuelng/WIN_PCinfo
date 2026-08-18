@@ -124,13 +124,16 @@ try {
     Assert-Equal $true $complete.windows11ClaimingRoute 'the claiming route is recorded'
     Assert-Equal $true $complete.synthetic 'the complete path is the synthetic controller'
     Assert-Equal 'Synthetic' $complete.platformKind 'the complete path uses the synthetic platform'
-    Assert-Equal $true $complete.azureContacted 'the controller invoked the platform'
+    Assert-Equal $false $complete.azureContacted 'a synthetic fixture does not contact Azure'
     Assert-Equal $false (Test-Path -LiteralPath (
         Join-Path $completeWorkspace "$($policy.workspace.workingDirectoryName)"
     )) 'complete rounds remove unprotected working material'
     Assert-Equal $false (Test-Path -LiteralPath (
         Join-Path $completeWorkspace "$($policy.workspace.recoveryDirectoryName)"
     )) 'recovery material is removed after zero residue'
+    Assert-Equal $false (Test-Path -LiteralPath (
+        Join-Path $completeWorkspace "$($policy.workspace.renderedDirectoryName)"
+    )) 'rendered admission files are removed only after zero residue'
     Assert-Equal $true (Test-Path -LiteralPath (
         Join-Path $completeWorkspace $policy.privacy.markerFileName
     )) 'the private workspace marker remains'
@@ -160,6 +163,9 @@ try {
         'state is still removed after a cleaned product failure'
     Assert-Equal $true $failed.nextRoundEligible `
         'the next round is eligible after a cleaned product failure'
+    Assert-Equal $false (Test-Path -LiteralPath (
+        Join-Path $failedWorkspace "$($policy.workspace.renderedDirectoryName)"
+    )) 'a cleaned product failure still removes rendered admission files'
 
     $identityWorkspace = New-RoundWorkspace -Name 'identity'
     $owned.Add($identityWorkspace)
@@ -173,6 +179,13 @@ try {
     Assert-Equal 'Unavailable' $identity.platformKind 'missing identity is Unavailable'
     Assert-Equal $false $identity.nextRoundEligible `
         'a blocked admission does not unlock the next round by inventing success'
+    Assert-Equal $false $identity.hostPeeringAbsent `
+        'a blocked identity path does not invent an independent peering-absence proof'
+    Assert-Equal $false $identity.unprotectedLocalMaterialAbsent `
+        'a blocked identity path does not invent absence of admission files'
+    Assert-Equal $true (Test-Path -LiteralPath (
+        Join-Path $identityWorkspace "$($policy.workspace.renderedDirectoryName)"
+    )) 'admission files remain after a blocked identity path'
 
     $deniedWorkspace = New-RoundWorkspace -Name 'denied'
     $owned.Add($deniedWorkspace)
@@ -248,6 +261,16 @@ try {
         'the next round stays blocked while residue remains'
     Assert-Equal $true $residue.persistentScopePreserved `
         'persistent controls are not deleted to chase residue'
+    Assert-Equal $false $residue.teardownCompleted `
+        'a destroy that leaves targets is not reported as teardown completed'
+    Assert-Equal $false $residue.unprotectedLocalMaterialAbsent `
+        'rendered admission files stay until residue is gone'
+    Assert-Equal $true (Test-Path -LiteralPath (
+        Join-Path $residueWorkspace "$($policy.workspace.renderedDirectoryName)"
+    )) 'the admitted rendered plan is kept while residue remains'
+    Assert-Equal $true (Test-Path -LiteralPath (
+        Join-Path $residueWorkspace "$($policy.workspace.recoveryDirectoryName)"
+    )) 'the private recovery journal is kept while residue remains'
 
     $captureWorkspace = New-RoundWorkspace -Name 'capture'
     $owned.Add($captureWorkspace)
@@ -257,6 +280,8 @@ try {
         'capture or reuse is rejected'
     Assert-Equal $true $capture.clientCapturedOrReused `
         'the controller records the capture attempt without keeping the client'
+    Assert-Equal 'None' $capture.guestControl `
+        'a rejected capture does not invent a completed VM Agent session'
     Assert-Equal $true $capture.teardownCompleted 'a capture attempt still tears down'
     Assert-Equal $true $capture.zeroResidue 'a rejected capture still reaches zero residue'
 
@@ -287,6 +312,74 @@ try {
     Assert-Equal $false $liveOutcome.synthetic 'the live path is not a synthetic fixture'
     Assert-Equal 'Unavailable' $liveOutcome.platformKind 'the live path is Unavailable'
     Assert-Equal $false $liveOutcome.azureContacted 'the live path does not contact Azure'
+    Assert-Equal $false $liveOutcome.cleanupFirst `
+        'the live NotStarted path does not invent a cleanup-first probe'
+    Assert-Equal $false $liveOutcome.hostPeeringAbsent `
+        'the live NotStarted path does not invent an independent peering-absence proof'
+    Assert-Equal $false $liveOutcome.unprotectedLocalMaterialAbsent `
+        'the live NotStarted path does not invent absence of admission files'
+
+    $previousIdentity = [Environment]::GetEnvironmentVariable('IDENTITY_ENDPOINT')
+    try {
+        $env:IDENTITY_ENDPOINT = 'http://127.0.0.1/metadata/identity/oauth2/token'
+        $identityPresentWorkspace = New-RoundWorkspace -Name 'identity-present'
+        $owned.Add($identityPresentWorkspace)
+        $identityPresent = Invoke-AzureValidationRound -Plan $plan `
+            -PrivateWorkspacePath $identityPresentWorkspace `
+            -RepositoryRoot $repositoryRoot `
+            -ApplicationDirectory (Join-Path $repositoryRoot 'artifacts')
+        Assert-PublicOutcome $identityPresent 'identity present without tooling' `
+            -WorkspacePath $identityPresentWorkspace
+        Assert-Equal 'Blocked' $identityPresent.state `
+            'an IDENTITY_ENDPOINT without pinned tooling stays blocked'
+        Assert-Equal 'VALIDATION.TOOLING_UNRESOLVED' $identityPresent.reasonCode `
+            'this slice does not apply Terraform when only an identity endpoint is visible'
+        Assert-Equal $false $identityPresent.created `
+            'seeing an identity endpoint never creates a client'
+        Assert-Equal $false $identityPresent.azureContacted `
+            'seeing an identity endpoint is not Azure contact'
+        Assert-Equal $false $identityPresent.cleanupFirst `
+            'unresolved tooling does not invent a cleanup-first probe'
+        Assert-Equal 'ManagedIdentity' $identityPresent.platformKind `
+            'the unresolved-tooling path records the identity kind without contacting Azure'
+    }
+    finally {
+        if ($null -eq $previousIdentity) {
+            Remove-Item -Path Env:IDENTITY_ENDPOINT -ErrorAction SilentlyContinue
+        }
+        else {
+            [Environment]::SetEnvironmentVariable('IDENTITY_ENDPOINT', $previousIdentity)
+        }
+    }
+
+    $fourClientPath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-four-clients.json'
+    $fourClientPlan = Get-Content -LiteralPath $fourClientPath -Raw | ConvertFrom-Json -Depth 20
+    $fourWorkspace = New-RoundWorkspace -Name 'four-clients'
+    $owned.Add($fourWorkspace)
+    $four = Invoke-Round -Scenario CompleteZeroResidue -WorkspacePath $fourWorkspace `
+        -PlanObject $fourClientPlan
+    Assert-PublicOutcome $four 'four-client plan is outside this one-client slice' `
+        -WorkspacePath $fourWorkspace
+    Assert-Equal 'VALIDATION.VM_COUNT_UNSAFE' $four.reasonCode `
+        'this slice refuses a four-client plan before create'
+    Assert-Equal $false $four.created 'a four-client plan never creates a client'
+    Assert-Equal 4 $four.clientCount 'the refused plan still records the requested count'
+    Assert-Equal $false $four.azureContacted 'a refused four-client plan does not contact Azure'
+
+    $diagnosticPlan = $plan | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
+    $diagnosticPlan.clients[0].role = 'NonClaimingDiagnostic'
+    $diagnosticPlan.clients[0].claiming = $false
+    $diagnosticWorkspace = New-RoundWorkspace -Name 'nonclaiming'
+    $owned.Add($diagnosticWorkspace)
+    $diagnostic = Invoke-Round -Scenario CompleteZeroResidue -WorkspacePath $diagnosticWorkspace `
+        -PlanObject $diagnosticPlan
+    Assert-PublicOutcome $diagnostic 'non-claiming diagnostic is outside this claiming slice' `
+        -WorkspacePath $diagnosticWorkspace
+    Assert-Equal 'VALIDATION.PLAN_UNSAFE' $diagnostic.reasonCode `
+        'this slice refuses a non-claiming diagnostic before create'
+    Assert-Equal $false $diagnostic.created 'a non-claiming diagnostic never creates a client'
+    Assert-Equal $false $diagnostic.windows11ClaimingRoute `
+        'the refused diagnostic does not invent a Windows 11 claiming route'
 
     $repoWorkspace = Join-Path $repositoryRoot '.test-output/azure-validation-round-forbidden'
     if (Test-Path -LiteralPath $repoWorkspace) {

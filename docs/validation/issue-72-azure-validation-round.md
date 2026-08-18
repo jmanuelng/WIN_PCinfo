@@ -20,10 +20,10 @@ This public projection contains identifier-free controller, guest-control, clean
 | Gate | Public-safe result |
 | --- | --- |
 | Policy contract | `tests/AzureValidationRoundPolicy.Tests.ps1` requires `docs/spec/releases/2.0.0-preview.1-azure-validation-round.json` to satisfy `schemas/azure-validation-round.schema.json`. Support, Preview, capability-delivery, and qualifying-evidence claims stay false. Trust class is `ControllerDevTracer`. |
-| Controller | `tests/AzureValidationRound.Tests.ps1` runs cleanup-first admission, synthetic create, VM Agent readiness, candidate and payload verification, Local Only and approved egress, sanitized retrieval, teardown, and exact absence checks. A product failure still reaches zero residue. Remaining residue blocks completion and state removal. |
-| Live identity | `Test-AzureValidationRoundLiveIdentity` and the generated application without a fixture return `VALIDATION.IDENTITY_UNAVAILABLE` / `NotStarted` when the approved managed identity is absent. |
-| Public/private boundary | Sanitized outcomes omit workspace paths, subscription paths, tenant facts, gallery IDs, IPs, Terraform paths, and credentials. Recovery journals stay in the private workspace and are removed after zero residue. |
-| Generated-application seam | `tests/AzureValidationRoundApplication.Tests.ps1` invokes `-Workflow RunValidationRound`. A complete synthetic fixture completes with `VALIDATION.ZERO_RESIDUE_PROVEN`. A product failure ends `CompletedWithGaps` after cleanup. Missing identity ends `NotStarted`. |
+| Controller | `tests/AzureValidationRound.Tests.ps1` runs cleanup-first admission, synthetic create, VM Agent readiness, candidate and payload verification, Local Only and approved egress, sanitized retrieval, teardown, and exact absence checks. A product failure still reaches zero residue. Remaining residue blocks completion, state removal, and rendered-file removal. A four-client or non-claiming plan is refused before create. Synthetic outcomes keep `azureContacted` false. |
+| Live identity | `Test-AzureValidationRoundLiveIdentity` and the generated application without a fixture return `VALIDATION.IDENTITY_UNAVAILABLE` / `NotStarted` when the approved managed identity is absent. An `IDENTITY_ENDPOINT` without acquired pinned tooling returns `VALIDATION.TOOLING_UNRESOLVED` and still creates nothing. |
+| Public/private boundary | Sanitized outcomes omit workspace paths, subscription paths, tenant facts, gallery IDs, IPs, Terraform paths, and credentials. Recovery journals and rendered admission files stay in the private workspace until zero residue. |
+| Generated-application seam | `tests/AzureValidationRoundApplication.Tests.ps1` invokes `-Workflow RunValidationRound`. A complete synthetic fixture completes with `VALIDATION.ZERO_RESIDUE_PROVEN`. A product failure ends `CompletedWithGaps` after cleanup. Remaining residue ends `CleanupIncomplete`. Missing identity ends `NotStarted`. |
 
 ## Reproduce
 
