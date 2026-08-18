@@ -9,6 +9,8 @@ import {
   GROK_REASONING_EFFORT,
   buildGrokPrintCommand,
   createGrokAgent,
+  grokRetryRunnerPath,
+  isTransientGrokAuthFailure,
   parseGrokStreamLine,
 } from "./grok-agent.mts";
 import {
@@ -20,6 +22,12 @@ import {
   AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   DEFAULT_MAX_PARALLEL_ISSUES,
   loginFromGitHubAuthStatus,
+  hostWorktreeIsClean,
+  isTransientGitHubCliFailure,
+  parseWorktreeLanes,
+  releaseOrphanSelfClaims,
+  requireStartableIssue,
+  selectStartableIssues,
   analyzeChecks,
   buildImplementationPhaseOptions,
   buildIntegrationPhaseOptions,
@@ -652,12 +660,14 @@ test("Grok provider uses extra-high reasoning and always-approve", () => {
   } as Parameters<typeof agent.buildPrintCommand>[0];
   const command = agent.buildPrintCommand(options).command;
 
+  assert.match(command, /grok-retry\.mts/);
   assert.match(command, /(?:^| )--always-approve(?: |$)/);
   assert.match(command, /(?:^| )--reasoning-effort xhigh(?: |$)/);
   assert.match(command, new RegExp(`(?:^| )-m ${GROK_MODEL}(?: |$)`));
   assert.match(command, /(?:^| )--output-format streaming-json(?: |$)/);
   assert.match(command, /(?:^| )--prompt-file(?: |$)/);
   assert.match(command, /(?:^| )--no-leader(?: |$)/);
+  assert.equal(grokRetryRunnerPath().replaceAll("\\", "/").endsWith("/.sandcastle/grok-retry.mts"), true);
   assert.doesNotMatch(command, /'/);
   assert.equal(GROK_REASONING_EFFORT, "xhigh");
 
@@ -768,6 +778,14 @@ test("Grok provider uses extra-high reasoning and always-approve", () => {
       },
     );
     assert.equal(invocation.status, 0, invocation.stderr);
+    assert.ok(isTransientGrokAuthFailure(
+      'Unauthorized (401) from https://cli-chat-proxy.grok.com/v1/responses: Invalid or expired credentials (auth_kind=none, reason=no auth context)',
+    ));
+    assert.ok(isTransientGrokAuthFailure(
+      "Authentication is temporarily unavailable (often a network blip right after wake).",
+    ));
+    assert.equal(isTransientGrokAuthFailure("Issue #72 produced no implementation commit."), false);
+
     assert.deepEqual(JSON.parse(invocation.stdout.trim()), [
       "--prompt-file",
       built.promptPath,
@@ -786,4 +804,122 @@ test("Grok provider uses extra-high reasoning and always-approve", () => {
   } finally {
     rmSync(shimDirectory, { force: true, recursive: true });
   }
+});
+
+test("transient GitHub and Grok auth failures are detected without changing gates", () => {
+  assert.ok(isTransientGitHubCliFailure("", "HTTP 503: No server is currently available"));
+  assert.ok(isTransientGitHubCliFailure("HTTP 502", ""));
+  assert.equal(isTransientGitHubCliFailure("Validation Failed", "HTTP 422"), false);
+});
+
+test("host start ignores untracked Sandcastle notes and logs", () => {
+  assert.equal(hostWorktreeIsClean(""), true);
+  assert.equal(hostWorktreeIsClean("?? .sandcastle/notes/\n"), true);
+  assert.equal(hostWorktreeIsClean("?? .sandcastle/notes/post-project-hardening.md"), true);
+  assert.equal(hostWorktreeIsClean(" M .sandcastle/workflow.mts"), false);
+});
+
+test("worktree porcelain yields only sandcastle issue lanes", () => {
+  const lanes = parseWorktreeLanes(
+    [
+      "worktree C:/repo",
+      "HEAD abc",
+      "branch refs/heads/main",
+      "",
+      "worktree C:/repo/.sandcastle/worktrees/sandcastle-issue-72-1",
+      "HEAD def",
+      "branch refs/heads/sandcastle/issue-72-1",
+      "",
+      "worktree C:/repo/.scratch/worktrees/other",
+      "HEAD ghi",
+      "branch refs/heads/research/other",
+      "",
+    ].join("\n"),
+  );
+  assert.deepEqual(lanes, [
+    {
+      issueNumber: 72,
+      branch: "sandcastle/issue-72-1",
+      worktreePath: "C:/repo/.sandcastle/worktrees/sandcastle-issue-72-1",
+    },
+  ]);
+});
+
+test("startable selection resumes a self-claimed worktree before taking new tickets", () => {
+  const claimed = issue(72, { assignees: [{ login: "agent" }] });
+  const fresh = issue(75);
+  const selected = selectStartableIssues(
+    [claimed, fresh],
+    "agent",
+    [
+      {
+        issueNumber: 72,
+        branch: "sandcastle/issue-72-1",
+        worktreePath: "C:/worktrees/72",
+      },
+    ],
+    2,
+  );
+  assert.deepEqual(selected.map((item) => item.number), [72, 75]);
+});
+
+test("orphan self-claims without a worktree are released before work", () => {
+  const released: number[] = [];
+  const commands: WorkflowCommandAdapter = {
+    run: (_command, args) => {
+      if (args[0] === "api") return commandResult("agent");
+      if (args[0] === "issue" && args[2] === "72") {
+        released.push(72);
+      }
+      return commandResult();
+    },
+    json<T>() {
+      return issue(72, { assignees: [] }) as T;
+    },
+  };
+  const orphaned = releaseOrphanSelfClaims(
+    [issue(72, { assignees: [{ login: "agent" }] })],
+    "agent",
+    [],
+    commands,
+  );
+  assert.deepEqual(orphaned, [72]);
+  assert.deepEqual(released, [72]);
+});
+
+test("pinned startable issues may be unassigned or a resumable self-claim", () => {
+  const eligibleCommands: WorkflowCommandAdapter = {
+    run: () => commandResult(),
+    json<T>() {
+      return issue(66) as T;
+    },
+  };
+  assert.equal(requireStartableIssue(66, "agent", [], eligibleCommands).number, 66);
+
+  const resumeCommands: WorkflowCommandAdapter = {
+    run: () => commandResult(),
+    json<T>() {
+      return issue(72, { assignees: [{ login: "agent" }] }) as T;
+    },
+  };
+  assert.equal(
+    requireStartableIssue(
+      72,
+      "agent",
+      [
+        {
+          issueNumber: 72,
+          branch: "sandcastle/issue-72-1",
+          worktreePath: "C:/worktrees/72",
+        },
+      ],
+      resumeCommands,
+    ).number,
+    72,
+  );
+
+  assert.throws(
+    () => requireStartableIssue(72, "agent", [], resumeCommands),
+    /not an unassigned or resumable/,
+  );
 });
