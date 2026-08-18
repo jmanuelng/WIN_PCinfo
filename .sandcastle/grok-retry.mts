@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import {
   GROK_AUTH_RETRY_ATTEMPTS,
   GROK_AUTH_RETRY_DELAYS_MS,
-  isTransientGrokAuthFailure,
+  planGrokAuthRetry,
 } from "./grok-agent.mts";
 
 function sleep(milliseconds: number): Promise<void> {
@@ -11,7 +11,10 @@ function sleep(milliseconds: number): Promise<void> {
   });
 }
 
-function spawnGrok(args: readonly string[]): Promise<{
+function spawnGrok(
+  args: readonly string[],
+  options: { readonly forward: boolean },
+): Promise<{
   readonly exitCode: number;
   readonly output: string;
 }> {
@@ -30,12 +33,16 @@ function spawnGrok(args: readonly string[]): Promise<{
     child.stdout?.on("data", (chunk: Buffer | string) => {
       const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
       output += text;
-      process.stdout.write(text);
+      if (options.forward) {
+        process.stdout.write(text);
+      }
     });
     child.stderr?.on("data", (chunk: Buffer | string) => {
       const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
       output += text;
-      process.stderr.write(text);
+      if (options.forward) {
+        process.stderr.write(text);
+      }
     });
     child.once("error", reject);
     child.once("close", (code) => {
@@ -44,28 +51,47 @@ function spawnGrok(args: readonly string[]): Promise<{
   });
 }
 
+async function refreshGrokSession(): Promise<void> {
+  try {
+    const result = await spawnGrok(["models"], { forward: false });
+    const loggedIn = /logged in/i.test(result.output);
+    process.stderr.write(
+      loggedIn
+        ? "Silent Grok session refresh succeeded (grok models).\n"
+        : `Silent Grok session refresh failed (exit ${result.exitCode}).\n`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Silent Grok session refresh failed: ${message}\n`);
+  }
+}
+
 export async function runGrokPhaseWithAuthRetry(
   args: readonly string[],
   delaysMs: readonly number[] = GROK_AUTH_RETRY_DELAYS_MS,
 ): Promise<number> {
   let lastExit = 1;
   for (let attempt = 1; attempt <= GROK_AUTH_RETRY_ATTEMPTS; attempt += 1) {
-    const result = await spawnGrok(args);
+    await refreshGrokSession();
+    const result = await spawnGrok(args, { forward: true });
     lastExit = result.exitCode;
-    if (result.exitCode === 0) {
-      return 0;
+    const plan = planGrokAuthRetry({
+      attempt,
+      maxAttempts: GROK_AUTH_RETRY_ATTEMPTS,
+      delaysMs,
+      exitCode: result.exitCode,
+      output: result.output,
+    });
+    if (plan.adapterWarning) {
+      process.stderr.write(`${plan.adapterWarning}\n`);
     }
-    const retryable =
-      attempt < GROK_AUTH_RETRY_ATTEMPTS &&
-      isTransientGrokAuthFailure(result.output);
-    if (!retryable) {
-      return result.exitCode;
+    if (plan.action === "return") {
+      return plan.exitCode;
     }
-    const delay = delaysMs[attempt - 1] ?? delaysMs[delaysMs.length - 1] ?? 5000;
     process.stderr.write(
-      `Grok authentication failed transiently (attempt ${attempt}/${GROK_AUTH_RETRY_ATTEMPTS}); retrying in ${delay}ms.\n`,
+      `Grok authentication failed transiently (attempt ${attempt}/${GROK_AUTH_RETRY_ATTEMPTS}); refreshing session and retrying in ${plan.delayMs}ms.\n`,
     );
-    await sleep(delay);
+    await sleep(plan.delayMs ?? 5_000);
   }
   return lastExit;
 }

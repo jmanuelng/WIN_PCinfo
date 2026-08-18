@@ -1,6 +1,14 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { join, resolve } from "node:path";
+import { describeGrokAccessTtl, readGrokAccessSnapshot } from "./grok-auth.mts";
 
 export const READY_LABEL = "ready-for-agent";
 export const BASE_REF = "origin/main";
@@ -11,6 +19,24 @@ export const MAX_ALLOWED_PARALLEL_ISSUES = 2;
 export const AGENT_PHASE_IDLE_TIMEOUT_SECONDS = 2 * 60 * 60;
 export const GITHUB_CLI_RETRY_ATTEMPTS = 3;
 export const GITHUB_CLI_RETRY_DELAYS_MS = [2_000, 6_000, 18_000] as const;
+export const HEARTBEAT_INTERVAL_MS = 60_000;
+export const SANDBOX_SETUP_TIMEOUT_MS = 5 * 60 * 1000;
+export const WORKTREE_TEARDOWN_RELATIVE_DIRS = [
+  "artifacts",
+  ".test-output",
+] as const;
+
+export class SandboxSetupTimeoutError extends Error {
+  readonly issueNumber: number;
+
+  constructor(issueNumber: number, timeoutMs = SANDBOX_SETUP_TIMEOUT_MS) {
+    super(
+      `Sandbox setup for #${issueNumber} did not produce a worktree within ${Math.round(timeoutMs / 1000)}s. Released the claim.`,
+    );
+    this.name = "SandboxSetupTimeoutError";
+    this.issueNumber = issueNumber;
+  }
+}
 const SANDCASTLE_LANE_BRANCH = /^sandcastle\/issue-(\d+)-\d+$/;
 
 export interface GitHubActor {
@@ -79,19 +105,23 @@ export function resultHasCompletionSignal(result: {
   return typeof result.phaseLog === "string" && result.phaseLog.includes(COMPLETION_SIGNAL);
 }
 
+export function sandcastleLogsDirectory(): string {
+  return join(process.cwd(), ".sandcastle", "logs");
+}
+
 export function latestPhaseLogPath(
   issueNumber: number,
   phase: "implementer" | "reviewer" | "integrator",
+  logsDirectory = sandcastleLogsDirectory(),
 ): string | undefined {
-  const directory = join(process.cwd(), ".sandcastle", "logs");
   const suffix = `-issue-${issueNumber}-${phase}.log`;
-  if (!existsSync(directory)) {
+  if (!existsSync(logsDirectory)) {
     return undefined;
   }
-  const matches = readdirSync(directory)
+  const matches = readdirSync(logsDirectory)
     .filter((name) => name.endsWith(suffix))
     .map((name) => {
-      const filePath = join(directory, name);
+      const filePath = join(logsDirectory, name);
       return { filePath, mtimeMs: statSync(filePath).mtimeMs };
     })
     .sort((left, right) => right.mtimeMs - left.mtimeMs);
@@ -101,12 +131,155 @@ export function latestPhaseLogPath(
 export function readLatestPhaseLog(
   issueNumber: number,
   phase: "implementer" | "reviewer" | "integrator",
+  logsDirectory = sandcastleLogsDirectory(),
 ): string | undefined {
-  const filePath = latestPhaseLogPath(issueNumber, phase);
+  const filePath = latestPhaseLogPath(issueNumber, phase, logsDirectory);
   if (!filePath) {
     return undefined;
   }
   return readFileSync(filePath, "utf8");
+}
+
+export function phaseSuccessMarkerPath(logPath: string): string {
+  return `${logPath}.succeeded`;
+}
+
+export function recordPhaseSuccess(
+  issueNumber: number,
+  phase: "implementer" | "reviewer" | "integrator",
+  logsDirectory = sandcastleLogsDirectory(),
+): void {
+  const logPath = latestPhaseLogPath(issueNumber, phase, logsDirectory);
+  if (!logPath) {
+    return;
+  }
+  writeFileSync(phaseSuccessMarkerPath(logPath), "exit 0\n", "utf8");
+}
+
+export function phaseCompletedSuccessfully(
+  issueNumber: number,
+  phase: "implementer" | "reviewer" | "integrator",
+  logsDirectory = sandcastleLogsDirectory(),
+): boolean {
+  const logPath = latestPhaseLogPath(issueNumber, phase, logsDirectory);
+  if (!logPath) {
+    return false;
+  }
+  const log = readFileSync(logPath, "utf8");
+  if (!log.includes(COMPLETION_SIGNAL)) {
+    return false;
+  }
+  return existsSync(phaseSuccessMarkerPath(logPath));
+}
+
+export function lastHeartbeatDetail(logText: string): string {
+  const lines = logText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const last = lines.at(-1);
+  if (!last) {
+    return "(no agent output yet)";
+  }
+  const tool = /^([A-Za-z][A-Za-z0-9_]*)\s*\(/.exec(last);
+  if (tool) {
+    return tool[1];
+  }
+  return last.length > 80 ? `${last.slice(0, 77)}...` : last;
+}
+
+export function formatAgentHeartbeat(options: {
+  readonly issueNumber: number;
+  readonly phase: string;
+  readonly lastDetail: string;
+  readonly secondsSinceOutput: number;
+}): string {
+  return `Heartbeat: #${options.issueNumber} ${options.phase} | last: ${options.lastDetail} | idle ${options.secondsSinceOutput}s`;
+}
+
+export async function withAgentHeartbeat<T>(
+  issueNumber: number,
+  phase: "implementer" | "reviewer" | "integrator",
+  operation: () => Promise<T>,
+  options: {
+    readonly intervalMs?: number;
+    readonly write?: (line: string) => void;
+    readonly now?: () => number;
+    readonly logsDirectory?: string;
+  } = {},
+): Promise<T> {
+  const intervalMs = options.intervalMs ?? HEARTBEAT_INTERVAL_MS;
+  const write = options.write ?? ((line) => console.log(line));
+  const now = options.now ?? Date.now;
+  const tick = (): void => {
+    const logPath = latestPhaseLogPath(
+      issueNumber,
+      phase,
+      options.logsDirectory,
+    );
+    let lastDetail = "(no agent output yet)";
+    let secondsSinceOutput = 0;
+    if (logPath && existsSync(logPath)) {
+      lastDetail = lastHeartbeatDetail(readFileSync(logPath, "utf8"));
+      secondsSinceOutput = Math.floor(
+        Math.max(0, now() - statSync(logPath).mtimeMs) / 1000,
+      );
+    }
+    write(
+      formatAgentHeartbeat({
+        issueNumber,
+        phase,
+        lastDetail,
+        secondsSinceOutput,
+      }),
+    );
+  };
+  const timer = setInterval(tick, intervalMs);
+  try {
+    return await operation();
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+export function windowsLongPath(
+  absolutePath: string,
+  platform = process.platform,
+): string {
+  const resolved = resolve(absolutePath);
+  if (platform !== "win32") {
+    return resolved;
+  }
+  if (resolved.startsWith("\\\\?\\")) {
+    return resolved;
+  }
+  if (resolved.startsWith("\\\\")) {
+    return `\\\\?\\UNC\\${resolved.slice(2)}`;
+  }
+  return `\\\\?\\${resolved}`;
+}
+
+export function worktreeTeardownTargets(worktreePath: string): readonly string[] {
+  return WORKTREE_TEARDOWN_RELATIVE_DIRS.map((relative) =>
+    join(worktreePath, relative),
+  );
+}
+
+export function removeWorktreeTeardownTargets(
+  worktreePath: string,
+): readonly string[] {
+  const removed: string[] = [];
+  for (const target of worktreeTeardownTargets(worktreePath)) {
+    if (!existsSync(target)) {
+      continue;
+    }
+    rmSync(windowsLongPath(target), { recursive: true, force: true });
+    if (existsSync(target)) {
+      rmSync(target, { recursive: true, force: true });
+    }
+    removed.push(target);
+  }
+  return removed;
 }
 
 export function buildImplementationPhaseOptions<TAgent>(
@@ -860,6 +1033,7 @@ export function refreshBase(): string {
 
 export function assertAuthentication(): void {
   runCommand("gh", ["auth", "status"]);
+  console.log(describeGrokAccessTtl(readGrokAccessSnapshot()));
   const grok = runCommand("grok", ["models"]);
   if (!/logged in/i.test(`${grok.stdout}\n${grok.stderr}`)) {
     throw new Error(

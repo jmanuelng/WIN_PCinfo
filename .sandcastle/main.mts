@@ -24,6 +24,8 @@ import {
   releaseIssueClaim,
   releaseOrphanSelfClaims,
   readLatestPhaseLog,
+  recordPhaseSuccess,
+  removeWorktreeTeardownTargets,
   requireStartableIssue,
   resultHasCompletionSignal,
   runCommand,
@@ -32,10 +34,15 @@ import {
   selectStartableIssues,
   syncLocalMain,
   waitForPullRequestChecks,
+  withAgentHeartbeat,
+  phaseCompletedSuccessfully,
+  SANDBOX_SETUP_TIMEOUT_MS,
+  SandboxSetupTimeoutError,
   type GitHubIssue,
   type LocalIssueLane,
 } from "./workflow.mts";
-import { createGrokAgent } from "./grok-agent.mts";
+import { createGrokAgent, isExhaustedGrokAuthError } from "./grok-agent.mts";
+import { grokLoginReminder, readGrokAccessSnapshot } from "./grok-auth.mts";
 import {
   createLaneRecovery,
   laneFailure,
@@ -48,11 +55,34 @@ const maxParallel = parseMaxParallel(cliArgs);
 const requestedIssueNumber = parseIssueNumber(cliArgs);
 const agent = createGrokAgent();
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => Error,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(onTimeout());
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function closeSandbox(
   sandbox: Awaited<ReturnType<typeof sandcastle.createSandbox>>,
   recovery: LaneRecovery,
 ): Promise<void> {
   recovery.worktreePath = sandbox.worktreePath;
+  removeWorktreeTeardownTargets(sandbox.worktreePath);
   let closeResult: Awaited<ReturnType<typeof sandbox.close>>;
   try {
     closeResult = await sandbox.close();
@@ -115,13 +145,37 @@ function branchAheadOfBase(worktreePath: string): number {
   return Number.isInteger(ahead) ? ahead : 0;
 }
 
-function phaseAlreadyComplete(
-  issueNumber: number,
-  phase: "implementer" | "reviewer",
-): boolean {
-  return resultHasCompletionSignal({
-    phaseLog: readLatestPhaseLog(issueNumber, phase),
-  });
+async function createIssueSandbox(
+  issue: GitHubIssue,
+  branch: string,
+  recovery: LaneRecovery,
+) {
+  try {
+    const sandbox = await withTimeout(
+      sandcastle.createSandbox({
+        branch,
+        baseBranch: BASE_REF,
+        sandbox: noSandbox(),
+      }),
+      SANDBOX_SETUP_TIMEOUT_MS,
+      () => new SandboxSetupTimeoutError(issue.number),
+    );
+    recovery.worktreePath = sandbox.worktreePath;
+    recovery.worktreeDisposition = "active";
+    return sandbox;
+  } catch (error) {
+    if (error instanceof SandboxSetupTimeoutError) {
+      try {
+        releaseIssueClaim(issue.number);
+      } catch (releaseError) {
+        throw new AggregateError(
+          [error, releaseError],
+          `Sandbox setup timed out for #${issue.number} and the claim could not be released.`,
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 async function prepareIssue(
@@ -132,26 +186,25 @@ async function prepareIssue(
   const branch = recovery.branch;
   // This host has no container boundary. Agents run on the dedicated Windows
   // machine because the product suite is PowerShell.
-  const sandbox = await sandcastle.createSandbox({
-    branch,
-    baseBranch: BASE_REF,
-    sandbox: noSandbox(),
-  });
-  recovery.worktreePath = sandbox.worktreePath;
-  recovery.worktreeDisposition = "active";
+  const sandbox = await createIssueSandbox(issue, branch, recovery);
 
   try {
     const implementerDone =
       resume &&
-      phaseAlreadyComplete(issue.number, "implementer") &&
+      phaseCompletedSuccessfully(issue.number, "implementer") &&
       branchAheadOfBase(sandbox.worktreePath) >= 1;
     if (implementerDone) {
       console.log(
         `Resuming #${issue.number}: implementer already completed on ${branch}.`,
       );
     } else {
-      const implementation = await sandbox.run(
-        buildImplementationPhaseOptions(agent, issue.number, issue.title),
+      const implementation = await withAgentHeartbeat(
+        issue.number,
+        "implementer",
+        () =>
+          sandbox.run(
+            buildImplementationPhaseOptions(agent, issue.number, issue.title),
+          ),
       );
       if (implementation.commits.length === 0) {
         throw new Error(`Issue #${issue.number} produced no implementation commit.`);
@@ -166,16 +219,18 @@ async function prepareIssue(
           `Issue #${issue.number} implementation did not emit its completion signal.`,
         );
       }
+      recordPhaseSuccess(issue.number, "implementer");
     }
 
-    const reviewerDone = resume && phaseAlreadyComplete(issue.number, "reviewer");
+    const reviewerDone =
+      resume && phaseCompletedSuccessfully(issue.number, "reviewer");
     if (reviewerDone) {
       console.log(
         `Resuming #${issue.number}: reviewer already completed on ${branch}.`,
       );
     } else {
-      const review = await sandbox.run(
-        buildReviewPhaseOptions(agent, issue.number, branch),
+      const review = await withAgentHeartbeat(issue.number, "reviewer", () =>
+        sandbox.run(buildReviewPhaseOptions(agent, issue.number, branch)),
       );
       if (
         !resultHasCompletionSignal({
@@ -187,6 +242,7 @@ async function prepareIssue(
           `Issue #${issue.number} review did not emit its completion signal.`,
         );
       }
+      recordPhaseSuccess(issue.number, "reviewer");
     }
 
     console.log(`Running independent full PowerShell test gate for #${issue.number}...`);
@@ -253,8 +309,13 @@ async function integrateLatestBase(
         );
       }
 
-      const integration = await sandbox.run(
-        buildIntegrationPhaseOptions(agent, issue.number, branch),
+      const integration = await withAgentHeartbeat(
+        issue.number,
+        "integrator",
+        () =>
+          sandbox.run(
+            buildIntegrationPhaseOptions(agent, issue.number, branch),
+          ),
       );
       if (
         !resultHasCompletionSignal({
@@ -266,6 +327,7 @@ async function integrateLatestBase(
           `Issue #${issue.number} integration did not emit its completion signal.`,
         );
       }
+      recordPhaseSuccess(issue.number, "integrator");
     }
 
     console.log(
@@ -409,6 +471,10 @@ async function run(): Promise<void> {
         try {
           prepared = await prepareIssue(issue, recovery, Boolean(existing));
         } catch (error) {
+          if (error instanceof SandboxSetupTimeoutError) {
+            console.error(error.message);
+            return;
+          }
           delivery.stop(error);
           throw laneFailure("preparation", recovery, error);
         }
@@ -435,10 +501,14 @@ async function run(): Promise<void> {
       .map((result) => result.reason);
 
     if (failures.length > 0) {
-      throw new AggregateError(
+      const aggregate = new AggregateError(
         failures,
         `${failures.length} issue lane(s) stopped safely.`,
       );
+      if (isExhaustedGrokAuthError(aggregate)) {
+        console.error(grokLoginReminder(readGrokAccessSnapshot()));
+      }
+      throw aggregate;
     }
   }
 }

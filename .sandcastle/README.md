@@ -95,13 +95,33 @@ sync state.
 
 These retries do not change eligibility, phase order, or `--max-parallel`.
 
+- Preflight prints remaining Grok access-token TTL (never token values). There
+  is no `grok refresh` command. Sandcastle runs silent `grok models` at
+  preflight, before every Grok spawn, and again before each 401 retry so a
+  long AFK can pass the ~6h access JWT using the stored refresh token.
 - Headless Grok retries transient `401` / `no auth context` failures a few
-  times before the lane fails. Access tokens last about six hours and refresh
-  automatically; a headless child used to exit 1 on a blip.
+  times. If those retries are exhausted, no new batches start; worktrees are
+  preserved and the console tells you to run `grok login`.
+- A phase moves forward only on Grok **exit 0** plus
+  `<promise>COMPLETE</promise>` (implementer also needs a commit). COMPLETE
+  then exit 1 is a failure, including on resume. The adapter logs that defect
+  instead of ignoring the exit code.
+- Agents still run tests from their prompts. The orchestrator still runs
+  `pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1` after review as the
+  independent merge bar. Console heartbeats every 60s show issue, phase, last
+  tool or log line, and idle time.
 - `gh` retries HTTP 502/503. Login falls back from `gh api user` to
-  `gh auth status`.
+  `gh auth status`. GraphQL discovery stays retry-only (no REST fallback).
+- Sandbox setup that produces no worktree within five minutes releases the
+  claim and continues the batch. Deep `artifacts/` and `.test-output` trees are
+  removed with Windows long-path-safe deletion before `git worktree remove`.
 - A self-claim with **no** local worktree is released before the next batch
   (rollback before work). A self-claim **with** a preserved worktree is
-  resumed on that same branch: skip a phase only when its log already contains
-  `<promise>COMPLETE</promise>`, then still run the independent full suite.
+  resumed on that same branch: skip a phase only when its log contains
+  `<promise>COMPLETE</promise>` **and** an exit-0 success marker, then still
+  run the independent full suite.
 - Host start ignores untracked `.sandcastle/notes/` and `.sandcastle/logs/`.
+- Parent specifications stay ineligible while they have open children
+  (`subIssuesSummary.completed === total`). Completed parents are eligible,
+  matching Matt Pocock's original PRD rule. There is no extra `[Spec]` title
+  filter.

@@ -1,18 +1,35 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
+  GROK_AUTH_RETRY_DELAYS_MS,
   GROK_MODEL,
   GROK_REASONING_EFFORT,
   buildGrokPrintCommand,
   createGrokAgent,
+  grokCompleteThenNonzeroWarning,
   grokRetryRunnerPath,
+  isExhaustedGrokAuthError,
   isTransientGrokAuthFailure,
   parseGrokStreamLine,
+  planGrokAuthRetry,
 } from "./grok-agent.mts";
+import {
+  describeGrokAccessTtl,
+  formatDurationMs,
+  grokLoginReminder,
+  parseGrokAuthFile,
+} from "./grok-auth.mts";
 import {
   createLaneRecovery,
   laneFailure,
@@ -21,8 +38,19 @@ import {
 import {
   AGENT_PHASE_IDLE_TIMEOUT_SECONDS,
   DEFAULT_MAX_PARALLEL_ISSUES,
+  HEARTBEAT_INTERVAL_MS,
+  SANDBOX_SETUP_TIMEOUT_MS,
+  SandboxSetupTimeoutError,
+  formatAgentHeartbeat,
+  lastHeartbeatDetail,
   loginFromGitHubAuthStatus,
   hostWorktreeIsClean,
+  phaseCompletedSuccessfully,
+  phaseSuccessMarkerPath,
+  recordPhaseSuccess,
+  removeWorktreeTeardownTargets,
+  windowsLongPath,
+  worktreeTeardownTargets,
   isTransientGitHubCliFailure,
   parseWorktreeLanes,
   releaseOrphanSelfClaims,
@@ -922,4 +950,179 @@ test("pinned startable issues may be unassigned or a resumable self-claim", () =
     () => requireStartableIssue(72, "agent", [], resumeCommands),
     /not an unassigned or resumable/,
   );
+});
+
+test("Grok access TTL is printed without leaking credentials", () => {
+  const now = new Date("2026-08-18T22:00:00.000Z");
+  const snapshot = parseGrokAuthFile(
+    JSON.stringify({
+      "https://auth.x.ai::test-id": {
+        key: "not-a-jwt",
+        refresh_token: "rt-secret-value",
+        expires_at: "2026-08-19T02:59:48.000Z",
+        email: "secret@example.com",
+      },
+    }),
+    now,
+  );
+
+  assert.equal(snapshot.found, true);
+  assert.equal(snapshot.hasRefreshToken, true);
+  assert.equal(snapshot.expiresAt?.toISOString(), "2026-08-19T02:59:48.000Z");
+  assert.equal(snapshot.remainingMs, 4 * 3600_000 + 59 * 60_000 + 48_000);
+  assert.equal(formatDurationMs(snapshot.remainingMs ?? 0), "4h 59m");
+
+  const description = describeGrokAccessTtl(snapshot);
+  assert.match(description, /4h 59m remaining/);
+  assert.match(description, /Silent grok models refresh/);
+  assert.doesNotMatch(description, /secret@example.com/);
+  assert.doesNotMatch(description, /rt-secret-value/);
+  assert.doesNotMatch(description, /not-a-jwt/);
+
+  const expired = parseGrokAuthFile(
+    JSON.stringify({
+      expires_at: "2026-08-18T21:00:00.000Z",
+      refresh_token: "rt",
+    }),
+    now,
+  );
+  assert.match(describeGrokAccessTtl(expired), /expired at 2026-08-18T21:00:00.000Z/);
+  assert.match(grokLoginReminder(expired), /Run grok login/);
+  assert.match(grokLoginReminder(expired), /No new batches will start/);
+});
+
+test("Grok auth retry never treats COMPLETE plus exit 1 as success", () => {
+  const completeThenOne = planGrokAuthRetry({
+    attempt: 1,
+    maxAttempts: 3,
+    delaysMs: GROK_AUTH_RETRY_DELAYS_MS,
+    exitCode: 1,
+    output: "committed\n<promise>COMPLETE</promise>\n",
+  });
+  assert.equal(completeThenOne.action, "return");
+  assert.equal(completeThenOne.exitCode, 1);
+  assert.match(
+    completeThenOne.adapterWarning ?? "",
+    /then exited 1/,
+  );
+  assert.equal(
+    grokCompleteThenNonzeroWarning(0, "<promise>COMPLETE</promise>"),
+    undefined,
+  );
+
+  const authBlip = planGrokAuthRetry({
+    attempt: 1,
+    maxAttempts: 3,
+    delaysMs: GROK_AUTH_RETRY_DELAYS_MS,
+    exitCode: 1,
+    output: "Unauthorized (401) auth_kind=none",
+  });
+  assert.equal(authBlip.action, "refresh-and-retry");
+  assert.equal(authBlip.exitCode, 1);
+  assert.equal(authBlip.delayMs, 5_000);
+
+  const success = planGrokAuthRetry({
+    attempt: 2,
+    maxAttempts: 3,
+    delaysMs: GROK_AUTH_RETRY_DELAYS_MS,
+    exitCode: 0,
+    output: "<promise>COMPLETE</promise>",
+  });
+  assert.equal(success.action, "return");
+  assert.equal(success.exitCode, 0);
+});
+
+test("exhausted Grok 401 stops new batches", () => {
+  const nested = new AggregateError(
+    [
+      new Error(
+        "grok exited with code 1:\nUnauthorized (401) from cli-chat-proxy (auth_kind=none)",
+      ),
+    ],
+    "1 issue lane(s) stopped safely.",
+  );
+  assert.equal(isExhaustedGrokAuthError(nested), true);
+  assert.equal(isExhaustedGrokAuthError(new Error("Issue #72 produced no implementation commit.")), false);
+});
+
+test("resume skips a phase only after exit 0 was recorded", () => {
+  const logs = mkdtempSync(join(tmpdir(), "sandcastle-phase-"));
+  try {
+    const logPath = join(logs, "lane-issue-9001-implementer.log");
+    writeFileSync(logPath, "committed\n<promise>COMPLETE</promise>\n", "utf8");
+    assert.equal(
+      phaseCompletedSuccessfully(9001, "implementer", logs),
+      false,
+    );
+    recordPhaseSuccess(9001, "implementer", logs);
+    assert.equal(existsSync(phaseSuccessMarkerPath(logPath)), true);
+    assert.equal(
+      phaseCompletedSuccessfully(9001, "implementer", logs),
+      true,
+    );
+  } finally {
+    rmSync(logs, { force: true, recursive: true });
+  }
+});
+
+test("heartbeat names the last tool and sandbox stall line", () => {
+  assert.equal(HEARTBEAT_INTERVAL_MS, 60_000);
+  assert.equal(lastHeartbeatDetail(""), "(no agent output yet)");
+  assert.equal(
+    lastHeartbeatDetail("Setting up sandbox\nSetting up sandbox"),
+    "Setting up sandbox",
+  );
+  assert.equal(
+    lastHeartbeatDetail(
+      'Agent started\nread_file({"target_file":"CONTEXT.md"})\n',
+    ),
+    "read_file",
+  );
+  assert.match(
+    formatAgentHeartbeat({
+      issueNumber: 72,
+      phase: "implementer",
+      lastDetail: "Setting up sandbox",
+      secondsSinceOutput: 187,
+    }),
+    /Heartbeat: #72 implementer \| last: Setting up sandbox \| idle 187s/,
+  );
+});
+
+test("sandbox-setup watchdog is five minutes and releases the claim", () => {
+  assert.equal(SANDBOX_SETUP_TIMEOUT_MS, 5 * 60 * 1000);
+  const error = new SandboxSetupTimeoutError(72);
+  assert.equal(error.name, "SandboxSetupTimeoutError");
+  assert.equal(error.issueNumber, 72);
+  assert.match(error.message, /#72/);
+  assert.match(error.message, /300s/);
+  assert.match(error.message, /Released the claim/);
+});
+
+test("worktree teardown deletes deep artifact trees using long paths on Windows", () => {
+  const prefixed = windowsLongPath("C:\\repo\\artifacts", "win32");
+  assert.equal(prefixed, "\\\\?\\C:\\repo\\artifacts");
+  assert.equal(
+    windowsLongPath("\\\\server\\share\\tree", "win32"),
+    "\\\\?\\UNC\\server\\share\\tree",
+  );
+  assert.equal(windowsLongPath("\\\\?\\C:\\already", "win32"), "\\\\?\\C:\\already");
+
+  const worktree = mkdtempSync(join(tmpdir(), "sandcastle-wt-"));
+  try {
+    const artifacts = join(worktree, "artifacts", "WIN-PCInfo", "nested");
+    mkdirSync(artifacts, { recursive: true });
+    writeFileSync(join(artifacts, "file.txt"), "payload", "utf8");
+    mkdirSync(join(worktree, ".test-output"), { recursive: true });
+    writeFileSync(join(worktree, ".test-output", "out.txt"), "out", "utf8");
+    assert.deepEqual(
+      worktreeTeardownTargets(worktree),
+      [join(worktree, "artifacts"), join(worktree, ".test-output")],
+    );
+    removeWorktreeTeardownTargets(worktree);
+    assert.equal(existsSync(join(worktree, "artifacts")), false);
+    assert.equal(existsSync(join(worktree, ".test-output")), false);
+  } finally {
+    rmSync(worktree, { force: true, recursive: true });
+  }
 });

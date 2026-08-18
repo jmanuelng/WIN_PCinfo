@@ -84,6 +84,73 @@ export function isTransientGrokAuthFailure(output: string): boolean {
   );
 }
 
+export function collectErrorText(error: unknown): string {
+  if (error instanceof AggregateError) {
+    return [error.message, ...error.errors.map(collectErrorText)].join("\n");
+  }
+  if (error instanceof Error) {
+    const cause =
+      error.cause === undefined ? "" : `\n${collectErrorText(error.cause)}`;
+    return `${error.message}${cause}`;
+  }
+  return String(error);
+}
+
+export function isExhaustedGrokAuthError(error: unknown): boolean {
+  return isTransientGrokAuthFailure(collectErrorText(error));
+}
+
+export function grokCompleteThenNonzeroWarning(
+  exitCode: number,
+  output: string,
+): string | undefined {
+  if (exitCode === 0 || !output.includes(COMPLETION_SIGNAL)) {
+    return undefined;
+  }
+  return `Grok printed ${COMPLETION_SIGNAL} then exited ${exitCode}. Treating as failure; do not review or merge. Root-cause the Grok adapter so a healthy completion exits 0.`;
+}
+
+export function planGrokAuthRetry(options: {
+  readonly attempt: number;
+  readonly maxAttempts: number;
+  readonly delaysMs: readonly number[];
+  readonly exitCode: number;
+  readonly output: string;
+}): {
+  readonly action: "return" | "refresh-and-retry";
+  readonly exitCode: number;
+  readonly delayMs?: number;
+  readonly adapterWarning?: string;
+} {
+  const adapterWarning = grokCompleteThenNonzeroWarning(
+    options.exitCode,
+    options.output,
+  );
+  if (options.exitCode === 0) {
+    return { action: "return", exitCode: 0 };
+  }
+  const retryable =
+    options.attempt < options.maxAttempts &&
+    isTransientGrokAuthFailure(options.output);
+  if (!retryable) {
+    return {
+      action: "return",
+      exitCode: options.exitCode,
+      adapterWarning,
+    };
+  }
+  const delayMs =
+    options.delaysMs[options.attempt - 1] ??
+    options.delaysMs[options.delaysMs.length - 1] ??
+    5_000;
+  return {
+    action: "refresh-and-retry",
+    exitCode: options.exitCode,
+    delayMs,
+    adapterWarning,
+  };
+}
+
 export function grokRetryRunnerPath(): string {
   return join(process.cwd(), ".sandcastle", "grok-retry.mts");
 }
