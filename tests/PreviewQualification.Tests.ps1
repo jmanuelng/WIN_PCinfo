@@ -275,6 +275,20 @@ $expiredResult = Invoke-Qualify -Request $expired -At $expiredNow
 Assert-PublicPacket $expiredResult 'stale Client VM evidence'
 Assert-Equal 'Denied' $expiredResult.Packet.state 'expired Client VM evidence denies the packet'
 
+$invalidated = Copy-Request $complete
+$invalidated.scenario = 'InvalidatedEvidence'
+@($invalidated.evidencePack.gates | Where-Object {
+    $_.gateId -eq 'zero-round-residue'
+})[0].result = 'Invalidated'
+@($invalidated.evidencePack.gates | Where-Object {
+    $_.gateId -eq 'zero-round-residue'
+})[0].reasonCode = 'GATE.INVALIDATED'
+$invalidatedResult = Invoke-Qualify -Request $invalidated
+Assert-PublicPacket $invalidatedResult 'invalidated evidence'
+Assert-Equal 'Denied' $invalidatedResult.Packet.state 'invalidated evidence denies the packet'
+Assert-Equal 'QUALIFY.INVALIDATED' $invalidatedResult.ReasonCode `
+    'invalidated evidence uses a stable reason'
+
 $wrong = Copy-Request $complete
 $wrong.scenario = 'WrongCandidate'
 $wrongResult = Invoke-Qualify -Request $wrong -Mutate {
@@ -343,6 +357,20 @@ Assert-Equal 'Denied' $unsignedAsFinalResult.Packet.state `
 Assert-Equal 'QUALIFY.FINAL_IDENTITY_NOT_DISTINCT' $unsignedAsFinalResult.ReasonCode `
     'a reused digest uses a stable reason'
 
+$notDerived = Copy-Request $complete
+$notDerivedResult = Invoke-Qualify -Request $notDerived -Mutate {
+    param($Prepared)
+    $Prepared.bindings.derivedFromGeneratedContentSha256 =
+        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    $Prepared.evidencePack.finalDistributable.derivedFromGeneratedContentSha256 =
+        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+}
+Assert-PublicPacket $notDerivedResult 'a final identity that does not derive from the candidate'
+Assert-Equal 'Denied' $notDerivedResult.Packet.state `
+    'an underived final identity denies the packet'
+Assert-Equal 'QUALIFY.FINAL_IDENTITY_NOT_DERIVED' $notDerivedResult.ReasonCode `
+    'an underived final identity uses a stable reason'
+
 $live = Copy-Request $complete
 $live.scenario = 'LiveValidation'
 $live.evidenceKind = 'LiveValidation'
@@ -379,5 +407,50 @@ $repoResult = Invoke-Qualify -Request $complete -WorkspacePath $repoWorkspace
 Assert-PublicPacket $repoResult 'a repository workspace'
 Assert-Equal 'Rejected' $repoResult.Packet.state 'a repository workspace is rejected'
 Assert-Equal 'NotStarted' $repoResult.ExitKind 'a repository workspace stays NotStarted'
+
+$misrootedWorkspace = Join-Path $repositoryRoot '.test-output/preview-qualification-misrooted-ws'
+if (Test-Path -LiteralPath $misrootedWorkspace) {
+    Remove-Item -LiteralPath $misrootedWorkspace -Recurse -Force
+}
+$null = New-Item -ItemType Directory -Path $misrootedWorkspace -Force
+[System.IO.File]::WriteAllText(
+    (Join-Path $misrootedWorkspace $policy.workspace.markerFileName),
+    ($policy.workspace.markerContent + "`n"),
+    [System.Text.UTF8Encoding]::new($false)
+)
+$misrootedPrepared = Set-BoundDigests -Request (Copy-Request $complete)
+$misrootedResult = Invoke-PreviewQualification -Request $misrootedPrepared `
+    -RequestText ($misrootedPrepared | ConvertTo-Json -Depth 30) `
+    -CandidatePath $candidatePath -PrivateWorkspacePath $misrootedWorkspace `
+    -RepositoryRoot (Join-Path $repositoryRoot 'docs') `
+    -ApplicationDirectory $workRoot `
+    -Ledger $ledger -ReleaseDefinition $releaseDefinition `
+    -ExpectedLedgerSha256 $ledgerDigest -Now $now
+Assert-PublicPacket $misrootedResult 'a repository workspace with a docs-only root'
+Assert-Equal 'Rejected' $misrootedResult.Packet.state `
+    'a workspace under the real repository is rejected even when the caller passes docs'
+Assert-Equal 'QUALIFY.WORKSPACE_REPOSITORY_PATH' $misrootedResult.ReasonCode `
+    'the bound ledger root, not docs, owns the repository check'
+
+$uncResult = Invoke-Qualify -Request $complete -WorkspacePath '\\example\share\qualify'
+Assert-PublicPacket $uncResult 'a UNC workspace'
+Assert-Equal 'Rejected' $uncResult.Packet.state 'a UNC workspace is rejected'
+Assert-Equal 'QUALIFY.WORKSPACE_UNC_PATH' $uncResult.ReasonCode `
+    'a UNC workspace uses a stable reason'
+
+$residueWorkspace = New-MarkedWorkspace -Name 'residue'
+$residueResult = Invoke-Qualify -Request $complete -WorkspacePath $residueWorkspace
+Assert-PublicPacket $residueResult 'cleanup after an approved packet'
+Assert-Equal 'Approved' $residueResult.Packet.state 'the residue check uses a complete pack'
+Assert-Equal $false (Test-Path -LiteralPath (
+    Join-Path $residueWorkspace 'derived-qualification-packet.json'
+) -PathType Leaf) 'the derived packet does not remain'
+Assert-Equal $false (Test-Path -LiteralPath (
+    Join-Path $residueWorkspace 'gate-derived'
+)) 'the gate-derived folder does not remain'
+$residueLeft = @(Get-ChildItem -LiteralPath $residueWorkspace -Force | Where-Object {
+    $_.Name -ne [string] $policy.workspace.markerFileName
+})
+Assert-Equal 0 $residueLeft.Count 'only the operator marker remains after qualification'
 
 Write-Output 'PASS: Preview qualification decision engine covers approval and every required denial.'

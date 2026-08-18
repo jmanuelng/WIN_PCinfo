@@ -119,6 +119,15 @@ function Get-PreviewQualificationCatalogPath {
         [Parameter(Mandatory)] [string] $RelativePath
     )
 
+    # The generated application may live two or more directories below the
+    # reviewed tree (portable package, artifacts, or a test work root). The
+    # threat is judging a workspace against `docs` because the policy file
+    # sits under `docs/spec/releases`, or skipping schema validation because
+    # the sidecar was one extra hop away. The mechanism walks a bounded
+    # ancestor list and returns only an exact relative file. The trust
+    # assumption is that the reviewed ledger and schemas keep those
+    # well-known paths. Safe failure is a missing path so the caller can
+    # fail closed.
     $seen = [System.Collections.Generic.HashSet[string]]::new(
         [System.StringComparer]::OrdinalIgnoreCase
     )
@@ -147,6 +156,36 @@ function Get-PreviewQualificationCatalogPath {
         if (Test-Path -LiteralPath $candidate -PathType Leaf) {
             return $candidate
         }
+    }
+    $null
+}
+
+function Get-PreviewQualificationBoundRepositoryRoot {
+    param(
+        [Parameter()] [string] $RepositoryRoot,
+        [Parameter()] [string] $ApplicationDirectory
+    )
+
+    # A policy under docs/spec/releases is three hops from the repository
+    # root, not two. The threat is treating `docs` as the tree and then
+    # writing a packet beside src or tests. The mechanism locates the
+    # frozen ledger and walks the same two hops Release Gates uses. The
+    # trust assumption is that the ledger stays at docs/spec. Safe failure
+    # is the caller-supplied root so later path checks still fail closed.
+    $ledgerPath = Get-PreviewQualificationCatalogPath `
+        -RepositoryRoot $RepositoryRoot `
+        -ApplicationDirectory $ApplicationDirectory `
+        -RelativePath 'docs/spec/capability-ledger.json'
+    if (-not [string]::IsNullOrWhiteSpace($ledgerPath)) {
+        return [System.IO.Path]::GetFullPath(
+            (Join-Path (Split-Path -Parent $ledgerPath) '..\..')
+        )
+    }
+    if (-not [string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+        return [System.IO.Path]::GetFullPath($RepositoryRoot)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ApplicationDirectory)) {
+        return [System.IO.Path]::GetFullPath($ApplicationDirectory)
     }
     $null
 }
@@ -209,11 +248,23 @@ function Get-PreviewQualificationWorkspaceRejection {
     if ([string]::IsNullOrWhiteSpace($PrivateWorkspacePath)) {
         return 'QUALIFY.PRIVACY_BOUNDARY_MISSING'
     }
+    if ($PrivateWorkspacePath.StartsWith('\\', [System.StringComparison]::Ordinal) -or
+        $PrivateWorkspacePath.StartsWith('//', [System.StringComparison]::Ordinal)) {
+        return 'QUALIFY.WORKSPACE_UNC_PATH'
+    }
+    $boundRoot = Get-PreviewQualificationBoundRepositoryRoot `
+        -RepositoryRoot $RepositoryRoot `
+        -ApplicationDirectory $ApplicationDirectory
+    if (-not [string]::IsNullOrWhiteSpace($boundRoot)) {
+        $RepositoryRoot = $boundRoot
+    }
     if (Test-PreviewQualificationPublicPath -Path $PrivateWorkspacePath) {
         return 'QUALIFY.WORKSPACE_PUBLIC_PATH'
     }
-    if (Test-PreviewQualificationPathUnderRoot -Path $PrivateWorkspacePath `
-        -Root $RepositoryRoot) {
+    if (-not [string]::IsNullOrWhiteSpace($RepositoryRoot) -and
+        (Test-Path -LiteralPath $RepositoryRoot) -and
+        (Test-PreviewQualificationPathUnderRoot -Path $PrivateWorkspacePath `
+            -Root $RepositoryRoot)) {
         return 'QUALIFY.WORKSPACE_REPOSITORY_PATH'
     }
     if (-not [string]::IsNullOrWhiteSpace($ApplicationDirectory) -and
@@ -500,7 +551,12 @@ function Invoke-PreviewQualificationWorkspaceCleanup {
     if (Test-Path -LiteralPath $derived -PathType Leaf) {
         Remove-Item -LiteralPath $derived -Force
     }
-    -not (Test-Path -LiteralPath $derived -PathType Leaf)
+    $gateDerived = Join-Path $WorkspacePath 'gate-derived'
+    if (Test-Path -LiteralPath $gateDerived) {
+        Remove-Item -LiteralPath $gateDerived -Recurse -Force
+    }
+    (-not (Test-Path -LiteralPath $derived -PathType Leaf)) -and
+        (-not (Test-Path -LiteralPath $gateDerived))
 }
 
 function Invoke-PreviewQualification {
@@ -519,6 +575,12 @@ function Invoke-PreviewQualification {
     )
 
     $policy = Get-PreviewQualificationPolicy
+    $boundRoot = Get-PreviewQualificationBoundRepositoryRoot `
+        -RepositoryRoot $RepositoryRoot `
+        -ApplicationDirectory $ApplicationDirectory
+    if (-not [string]::IsNullOrWhiteSpace($boundRoot)) {
+        $RepositoryRoot = $boundRoot
+    }
     $privacyReason = Test-PreviewQualificationPrivacyBoundary -Text $RequestText
     if ($privacyReason) {
         return Get-PreviewQualificationRejectedEvaluation -ReasonCode $privacyReason `
@@ -676,131 +738,156 @@ function Invoke-PreviewQualification {
     }
     $gatePolicy = Get-ReleaseGatesPolicy
     $gateWorkspace = Join-Path $PrivateWorkspacePath 'gate-derived'
-    $null = New-Item -ItemType Directory -Path $gateWorkspace -Force
-    $gateEvaluation = Invoke-ReleaseGateEvaluation -Pack $pack -Policy $gatePolicy `
-        -Ledger $Ledger -ReleaseDefinition $ReleaseDefinition -PackText $packText `
-        -ExpectedGeneratedContentSha256 $candidateDigest `
-        -ExpectedLedgerSha256 $ExpectedLedgerSha256 -Now $Now `
-        -WorkspacePath $gateWorkspace -RepositoryRoot $RepositoryRoot `
-        -ApplicationDirectory $ApplicationDirectory
+    $gateEvaluation = $null
+    $packet = $null
+    $state = 'Denied'
+    $primary = 'QUALIFY.DENIED'
+    try {
+        $null = New-Item -ItemType Directory -Path $gateWorkspace -Force
+        $gateEvaluation = Invoke-ReleaseGateEvaluation -Pack $pack -Policy $gatePolicy `
+            -Ledger $Ledger -ReleaseDefinition $ReleaseDefinition -PackText $packText `
+            -ExpectedGeneratedContentSha256 $candidateDigest `
+            -ExpectedLedgerSha256 $ExpectedLedgerSha256 -Now $Now `
+            -WorkspacePath $gateWorkspace -RepositoryRoot $RepositoryRoot `
+            -ApplicationDirectory $ApplicationDirectory
 
-    $coverage.gatesComplete = $true
-    foreach ($gate in @($gateEvaluation.Manifest.gates)) {
-        if ([string] $gate.result -ne 'Pass') {
-            $coverage.gatesComplete = $false
+        $coverage.gatesComplete = Test-PreviewQualificationRowCoverage `
+            -Rows @($gateEvaluation.Manifest.gates) -IdName 'gateId' `
+            -RequiredIds $policy.requiredGates
+        $packPrivileges = @(Get-PreviewQualificationProperty $pack 'privilegePaths')
+        $coverage.privilegeComplete = Test-PreviewQualificationRowCoverage `
+            -Rows $packPrivileges -IdName 'pathId' `
+            -RequiredIds $policy.requiredPrivilegePaths
+        $packNetworks = @(Get-PreviewQualificationProperty $pack 'networkBehaviors')
+        $coverage.networkComplete = Test-PreviewQualificationRowCoverage `
+            -Rows $packNetworks -IdName 'behavior' `
+            -RequiredIds $policy.requiredNetworkBehaviors
+        $requiredLocales = @($policy.requiredLocales)
+        $packLocales = @(Get-PreviewQualificationProperty $pack 'locales')
+        $coverage.localeComplete = $true
+        foreach ($locale in $requiredLocales) {
+            if ($locale -notin $packLocales) {
+                $coverage.localeComplete = $false
+            }
         }
-    }
-    $packPrivileges = @(Get-PreviewQualificationProperty $pack 'privilegePaths')
-    $coverage.privilegeComplete = Test-PreviewQualificationRowCoverage `
-        -Rows $packPrivileges -IdName 'pathId' `
-        -RequiredIds $policy.requiredPrivilegePaths
-    $packNetworks = @(Get-PreviewQualificationProperty $pack 'networkBehaviors')
-    $coverage.networkComplete = Test-PreviewQualificationRowCoverage `
-        -Rows $packNetworks -IdName 'behavior' `
-        -RequiredIds $policy.requiredNetworkBehaviors
-    $requiredLocales = @($policy.requiredLocales)
-    $packLocales = @(Get-PreviewQualificationProperty $pack 'locales')
-    $coverage.localeComplete = $true
-    foreach ($locale in $requiredLocales) {
-        if ($locale -notin $packLocales) {
-            $coverage.localeComplete = $false
+
+        foreach ($gateReason in @($gateEvaluation.Manifest.promotion.blockingReasons)) {
+            if ($gateReason -in @(
+                'GATE.SYNTHETIC_EVIDENCE_NOT_PROMOTABLE'
+            )) {
+                continue
+            }
+            if ($gateReason -notin $blocking) {
+                $blocking.Add([string] $gateReason)
+            }
         }
-    }
-
-    foreach ($gateReason in @($gateEvaluation.Manifest.promotion.blockingReasons)) {
-        if ($gateReason -in @(
-            'GATE.SYNTHETIC_EVIDENCE_NOT_PROMOTABLE'
-        )) {
-            continue
+        if (-not $coverage.gatesComplete -or
+            -not $coverage.privilegeComplete -or
+            -not $coverage.networkComplete -or
+            -not $coverage.localeComplete) {
+            if ('QUALIFY.EVIDENCE_INCOMPLETE' -notin $blocking) {
+                $blocking.Add('QUALIFY.EVIDENCE_INCOMPLETE')
+            }
         }
-        if ($gateReason -notin $blocking) {
-            $blocking.Add([string] $gateReason)
+        if (-not [bool] $gateEvaluation.Manifest.unsignedContentQualified -and
+            'GATE.MISSING' -in @($gateEvaluation.Manifest.promotion.blockingReasons) -and
+            'QUALIFY.EVIDENCE_INCOMPLETE' -notin $blocking) {
+            $blocking.Add('QUALIFY.EVIDENCE_INCOMPLETE')
         }
+
+        $claimed = @()
+        foreach ($snapshot in @($gateEvaluation.Matrix.scenarioSnapshots)) {
+            $claimed += Get-PreviewQualificationSanitizedScenario `
+                -ScenarioId ([string] $snapshot.scenarioId) `
+                -WindowsFamily ([string] $snapshot.windowsFamily) `
+                -Result ([string] $snapshot.evidenceResult)
+        }
+        if ($claimed.Count -eq 0) {
+            $claimed += Get-PreviewQualificationSanitizedScenario `
+                -ScenarioId 'windows-10-enterprise-x64' -WindowsFamily 'Windows 10' `
+                -Result 'NotRun'
+            $claimed += Get-PreviewQualificationSanitizedScenario `
+                -ScenarioId 'windows-11-enterprise-x64' -WindowsFamily 'Windows 11' `
+                -Result 'NotRun'
+        }
+
+        # This host never launches the distinct signed or attested zip.
+        # The threat is recording Pass for a smoke that only ran Help on
+        # the precursor script. The mechanism keeps the Help launch as
+        # the launch smoke and records the final-artifact smoke as not
+        # run unless that launch itself failed. The trust assumption is
+        # that the evidence pack still carries the declared final-artifact
+        # gate. Safe failure is NotRun, or ProductFail when Help failed.
+        $limitations.Add('final-artifact-bytes-not-launched')
+        $finalSmokeResult = 'NotRun'
+        $finalSmokeReason = 'QUALIFY.FINAL_ARTIFACT_NOT_LAUNCHED'
+        if (-not $smokePassed) {
+            $finalSmokeResult = 'ProductFail'
+            $finalSmokeReason = 'QUALIFY.SMOKE_FAILED'
+        }
+        elseif (-not [bool] $gateEvaluation.Manifest.finalArtifactQualified -or
+            -not $candidateBound) {
+            $finalSmokeReason = 'QUALIFY.EVIDENCE_INCOMPLETE'
+        }
+        $smokes += [pscustomobject][ordered]@{
+            smokeId = 'final-artifact'
+            result = $finalSmokeResult
+            reasonCode = $finalSmokeReason
+        }
+
+        $uniqueBlocking = @($blocking | Select-Object -Unique)
+        $approved = $uniqueBlocking.Count -eq 0 -and
+            [bool] $gateEvaluation.Manifest.unsignedContentQualified -and
+            [bool] $gateEvaluation.Manifest.finalArtifactQualified -and
+            $smokePassed -and $candidateBound
+        $primary = if ($approved) {
+            'QUALIFY.APPROVED'
+        }
+        elseif ($uniqueBlocking.Count -gt 0) {
+            ConvertTo-PreviewQualificationReason -ReasonCode ([string] $uniqueBlocking[0])
+        }
+        else {
+            'QUALIFY.DENIED'
+        }
+        if (-not $approved -and $primary -notin $uniqueBlocking) {
+            $uniqueBlocking = @($primary) + @($uniqueBlocking)
+        }
+
+        $zeroResidue = $false
+        $zeroGate = @($gateEvaluation.Manifest.gates | Where-Object {
+            [string] $_.gateId -eq 'zero-round-residue'
+        })
+        if ($zeroGate.Count -gt 0 -and [string] $zeroGate[0].result -eq 'Pass' -and
+            [bool] $zeroGate[0].cleanupVerified) {
+            $zeroResidue = $true
+        }
+
+        $state = if ($approved) { 'Approved' } else { 'Denied' }
+        $decision = if ($approved) { 'Qualify' } else { 'Deny' }
+        $packet = New-PreviewQualificationPacket -State $state -Decision $decision `
+            -ReasonCode $primary -TrustPath $trustPath `
+            -UnsignedContentQualified:([bool] $gateEvaluation.Manifest.unsignedContentQualified) `
+            -FinalArtifactQualified:([bool] $gateEvaluation.Manifest.finalArtifactQualified -and $approved) `
+            -CandidateBound:$candidateBound `
+            -QualityThreeCleanPassed:([bool] $gateEvaluation.Manifest.qualityBudget.threeCleanPassed) `
+            -AzureIdentityAvailable:$azureIdentity -ZeroResidueVerified:$zeroResidue `
+            -Smokes $smokes -Coverage $coverage -ClaimedScenarios $claimed `
+            -BlockingReasons $uniqueBlocking -Limitations @($limitations | Select-Object -Unique)
+
+        $derived = Join-Path $PrivateWorkspacePath 'derived-qualification-packet.json'
+        [System.IO.File]::WriteAllText(
+            $derived,
+            ($packet | ConvertTo-Json -Compress -Depth 20),
+            [System.Text.UTF8Encoding]::new($false)
+        )
     }
-    if (-not [bool] $gateEvaluation.Manifest.unsignedContentQualified -and
-        'GATE.MISSING' -in @($gateEvaluation.Manifest.promotion.blockingReasons) -and
-        'QUALIFY.EVIDENCE_INCOMPLETE' -notin $blocking) {
-        $blocking.Add('QUALIFY.EVIDENCE_INCOMPLETE')
+    catch {
+        $null = Invoke-PreviewQualificationWorkspaceCleanup `
+            -WorkspacePath $PrivateWorkspacePath
+        return Get-PreviewQualificationRejectedEvaluation `
+            -ReasonCode 'QUALIFY.REQUEST_INVALID' -Policy $policy
     }
 
-    $claimed = @()
-    foreach ($snapshot in @($gateEvaluation.Matrix.scenarioSnapshots)) {
-        $claimed += Get-PreviewQualificationSanitizedScenario `
-            -ScenarioId ([string] $snapshot.scenarioId) `
-            -WindowsFamily ([string] $snapshot.windowsFamily) `
-            -Result ([string] $snapshot.evidenceResult)
-    }
-    if ($claimed.Count -eq 0) {
-        $claimed += Get-PreviewQualificationSanitizedScenario `
-            -ScenarioId 'windows-10-enterprise-x64' -WindowsFamily 'Windows 10' `
-            -Result 'NotRun'
-        $claimed += Get-PreviewQualificationSanitizedScenario `
-            -ScenarioId 'windows-11-enterprise-x64' -WindowsFamily 'Windows 11' `
-            -Result 'NotRun'
-    }
-
-    $finalSmokeResult = 'NotRun'
-    $finalSmokeReason = 'QUALIFY.EVIDENCE_INCOMPLETE'
-    if ([bool] $gateEvaluation.Manifest.finalArtifactQualified -and $smokePassed -and
-        $candidateBound) {
-        $finalSmokeResult = 'Pass'
-        $finalSmokeReason = 'QUALIFY.PASS'
-    }
-    elseif (-not $smokePassed) {
-        $finalSmokeResult = 'ProductFail'
-        $finalSmokeReason = 'QUALIFY.SMOKE_FAILED'
-    }
-    $smokes += [pscustomobject][ordered]@{
-        smokeId = 'final-artifact'
-        result = $finalSmokeResult
-        reasonCode = $finalSmokeReason
-    }
-
-    $uniqueBlocking = @($blocking | Select-Object -Unique)
-    $approved = $uniqueBlocking.Count -eq 0 -and
-        [bool] $gateEvaluation.Manifest.unsignedContentQualified -and
-        [bool] $gateEvaluation.Manifest.finalArtifactQualified -and
-        $smokePassed -and $candidateBound
-    $primary = if ($approved) {
-        'QUALIFY.APPROVED'
-    }
-    elseif ($uniqueBlocking.Count -gt 0) {
-        ConvertTo-PreviewQualificationReason -ReasonCode ([string] $uniqueBlocking[0])
-    }
-    else {
-        'QUALIFY.DENIED'
-    }
-    if (-not $approved -and $primary -notin $uniqueBlocking) {
-        $uniqueBlocking = @($primary) + @($uniqueBlocking)
-    }
-
-    $zeroResidue = $false
-    $zeroGate = @($gateEvaluation.Manifest.gates | Where-Object {
-        [string] $_.gateId -eq 'zero-round-residue'
-    })
-    if ($zeroGate.Count -gt 0 -and [string] $zeroGate[0].result -eq 'Pass' -and
-        [bool] $zeroGate[0].cleanupVerified) {
-        $zeroResidue = $true
-    }
-
-    $state = if ($approved) { 'Approved' } else { 'Denied' }
-    $decision = if ($approved) { 'Qualify' } else { 'Deny' }
-    $packet = New-PreviewQualificationPacket -State $state -Decision $decision `
-        -ReasonCode $primary -TrustPath $trustPath `
-        -UnsignedContentQualified:([bool] $gateEvaluation.Manifest.unsignedContentQualified) `
-        -FinalArtifactQualified:([bool] $gateEvaluation.Manifest.finalArtifactQualified -and $approved) `
-        -CandidateBound:$candidateBound `
-        -QualityThreeCleanPassed:([bool] $gateEvaluation.Manifest.qualityBudget.threeCleanPassed) `
-        -AzureIdentityAvailable:$azureIdentity -ZeroResidueVerified:$zeroResidue `
-        -Smokes $smokes -Coverage $coverage -ClaimedScenarios $claimed `
-        -BlockingReasons $uniqueBlocking -Limitations @($limitations | Select-Object -Unique)
-
-    $derived = Join-Path $PrivateWorkspacePath 'derived-qualification-packet.json'
-    [System.IO.File]::WriteAllText(
-        $derived,
-        ($packet | ConvertTo-Json -Compress -Depth 20),
-        [System.Text.UTF8Encoding]::new($false)
-    )
     $cleanupVerified = Invoke-PreviewQualificationWorkspaceCleanup `
         -WorkspacePath $PrivateWorkspacePath
     $packet.cleanupVerified = [bool] $cleanupVerified

@@ -755,13 +755,13 @@ if ($Workflow -eq 'QualifyPreviewCandidate') {
             }
             else {
                 $qualifyApplicationDirectory = Split-Path -Parent $PSCommandPath
-                $qualifyRepositoryRoot = $qualifyApplicationDirectory
-                $qualifyPolicyPath = Get-PreviewQualificationCatalogPath `
+                $qualifyLedgerPath = Get-PreviewQualificationCatalogPath `
                     -ApplicationDirectory $qualifyApplicationDirectory `
-                    -RelativePath 'docs/spec/releases/2.0.0-preview.1-preview-qualification.json'
-                if (-not [string]::IsNullOrWhiteSpace($qualifyPolicyPath)) {
+                    -RelativePath 'docs/spec/capability-ledger.json'
+                $qualifyRepositoryRoot = $qualifyApplicationDirectory
+                if (-not [string]::IsNullOrWhiteSpace($qualifyLedgerPath)) {
                     $qualifyRepositoryRoot = [System.IO.Path]::GetFullPath(
-                        (Join-Path (Split-Path -Parent $qualifyPolicyPath) '..\..')
+                        (Join-Path (Split-Path -Parent $qualifyLedgerPath) '..\..')
                     )
                 }
                 $qualifyRequestSchema = Get-PreviewQualificationCatalogPath `
@@ -785,10 +785,6 @@ if ($Workflow -eq 'QualifyPreviewCandidate') {
                 else {
                     $qualifyRequest = & $convertFromJsonCommand -InputObject $qualifyRequestText `
                         -ErrorAction Stop
-                    $qualifyLedgerPath = Get-PreviewQualificationCatalogPath `
-                        -RepositoryRoot $qualifyRepositoryRoot `
-                        -ApplicationDirectory $qualifyApplicationDirectory `
-                        -RelativePath 'docs/spec/capability-ledger.json'
                     $qualifyReleasePath = Get-PreviewQualificationCatalogPath `
                         -RepositoryRoot $qualifyRepositoryRoot `
                         -ApplicationDirectory $qualifyApplicationDirectory `

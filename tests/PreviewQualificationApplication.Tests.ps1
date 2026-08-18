@@ -130,6 +130,12 @@ try {
     Assert-Equal 'QUALIFY.APPROVED' $terminal[0].reasonCode `
         'the terminal reason records that the packet is approved'
     Assert-Equal $false $terminal[0].collectionStarted 'completed qualification never collects'
+    Assert-Equal $false (Test-Path -LiteralPath (
+        Join-Path $safeWorkspace 'derived-qualification-packet.json'
+    ) -PathType Leaf) 'the generated application leaves no derived packet'
+    Assert-Equal $false (Test-Path -LiteralPath (
+        Join-Path $safeWorkspace 'gate-derived'
+    )) 'the generated application leaves no gate-derived residue'
 
     $missing = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Workflow', 'QualifyPreviewCandidate'
@@ -167,6 +173,27 @@ try {
     Assert-Equal 'NotStarted' $kindTerminal[0].outcome 'a wrong-kind request stays NotStarted'
     Assert-Equal 'QUALIFY.REQUEST_INVALID' $kindTerminal[0].reasonCode `
         'a wrong-kind request uses a stable reason'
+
+    $repoWorkspace = Join-Path $repositoryRoot '.test-output/preview-qualification-app-repo-ws'
+    if (Test-Path -LiteralPath $repoWorkspace) {
+        Remove-Item -LiteralPath $repoWorkspace -Recurse -Force
+    }
+    $null = New-Item -ItemType Directory -Path $repoWorkspace -Force
+    [System.IO.File]::WriteAllText(
+        (Join-Path $repoWorkspace $policy.workspace.markerFileName),
+        ($policy.workspace.markerContent + "`n"),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    $repoRejected = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'QualifyPreviewCandidate',
+        '-QualificationRequestPath', $boundPath,
+        '-QualificationWorkspacePath', $repoWorkspace
+    )
+    Assert-Equal 20 $repoRejected.ExitCode 'a repository workspace ends NotStarted'
+    $repoTerminal = @($repoRejected.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 'NotStarted' $repoTerminal[0].outcome 'a repository workspace stays NotStarted'
+    Assert-Equal 'QUALIFY.WORKSPACE_REPOSITORY_PATH' $repoTerminal[0].reasonCode `
+        'the generated application rejects a workspace inside the repository'
 }
 finally {
     foreach ($name in @('safe', 'secret', 'kind')) {
@@ -174,6 +201,10 @@ finally {
         if (Test-Path -LiteralPath $path) {
             Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
         }
+    }
+    $repoWorkspace = Join-Path $repositoryRoot '.test-output/preview-qualification-app-repo-ws'
+    if (Test-Path -LiteralPath $repoWorkspace) {
+        Remove-Item -LiteralPath $repoWorkspace -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
