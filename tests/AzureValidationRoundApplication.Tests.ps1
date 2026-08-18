@@ -21,6 +21,8 @@ $cancelFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-ex
 $hostLossFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-host-loss.json'
 $recoveryFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-independent-recovery.json'
 $pendingFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-cleanup-pending.json'
+$expiryFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-expiry.json'
+$leaseBusyFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-lease-busy.json'
 
 $workRoot = Join-Path $repositoryRoot '.test-output/azure-validation-round-application'
 if (Test-Path -LiteralPath $workRoot) {
@@ -219,6 +221,39 @@ try {
     Assert-Equal $true $hostLossOutcome[0].zeroResidue 'host loss still proves zero residue'
     Remove-Item -LiteralPath $hostLossWorkspace -Recurse -Force
 
+    $expiryWorkspace = New-MarkedWorkspace -Name 'expiry'
+    $expired = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RunValidationRound',
+        '-ValidationRoundRequestPath', $oneClientPath,
+        '-ValidationPrivateWorkspacePath', $expiryWorkspace,
+        '-ValidationRoundFixturePath', $expiryFixturePath
+    )
+    Assert-Equal 10 $expired.ExitCode 'expiry ends CompletedWithGaps after cleanup'
+    $expiryOutcome = @($expired.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    $expiryTerminal = @($expired.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 'VALIDATION.EXPIRY_REACHED' $expiryOutcome[0].reasonCode `
+        'expiry uses the typed reason'
+    Assert-Equal 'RoundCleanupMode' $expiryOutcome[0].cleanupMode 'expiry enters Round Cleanup Mode'
+    Assert-Equal $true $expiryOutcome[0].zeroResidue 'expiry still proves zero residue'
+    Assert-Equal 'CompletedWithGaps' $expiryTerminal[0].outcome 'expiry is not a product pass'
+    Remove-Item -LiteralPath $expiryWorkspace -Recurse -Force
+
+    $leaseBusyWorkspace = New-MarkedWorkspace -Name 'lease-busy'
+    $leaseBusy = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RunValidationRound',
+        '-ValidationRoundRequestPath', $oneClientPath,
+        '-ValidationPrivateWorkspacePath', $leaseBusyWorkspace,
+        '-ValidationRoundFixturePath', $leaseBusyFixturePath
+    )
+    Assert-Equal 20 $leaseBusy.ExitCode 'a busy exclusive lease ends NotStarted'
+    $leaseBusyOutcome = @($leaseBusy.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    $leaseBusyTerminal = @($leaseBusy.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 'VALIDATION.LEASE_UNAVAILABLE' $leaseBusyOutcome[0].reasonCode `
+        'the generated application rejects a busy exclusive lease'
+    Assert-Equal $false $leaseBusyOutcome[0].created 'a busy lease never creates'
+    Assert-Equal 'NotStarted' $leaseBusyTerminal[0].outcome 'a busy lease stays NotStarted'
+    Remove-Item -LiteralPath $leaseBusyWorkspace -Recurse -Force
+
     $pendingWorkspace = New-MarkedWorkspace -Name 'pending'
     $pending = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Workflow', 'RunValidationRound',
@@ -253,6 +288,23 @@ try {
     Assert-Equal 'CompletedWithGaps' $recoveryTerminal[0].outcome `
         'independent recovery is not reported as a product pass'
     Remove-Item -LiteralPath $recoveryWorkspace -Recurse -Force
+
+    $missingWorkspace = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RecoverValidationRound',
+        '-ValidationRoundFixturePath', $recoveryFixturePath
+    )
+    Assert-Equal 20 $missingWorkspace.ExitCode `
+        'recovery without a private workspace ends NotStarted'
+    $missingWorkspaceOutcome = @($missingWorkspace.Records |
+        Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    $missingWorkspaceTerminal = @($missingWorkspace.Records |
+        Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 'VALIDATION.PRIVACY_BOUNDARY_MISSING' $missingWorkspaceOutcome[0].reasonCode `
+        'recovery does not fall back to a public temporary folder'
+    Assert-Equal 'Missing' $missingWorkspaceOutcome[0].privacyBoundary `
+        'a missing recovery workspace stays Missing'
+    Assert-Equal 'NotStarted' $missingWorkspaceTerminal[0].outcome `
+        'recovery without a workspace stays NotStarted'
 
     $missing = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Workflow', 'RunValidationRound'

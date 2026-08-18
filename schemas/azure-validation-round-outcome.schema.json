@@ -105,7 +105,7 @@
     "clientCapturedOrReused": { "type": "boolean" },
     "vmPublicIpAssigned": { "type": "boolean" },
     "freshApprovedBaseline": { "type": "boolean" },
-    "clientCount": { "type": ["integer", "null"], "minimum": 0, "maximum": 4 },
+    "clientCount": { "type": ["integer", "null"], "minimum": 0, "maximum": 8 },
     "windows11ClaimingRoute": { "type": "boolean" },
     "trustClass": {
       "enum": ["ControllerDevTracer", "None"]
@@ -152,7 +152,7 @@
     "liveTaggedVmCount": {
       "type": ["integer", "null"],
       "minimum": 0,
-      "maximum": 4
+      "maximum": 8
     },
     "resultingTotalExceedsMaximum": { "type": "boolean" },
     "recoveryIndependent": { "type": "boolean" },

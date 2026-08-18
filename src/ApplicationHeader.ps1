@@ -33,11 +33,15 @@ param(
     # independent absence checks. The trust assumption is the approved
     # managed identity. Safe failure is NotStarted, or CleanupIncomplete
     # while residue remains.
-    # RecoverValidationRound is the Azure-resident cleanup worker. The
-    # threat is being unable to finish teardown after host loss. The
-    # mechanism is the private Round Recovery Record without the
-    # initiating process or its local files. Safe failure is
-    # CleanupIncomplete while any exact owned target remains.
+    # RecoverValidationRound is the cleanup worker that uses the private
+    # Round Recovery Record. The threat is being unable to finish
+    # teardown after host loss, or deleting whatever remains in a
+    # subscription. The mechanism is the privately recorded token list
+    # without the initiating process or its local journal. The trust
+    # assumption is that the record lists only privately recorded
+    # tokens and that the operator chose a marked private workspace.
+    # Safe failure is CleanupIncomplete while any exact owned target
+    # remains, or NotStarted when the workspace is missing.
     [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate')]
     [string] $Workflow = 'Assessment',
 

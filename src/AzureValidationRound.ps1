@@ -135,7 +135,11 @@ function Get-AzureValidationRoundRecordedClientCount {
         return $null
     }
     $value = [int] $Count
-    if ($value -ge 0 -and $value -le 4) {
+    # The public count must remain bounded, but it must also be able to
+    # show an over-limit recount or request. The threat is hiding a fifth
+    # live VM behind a null. Safe failure is to omit only values outside
+    # the closed 0-8 honesty window used by admission verdicts.
+    if ($value -ge 0 -and $value -le 8) {
         return $value
     }
     $null
@@ -476,8 +480,10 @@ function Initialize-AzureValidationRoundResources {
     if ([bool] $Platform.PartialProvisioning) {
         # Partial create still records only the objects that appeared.
         # The threat is deleting a guessed VM that was never created, or
-        # retrying the rest of the plan after a failed apply. Safe failure
-        # is to keep the short owned list and enter cleanup.
+        # retrying the rest of the plan after a failed apply. The
+        # mechanism is a short privately recorded token list. The trust
+        # assumption is that only objects that appeared are listed. Safe
+        # failure is to keep that short list and enter cleanup.
         $null = $Platform.Resources.Add('synthetic-round-vnet')
         $null = $Platform.Resources.Add('synthetic-round-nic-01')
     }
@@ -496,6 +502,12 @@ function Test-AzureValidationRoundRoundOwnedToken {
         [Parameter(Mandatory)] [string] $Token
     )
 
+    # Ownership is a closed allowlist, not a denylist. The threat is
+    # deleting an unresolved guess or an unrelated control-plane object
+    # because it was not on a skip list. The mechanism is the privately
+    # recorded synthetic-round token set plus the unrelated list. The
+    # trust assumption is that only those tokens were created by this
+    # round. Safe failure is to preserve the token.
     $unrelated = @()
     if ($null -ne $Platform.PSObject.Properties['UnrelatedResources']) {
         $unrelated = @($Platform.UnrelatedResources)
@@ -503,7 +515,8 @@ function Test-AzureValidationRoundRoundOwnedToken {
     if ($unrelated -contains $Token) {
         return $false
     }
-    $true
+    $owned = @(Get-AzureValidationRoundOwnedTokens -ClientCount 4)
+    $owned -contains $Token
 }
 
 function Invoke-AzureValidationRoundDestroy {
@@ -620,6 +633,52 @@ function Invoke-AzureValidationRoundGuest {
     }
 }
 
+function Get-AzureValidationRoundLeasePath {
+    param([Parameter(Mandatory)] [string] $PrivateWorkspacePath)
+
+    Join-Path $PrivateWorkspacePath 'round-lease.held'
+}
+
+function New-AzureValidationRoundExclusiveLease {
+    param([Parameter(Mandatory)] [string] $PrivateWorkspacePath)
+
+    # One exclusive lease serializes admission across processes that share
+    # the marked private workspace. The threat is two maintainers
+    # recounting four live VMs at the same time and each admitting one
+    # more. The mechanism is an exclusive create of a synthetic marker
+    # file. The trust assumption is that the operator chose that folder.
+    # Safe failure is to treat a collision as LEASE_UNAVAILABLE.
+    $path = Get-AzureValidationRoundLeasePath -PrivateWorkspacePath $PrivateWorkspacePath
+    try {
+        $stream = [System.IO.File]::Open(
+            $path,
+            [System.IO.FileMode]::CreateNew,
+            [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::None
+        )
+        try {
+            $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes("synthetic=true`n")
+            $stream.Write($bytes, 0, $bytes.Length)
+        }
+        finally {
+            $stream.Dispose()
+        }
+        $true
+    }
+    catch {
+        $false
+    }
+}
+
+function Remove-AzureValidationRoundExclusiveLease {
+    param([Parameter(Mandatory)] [string] $PrivateWorkspacePath)
+
+    $path = Get-AzureValidationRoundLeasePath -PrivateWorkspacePath $PrivateWorkspacePath
+    if (Test-Path -LiteralPath $path) {
+        Remove-Item -LiteralPath $path -Force
+    }
+}
+
 function Get-AzureValidationRoundLocalAbsence {
     param(
         [Parameter(Mandatory)] [string] $PrivateWorkspacePath,
@@ -724,7 +783,9 @@ function Write-AzureValidationRoundRecovery {
         'kind=win-pcinfo.private-round-recovery'
         'synthetic=true'
     )
-    foreach ($token in @($Platform.Resources)) {
+    foreach ($token in @($Platform.Resources | Where-Object {
+        Test-AzureValidationRoundRoundOwnedToken -Platform $Platform -Token $_
+    })) {
         $lines += "owned=$token"
     }
     [System.IO.File]::WriteAllLines(
@@ -786,6 +847,14 @@ function Get-AzureValidationRoundClockState {
         [Parameter(Mandatory)] $Plan
     )
 
+    # The hard expiry and Cleanup Reserve are visible clocks, not a
+    # hidden timeout. The threat is starting another guest test after
+    # cleanup priority has begun, or treating an expired round as a
+    # product pass. The mechanism is the plan's ExpiresUtc minus the
+    # reviewed reserve minutes compared to the platform clock. The trust
+    # assumption is that the admitted plan already has a six-hour ceiling
+    # and at least 30 minutes of reserve. Safe failure is to enter
+    # Round Cleanup Mode rather than continue testing.
     $expires = ConvertTo-AzureValidationDateTimeOffset -Value $Plan.tags.ExpiresUtc
     $reserveMinutes = [int] $Plan.round.cleanupReserveMinutes
     $reserveStart = $expires.AddMinutes(-1 * $reserveMinutes)
@@ -805,8 +874,8 @@ function Update-AzureValidationRoundOperationsRecords {
     # Completed operations records are not a second evidence store. The
     # threat is keeping restricted round facts forever, or blocking the
     # next round after a clean finish. The mechanism is a seven-day
-    # ceiling from the reviewed policy. A documented incident ends
-    # controller retention because the incident record takes over.
+    # ceiling from the reviewed policy, and Cleanup Pending records are
+    # dropped once residue is gone or a documented incident takes over.
     # Safe failure is to drop a completed record rather than invent a
     # longer private archive.
     $limit = [int] $Policy.lifetime.completedRecordRetentionDays
@@ -817,7 +886,8 @@ function Update-AzureValidationRoundOperationsRecords {
         if ($kind -eq 'Completed' -and $age -ge $limit) {
             continue
         }
-        if ([bool] $Platform.DocumentedIncident -and $kind -eq 'CleanupPending') {
+        if ($kind -eq 'CleanupPending' -and
+            (-not [bool] $Platform.CleanupPending -or [bool] $Platform.DocumentedIncident)) {
             continue
         }
         $null = $kept.Add($record)
@@ -846,6 +916,13 @@ function Complete-AzureValidationRoundCleanup {
         [Parameter(Mandatory)] [string] $PrivateWorkspacePath
     )
 
+    # Cleanup is independent of the product payload. The threat is
+    # reporting Zero Round Residue from a destroy exit code, or keeping
+    # restricted pending records after the residue is gone. The mechanism
+    # is destroy of exact owned tokens, then independent absence checks,
+    # then journal and state removal. The trust assumption is that the
+    # privately recorded token list and the resident record agree. Safe
+    # failure is ResidueRemains with Cleanup Pending kept visible.
     $teardownCompleted = $false
     try {
         $teardownCompleted = [bool] (Invoke-AzureValidationRoundDestroy -Platform $Platform)
@@ -894,6 +971,8 @@ function Complete-AzureValidationRoundCleanup {
                 Kind = 'Completed'
                 AgeDays = 0
             })
+            Remove-AzureValidationRoundExclusiveLease `
+                -PrivateWorkspacePath $PrivateWorkspacePath
         }
     }
     else {
@@ -937,7 +1016,12 @@ function Invoke-AzureValidationRoundRecovery {
     # Record. The trust assumption is that the record lists only
     # privately recorded tokens. Safe failure is ResidueRemains.
     if ([string]::IsNullOrWhiteSpace($PrivateWorkspacePath)) {
-        $PrivateWorkspacePath = [System.IO.Path]::GetTempPath()
+        if ($null -ne $Common) {
+            $Common.PrivacyBoundary = 'Missing'
+            return New-AzureValidationRoundOutcome -State Rejected `
+                -ReasonCode 'VALIDATION.PRIVACY_BOUNDARY_MISSING' @Common
+        }
+        return $null
     }
 
     Enter-AzureValidationRoundCleanupMode -Platform $Platform `
@@ -1184,6 +1268,17 @@ function Invoke-AzureValidationRound {
             -Plan $Plan -Common $common
     }
 
+    $recoveryDirectory = Join-Path $PrivateWorkspacePath (
+        [string] $policy.workspace.recoveryDirectoryName
+    )
+    if (Test-Path -LiteralPath $recoveryDirectory) {
+        # A leftover private journal means Cleanup Pending even after the
+        # initiating process is gone. The threat is admitting another
+        # round while residue or recovery data remains. Safe failure is
+        # to refuse create.
+        $Platform.CleanupPending = $true
+    }
+
     if ([bool] $Platform.CleanupPending) {
         $common.CleanupMode = 'CleanupPending'
         $common.OperationsRecordRetained = -not [bool] $Platform.DocumentedIncident
@@ -1206,7 +1301,14 @@ function Invoke-AzureValidationRound {
     elseif ([bool] $Platform.LeaseHeld) {
         # One exclusive lease serializes admission. The threat is two
         # maintainers recounting four live VMs at the same time and each
-        # admitting one more. Safe failure is LEASE_UNAVAILABLE.
+        # admitting one more. The mechanism is an in-memory hold plus a
+        # private workspace marker. The trust assumption is that every
+        # admission shares that workspace. Safe failure is
+        # LEASE_UNAVAILABLE.
+        $Platform.Probes['ExclusiveLease'] = $false
+    }
+    elseif (-not (New-AzureValidationRoundExclusiveLease `
+        -PrivateWorkspacePath $PrivateWorkspacePath)) {
         $Platform.Probes['ExclusiveLease'] = $false
     }
     else {
@@ -1222,6 +1324,10 @@ function Invoke-AzureValidationRound {
     if (($liveCount + $requested) -gt [int] $policy.clients.maximum) {
         # Recount under the lease. The threat is admitting a fifth live
         # tagged validation VM because a prior round was still running.
+        # The mechanism is live tagged count plus requested clients
+        # compared to the reviewed ceiling. The trust assumption is that
+        # the platform list is the recount source on this synthetic
+        # fixture. Safe failure is VM_COUNT_UNSAFE before create.
         $Platform.Probes['VmCount'] = $false
         $common.ResultingTotalExceedsMaximum = $true
     }
@@ -1234,6 +1340,8 @@ function Invoke-AzureValidationRound {
         else {
             if ($acquiredLease) {
                 $Platform.LeaseHeld = $false
+                Remove-AzureValidationRoundExclusiveLease `
+                    -PrivateWorkspacePath $PrivateWorkspacePath
             }
             return New-AzureValidationRoundOutcome -State Rejected `
                 -ReasonCode 'VALIDATION.TRANSIENT_SCOPE_NOT_EMPTY' @common
@@ -1245,6 +1353,8 @@ function Invoke-AzureValidationRound {
         if (-not [bool] $Platform.Probes[$probe]) {
             if ($acquiredLease) {
                 $Platform.LeaseHeld = $false
+                Remove-AzureValidationRoundExclusiveLease `
+                    -PrivateWorkspacePath $PrivateWorkspacePath
             }
             $state = if ($probe -eq 'Identity') { 'Blocked' } else { 'Rejected' }
             if ($probe -eq 'Identity') {
@@ -1308,12 +1418,24 @@ function Invoke-AzureValidationRound {
         }
         elseif ([bool] $Platform.HostLost) {
             # Host loss drops local files. Cleanup continues from the
-            # Azure-resident recovery record, not from this process tree.
+            # Azure-resident recovery record, not from leftover in-memory
+            # tokens in this process tree.
             Enter-AzureValidationRoundCleanupMode -Platform $Platform
             Remove-AzureValidationRoundLocalMaterial -PrivateWorkspacePath $PrivateWorkspacePath `
                 -Policy $policy -IncludingRecovery:$true
             $common.RecoveryIndependent = $true
             $reason = 'VALIDATION.HOST_LOST'
+            $record = $Platform.ResidentRecoveryRecord
+            if ($null -eq $record) {
+                $reason = 'VALIDATION.RECOVERY_NOT_ARMED'
+            }
+            else {
+                $Platform.Resources.Clear()
+                foreach ($token in @($record.Owned)) {
+                    $null = $Platform.Resources.Add($token)
+                }
+                $Platform.PersistentPresent = [bool] $record.PersistentPresent
+            }
         }
         elseif ([bool] $Platform.SharedSafetyFailed) {
             Enter-AzureValidationRoundCleanupMode -Platform $Platform
@@ -1475,8 +1597,13 @@ function Invoke-AzureValidationRound {
         # assumption is that destroy names only privately recorded tokens.
         # Safe failure is ResidueRemains, never Completed, and never a
         # throw that ApplicationMain would map to REQUEST_INVALID.
-        if ($acquiredLease) {
+        # Hold the exclusive lease through cleanup so another admission
+        # cannot start while destroy is still running. Release it only
+        # when create never happened and this invoke is escaping.
+        if ($acquiredLease -and -not $created) {
             $Platform.LeaseHeld = $false
+            Remove-AzureValidationRoundExclusiveLease `
+                -PrivateWorkspacePath $PrivateWorkspacePath
         }
     }
 
@@ -1488,6 +1615,9 @@ function Invoke-AzureValidationRound {
 
     $cleanup = Complete-AzureValidationRoundCleanup -Platform $Platform `
         -Policy $policy -PrivateWorkspacePath $PrivateWorkspacePath
+    if ($acquiredLease) {
+        $Platform.LeaseHeld = $false
+    }
     $teardownCompleted = [bool] $cleanup.TeardownCompleted
     $zeroResidue = [bool] $cleanup.ZeroResidue
     $stateRemoved = [bool] $cleanup.StateRemoved

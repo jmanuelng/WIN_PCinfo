@@ -404,6 +404,83 @@ try {
     Assert-Equal $false (8 -in $ages) 'completed records older than seven days are removed'
     Assert-Equal $true ((1 -in $ages) -or (0 -in $ages)) `
         'a completed record inside seven days is kept until the ceiling'
+
+    $fiveLiveWorkspace = New-RoundWorkspace -Name 'live-five'
+    $owned.Add($fiveLiveWorkspace)
+    $fiveLivePlatform = New-AzureValidationRoundPlatform -Scenario CompleteZeroResidue
+    foreach ($token in @(
+        'synthetic-live-tagged-01'
+        'synthetic-live-tagged-02'
+        'synthetic-live-tagged-03'
+        'synthetic-live-tagged-04'
+        'synthetic-live-tagged-05'
+    )) {
+        $null = $fiveLivePlatform.LiveTaggedVms.Add($token)
+    }
+    $fiveLive = Invoke-SafetyRound -Scenario CompleteZeroResidue `
+        -WorkspacePath $fiveLiveWorkspace -Platform $fiveLivePlatform
+    Assert-PublicSafetyOutcome $fiveLive 'five live tagged VMs' -WorkspacePath $fiveLiveWorkspace
+    Assert-Equal 'VALIDATION.VM_COUNT_UNSAFE' $fiveLive.reasonCode `
+        'five live tagged VMs plus one requested client is reported honestly'
+    Assert-Equal 5 $fiveLive.liveTaggedVmCount `
+        'an over-limit recount remains visible on the public outcome'
+    Assert-Equal $true $fiveLive.resultingTotalExceedsMaximum `
+        'five live plus one requested exceeds the ceiling'
+    Assert-Equal $false $fiveLive.created 'five live tagged VMs never create another client'
+
+    $foreignWorkspace = New-RoundWorkspace -Name 'foreign-token'
+    $owned.Add($foreignWorkspace)
+    $foreignPlatform = New-AzureValidationRoundPlatform -Scenario CompleteZeroResidue
+    $null = $foreignPlatform.Resources.Add('synthetic-foreign-disk')
+    $foreign = Invoke-SafetyRound -Scenario CompleteZeroResidue `
+        -WorkspacePath $foreignWorkspace -Platform $foreignPlatform
+    Assert-Equal $true $foreign.zeroResidue `
+        'an unknown token does not count as round residue'
+    Assert-Equal $true $foreign.unrelatedTargetPreserved `
+        'cleanup never deletes a token outside the owned allowlist'
+    Assert-Equal $true ('synthetic-foreign-disk' -in @($foreignPlatform.Resources)) `
+        'the unknown token remains after destroy'
+
+    $pendingDropWorkspace = New-RoundWorkspace -Name 'pending-drop'
+    $owned.Add($pendingDropWorkspace)
+    $pendingDropPlatform = New-AzureValidationRoundPlatform -Scenario CompleteZeroResidue
+    $null = $pendingDropPlatform.OperationsRecords.Add([pscustomobject]@{
+        Kind = 'CleanupPending'
+        AgeDays = 0
+    })
+    $pendingDrop = Invoke-SafetyRound -Scenario CompleteZeroResidue `
+        -WorkspacePath $pendingDropWorkspace -Platform $pendingDropPlatform
+    Assert-Equal $true $pendingDrop.zeroResidue 'dropping pending records still proves zero residue'
+    Assert-Equal $false $pendingDrop.operationsRecordRetained `
+        'Cleanup Pending records are not kept after zero residue'
+    Assert-Equal 0 @($pendingDropPlatform.OperationsRecords | Where-Object {
+        [string] $_.Kind -eq 'CleanupPending'
+    }).Count 'Cleanup Pending records are removed when residue is gone'
+
+    $journalWorkspace = New-RoundWorkspace -Name 'leftover-journal'
+    $owned.Add($journalWorkspace)
+    $residue = Invoke-SafetyRound -Scenario ResidueRemains -WorkspacePath $journalWorkspace
+    Assert-Equal 'VALIDATION.RESIDUE_REMAINS' $residue.reasonCode `
+        'the first invoke leaves residue and the private journal'
+    $blockedByJournal = Invoke-SafetyRound -Scenario CompleteZeroResidue `
+        -WorkspacePath $journalWorkspace
+    Assert-Equal 'VALIDATION.CLEANUP_PENDING' $blockedByJournal.reasonCode `
+        'a leftover private recovery journal blocks the next admission'
+    Assert-Equal $false $blockedByJournal.created `
+        'a leftover journal never creates another client'
+
+    $fileLeaseWorkspace = New-RoundWorkspace -Name 'file-lease'
+    $owned.Add($fileLeaseWorkspace)
+    Assert-Equal $true (New-AzureValidationRoundExclusiveLease `
+        -PrivateWorkspacePath $fileLeaseWorkspace) 'the first workspace lease is acquired'
+    $blockedByFileLease = Invoke-SafetyRound -Scenario CompleteZeroResidue `
+        -WorkspacePath $fileLeaseWorkspace
+    Assert-Equal 'VALIDATION.LEASE_UNAVAILABLE' $blockedByFileLease.reasonCode `
+        'an existing private-workspace lease serializes the next admission'
+    Assert-Equal $false $blockedByFileLease.created `
+        'a held workspace lease never creates'
+    Assert-Equal $false $blockedByFileLease.exclusiveLeaseHeld `
+        'the rejected caller does not hold the exclusive lease'
 }
 finally {
     foreach ($path in $owned) {

@@ -20,10 +20,10 @@ This public projection contains identifier-free lease, cancellation, expiry, rec
 | Gate | Public-safe result |
 | --- | --- |
 | Policy contract | `tests/AzureValidationRoundPolicy.Tests.ps1` requires a four-client ceiling, a six-hour hard expiry, a 30-minute Cleanup Reserve, an exclusive lease, irreversible Round Cleanup Mode, independent recovery, and seven-day completed-record retention. Support, Preview, and capability-delivery claims stay false. |
-| Exclusive lease and recount | `tests/AzureValidationRoundSafety.Tests.ps1` holds one lease, recounts live tagged validation VMs, admits four, and rejects a request whose resulting total exceeds four. A busy lease and Cleanup Pending also reject before create. |
+| Exclusive lease and recount | `tests/AzureValidationRoundSafety.Tests.ps1` holds one private-workspace lease, recounts live tagged validation VMs including a five-VM total, admits four, and rejects a request whose resulting total exceeds four. A busy lease, a leftover recovery journal, and Cleanup Pending also reject before create. |
 | Cancellation and expiry | The same module tests inject cancellation during create, readiness, transfer, execution, retrieval, and teardown, and simulate expiry and Cleanup Reserve. Each path enters Round Cleanup Mode, stops new tests and evidence export, and still reaches independently verified zero residue without becoming a product pass. |
 | Independent recovery | Host-loss and `RecoverValidationRound` fixtures complete cleanup from the private Round Recovery Record after local journal files are gone. Cleanup is idempotent and never deletes an unresolved or unrelated token. |
-| Generated-application seam | `tests/AzureValidationRoundApplication.Tests.ps1` runs a four-client synthetic round to `VALIDATION.ZERO_RESIDUE_PROVEN`, cancellation and host-loss fixtures to `CompletedWithGaps`, independent recovery through `-Workflow RecoverValidationRound`, and Cleanup Pending as `NotStarted`. Live Azure without identity stays `NotStarted`. |
+| Generated-application seam | `tests/AzureValidationRoundApplication.Tests.ps1` runs a four-client synthetic round to `VALIDATION.ZERO_RESIDUE_PROVEN`, cancellation, host-loss, and expiry fixtures to `CompletedWithGaps`, independent recovery through `-Workflow RecoverValidationRound`, and Cleanup Pending, a busy lease, or a missing private workspace as `NotStarted`. Live Azure without identity stays `NotStarted`. |
 
 ## Reproduce
 

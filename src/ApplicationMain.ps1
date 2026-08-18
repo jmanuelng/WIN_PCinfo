@@ -370,49 +370,66 @@ if ($Workflow -eq 'RecoverValidationRound') {
                     $recoveryScenario = [string] $recoveryFixture.scenario
                     $recoveryPlatform = New-AzureValidationRoundPlatform -Scenario $recoveryScenario
                     $recoveryPolicy = Get-AzureValidationRoundPolicy
-                    $recoveryWorkspace = $ValidationPrivateWorkspacePath
-                    if ([string]::IsNullOrWhiteSpace($recoveryWorkspace)) {
-                        $recoveryWorkspace = [System.IO.Path]::GetTempPath()
+                    $recoveryWorkspaceRejection = $null
+                    if ([string]::IsNullOrWhiteSpace($ValidationPrivateWorkspacePath)) {
+                        $recoveryWorkspaceRejection = 'VALIDATION.PRIVACY_BOUNDARY_MISSING'
                     }
-                    $recoveryCommon = @{
-                        ClientCount = $null
-                        Windows11ClaimingRoute = $false
-                        TrustClass = 'ControllerDevTracer'
-                        PersistentScopePreserved = $true
-                        HostPeeringAbsent = $false
-                        TagSweepEmpty = $false
-                        UnprotectedLocalMaterialAbsent = $false
-                        CleanupMode = 'None'
-                        Cancelled = $false
-                        CancelPhase = 'None'
-                        ExpiryReached = $false
-                        CleanupReserveActive = $false
-                        CleanupReserveMinutes = [int] $recoveryPolicy.lifetime.minimumCleanupReserveMinutes
-                        NewTestsStopped = $true
-                        EvidenceExportStopped = $true
-                        ExclusiveLeaseHeld = $false
-                        LiveTaggedVmCount = $null
-                        ResultingTotalExceedsMaximum = $false
-                        RecoveryIndependent = $true
-                        UnresolvedTargetPreserved = $false
-                        UnrelatedTargetPreserved = $false
-                        CleanupPending = $false
-                        OperationsRecordRetained = $false
-                        DocumentedIncident = $false
-                        Synthetic = $true
-                        PlatformKind = 'Synthetic'
-                        AzureContacted = $false
-                        PrivacyBoundary = $(if ([string]::IsNullOrWhiteSpace($ValidationPrivateWorkspacePath)) {
-                            'Missing'
-                        } else {
-                            'PrivateExternalWorkspace'
-                        })
-                        Admitted = $true
+                    else {
+                        $recoveryWorkspaceProbe = [pscustomobject]@{
+                            privacyBoundary = 'PrivateExternalWorkspace'
+                        }
+                        $recoveryWorkspaceRejection = Get-AzureValidationWorkspaceRejection `
+                            -PrivateWorkspacePath $ValidationPrivateWorkspacePath `
+                            -RepositoryRoot $recoveryRepositoryRoot `
+                            -ApplicationDirectory $recoveryApplicationDirectory `
+                            -Policy $recoveryPolicy `
+                            -Request $recoveryWorkspaceProbe
                     }
-                    Invoke-AzureValidationRoundRecovery -Platform $recoveryPlatform `
-                        -Policy $recoveryPolicy `
-                        -PrivateWorkspacePath $recoveryWorkspace `
-                        -Common $recoveryCommon
+                    if ($recoveryWorkspaceRejection) {
+                        New-AzureValidationRoundOutcome -State Rejected `
+                            -ReasonCode $recoveryWorkspaceRejection `
+                            -PrivacyBoundary $(if ([string]::IsNullOrWhiteSpace(
+                                $ValidationPrivateWorkspacePath
+                            )) { 'Missing' } else { 'Rejected' }) `
+                            -RecoveryIndependent:$true
+                    }
+                    else {
+                        $recoveryCommon = @{
+                            ClientCount = $null
+                            Windows11ClaimingRoute = $false
+                            TrustClass = 'ControllerDevTracer'
+                            PersistentScopePreserved = $true
+                            HostPeeringAbsent = $false
+                            TagSweepEmpty = $false
+                            UnprotectedLocalMaterialAbsent = $false
+                            CleanupMode = 'None'
+                            Cancelled = $false
+                            CancelPhase = 'None'
+                            ExpiryReached = $false
+                            CleanupReserveActive = $false
+                            CleanupReserveMinutes = [int] $recoveryPolicy.lifetime.minimumCleanupReserveMinutes
+                            NewTestsStopped = $true
+                            EvidenceExportStopped = $true
+                            ExclusiveLeaseHeld = $false
+                            LiveTaggedVmCount = $null
+                            ResultingTotalExceedsMaximum = $false
+                            RecoveryIndependent = $true
+                            UnresolvedTargetPreserved = $false
+                            UnrelatedTargetPreserved = $false
+                            CleanupPending = $false
+                            OperationsRecordRetained = $false
+                            DocumentedIncident = $false
+                            Synthetic = $true
+                            PlatformKind = 'Synthetic'
+                            AzureContacted = $false
+                            PrivacyBoundary = 'PrivateExternalWorkspace'
+                            Admitted = $true
+                        }
+                        Invoke-AzureValidationRoundRecovery -Platform $recoveryPlatform `
+                            -Policy $recoveryPolicy `
+                            -PrivateWorkspacePath $ValidationPrivateWorkspacePath `
+                            -Common $recoveryCommon
+                    }
                 }
             }
         }
@@ -434,19 +451,14 @@ if ($Workflow -eq 'RecoverValidationRound') {
     $terminal = New-TerminalRecord -ReasonCode $recoveryResult.reasonCode `
         -Phase ValidationRound
     $exitCode = 20
-    if ($recoveryResult.state -eq 'FailedCleaned' -and $recoveryResult.zeroResidue) {
+    if (($recoveryResult.state -eq 'FailedCleaned' -or
+        $recoveryResult.state -eq 'ZeroResidueProven') -and $recoveryResult.zeroResidue) {
+        # Leftover cleanup is never a product pass, even when residue is gone.
         $terminal.outcome = 'CompletedWithGaps'
         $terminal.exitCode = 10
         $terminal.cleanup.required = $true
         $terminal.cleanup.verified = $true
         $exitCode = 10
-    }
-    elseif ($recoveryResult.state -eq 'ZeroResidueProven') {
-        $terminal.outcome = 'Completed'
-        $terminal.exitCode = 0
-        $terminal.cleanup.required = $true
-        $terminal.cleanup.verified = $true
-        $exitCode = 0
     }
     elseif ($recoveryResult.state -eq 'ResidueRemains') {
         $terminal.outcome = 'CleanupIncomplete'

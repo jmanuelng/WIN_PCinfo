@@ -121,6 +121,7 @@ foreach ($fixtureName in @(
     'azure-validation-round-execution-expiry.json'
     'azure-validation-round-execution-independent-recovery.json'
     'azure-validation-round-execution-cleanup-pending.json'
+    'azure-validation-round-execution-lease-busy.json'
 )) {
     $fixturePath = Join-Path $PSScriptRoot "fixtures/$fixtureName"
     $fixtureJson = Get-Content -LiteralPath $fixturePath -Raw
@@ -172,6 +173,10 @@ Assert-Equal $true ($operatorDoc -match 'Round Cleanup Mode') `
     'operator documentation teaches irreversible Round Cleanup Mode'
 Assert-Equal $true ($operatorDoc -match 'RecoverValidationRound|independent recovery') `
     'operator documentation teaches independent recovery'
+Assert-Equal $true ($operatorDoc -match 'leftover private recovery journal|Cleanup Pending') `
+    'operator documentation teaches that leftover recovery data blocks admission'
+Assert-Equal $true ($operatorDoc -match 'does not fall back to a public temporary folder') `
+    'operator documentation teaches that recovery stays in the marked workspace'
 Assert-Equal $false ($operatorDoc -match '(?i)/subscriptions/') `
     'operator documentation contains no Azure subscription path'
 Assert-Equal $false ($operatorDoc -match 'this slice delivers CAP-0028') `

@@ -9,7 +9,7 @@ A passing infrastructure round is a **controller or DEV tracer**. It becomes qua
 The generated application can run `-Workflow RunValidationRound` against an already reviewed one-to-four-client plan. A synthetic fixture walks this lifecycle without contacting Azure. This slice does not apply Terraform, call Azure APIs, or create a VM. Live create stays `NotStarted` without the approved managed identity, and it also stays `NotStarted` when only `IDENTITY_ENDPOINT` is visible because the pinned tools stay declared-not-acquired. The controller:
 
 1. Reuses [offline admission](azure-validation-admission.md) so the plan is still one to four small Trusted Launch clients, Standard SSD, no VM public IP, and a marked private workspace. A fifth client, or a plan with no claiming Windows 11 route, is refused before create.
-2. Takes one exclusive lease, then recounts live tagged validation VMs. Admission is serialized. If live VMs plus the requested clients would exceed four, the request is rejected.
+2. Takes one exclusive lease in the marked private workspace, then recounts live tagged validation VMs. Admission is serialized across processes that share that folder. If live VMs plus the requested clients would exceed four, the request is rejected. A leftover private recovery journal is Cleanup Pending and also blocks a new admission.
 3. Gives every round a visible six-hour hard expiry and a Cleanup Reserve of at least 30 minutes. When Cleanup Reserve or expiry begins, new tests and evidence export stop and the round enters Round Cleanup Mode.
 4. Runs cleanup-first admission probes (synthetic flags on a fixture; live Azure stays `NotStarted` without identity and acquired tooling): managed-identity authority, policy, locks, quota, image, SKU, Standard SSD, tags, expiry, subnet capacity, VM count, cleanup rights, empty transient scope, exclusive lease, and armed recovery. Cleanup Pending also blocks a new admission.
 5. Records the admitted clients from an approved pristine Azure Compute Gallery baseline on the round-scoped private network and NAT. A synthetic fixture records that create without contacting Azure.
@@ -68,7 +68,7 @@ Independent recovery after host loss:
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Workflow RecoverValidationRound -ValidationRoundFixturePath ./tests/fixtures/azure-validation-round-execution-independent-recovery.json -ValidationPrivateWorkspacePath C:\PrivateValidation\round
 ```
 
-That worker uses the private Round Recovery Record. It does not need the initiating process or its local journal.
+That worker uses the private Round Recovery Record. It does not need the initiating process or its local journal. It still requires the same marked private workspace; it does not fall back to a public temporary folder.
 
 ## What Zero Round Residue requires
 
