@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/azure-validation-round-execution-request.schema.json",
+  "title": "WIN-PCInfo synthetic Azure validation-round fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "synthetic",
+    "scenario",
+    "privacyBoundary",
+    "azureContact",
+    "guestControl",
+    "trustClass"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.azure-validation-round-fixture" },
+    "contractVersion": { "const": "1.0.0" },
+    "synthetic": { "const": true },
+    "scenario": {
+      "enum": [
+        "CompleteZeroResidue",
+        "CleanupFirst",
+        "AssessmentFailed",
+        "IdentityUnavailable",
+        "AdmissionDenied",
+        "ResidueRemains",
+        "CaptureAttempted",
+        "CredentialExposed"
+      ]
+    },
+    "privacyBoundary": { "const": "PrivateExternalWorkspace" },
+    "azureContact": { "const": "ManagedIdentity" },
+    "guestControl": { "const": "VmAgentRunCommand" },
+    "trustClass": { "const": "ControllerDevTracer" }
+  }
+}

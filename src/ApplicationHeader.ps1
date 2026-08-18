@@ -25,7 +25,13 @@ param(
     # fail-closed verification. The trust assumption is that the request
     # is synthetic and live Azure setup is absent. Safe failure is
     # NotStarted with no Trusted label.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate')]
+    # RunValidationRound is the maintainer controller for one private
+    # Windows 11 client. The threat is leaving residue or treating a
+    # controller tracer as qualifying Preview evidence. The mechanism is
+    # cleanup-first admission, VM Agent control, and independent absence
+    # checks. The trust assumption is the approved managed identity. Safe
+    # failure is NotStarted, or CleanupIncomplete while residue remains.
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -198,6 +204,15 @@ param(
 
     [Parameter()]
     [string] $ValidationPrivateWorkspacePath,
+
+    # RunValidationRound is a maintainer controller. The threat is treating
+    # a synthetic fixture as live Azure, or leaking a bootstrap password
+    # through guest control. The mechanism is a closed scenario name plus
+    # the same marked private workspace as admission. The trust assumption
+    # is that live Azure uses the approved managed identity. Safe failure
+    # is NotStarted with no create.
+    [Parameter(DontShow)]
+    [string] $ValidationRoundFixturePath,
 
     # EvaluateReleaseGates is a maintainer offline gate. The threat is treating
     # a synthetic pack, a waived failure, or the unsigned generated script as a

@@ -1,0 +1,88 @@
+{
+  "kind": "win-pcinfo.azure-validation-round-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.azure-validation-round/1.0.0",
+  "productCapability": "CAP-0028",
+  "sliceDeliversCapability": false,
+  "supportClaim": "None",
+  "previewOrStableClaim": "None",
+  "trustClass": "ControllerDevTracer",
+  "qualifyingEvidenceRequiresAttestedOrSignedPath": true,
+  "azure": {
+    "contact": "ManagedIdentity",
+    "livePathWithoutIdentity": "NotStarted",
+    "persistentResourceChange": "AdmittedRoundOnly",
+    "credentialless": true,
+    "toolingAcquisition": "declared-not-acquired"
+  },
+  "guest": {
+    "control": "VmAgentRunCommand",
+    "bootstrapCredentialExposure": "Prohibited",
+    "captureOrReuse": "Prohibited",
+    "publicIp": false,
+    "imageSourceKind": "ApprovedEvaluationGallery",
+    "freshBaselineRequired": true
+  },
+  "admissionProbes": [
+    "Identity",
+    "Policy",
+    "Locks",
+    "Quota",
+    "Image",
+    "Sku",
+    "StandardSsd",
+    "Tags",
+    "Expiry",
+    "SubnetCapacity",
+    "VmCount",
+    "CleanupRights",
+    "EmptyTransientScope",
+    "ExclusiveLease",
+    "ArmedRecovery"
+  ],
+  "lifecycle": {
+    "cleanupFirst": true,
+    "testingFailureCannotBlockCleanup": true,
+    "completionRequiresZeroResidue": true,
+    "terraformStateRemovalOnlyAfterZeroResidue": true,
+    "nextRoundEligibleOnlyAfterZeroResidue": true,
+    "persistentScopePreserved": true
+  },
+  "zeroResidue": {
+    "transientScopeEmpty": true,
+    "bothPeeringsAbsent": true,
+    "exactRoundIdsAbsent": true,
+    "transferObjectsRemoved": true,
+    "coordinationObjectsRemoved": true,
+    "tagSweepEmpty": true,
+    "unprotectedLocalMaterialAbsent": true
+  },
+  "networkBehaviors": [
+    "LocalOnly",
+    "ApprovedEgress"
+  ],
+  "scenarios": [
+    "CompleteZeroResidue",
+    "CleanupFirst",
+    "AssessmentFailed",
+    "IdentityUnavailable",
+    "AdmissionDenied",
+    "ResidueRemains",
+    "CaptureAttempted",
+    "CredentialExposed"
+  ],
+  "privacy": {
+    "requiredBoundary": "PrivateExternalWorkspace",
+    "markerFileName": ".win-pcinfo-private-workspace",
+    "markerContent": "win-pcinfo.private-external-workspace",
+    "rejectRepositoryPath": true,
+    "rejectPublicPath": true,
+    "rejectUncPath": true
+  },
+  "workspace": {
+    "recoveryDirectoryName": "recovery",
+    "workingDirectoryName": "round-work",
+    "renderedDirectoryName": "rendered"
+  }
+}

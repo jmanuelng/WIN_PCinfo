@@ -69,6 +69,6 @@ Prohibited Secret Material is never a template.
 
 ## Limitations
 
-This slice does not apply a round, recount live Azure VMs, tear down residue, or publish release evidence. Later tickets must keep the same privacy boundary.
+This slice does not apply a round, recount live Azure VMs, tear down residue, or publish release evidence. The controller that can run one admitted client to Zero Round Residue is documented in [One fresh Azure validation round](azure-validation-round.md). Later tickets must keep the same privacy boundary.
 
 See the [Consultant Workbench](consultant-workbench.md) for the rest of the implemented product path.

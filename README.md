@@ -66,6 +66,8 @@ To understand why one device-level Windows MDM WMI Bridge source requires LocalS
 
 To understand the maintainer-only offline gate that copies generic Azure validation templates into a private workspace without contacting Azure, read [Offline Azure validation admission](docs/azure-validation-admission.md). It does not deliver a Preview or Supported claim.
 
+To understand the maintainer-only controller that walks one private Windows 11 client through synthetic VM Agent control and Zero Round Residue, read [One fresh Azure validation round](docs/azure-validation-round.md). Live create stays `NotStarted` on this host. It is a controller or DEV tracer and does not deliver a Preview or Supported claim.
+
 To understand the maintainer-only release-gate workflow that binds an exact unsigned candidate, scores Pass through Invalidated results, derives the Preview Capability Matrix, and refuses to waive or publish from synthetic evidence, read [Automated release gates and evidence manifests](docs/release-gates.md). It does not deliver a Preview or Supported claim.
 
 ## Legacy script
