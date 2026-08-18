@@ -724,6 +724,149 @@ if ($Workflow -eq 'SignAndVerifyCandidate') {
     exit $exitCode
 }
 
+if ($Workflow -eq 'QualifyPreviewCandidate') {
+    # Qualification must run on the exact generated candidate. The
+    # threat is hiding a failed or private pack behind Authenticode,
+    # treating this workflow as collection, or claiming live Azure
+    # that never started. The mechanism is the same trusted JSON
+    # commands as Help, with no Azure create and no assessment work.
+    # The trust assumption is that the request is synthetic. Safe
+    # failure is NotStarted without derived residue.
+    Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'PreviewQualification' `
+        -State 'Started' -MessageId 'qualification.started' -CompletedUnits 0 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    $qualifyPolicy = Get-PreviewQualificationPolicy
+    $qualifyEvaluation = $null
+    if ([string]::IsNullOrWhiteSpace($QualificationRequestPath) -or
+        [string]::IsNullOrWhiteSpace($QualificationWorkspacePath)) {
+        $qualifyEvaluation = Get-PreviewQualificationRejectedEvaluation `
+            -ReasonCode 'QUALIFY.REQUEST_MISSING' -Policy $qualifyPolicy
+    }
+    else {
+        try {
+            $qualifyRequestText = [System.IO.File]::ReadAllText(
+                $QualificationRequestPath,
+                [System.Text.UTF8Encoding]::new($false, $true)
+            )
+            $qualifyPrivacy = Test-PreviewQualificationPrivacyBoundary -Text $qualifyRequestText
+            if ($qualifyPrivacy) {
+                $qualifyEvaluation = Get-PreviewQualificationRejectedEvaluation `
+                    -ReasonCode $qualifyPrivacy -Policy $qualifyPolicy
+            }
+            else {
+                $qualifyApplicationDirectory = Split-Path -Parent $PSCommandPath
+                $qualifyLedgerPath = Get-PreviewQualificationCatalogPath `
+                    -ApplicationDirectory $qualifyApplicationDirectory `
+                    -RelativePath 'docs/spec/capability-ledger.json'
+                $qualifyRepositoryRoot = $qualifyApplicationDirectory
+                if (-not [string]::IsNullOrWhiteSpace($qualifyLedgerPath)) {
+                    $qualifyRepositoryRoot = [System.IO.Path]::GetFullPath(
+                        (Join-Path (Split-Path -Parent $qualifyLedgerPath) '..\..')
+                    )
+                }
+                $qualifyRequestSchema = Get-PreviewQualificationCatalogPath `
+                    -RepositoryRoot $qualifyRepositoryRoot `
+                    -ApplicationDirectory $qualifyApplicationDirectory `
+                    -RelativePath 'schemas/preview-qualification-request.schema.json'
+                $qualifyRequestSchemaValid = $false
+                if (-not [string]::IsNullOrWhiteSpace($qualifyRequestSchema)) {
+                    try {
+                        $qualifyRequestSchemaValid = Test-Json -Json $qualifyRequestText `
+                            -SchemaFile $qualifyRequestSchema
+                    }
+                    catch {
+                        $qualifyRequestSchemaValid = $false
+                    }
+                }
+                if (-not $qualifyRequestSchemaValid) {
+                    $qualifyEvaluation = Get-PreviewQualificationRejectedEvaluation `
+                        -ReasonCode 'QUALIFY.REQUEST_INVALID' -Policy $qualifyPolicy
+                }
+                else {
+                    $qualifyRequest = & $convertFromJsonCommand -InputObject $qualifyRequestText `
+                        -ErrorAction Stop
+                    $qualifyReleasePath = Get-PreviewQualificationCatalogPath `
+                        -RepositoryRoot $qualifyRepositoryRoot `
+                        -ApplicationDirectory $qualifyApplicationDirectory `
+                        -RelativePath 'docs/spec/releases/2.0.0-preview.1.json'
+                    $qualifyLedger = $null
+                    $qualifyReleaseDefinition = $null
+                    $qualifyLedgerDigest = $null
+                    if (-not [string]::IsNullOrWhiteSpace($qualifyLedgerPath)) {
+                        $qualifyLedgerBytes = [System.IO.File]::ReadAllBytes($qualifyLedgerPath)
+                        $qualifyLedgerDigest = Get-PreviewQualificationSha256 `
+                            -Bytes $qualifyLedgerBytes
+                        $qualifyLedgerText = [System.Text.UTF8Encoding]::new($false, $true).GetString(
+                            $qualifyLedgerBytes
+                        )
+                        $qualifyLedger = & $convertFromJsonCommand -InputObject $qualifyLedgerText `
+                            -ErrorAction Stop
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace($qualifyReleasePath)) {
+                        $qualifyReleaseText = [System.IO.File]::ReadAllText(
+                            $qualifyReleasePath,
+                            [System.Text.UTF8Encoding]::new($false, $true)
+                        )
+                        $qualifyReleaseDefinition = & $convertFromJsonCommand `
+                            -InputObject $qualifyReleaseText -ErrorAction Stop
+                    }
+                    $qualifyEvaluation = Invoke-PreviewQualification -Request $qualifyRequest `
+                        -RequestText $qualifyRequestText -CandidatePath $PSCommandPath `
+                        -PrivateWorkspacePath $QualificationWorkspacePath `
+                        -RepositoryRoot $qualifyRepositoryRoot `
+                        -ApplicationDirectory $qualifyApplicationDirectory `
+                        -Ledger $qualifyLedger `
+                        -ReleaseDefinition $qualifyReleaseDefinition `
+                        -ExpectedLedgerSha256 $qualifyLedgerDigest
+                }
+            }
+        }
+        catch {
+            $qualifyEvaluation = Get-PreviewQualificationRejectedEvaluation `
+                -ReasonCode 'QUALIFY.REQUEST_INVALID' -Policy $qualifyPolicy
+        }
+    }
+    $qualifySucceeded = $qualifyEvaluation.State -in @('Approved', 'Denied') -and
+        $qualifyEvaluation.ExitKind -eq 'Completed'
+    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'PreviewQualification' `
+        -State $(if ($qualifySucceeded) { 'Succeeded' } else { 'Failed' }) `
+        -MessageId $(if ($qualifySucceeded) {
+            'qualification.succeeded'
+        } else {
+            'qualification.failed'
+        }) -CompletedUnits 1 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $qualifyEvaluation.Manifest -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $qualifyEvaluation.Matrix -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $qualifyEvaluation.Packet -ConvertToJsonCommand $convertToJsonCommand
+    $terminalReason = if ($qualifyEvaluation.State -eq 'Approved') {
+        'QUALIFY.APPROVED'
+    }
+    elseif ($qualifyEvaluation.State -eq 'Denied' -and
+        $qualifyEvaluation.ExitKind -eq 'Completed') {
+        'QUALIFY.DENIED'
+    }
+    else {
+        $qualifyEvaluation.ReasonCode
+    }
+    $terminal = New-TerminalRecord -ReasonCode $terminalReason -Phase PreviewQualification
+    $exitCode = 20
+    if ($qualifyEvaluation.ExitKind -eq 'Completed') {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        $exitCode = 0
+    }
+    elseif ($qualifyEvaluation.ExitKind -eq 'CleanupIncomplete') {
+        $terminal.outcome = 'CleanupIncomplete'
+        $terminal.exitCode = 60
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $false
+        $exitCode = 60
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $exitCode
+}
+
 if ($Workflow -eq 'Help' -or $Workflow -eq 'About') {
     # Discovery must remain available on an unsigned development artifact.
     # Requiring Authenticode here would hide the repository from the people

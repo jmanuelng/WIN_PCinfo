@@ -1,0 +1,151 @@
+{
+  "kind": "win-pcinfo.preview-qualification-policy",
+  "contractVersion": "1.0.0",
+  "release": "2.0.0-preview.1",
+  "policyId": "win-pcinfo.preview-qualification/1.0.0",
+  "productCapability": "CAP-0027",
+  "relatedCapabilityIds": [
+    "CAP-0026",
+    "CAP-0028",
+    "CAP-0030"
+  ],
+  "sliceDeliversCapability": false,
+  "supportClaim": "None",
+  "previewOrStableClaim": "None",
+  "publicationAuthorized": false,
+  "supportedPromotionPermitted": false,
+  "attestedPreviewSatisfiesStableSigning": false,
+  "syntheticCannotAuthorizePublication": true,
+  "humanApprovalRequired": true,
+  "identity": {
+    "unsignedContentKind": "win-pcinfo.unsigned-generated-content-identity",
+    "finalUnsignedKind": "win-pcinfo.unsigned-portable-package-identity",
+    "finalSignedKind": "win-pcinfo.authenticode-signed-package-identity",
+    "finalMustBeDistinct": true,
+    "finalMustDeriveFromQualifiedContent": true
+  },
+  "trustPaths": [
+    "AuthenticodeSigned",
+    "AttestedPreview"
+  ],
+  "attestedFallback": {
+    "permittedReasons": [
+      "ArtifactSigningNotOperational",
+      "VerifiedServiceIncident"
+    ],
+    "neverForConvenience": true,
+    "satisfiesStableSigningGate": false
+  },
+  "evidenceKinds": [
+    "SyntheticProjection",
+    "LiveValidation"
+  ],
+  "liveValidationInThisSlice": "NotStarted",
+  "azure": {
+    "contact": "None",
+    "livePathWithoutIdentity": "NotStarted",
+    "overclaimRejected": true
+  },
+  "requiredGates": [
+    "deterministic-contract-schema-and-artifact-gates",
+    "privacy-secret-exclusion-and-evidence-protection-gates",
+    "lifecycle-terminal-honesty-cancellation-and-cleanup-gates",
+    "language-neutral-and-basic-primary-path-operability-gates",
+    "three-clean-full-profile-quality-budget-measurements",
+    "fresh-client-validation-for-each-claimed-windows-scenario",
+    "standard-elevated-denied-and-system-context-validation",
+    "microsoft-connectivity-enabled-and-local-only-validation",
+    "protected-package-recipient-export-corruption-and-recovery-validation",
+    "failure-injection-and-stale-run-recovery-validation",
+    "zero-round-residue",
+    "final-artifact-trust-launch-collection-package-open-and-cleanup-validation"
+  ],
+  "requiredPrivilegePaths": [
+    "StandardLaunchWithOneElevation",
+    "AlreadyElevated",
+    "ElevationDenied",
+    "SystemContext"
+  ],
+  "requiredNetworkBehaviors": [
+    "LocalOnly",
+    "MicrosoftConnectivityEnabled"
+  ],
+  "requiredLocales": [
+    "en-US",
+    "es-MX",
+    "tr-TR",
+    "ja-JP",
+    "ar-SA"
+  ],
+  "requiredValidationControls": [
+    "RestrictedOutbound",
+    "FullOutbound"
+  ],
+  "requiredFailureInjections": [
+    "Cancellation",
+    "Timeout",
+    "Crash",
+    "DiskPressure",
+    "CorruptEvidence"
+  ],
+  "requiredPackageExercises": [
+    "LocalOpen",
+    "RecipientOpen",
+    "RestrictedExport",
+    "ViewingCleanup"
+  ],
+  "requiredRecoveryExercises": [
+    "StaleRecovery"
+  ],
+  "smokes": {
+    "launch": "Help",
+    "collectionProhibited": true
+  },
+  "decision": {
+    "approvalRequiresAllPass": true,
+    "missingDenies": true,
+    "failedDenies": true,
+    "expiredDenies": true,
+    "invalidatedDenies": true,
+    "wrongCandidateDenies": true,
+    "privacyUnsafeDenies": true,
+    "cleanupPendingDenies": true,
+    "waiverDenies": true,
+    "manualPromotionAllowed": false
+  },
+  "scenarios": [
+    "CompleteSignedCandidate",
+    "CompleteAttestedFallback",
+    "MissingEvidence",
+    "ProductFail",
+    "ExpiredEvidence",
+    "InvalidatedEvidence",
+    "WrongCandidate",
+    "PrivacyUnsafe",
+    "CleanupPending",
+    "WaiverRequested",
+    "AzureOverclaim",
+    "AttestedConvenience",
+    "UnsignedAsFinal",
+    "LiveValidation"
+  ],
+  "privacy": {
+    "rejectNonSynthetic": true,
+    "rejectCredentialsAndSecrets": true,
+    "rejectRealIdentifiers": true,
+    "rejectRestrictedEvidence": true,
+    "rejectRawLogs": true,
+    "rejectInstantiatedAzureConfiguration": true,
+    "rejectPlansStateAndCache": true,
+    "rejectLocalUserPaths": true
+  },
+  "workspace": {
+    "requiredBoundary": "PrivateQualificationWorkspace",
+    "markerFileName": ".win-pcinfo-qualification-workspace",
+    "markerContent": "win-pcinfo.private-qualification-workspace",
+    "rejectRepositoryPath": true,
+    "rejectPublicPath": true,
+    "rejectUncPath": true,
+    "cleanupRequired": true
+  }
+}

@@ -42,7 +42,15 @@ param(
     # tokens and that the operator chose a marked private workspace.
     # Safe failure is CleanupIncomplete while any exact owned target
     # remains, or NotStarted when the workspace is missing.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate')]
+    # QualifyPreviewCandidate is the maintainer qualification packet.
+    # The threat is approving the wrong bytes, treating attested
+    # checksums as Authenticode, or publishing synthetic Azure
+    # evidence as a Preview claim. The mechanism is exact-digest
+    # binding, a closed scenario catalog, and an identifier-free
+    # approval or denial packet. The trust assumption is that the
+    # request is synthetic and live Azure is absent. Safe failure is
+    # NotStarted, or an evaluated denial that cannot be waived.
+    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -250,7 +258,20 @@ param(
     [string] $SigningSessionRequestPath,
 
     [Parameter()]
-    [string] $SigningWorkspacePath
+    [string] $SigningWorkspacePath,
+
+    # QualifyPreviewCandidate is a maintainer qualification gate. The
+    # threat is treating a synthetic pack, a waived failure, or live
+    # Azure that never ran as a published Preview. The mechanism is
+    # exact-candidate binding plus a public identifier-free packet.
+    # The trust assumption is that the request is synthetic and that
+    # these bytes are the candidate. Safe failure is NotStarted, or
+    # an evaluated denial that cannot authorize publication.
+    [Parameter()]
+    [string] $QualificationRequestPath,
+
+    [Parameter()]
+    [string] $QualificationWorkspacePath
 )
 
 Set-StrictMode -Version Latest

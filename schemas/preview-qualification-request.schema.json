@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jmanuelng/WIN_PCinfo/schemas/preview-qualification-request.schema.json",
+  "title": "WIN-PCInfo synthetic Preview qualification request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "contractVersion",
+    "synthetic",
+    "scenario",
+    "privacyBoundary",
+    "trustPath",
+    "signingUnavailability",
+    "evidenceKind",
+    "liveAzureStarted",
+    "waiverRequested",
+    "cleanupPending",
+    "checkpoint",
+    "bindings",
+    "evidencePack",
+    "validationControls",
+    "failureInjections",
+    "packageExercises",
+    "recoveryExercises"
+  ],
+  "properties": {
+    "kind": { "const": "win-pcinfo.preview-qualification-request" },
+    "contractVersion": { "const": "1.0.0" },
+    "synthetic": { "const": true },
+    "scenario": {
+      "enum": [
+        "CompleteSignedCandidate",
+        "CompleteAttestedFallback",
+        "MissingEvidence",
+        "ProductFail",
+        "ExpiredEvidence",
+        "InvalidatedEvidence",
+        "WrongCandidate",
+        "PrivacyUnsafe",
+        "CleanupPending",
+        "WaiverRequested",
+        "AzureOverclaim",
+        "AttestedConvenience",
+        "UnsignedAsFinal",
+        "LiveValidation"
+      ]
+    },
+    "privacyBoundary": { "const": "PrivateQualificationWorkspace" },
+    "trustPath": {
+      "enum": ["AuthenticodeSigned", "AttestedPreview"]
+    },
+    "signingUnavailability": {
+      "enum": [
+        "None",
+        "ArtifactSigningNotOperational",
+        "VerifiedServiceIncident"
+      ]
+    },
+    "evidenceKind": {
+      "enum": ["SyntheticProjection", "LiveValidation"]
+    },
+    "liveAzureStarted": { "type": "boolean" },
+    "waiverRequested": { "type": "boolean" },
+    "cleanupPending": { "type": "boolean" },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "azureManagedIdentityAvailable",
+        "artifactSigningSetupAuthorityPresent",
+        "liveValidationAuthorized"
+      ],
+      "properties": {
+        "azureManagedIdentityAvailable": { "type": "boolean" },
+        "artifactSigningSetupAuthorityPresent": { "type": "boolean" },
+        "liveValidationAuthorized": { "type": "boolean" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generatedContentSha256",
+        "generatedContentIdentityKind",
+        "finalDistributableSha256",
+        "finalDistributableIdentityKind",
+        "derivedFromGeneratedContentSha256"
+      ],
+      "properties": {
+        "generatedContentSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "generatedContentIdentityKind": {
+          "const": "win-pcinfo.unsigned-generated-content-identity"
+        },
+        "finalDistributableSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "finalDistributableIdentityKind": {
+          "enum": [
+            "win-pcinfo.unsigned-portable-package-identity",
+            "win-pcinfo.authenticode-signed-package-identity"
+          ]
+        },
+        "derivedFromGeneratedContentSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "evidencePack": {
+      "type": "object",
+      "required": ["kind", "synthetic", "stage"]
+    },
+    "validationControls": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["controlId", "result", "reasonCode"],
+        "properties": {
+          "controlId": {
+            "enum": ["RestrictedOutbound", "FullOutbound"]
+          },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "pattern": "^QUALIFY\\.[A-Z0-9_]+$"
+          }
+        }
+      }
+    },
+    "failureInjections": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["faultId", "result", "reasonCode"],
+        "properties": {
+          "faultId": {
+            "enum": [
+              "Cancellation",
+              "Timeout",
+              "Crash",
+              "DiskPressure",
+              "CorruptEvidence"
+            ]
+          },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "pattern": "^QUALIFY\\.[A-Z0-9_]+$"
+          }
+        }
+      }
+    },
+    "packageExercises": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["exerciseId", "result", "reasonCode"],
+        "properties": {
+          "exerciseId": {
+            "enum": [
+              "LocalOpen",
+              "RecipientOpen",
+              "RestrictedExport",
+              "ViewingCleanup"
+            ]
+          },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "pattern": "^QUALIFY\\.[A-Z0-9_]+$"
+          }
+        }
+      }
+    },
+    "recoveryExercises": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["exerciseId", "result", "reasonCode"],
+        "properties": {
+          "exerciseId": { "enum": ["StaleRecovery"] },
+          "result": {
+            "enum": [
+              "Pass",
+              "ProductFail",
+              "InfrastructureInconclusive",
+              "NotRun",
+              "Expired",
+              "Invalidated"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "pattern": "^QUALIFY\\.[A-Z0-9_]+$"
+          }
+        }
+      }
+    }
+  }
+}
