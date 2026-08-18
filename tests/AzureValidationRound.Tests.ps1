@@ -358,13 +358,19 @@ try {
     $owned.Add($fourWorkspace)
     $four = Invoke-Round -Scenario CompleteZeroResidue -WorkspacePath $fourWorkspace `
         -PlanObject $fourClientPlan
-    Assert-PublicOutcome $four 'four-client plan is outside this one-client slice' `
+    Assert-PublicOutcome $four 'four-client plan is the maximum admitted round' `
         -WorkspacePath $fourWorkspace
-    Assert-Equal 'VALIDATION.VM_COUNT_UNSAFE' $four.reasonCode `
-        'this slice refuses a four-client plan before create'
-    Assert-Equal $false $four.created 'a four-client plan never creates a client'
-    Assert-Equal 4 $four.clientCount 'the refused plan still records the requested count'
-    Assert-Equal $false $four.azureContacted 'a refused four-client plan does not contact Azure'
+    Assert-Equal 'ZeroResidueProven' $four.state 'a four-client synthetic round proves zero residue'
+    Assert-Equal 'VALIDATION.ZERO_RESIDUE_PROVEN' $four.reasonCode `
+        'four allowlisted clients complete to zero residue'
+    Assert-Equal $true $four.created 'a four-client plan creates the admitted clients'
+    Assert-Equal 4 $four.clientCount 'the four-client count is recorded'
+    Assert-Equal $true $four.exclusiveLeaseHeld 'four-client admission used the exclusive lease'
+    Assert-Equal 0 $four.liveTaggedVmCount 'four-client admission recounted zero live tagged VMs'
+    Assert-Equal $false $four.resultingTotalExceedsMaximum `
+        'four requested plus zero live stays at the ceiling'
+    Assert-Equal $false $four.azureContacted 'a four-client synthetic plan does not contact Azure'
+    Assert-Equal $true $four.zeroResidue 'a four-client round still proves zero residue'
 
     $diagnosticPlan = $plan | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
     $diagnosticPlan.clients[0].role = 'NonClaimingDiagnostic'

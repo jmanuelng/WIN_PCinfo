@@ -312,6 +312,153 @@ if ($Workflow -eq 'RunValidationRound') {
     exit $exitCode
 }
 
+if ($Workflow -eq 'RecoverValidationRound') {
+    # Independent recovery is a later process. The threat is requiring the
+    # initiating laptop, or deleting whatever remains in a subscription.
+    # The mechanism is a synthetic resident recovery record plus the same
+    # trusted JSON commands as Help. The trust assumption is that the
+    # record lists only privately recorded tokens. Safe failure is
+    # CleanupIncomplete while any exact owned target remains.
+    Write-ContractRecord (New-ProgressRecord -Sequence 1 -Phase 'ValidationRound' -State 'Started' `
+        -MessageId 'validation.recovery.started' -CompletedUnits 0 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    $recoveryResult = if ([string]::IsNullOrWhiteSpace($ValidationRoundFixturePath)) {
+        New-AzureValidationRoundOutcome -State Rejected `
+            -ReasonCode 'VALIDATION.REQUEST_INVALID' -PrivacyBoundary Missing
+    }
+    else {
+        try {
+            $recoveryFixtureText = [System.IO.File]::ReadAllText(
+                $ValidationRoundFixturePath,
+                [System.Text.UTF8Encoding]::new($false, $true)
+            )
+            $recoveryPrivacy = Test-AzureValidationRoundPrivacyBoundary -Text $recoveryFixtureText
+            if ($recoveryPrivacy) {
+                New-AzureValidationRoundOutcome -State Rejected `
+                    -ReasonCode $recoveryPrivacy -PrivacyBoundary Rejected
+            }
+            else {
+                $recoveryRepositoryRoot = Split-Path -Parent $PSCommandPath
+                $recoveryApplicationDirectory = Split-Path -Parent $PSCommandPath
+                if (-not (Test-Path -LiteralPath (
+                    Join-Path $recoveryRepositoryRoot 'infra/azure-validation/versions.tf'
+                ))) {
+                    $recoveryRepositoryRoot = Split-Path -Parent $recoveryRepositoryRoot
+                }
+                $recoveryFixtureSchema = Get-AzureValidationRoundCatalogPath `
+                    -RepositoryRoot $recoveryRepositoryRoot `
+                    -ApplicationDirectory $recoveryApplicationDirectory `
+                    -RelativePath 'schemas/azure-validation-round-execution-request.schema.json'
+                $recoveryFixtureValid = $false
+                if (-not [string]::IsNullOrWhiteSpace($recoveryFixtureSchema)) {
+                    try {
+                        $recoveryFixtureValid = Test-Json -Json $recoveryFixtureText `
+                            -SchemaFile $recoveryFixtureSchema
+                    }
+                    catch {
+                        $recoveryFixtureValid = $false
+                    }
+                }
+                if (-not $recoveryFixtureValid) {
+                    New-AzureValidationRoundOutcome -State Rejected `
+                        -ReasonCode 'VALIDATION.REQUEST_INVALID' `
+                        -PrivacyBoundary Rejected
+                }
+                else {
+                    $recoveryFixture = & $convertFromJsonCommand `
+                        -InputObject $recoveryFixtureText -ErrorAction Stop
+                    $recoveryScenario = [string] $recoveryFixture.scenario
+                    $recoveryPlatform = New-AzureValidationRoundPlatform -Scenario $recoveryScenario
+                    $recoveryPolicy = Get-AzureValidationRoundPolicy
+                    $recoveryWorkspace = $ValidationPrivateWorkspacePath
+                    if ([string]::IsNullOrWhiteSpace($recoveryWorkspace)) {
+                        $recoveryWorkspace = [System.IO.Path]::GetTempPath()
+                    }
+                    $recoveryCommon = @{
+                        ClientCount = $null
+                        Windows11ClaimingRoute = $false
+                        TrustClass = 'ControllerDevTracer'
+                        PersistentScopePreserved = $true
+                        HostPeeringAbsent = $false
+                        TagSweepEmpty = $false
+                        UnprotectedLocalMaterialAbsent = $false
+                        CleanupMode = 'None'
+                        Cancelled = $false
+                        CancelPhase = 'None'
+                        ExpiryReached = $false
+                        CleanupReserveActive = $false
+                        CleanupReserveMinutes = [int] $recoveryPolicy.lifetime.minimumCleanupReserveMinutes
+                        NewTestsStopped = $true
+                        EvidenceExportStopped = $true
+                        ExclusiveLeaseHeld = $false
+                        LiveTaggedVmCount = $null
+                        ResultingTotalExceedsMaximum = $false
+                        RecoveryIndependent = $true
+                        UnresolvedTargetPreserved = $false
+                        UnrelatedTargetPreserved = $false
+                        CleanupPending = $false
+                        OperationsRecordRetained = $false
+                        DocumentedIncident = $false
+                        Synthetic = $true
+                        PlatformKind = 'Synthetic'
+                        AzureContacted = $false
+                        PrivacyBoundary = $(if ([string]::IsNullOrWhiteSpace($ValidationPrivateWorkspacePath)) {
+                            'Missing'
+                        } else {
+                            'PrivateExternalWorkspace'
+                        })
+                        Admitted = $true
+                    }
+                    Invoke-AzureValidationRoundRecovery -Platform $recoveryPlatform `
+                        -Policy $recoveryPolicy `
+                        -PrivateWorkspacePath $recoveryWorkspace `
+                        -Common $recoveryCommon
+                }
+            }
+        }
+        catch {
+            New-AzureValidationRoundOutcome -State Rejected `
+                -ReasonCode 'VALIDATION.REQUEST_INVALID' -PrivacyBoundary Missing
+        }
+    }
+    $recoveryCleaned = $recoveryResult.zeroResidue -eq $true
+    Write-ContractRecord (New-ProgressRecord -Sequence 2 -Phase 'ValidationRound' `
+        -State $(if ($recoveryCleaned) { 'Succeeded' } else { 'Failed' }) `
+        -MessageId $(if ($recoveryCleaned) {
+            'validation.recovery.succeeded'
+        } else {
+            'validation.recovery.failed'
+        }) -CompletedUnits 1 -TotalUnits 2) `
+        -ConvertToJsonCommand $convertToJsonCommand
+    Write-ContractRecord $recoveryResult -ConvertToJsonCommand $convertToJsonCommand
+    $terminal = New-TerminalRecord -ReasonCode $recoveryResult.reasonCode `
+        -Phase ValidationRound
+    $exitCode = 20
+    if ($recoveryResult.state -eq 'FailedCleaned' -and $recoveryResult.zeroResidue) {
+        $terminal.outcome = 'CompletedWithGaps'
+        $terminal.exitCode = 10
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $true
+        $exitCode = 10
+    }
+    elseif ($recoveryResult.state -eq 'ZeroResidueProven') {
+        $terminal.outcome = 'Completed'
+        $terminal.exitCode = 0
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $true
+        $exitCode = 0
+    }
+    elseif ($recoveryResult.state -eq 'ResidueRemains') {
+        $terminal.outcome = 'CleanupIncomplete'
+        $terminal.exitCode = 60
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $false
+        $exitCode = 60
+    }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $exitCode
+}
+
 if ($Workflow -eq 'EvaluateReleaseGates') {
     # Pre-signing gates must run on the unsigned generated candidate. The
     # threat is hiding a failed or private pack behind Authenticode, or

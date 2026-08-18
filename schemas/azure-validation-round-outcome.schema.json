@@ -43,7 +43,26 @@
     "azureContacted",
     "supportClaim",
     "previewOrStableClaim",
-    "privacyBoundary"
+    "privacyBoundary",
+    "cleanupMode",
+    "cancelled",
+    "cancelPhase",
+    "expiryReached",
+    "cleanupReserveActive",
+    "hardExpiryMinutes",
+    "cleanupReserveMinutes",
+    "newTestsStopped",
+    "evidenceExportStopped",
+    "exclusiveLeaseHeld",
+    "liveTaggedVmCount",
+    "resultingTotalExceedsMaximum",
+    "recoveryIndependent",
+    "unresolvedTargetPreserved",
+    "unrelatedTargetPreserved",
+    "cleanupPending",
+    "operationsRecordRetained",
+    "completedRecordRetentionDays",
+    "documentedIncident"
   ],
   "properties": {
     "recordType": { "const": "win-pcinfo.azure-validation-round" },
@@ -103,6 +122,45 @@
     "previewOrStableClaim": { "const": "None" },
     "privacyBoundary": {
       "enum": ["PrivateExternalWorkspace", "Missing", "Rejected"]
-    }
+    },
+    "cleanupMode": {
+      "enum": ["None", "RoundCleanupMode", "CleanupPending"]
+    },
+    "cancelled": { "type": "boolean" },
+    "cancelPhase": {
+      "enum": [
+        "None",
+        "Create",
+        "Readiness",
+        "Transfer",
+        "Execution",
+        "Retrieval",
+        "Teardown"
+      ]
+    },
+    "expiryReached": { "type": "boolean" },
+    "cleanupReserveActive": { "type": "boolean" },
+    "hardExpiryMinutes": { "const": 360 },
+    "cleanupReserveMinutes": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 360
+    },
+    "newTestsStopped": { "type": "boolean" },
+    "evidenceExportStopped": { "type": "boolean" },
+    "exclusiveLeaseHeld": { "type": "boolean" },
+    "liveTaggedVmCount": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 4
+    },
+    "resultingTotalExceedsMaximum": { "type": "boolean" },
+    "recoveryIndependent": { "type": "boolean" },
+    "unresolvedTargetPreserved": { "type": "boolean" },
+    "unrelatedTargetPreserved": { "type": "boolean" },
+    "cleanupPending": { "type": "boolean" },
+    "operationsRecordRetained": { "type": "boolean" },
+    "completedRecordRetentionDays": { "const": 7 },
+    "documentedIncident": { "type": "boolean" }
   }
 }

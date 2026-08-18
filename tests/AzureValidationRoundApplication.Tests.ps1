@@ -12,10 +12,15 @@ $policy = Get-Content -LiteralPath (
 ) -Raw | ConvertFrom-Json -Depth 20
 $outcomeSchemaPath = Join-Path $repositoryRoot 'schemas/azure-validation-round-outcome.schema.json'
 $oneClientPath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-one-client.json'
+$fourClientPath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-four-clients.json'
 $completeFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-complete.json'
 $failedFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-assessment-failed.json'
 $identityFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-identity-unavailable.json'
 $residueFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-residue-remains.json'
+$cancelFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-cancel-create.json'
+$hostLossFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-host-loss.json'
+$recoveryFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-independent-recovery.json'
+$pendingFixturePath = Join-Path $PSScriptRoot 'fixtures/azure-validation-round-execution-cleanup-pending.json'
 
 $workRoot = Join-Path $repositoryRoot '.test-output/azure-validation-round-application'
 if (Test-Path -LiteralPath $workRoot) {
@@ -166,6 +171,88 @@ try {
         'the generated live path does not contact Azure'
     Assert-Equal 'NotStarted' $liveTerminal[0].outcome 'the generated live path stays NotStarted'
     Remove-Item -LiteralPath $liveWorkspace -Recurse -Force
+
+    $fourWorkspace = New-MarkedWorkspace -Name 'four'
+    $four = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RunValidationRound',
+        '-ValidationRoundRequestPath', $fourClientPath,
+        '-ValidationPrivateWorkspacePath', $fourWorkspace,
+        '-ValidationRoundFixturePath', $completeFixturePath
+    )
+    Assert-Equal 0 $four.ExitCode 'a four-client synthetic round completes'
+    $fourOutcome = @($four.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    Assert-Equal 'ZeroResidueProven' $fourOutcome[0].state 'four allowlisted clients reach zero residue'
+    Assert-Equal 4 $fourOutcome[0].clientCount 'the generated application records four clients'
+    Assert-Equal $true $fourOutcome[0].exclusiveLeaseHeld 'the generated application used the exclusive lease'
+    Assert-Equal $false $fourOutcome[0].resultingTotalExceedsMaximum `
+        'four requested clients with no live tagged VMs stay at the ceiling'
+    Remove-Item -LiteralPath $fourWorkspace -Recurse -Force
+
+    $cancelWorkspace = New-MarkedWorkspace -Name 'cancel'
+    $cancelled = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RunValidationRound',
+        '-ValidationRoundRequestPath', $oneClientPath,
+        '-ValidationPrivateWorkspacePath', $cancelWorkspace,
+        '-ValidationRoundFixturePath', $cancelFixturePath
+    )
+    Assert-Equal 10 $cancelled.ExitCode 'cancellation ends CompletedWithGaps after cleanup'
+    $cancelOutcome = @($cancelled.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    $cancelTerminal = @($cancelled.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 'FailedCleaned' $cancelOutcome[0].state 'cancellation is not a product pass'
+    Assert-Equal 'VALIDATION.CANCELLED' $cancelOutcome[0].reasonCode 'cancellation uses the typed reason'
+    Assert-Equal 'RoundCleanupMode' $cancelOutcome[0].cleanupMode 'cancellation enters Round Cleanup Mode'
+    Assert-Equal $true $cancelOutcome[0].zeroResidue 'cancellation still proves zero residue'
+    Assert-Equal 'CompletedWithGaps' $cancelTerminal[0].outcome 'cancellation is CompletedWithGaps'
+    Remove-Item -LiteralPath $cancelWorkspace -Recurse -Force
+
+    $hostLossWorkspace = New-MarkedWorkspace -Name 'host-loss'
+    $hostLoss = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RunValidationRound',
+        '-ValidationRoundRequestPath', $oneClientPath,
+        '-ValidationPrivateWorkspacePath', $hostLossWorkspace,
+        '-ValidationRoundFixturePath', $hostLossFixturePath
+    )
+    Assert-Equal 10 $hostLoss.ExitCode 'host loss ends CompletedWithGaps after recovery'
+    $hostLossOutcome = @($hostLoss.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    Assert-Equal 'VALIDATION.HOST_LOST' $hostLossOutcome[0].reasonCode 'host loss uses the typed reason'
+    Assert-Equal $true $hostLossOutcome[0].recoveryIndependent 'host loss recovers without local files'
+    Assert-Equal $true $hostLossOutcome[0].zeroResidue 'host loss still proves zero residue'
+    Remove-Item -LiteralPath $hostLossWorkspace -Recurse -Force
+
+    $pendingWorkspace = New-MarkedWorkspace -Name 'pending'
+    $pending = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RunValidationRound',
+        '-ValidationRoundRequestPath', $oneClientPath,
+        '-ValidationPrivateWorkspacePath', $pendingWorkspace,
+        '-ValidationRoundFixturePath', $pendingFixturePath
+    )
+    Assert-Equal 20 $pending.ExitCode 'Cleanup Pending ends NotStarted'
+    $pendingOutcome = @($pending.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    $pendingTerminal = @($pending.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 'VALIDATION.CLEANUP_PENDING' $pendingOutcome[0].reasonCode `
+        'Cleanup Pending blocks generated-application admission'
+    Assert-Equal $false $pendingOutcome[0].created 'Cleanup Pending never creates'
+    Assert-Equal 'NotStarted' $pendingTerminal[0].outcome 'Cleanup Pending stays NotStarted'
+    Remove-Item -LiteralPath $pendingWorkspace -Recurse -Force
+
+    $recoveryWorkspace = New-MarkedWorkspace -Name 'recover'
+    $recovered = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'RecoverValidationRound',
+        '-ValidationPrivateWorkspacePath', $recoveryWorkspace,
+        '-ValidationRoundFixturePath', $recoveryFixturePath
+    )
+    Assert-Equal 10 $recovered.ExitCode 'independent recovery ends CompletedWithGaps'
+    $recoveryOutcome = @($recovered.Records | Where-Object recordType -eq 'win-pcinfo.azure-validation-round')
+    $recoveryTerminal = @($recovered.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 'VALIDATION.RECOVERY_COMPLETED' $recoveryOutcome[0].reasonCode `
+        'the generated recovery worker uses the resident record'
+    Assert-Equal $true $recoveryOutcome[0].recoveryIndependent `
+        'the generated recovery worker does not need the initiating process'
+    Assert-Equal $true $recoveryOutcome[0].zeroResidue `
+        'the generated recovery worker proves zero residue'
+    Assert-Equal 'CompletedWithGaps' $recoveryTerminal[0].outcome `
+        'independent recovery is not reported as a product pass'
+    Remove-Item -LiteralPath $recoveryWorkspace -Recurse -Force
 
     $missing = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Workflow', 'RunValidationRound'

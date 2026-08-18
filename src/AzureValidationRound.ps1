@@ -128,6 +128,19 @@ function Get-AzureValidationRoundProbeReason {
     }
 }
 
+function Get-AzureValidationRoundRecordedClientCount {
+    param([Parameter()] $Count)
+
+    if ($null -eq $Count) {
+        return $null
+    }
+    $value = [int] $Count
+    if ($value -ge 0 -and $value -le 4) {
+        return $value
+    }
+    $null
+}
+
 function New-AzureValidationRoundOutcome {
     param(
         [Parameter(Mandatory)] [ValidateSet(
@@ -167,7 +180,29 @@ function New-AzureValidationRoundOutcome {
         [string] $PlatformKind = 'Unavailable',
         [Parameter()] [bool] $AzureContacted = $false,
         [Parameter()] [ValidateSet('PrivateExternalWorkspace', 'Missing', 'Rejected')]
-        [string] $PrivacyBoundary = 'Rejected'
+        [string] $PrivacyBoundary = 'Rejected',
+        [Parameter()] [ValidateSet('None', 'RoundCleanupMode', 'CleanupPending')]
+        [string] $CleanupMode = 'None',
+        [Parameter()] [bool] $Cancelled = $false,
+        [Parameter()] [ValidateSet(
+            'None', 'Create', 'Readiness', 'Transfer', 'Execution', 'Retrieval', 'Teardown'
+        )] [string] $CancelPhase = 'None',
+        [Parameter()] [bool] $ExpiryReached = $false,
+        [Parameter()] [bool] $CleanupReserveActive = $false,
+        [Parameter()] [int] $HardExpiryMinutes = 360,
+        [Parameter()] [Nullable[int]] $CleanupReserveMinutes,
+        [Parameter()] [bool] $NewTestsStopped = $false,
+        [Parameter()] [bool] $EvidenceExportStopped = $false,
+        [Parameter()] [bool] $ExclusiveLeaseHeld = $false,
+        [Parameter()] [Nullable[int]] $LiveTaggedVmCount,
+        [Parameter()] [bool] $ResultingTotalExceedsMaximum = $false,
+        [Parameter()] [bool] $RecoveryIndependent = $false,
+        [Parameter()] [bool] $UnresolvedTargetPreserved = $false,
+        [Parameter()] [bool] $UnrelatedTargetPreserved = $false,
+        [Parameter()] [bool] $CleanupPending = $false,
+        [Parameter()] [bool] $OperationsRecordRetained = $false,
+        [Parameter()] [int] $CompletedRecordRetentionDays = 7,
+        [Parameter()] [bool] $DocumentedIncident = $false
     )
 
     [pscustomobject][ordered]@{
@@ -198,7 +233,7 @@ function New-AzureValidationRoundOutcome {
         clientCapturedOrReused = [bool] $ClientCapturedOrReused
         vmPublicIpAssigned = [bool] $VmPublicIpAssigned
         freshApprovedBaseline = [bool] $FreshApprovedBaseline
-        clientCount = $ClientCount
+        clientCount = (Get-AzureValidationRoundRecordedClientCount -Count $ClientCount)
         windows11ClaimingRoute = [bool] $Windows11ClaimingRoute
         trustClass = $TrustClass
         qualifyingEvidence = $false
@@ -210,6 +245,25 @@ function New-AzureValidationRoundOutcome {
         supportClaim = 'None'
         previewOrStableClaim = 'None'
         privacyBoundary = $PrivacyBoundary
+        cleanupMode = $CleanupMode
+        cancelled = [bool] $Cancelled
+        cancelPhase = $CancelPhase
+        expiryReached = [bool] $ExpiryReached
+        cleanupReserveActive = [bool] $CleanupReserveActive
+        hardExpiryMinutes = 360
+        cleanupReserveMinutes = $CleanupReserveMinutes
+        newTestsStopped = [bool] $NewTestsStopped
+        evidenceExportStopped = [bool] $EvidenceExportStopped
+        exclusiveLeaseHeld = [bool] $ExclusiveLeaseHeld
+        liveTaggedVmCount = $LiveTaggedVmCount
+        resultingTotalExceedsMaximum = [bool] $ResultingTotalExceedsMaximum
+        recoveryIndependent = [bool] $RecoveryIndependent
+        unresolvedTargetPreserved = [bool] $UnresolvedTargetPreserved
+        unrelatedTargetPreserved = [bool] $UnrelatedTargetPreserved
+        cleanupPending = [bool] $CleanupPending
+        operationsRecordRetained = [bool] $OperationsRecordRetained
+        completedRecordRetentionDays = 7
+        documentedIncident = [bool] $DocumentedIncident
     }
 }
 
@@ -230,6 +284,33 @@ function Test-AzureValidationRoundLiveIdentity {
     }
 }
 
+function Get-AzureValidationRoundScenarioNames {
+    @(
+        'CompleteZeroResidue'
+        'CleanupFirst'
+        'AssessmentFailed'
+        'IdentityUnavailable'
+        'AdmissionDenied'
+        'ResidueRemains'
+        'CaptureAttempted'
+        'CredentialExposed'
+        'CancelDuringCreate'
+        'CancelDuringReadiness'
+        'CancelDuringTransfer'
+        'CancelDuringExecution'
+        'CancelDuringRetrieval'
+        'CancelDuringTeardown'
+        'HostLoss'
+        'Expiry'
+        'CleanupReserve'
+        'PartialProvisioning'
+        'SharedSafetyFailure'
+        'IndependentRecovery'
+        'CleanupPending'
+        'LeaseBusy'
+    )
+}
+
 function New-AzureValidationRoundPlatform {
     param(
         [Parameter()] [ValidateSet(
@@ -240,7 +321,21 @@ function New-AzureValidationRoundPlatform {
             'AdmissionDenied',
             'ResidueRemains',
             'CaptureAttempted',
-            'CredentialExposed'
+            'CredentialExposed',
+            'CancelDuringCreate',
+            'CancelDuringReadiness',
+            'CancelDuringTransfer',
+            'CancelDuringExecution',
+            'CancelDuringRetrieval',
+            'CancelDuringTeardown',
+            'HostLoss',
+            'Expiry',
+            'CleanupReserve',
+            'PartialProvisioning',
+            'SharedSafetyFailure',
+            'IndependentRecovery',
+            'CleanupPending',
+            'LeaseBusy'
         )] [string] $Scenario = 'CompleteZeroResidue'
     )
 
@@ -277,7 +372,28 @@ function New-AzureValidationRoundPlatform {
         CandidateMatches = $true
         PayloadMatches = $true
         GuestCommands = [System.Collections.Generic.List[string]]::new()
+        LeaseHeld = $false
+        LeaseSerial = 0
+        CleanupPending = $false
+        CleanupMode = 'None'
+        LiveTaggedVms = [System.Collections.Generic.List[string]]::new()
+        UnrelatedResources = [System.Collections.Generic.List[string]]::new()
+        UnresolvedResources = [System.Collections.Generic.List[string]]::new()
+        ResidentRecoveryRecord = $null
+        NowUtc = [datetimeoffset]::new(2026, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+        CancelAt = $null
+        HostLost = $false
+        PartialProvisioning = $false
+        SharedSafetyFailed = $false
+        NewTestsAllowed = $true
+        EvidenceExportAllowed = $true
+        OperationsRecords = [System.Collections.Generic.List[object]]::new()
+        DocumentedIncident = $false
+        UnresolvedPreserved = $false
+        UnrelatedPreserved = $false
+        IndependentRecovery = $false
     }
+    $null = $platform.UnrelatedResources.Add('synthetic-persistent-control-plane')
 
     switch ($Scenario) {
         'AdmissionDenied' { $platform.Probes['Locks'] = $false }
@@ -289,16 +405,43 @@ function New-AzureValidationRoundPlatform {
         'CaptureAttempted' { $platform.Capture = $true }
         'CredentialExposed' { $platform.OfferBootstrapPassword = $true }
         'AssessmentFailed' { $platform.AssessmentFails = $true }
+        'CancelDuringCreate' { $platform.CancelAt = 'Create' }
+        'CancelDuringReadiness' { $platform.CancelAt = 'Readiness' }
+        'CancelDuringTransfer' { $platform.CancelAt = 'Transfer' }
+        'CancelDuringExecution' { $platform.CancelAt = 'Execution' }
+        'CancelDuringRetrieval' { $platform.CancelAt = 'Retrieval' }
+        'CancelDuringTeardown' { $platform.CancelAt = 'Teardown' }
+        'HostLoss' { $platform.HostLost = $true }
+        'PartialProvisioning' { $platform.PartialProvisioning = $true }
+        'SharedSafetyFailure' { $platform.SharedSafetyFailed = $true }
+        'IndependentRecovery' {
+            $platform.IndependentRecovery = $true
+            $platform.CleanupPending = $true
+            foreach ($token in @(Get-AzureValidationRoundOwnedTokens -ClientCount 1)) {
+                $null = $platform.Resources.Add($token)
+            }
+            $platform.ResidentRecoveryRecord = New-AzureValidationRoundResidentRecord `
+                -Platform $platform
+        }
+        'CleanupPending' { $platform.CleanupPending = $true }
+        'LeaseBusy' { $platform.LeaseHeld = $true }
     }
 
     $platform
 }
 
 function Get-AzureValidationRoundOwnedTokens {
-    @(
-        'synthetic-round-vm-01'
-        'synthetic-round-nic-01'
-        'synthetic-round-disk-01'
+    param([Parameter()] [int] $ClientCount = 1)
+
+    $tokens = [System.Collections.Generic.List[string]]::new()
+    $count = [Math]::Max(1, $ClientCount)
+    for ($index = 1; $index -le $count; $index++) {
+        $suffix = $index.ToString('00', [System.Globalization.CultureInfo]::InvariantCulture)
+        $null = $tokens.Add("synthetic-round-vm-$suffix")
+        $null = $tokens.Add("synthetic-round-nic-$suffix")
+        $null = $tokens.Add("synthetic-round-disk-$suffix")
+    }
+    foreach ($shared in @(
         'synthetic-round-vnet'
         'synthetic-round-subnet'
         'synthetic-round-nsg'
@@ -308,18 +451,59 @@ function Get-AzureValidationRoundOwnedTokens {
         'synthetic-round-peering-round'
         'synthetic-round-transfer'
         'synthetic-round-coordination'
-    )
+    )) {
+        $null = $tokens.Add($shared)
+    }
+    @($tokens)
 }
 
 function Initialize-AzureValidationRoundResources {
-    param([Parameter(Mandatory)] $Platform)
+    param(
+        [Parameter(Mandatory)] $Platform,
+        [Parameter()] [int] $ClientCount = 1
+    )
 
+    $preserved = [System.Collections.Generic.List[string]]::new()
+    foreach ($token in @($Platform.Resources)) {
+        if (-not (Test-AzureValidationRoundRoundOwnedToken -Platform $Platform -Token $token)) {
+            $null = $preserved.Add($token)
+        }
+    }
     $Platform.Resources.Clear()
-    foreach ($token in @(Get-AzureValidationRoundOwnedTokens)) {
+    foreach ($token in $preserved) {
         $null = $Platform.Resources.Add($token)
+    }
+    if ([bool] $Platform.PartialProvisioning) {
+        # Partial create still records only the objects that appeared.
+        # The threat is deleting a guessed VM that was never created, or
+        # retrying the rest of the plan after a failed apply. Safe failure
+        # is to keep the short owned list and enter cleanup.
+        $null = $Platform.Resources.Add('synthetic-round-vnet')
+        $null = $Platform.Resources.Add('synthetic-round-nic-01')
+    }
+    else {
+        foreach ($token in @(Get-AzureValidationRoundOwnedTokens -ClientCount $ClientCount)) {
+            $null = $Platform.Resources.Add($token)
+        }
     }
     $Platform.Created = $true
     $Platform.TerraformStatePresent = $true
+}
+
+function Test-AzureValidationRoundRoundOwnedToken {
+    param(
+        [Parameter(Mandatory)] $Platform,
+        [Parameter(Mandatory)] [string] $Token
+    )
+
+    $unrelated = @()
+    if ($null -ne $Platform.PSObject.Properties['UnrelatedResources']) {
+        $unrelated = @($Platform.UnrelatedResources)
+    }
+    if ($unrelated -contains $Token) {
+        return $false
+    }
+    $true
 }
 
 function Invoke-AzureValidationRoundDestroy {
@@ -327,19 +511,55 @@ function Invoke-AzureValidationRoundDestroy {
 
     # Teardown is independent of the product payload. The threat is leaving
     # a VM, peering, or NAT after an assessment failure and still reporting
-    # completion. The mechanism is a single destroy path that every created
-    # round must enter. The trust assumption is that the platform can name
-    # only privately recorded round-owned tokens. Safe failure is to keep
-    # residue visible rather than invent absence.
+    # completion, or deleting an unresolved or unrelated object to chase
+    # a green result. The mechanism is a single idempotent destroy path
+    # that names only privately recorded, ownership-proven, round-owned
+    # tokens. The trust assumption is that the resident recovery record
+    # and the in-memory token list agree. Safe failure is to keep residue
+    # visible rather than invent absence.
     if ($Platform.LeaveResidue) {
+        $kept = [System.Collections.Generic.List[string]]::new()
+        foreach ($token in @($Platform.Resources)) {
+            if ($token -match 'peering' -or -not (Test-AzureValidationRoundRoundOwnedToken `
+                -Platform $Platform -Token $token)) {
+                $null = $kept.Add($token)
+            }
+        }
         $Platform.Resources.Clear()
-        $null = $Platform.Resources.Add('synthetic-round-peering-host')
-        $null = $Platform.Resources.Add('synthetic-round-peering-round')
+        foreach ($token in $kept) {
+            $null = $Platform.Resources.Add($token)
+        }
+        if (@($Platform.UnrelatedResources).Count -gt 0) {
+            $Platform.UnrelatedPreserved = $true
+        }
         return $false
     }
 
+    $remaining = [System.Collections.Generic.List[string]]::new()
+    foreach ($token in @($Platform.Resources)) {
+        if (@($Platform.UnresolvedResources) -contains $token) {
+            $Platform.UnresolvedPreserved = $true
+            $null = $remaining.Add($token)
+            continue
+        }
+        if (-not (Test-AzureValidationRoundRoundOwnedToken -Platform $Platform -Token $token)) {
+            $Platform.UnrelatedPreserved = $true
+            $null = $remaining.Add($token)
+            continue
+        }
+    }
     $Platform.Resources.Clear()
-    $true
+    foreach ($token in $remaining) {
+        $null = $Platform.Resources.Add($token)
+    }
+    if (@($Platform.UnrelatedResources).Count -gt 0 -and -not $Platform.UnrelatedPreserved) {
+        $Platform.UnrelatedPreserved = $true
+    }
+
+    $roundOwnedRemaining = @($Platform.Resources | Where-Object {
+        Test-AzureValidationRoundRoundOwnedToken -Platform $Platform -Token $_
+    })
+    $roundOwnedRemaining.Count -eq 0
 }
 
 function Test-AzureValidationRoundGuestCommandSafe {
@@ -362,6 +582,7 @@ function Invoke-AzureValidationRoundGuest {
     param(
         [Parameter(Mandatory)] $Platform,
         [Parameter(Mandatory)] [ValidateSet(
+            'TransferPayload',
             'VerifyCandidate',
             'VerifyPayload',
             'RunLocalOnly',
@@ -408,6 +629,8 @@ function Get-AzureValidationRoundLocalAbsence {
     $empty = [pscustomobject]@{
         Resources = [System.Collections.Generic.List[string]]::new()
         PersistentPresent = $true
+        UnrelatedResources = [System.Collections.Generic.List[string]]::new()
+        UnresolvedResources = [System.Collections.Generic.List[string]]::new()
     }
     Get-AzureValidationRoundAbsence -Platform $empty `
         -PrivateWorkspacePath $PrivateWorkspacePath -Policy $Policy
@@ -426,7 +649,9 @@ function Get-AzureValidationRoundAbsence {
     # privately recorded token list and local folders. The trust
     # assumption is that only round-owned tokens were recorded. Safe
     # failure is to keep residue visible rather than infer emptiness.
-    $tokens = @($Platform.Resources)
+    $tokens = @($Platform.Resources | Where-Object {
+        Test-AzureValidationRoundRoundOwnedToken -Platform $Platform -Token $_
+    })
     $peeringPresent = @($tokens | Where-Object { $_ -match 'peering' }).Count -gt 0
     $transferPresent = @($tokens | Where-Object { $_ -match 'transfer|coordination' }).Count -gt 0
     $workingPath = Join-Path $PrivateWorkspacePath ([string] $Policy.workspace.workingDirectoryName)
@@ -512,6 +737,272 @@ function Write-AzureValidationRoundRecovery {
         "present`n",
         [System.Text.UTF8Encoding]::new($false)
     )
+    $Platform.ResidentRecoveryRecord = New-AzureValidationRoundResidentRecord -Platform $Platform
+}
+
+function New-AzureValidationRoundResidentRecord {
+    param([Parameter(Mandatory)] $Platform)
+
+    # The Round Recovery Record is conceptually Azure-resident. The threat
+    # is tying cleanup to the initiating laptop, a temp folder, or a
+    # public log that contains real resource IDs. The mechanism is a
+    # closed synthetic token list that a later worker can use after host
+    # loss. The trust assumption is that only privately recorded
+    # round-owned tokens are listed. Safe failure is to refuse deletion
+    # of anything not on this list.
+    [pscustomobject][ordered]@{
+        Kind = 'win-pcinfo.private-round-recovery'
+        Synthetic = $true
+        Owned = @($Platform.Resources | Where-Object {
+            Test-AzureValidationRoundRoundOwnedToken -Platform $Platform -Token $_
+        })
+        PersistentPresent = [bool] $Platform.PersistentPresent
+    }
+}
+
+function Enter-AzureValidationRoundCleanupMode {
+    param(
+        [Parameter(Mandatory)] $Platform,
+        [Parameter()] [string] $Reason
+    )
+
+    # Round Cleanup Mode is a one-way door. The threat is retrying create,
+    # widening the SKU set, or exporting more evidence after cancellation,
+    # expiry, or a shared-safety fault. The mechanism is a mode flag that
+    # stops new tests and evidence export and cannot return to testing.
+    # The trust assumption is that only exact owned tokens will be
+    # removed. Safe failure is to stay in cleanup rather than resume.
+    if ([string] $Platform.CleanupMode -eq 'RoundCleanupMode') {
+        return
+    }
+    $Platform.CleanupMode = 'RoundCleanupMode'
+    $Platform.NewTestsAllowed = $false
+    $Platform.EvidenceExportAllowed = $false
+}
+
+function Get-AzureValidationRoundClockState {
+    param(
+        [Parameter(Mandatory)] $Platform,
+        [Parameter(Mandatory)] $Plan
+    )
+
+    $expires = ConvertTo-AzureValidationDateTimeOffset -Value $Plan.tags.ExpiresUtc
+    $reserveMinutes = [int] $Plan.round.cleanupReserveMinutes
+    $reserveStart = $expires.AddMinutes(-1 * $reserveMinutes)
+    $now = [datetimeoffset] $Platform.NowUtc
+    [pscustomobject][ordered]@{
+        ExpiryReached = ($now -ge $expires)
+        CleanupReserveActive = ($now -ge $reserveStart)
+    }
+}
+
+function Update-AzureValidationRoundOperationsRecords {
+    param(
+        [Parameter(Mandatory)] $Platform,
+        [Parameter(Mandatory)] $Policy
+    )
+
+    # Completed operations records are not a second evidence store. The
+    # threat is keeping restricted round facts forever, or blocking the
+    # next round after a clean finish. The mechanism is a seven-day
+    # ceiling from the reviewed policy. A documented incident ends
+    # controller retention because the incident record takes over.
+    # Safe failure is to drop a completed record rather than invent a
+    # longer private archive.
+    $limit = [int] $Policy.lifetime.completedRecordRetentionDays
+    $kept = [System.Collections.Generic.List[object]]::new()
+    foreach ($record in @($Platform.OperationsRecords)) {
+        $kind = [string] $record.Kind
+        $age = [int] $record.AgeDays
+        if ($kind -eq 'Completed' -and $age -ge $limit) {
+            continue
+        }
+        if ([bool] $Platform.DocumentedIncident -and $kind -eq 'CleanupPending') {
+            continue
+        }
+        $null = $kept.Add($record)
+    }
+    $Platform.OperationsRecords.Clear()
+    foreach ($record in $kept) {
+        $null = $Platform.OperationsRecords.Add($record)
+    }
+}
+
+function Get-AzureValidationRoundOperationsRetention {
+    param([Parameter(Mandatory)] $Platform)
+
+    if ([bool] $Platform.DocumentedIncident) {
+        return $false
+    }
+    @($Platform.OperationsRecords | Where-Object {
+        [string] $_.Kind -eq 'CleanupPending'
+    }).Count -gt 0
+}
+
+function Complete-AzureValidationRoundCleanup {
+    param(
+        [Parameter(Mandatory)] $Platform,
+        [Parameter(Mandatory)] $Policy,
+        [Parameter(Mandatory)] [string] $PrivateWorkspacePath
+    )
+
+    $teardownCompleted = $false
+    try {
+        $teardownCompleted = [bool] (Invoke-AzureValidationRoundDestroy -Platform $Platform)
+    }
+    catch {
+        $teardownCompleted = $false
+    }
+    try {
+        Remove-AzureValidationRoundLocalMaterial -PrivateWorkspacePath $PrivateWorkspacePath `
+            -Policy $Policy
+    }
+    catch {
+    }
+
+    $absence = Get-AzureValidationRoundAbsence -Platform $Platform `
+        -PrivateWorkspacePath $PrivateWorkspacePath -Policy $Policy
+    $azureAbsent = [bool] $absence.TransientEmpty -and
+        [bool] $absence.HostPeeringAbsent -and
+        [bool] $absence.ExactIdsAbsent -and
+        [bool] $absence.TransferRemoved -and
+        [bool] $absence.TagSweepEmpty -and
+        [bool] $absence.PersistentPresent
+
+    $stateRemoved = $false
+    $nextEligible = $false
+    $zeroResidue = $false
+    $reason = 'VALIDATION.RESIDUE_REMAINS'
+    if ($azureAbsent) {
+        $Platform.TerraformStatePresent = $false
+        Remove-AzureValidationRoundLocalMaterial -PrivateWorkspacePath $PrivateWorkspacePath `
+            -Policy $Policy -IncludingRecovery:$true
+        $absence = Get-AzureValidationRoundAbsence -Platform $Platform `
+            -PrivateWorkspacePath $PrivateWorkspacePath -Policy $Policy
+        $zeroResidue = [bool] $absence.TransientEmpty -and
+            [bool] $absence.HostPeeringAbsent -and
+            [bool] $absence.UnprotectedAbsent -and
+            [bool] $absence.RecoveryAbsent
+        if ($zeroResidue) {
+            $stateRemoved = $true
+            $nextEligible = $true
+            $Platform.CleanupPending = $false
+            $Platform.CleanupMode = 'None'
+            $Platform.ResidentRecoveryRecord = $null
+            $reason = 'VALIDATION.ZERO_RESIDUE_PROVEN'
+            $null = $Platform.OperationsRecords.Add([pscustomobject]@{
+                Kind = 'Completed'
+                AgeDays = 0
+            })
+        }
+    }
+    else {
+        $Platform.CleanupPending = $true
+        $null = $Platform.OperationsRecords.Add([pscustomobject]@{
+            Kind = 'CleanupPending'
+            AgeDays = 0
+        })
+    }
+
+    Update-AzureValidationRoundOperationsRecords -Platform $Platform -Policy $Policy
+
+    [pscustomobject][ordered]@{
+        TeardownCompleted = $teardownCompleted
+        ZeroResidue = $zeroResidue
+        StateRemoved = $stateRemoved
+        NextEligible = $nextEligible
+        Absence = $absence
+        Reason = $reason
+        UnresolvedPreserved = [bool] $Platform.UnresolvedPreserved
+        UnrelatedPreserved = [bool] $Platform.UnrelatedPreserved
+        CleanupPending = [bool] $Platform.CleanupPending
+        OperationsRecordRetained = (Get-AzureValidationRoundOperationsRetention -Platform $Platform)
+        DocumentedIncident = [bool] $Platform.DocumentedIncident
+    }
+}
+
+function Invoke-AzureValidationRoundRecovery {
+    param(
+        [Parameter(Mandatory)] $Platform,
+        [Parameter(Mandatory)] $Policy,
+        [Parameter()] [string] $PrivateWorkspacePath,
+        [Parameter()] $Plan,
+        [Parameter()] [hashtable] $Common
+    )
+
+    # Independent recovery must work after the initiating process and its
+    # local files are gone. The threat is being unable to delete a billed
+    # VM because a laptop died, or deleting whatever is left in a
+    # subscription. The mechanism is the Azure-resident Round Recovery
+    # Record. The trust assumption is that the record lists only
+    # privately recorded tokens. Safe failure is ResidueRemains.
+    if ([string]::IsNullOrWhiteSpace($PrivateWorkspacePath)) {
+        $PrivateWorkspacePath = [System.IO.Path]::GetTempPath()
+    }
+
+    Enter-AzureValidationRoundCleanupMode -Platform $Platform `
+        -Reason 'VALIDATION.RECOVERY_COMPLETED'
+    $record = $Platform.ResidentRecoveryRecord
+    if ($null -eq $record) {
+        if ($null -ne $Common) {
+            $Common.CleanupMode = 'RoundCleanupMode'
+            $Common.NewTestsStopped = $true
+            $Common.EvidenceExportStopped = $true
+            $Common.RecoveryIndependent = $true
+            return New-AzureValidationRoundOutcome -State Rejected `
+                -ReasonCode 'VALIDATION.RECOVERY_NOT_ARMED' @Common
+        }
+        return $null
+    }
+
+    $Platform.Resources.Clear()
+    foreach ($token in @($record.Owned)) {
+        $null = $Platform.Resources.Add($token)
+    }
+    $Platform.PersistentPresent = [bool] $record.PersistentPresent
+    $cleanup = Complete-AzureValidationRoundCleanup -Platform $Platform `
+        -Policy $Policy -PrivateWorkspacePath $PrivateWorkspacePath
+
+    if ($null -eq $Common) {
+        return $cleanup
+    }
+
+    $Common.CleanupMode = $(if ([bool] $cleanup.CleanupPending) {
+        'CleanupPending'
+    } else {
+        'RoundCleanupMode'
+    })
+    $Common.NewTestsStopped = $true
+    $Common.EvidenceExportStopped = $true
+    $Common.RecoveryIndependent = $true
+    $Common.CleanupPending = [bool] $cleanup.CleanupPending
+    $Common.OperationsRecordRetained = [bool] $cleanup.OperationsRecordRetained
+    $Common.DocumentedIncident = [bool] $cleanup.DocumentedIncident
+    $Common.UnresolvedTargetPreserved = [bool] $cleanup.UnresolvedPreserved
+    $Common.UnrelatedTargetPreserved = [bool] $cleanup.UnrelatedPreserved
+    $Common.HostPeeringAbsent = [bool] $cleanup.Absence.HostPeeringAbsent
+    $Common.TagSweepEmpty = [bool] $cleanup.Absence.TagSweepEmpty
+    $Common.UnprotectedLocalMaterialAbsent = [bool] $cleanup.Absence.UnprotectedAbsent
+
+    $state = if (-not [bool] $cleanup.ZeroResidue) {
+        'ResidueRemains'
+    }
+    else {
+        'FailedCleaned'
+    }
+    $reason = if ($state -eq 'ResidueRemains') {
+        'VALIDATION.RESIDUE_REMAINS'
+    }
+    else {
+        'VALIDATION.RECOVERY_COMPLETED'
+    }
+
+    New-AzureValidationRoundOutcome -State $state -ReasonCode $reason `
+        -TeardownCompleted:([bool] $cleanup.TeardownCompleted) `
+        -ZeroResidue:([bool] $cleanup.ZeroResidue) `
+        -TerraformStateRemoved:([bool] $cleanup.StateRemoved) `
+        -NextRoundEligible:([bool] $cleanup.NextEligible) `
+        @Common
 }
 
 function Invoke-AzureValidationRound {
@@ -526,7 +1017,21 @@ function Invoke-AzureValidationRound {
             'AdmissionDenied',
             'ResidueRemains',
             'CaptureAttempted',
-            'CredentialExposed'
+            'CredentialExposed',
+            'CancelDuringCreate',
+            'CancelDuringReadiness',
+            'CancelDuringTransfer',
+            'CancelDuringExecution',
+            'CancelDuringRetrieval',
+            'CancelDuringTeardown',
+            'HostLoss',
+            'Expiry',
+            'CleanupReserve',
+            'PartialProvisioning',
+            'SharedSafetyFailure',
+            'IndependentRecovery',
+            'CleanupPending',
+            'LeaseBusy'
         )]
         [string] $Scenario,
         [Parameter(Mandatory)] [string] $PrivateWorkspacePath,
@@ -545,6 +1050,14 @@ function Invoke-AzureValidationRound {
         $facts = [pscustomobject]@{ Count = $null; Windows11ClaimingRoute = $false }
     }
 
+    $reserveMinutes = $null
+    try {
+        $reserveMinutes = [int] $Plan.round.cleanupReserveMinutes
+    }
+    catch {
+        $reserveMinutes = $null
+    }
+
     $common = @{
         ClientCount = $facts.Count
         Windows11ClaimingRoute = [bool] $facts.Windows11ClaimingRoute
@@ -553,6 +1066,23 @@ function Invoke-AzureValidationRound {
         HostPeeringAbsent = $false
         TagSweepEmpty = $false
         UnprotectedLocalMaterialAbsent = $false
+        CleanupMode = 'None'
+        Cancelled = $false
+        CancelPhase = 'None'
+        ExpiryReached = $false
+        CleanupReserveActive = $false
+        CleanupReserveMinutes = $reserveMinutes
+        NewTestsStopped = $false
+        EvidenceExportStopped = $false
+        ExclusiveLeaseHeld = $false
+        LiveTaggedVmCount = $null
+        ResultingTotalExceedsMaximum = $false
+        RecoveryIndependent = $false
+        UnresolvedTargetPreserved = $false
+        UnrelatedTargetPreserved = $false
+        CleanupPending = $false
+        OperationsRecordRetained = $false
+        DocumentedIncident = $false
     }
     $localAbsence = Get-AzureValidationRoundLocalAbsence `
         -PrivateWorkspacePath $PrivateWorkspacePath -Policy $policy
@@ -583,11 +1113,10 @@ function Invoke-AzureValidationRound {
             @common
     }
 
-    # This slice runs one Windows 11 claiming client. Admission still
-    # accepts one-to-four-client plans for later tickets. The threat is
-    # reporting a four-client or non-claiming diagnostic as this tracer.
-    # Safe failure is to stop after admission and create nothing.
-    if ($facts.Count -ne 1) {
+    # Offline admission already accepted one-to-four allowlisted clients.
+    # A plan with no claiming Windows 11 route still cannot become this
+    # tracer. Safe failure is to stop after admission and create nothing.
+    if ($null -eq $facts.Count -or [int] $facts.Count -lt 1) {
         return New-AzureValidationRoundOutcome -State Rejected `
             -ReasonCode 'VALIDATION.VM_COUNT_UNSAFE' `
             -Admitted:$true `
@@ -641,6 +1170,61 @@ function Invoke-AzureValidationRound {
     $common.AzureContacted = $azureContacted
     $common.PrivacyBoundary = $privacyBoundary
     $common.Admitted = $true
+    $common.DocumentedIncident = [bool] $Platform.DocumentedIncident
+    $common.CleanupPending = [bool] $Platform.CleanupPending
+    try {
+        $Platform.NowUtc = ConvertTo-AzureValidationDateTimeOffset -Value $Plan.tags.CreatedUtc
+    }
+    catch {
+    }
+
+    if ([bool] $Platform.IndependentRecovery -or $Scenario -eq 'IndependentRecovery') {
+        return Invoke-AzureValidationRoundRecovery -Platform $Platform `
+            -Policy $policy -PrivateWorkspacePath $PrivateWorkspacePath `
+            -Plan $Plan -Common $common
+    }
+
+    if ([bool] $Platform.CleanupPending) {
+        $common.CleanupMode = 'CleanupPending'
+        $common.OperationsRecordRetained = -not [bool] $Platform.DocumentedIncident
+        return New-AzureValidationRoundOutcome -State Rejected `
+            -ReasonCode 'VALIDATION.CLEANUP_PENDING' @common
+    }
+
+    if ([string] $Platform.CleanupMode -eq 'RoundCleanupMode') {
+        # Irreversible cleanup refuses to expand. Recover the leftover
+        # tokens instead of creating another client.
+        return Invoke-AzureValidationRoundRecovery -Platform $Platform `
+            -Policy $policy -PrivateWorkspacePath $PrivateWorkspacePath `
+            -Plan $Plan -Common $common
+    }
+
+    $acquiredLease = $false
+    if (-not [bool] $Platform.Probes['ExclusiveLease']) {
+        # A failed ExclusiveLease probe stays failed. Do not invent a hold.
+    }
+    elseif ([bool] $Platform.LeaseHeld) {
+        # One exclusive lease serializes admission. The threat is two
+        # maintainers recounting four live VMs at the same time and each
+        # admitting one more. Safe failure is LEASE_UNAVAILABLE.
+        $Platform.Probes['ExclusiveLease'] = $false
+    }
+    else {
+        $Platform.LeaseHeld = $true
+        $Platform.LeaseSerial = [int] $Platform.LeaseSerial + 1
+        $acquiredLease = $true
+        $common.ExclusiveLeaseHeld = $true
+    }
+
+    $liveCount = @($Platform.LiveTaggedVms).Count
+    $common.LiveTaggedVmCount = $liveCount
+    $requested = [int] $facts.Count
+    if (($liveCount + $requested) -gt [int] $policy.clients.maximum) {
+        # Recount under the lease. The threat is admitting a fifth live
+        # tagged validation VM because a prior round was still running.
+        $Platform.Probes['VmCount'] = $false
+        $common.ResultingTotalExceedsMaximum = $true
+    }
 
     if (-not [bool] $Platform.Probes['EmptyTransientScope']) {
         if ([bool] $Platform.CleanupFirstSucceeds) {
@@ -648,6 +1232,9 @@ function Invoke-AzureValidationRound {
             $Platform.Probes['EmptyTransientScope'] = $true
         }
         else {
+            if ($acquiredLease) {
+                $Platform.LeaseHeld = $false
+            }
             return New-AzureValidationRoundOutcome -State Rejected `
                 -ReasonCode 'VALIDATION.TRANSIENT_SCOPE_NOT_EMPTY' @common
         }
@@ -656,6 +1243,9 @@ function Invoke-AzureValidationRound {
 
     foreach ($probe in @($policy.admissionProbes)) {
         if (-not [bool] $Platform.Probes[$probe]) {
+            if ($acquiredLease) {
+                $Platform.LeaseHeld = $false
+            }
             $state = if ($probe -eq 'Identity') { 'Blocked' } else { 'Rejected' }
             if ($probe -eq 'Identity') {
                 $common.AzureContacted = $false
@@ -683,91 +1273,188 @@ function Invoke-AzureValidationRound {
     $assessmentExecuted = $false
     $sanitizedRetrieval = $false
     $assessmentFailed = $false
-    $teardownCompleted = $false
     $reason = 'VALIDATION.ZERO_RESIDUE_PROVEN'
+    $requestedCount = [int] $facts.Count
 
     try {
         # Create and the private recovery map are inside the same try as
         # guest work so a journal write failure still enters teardown.
-        Initialize-AzureValidationRoundResources -Platform $Platform
+        Initialize-AzureValidationRoundResources -Platform $Platform `
+            -ClientCount $requestedCount
         $created = $true
         Write-AzureValidationRoundRecovery -PrivateWorkspacePath $PrivateWorkspacePath `
             -Policy $policy -Platform $Platform
 
-        if ([bool] $Platform.PublicIp) {
+        if ($Scenario -eq 'Expiry') {
+            $Platform.NowUtc = (ConvertTo-AzureValidationDateTimeOffset `
+                -Value $Plan.tags.ExpiresUtc)
+        }
+        elseif ($Scenario -eq 'CleanupReserve') {
+            $Platform.NowUtc = (ConvertTo-AzureValidationDateTimeOffset `
+                -Value $Plan.tags.ExpiresUtc).AddMinutes(
+                -1 * [int] $Plan.round.cleanupReserveMinutes)
+        }
+
+        if ([string] $Platform.CancelAt -eq 'Create' -or [bool] $Platform.PartialProvisioning) {
+            Enter-AzureValidationRoundCleanupMode -Platform $Platform
+            if ([bool] $Platform.PartialProvisioning) {
+                $reason = 'VALIDATION.PARTIAL_PROVISIONING'
+            }
+            else {
+                $reason = 'VALIDATION.CANCELLED'
+                $common.Cancelled = $true
+                $common.CancelPhase = 'Create'
+            }
+        }
+        elseif ([bool] $Platform.HostLost) {
+            # Host loss drops local files. Cleanup continues from the
+            # Azure-resident recovery record, not from this process tree.
+            Enter-AzureValidationRoundCleanupMode -Platform $Platform
+            Remove-AzureValidationRoundLocalMaterial -PrivateWorkspacePath $PrivateWorkspacePath `
+                -Policy $policy -IncludingRecovery:$true
+            $common.RecoveryIndependent = $true
+            $reason = 'VALIDATION.HOST_LOST'
+        }
+        elseif ([bool] $Platform.SharedSafetyFailed) {
+            Enter-AzureValidationRoundCleanupMode -Platform $Platform
+            $reason = 'VALIDATION.SHARED_SAFETY_FAILED'
+        }
+        elseif ([bool] $Platform.PublicIp) {
+            Enter-AzureValidationRoundCleanupMode -Platform $Platform
             $publicIp = $true
             $reason = 'VALIDATION.PUBLIC_IP_PROHIBITED'
         }
         elseif ([bool] $Platform.Capture) {
+            Enter-AzureValidationRoundCleanupMode -Platform $Platform
             $captured = $true
             $fresh = $false
             $reason = 'VALIDATION.CLIENT_CAPTURE_PROHIBITED'
         }
-        elseif (-not [bool] $Platform.GuestReady) {
-            $reason = 'VALIDATION.GUEST_NOT_READY'
-        }
         else {
-            $guestReady = $true
-            $guestControl = 'VmAgentRunCommand'
-            foreach ($step in @(
-                @{ Operation = 'VerifyCandidate'; Flag = 'candidate' }
-                @{ Operation = 'VerifyPayload'; Flag = 'payload' }
-                @{ Operation = 'RunLocalOnly'; Flag = 'local' }
-                @{ Operation = 'RunApprovedEgress'; Flag = 'egress' }
-                @{ Operation = 'RunAssessment'; Flag = 'assessment' }
-                @{ Operation = 'RetrieveSanitized'; Flag = 'retrieve' }
-            )) {
-                $guest = Invoke-AzureValidationRoundGuest -Platform $Platform `
-                    -Operation ([string] $step.Operation)
-                if ([bool] $guest.CredentialOffered) {
-                    $credentialExposed = $true
-                    $reason = 'VALIDATION.BOOTSTRAP_CREDENTIAL_EXPOSED'
-                    break
+            $clock = Get-AzureValidationRoundClockState -Platform $Platform -Plan $Plan
+            if ([bool] $clock.ExpiryReached -or [bool] $clock.CleanupReserveActive) {
+                Enter-AzureValidationRoundCleanupMode -Platform $Platform
+                $common.ExpiryReached = [bool] $clock.ExpiryReached
+                $common.CleanupReserveActive = [bool] $clock.CleanupReserveActive
+                $reason = if ([bool] $clock.ExpiryReached) {
+                    'VALIDATION.EXPIRY_REACHED'
                 }
-                switch ([string] $step.Flag) {
-                    'candidate' {
-                        if (-not [bool] $guest.Ok) {
-                            $reason = 'VALIDATION.CANDIDATE_MISMATCH'
-                            break
-                        }
-                        $candidateVerified = $true
-                    }
-                    'payload' {
-                        if (-not [bool] $guest.Ok) {
-                            $reason = 'VALIDATION.PAYLOAD_MISMATCH'
-                            break
-                        }
-                        $payloadVerified = $true
-                    }
-                    'local' { $localOnlyChecked = $true }
-                    'egress' { $approvedEgressChecked = $true }
-                    'assessment' {
-                        $assessmentExecuted = $true
-                        if (-not [bool] $guest.Ok) {
-                            $assessmentFailed = $true
-                            $reason = 'VALIDATION.ASSESSMENT_FAILED'
-                        }
-                    }
-                    'retrieve' {
-                        if ($assessmentFailed) {
-                            $sanitizedRetrieval = $true
-                        }
-                        elseif (-not [bool] $guest.Ok) {
-                            $reason = 'VALIDATION.SANITIZED_RETRIEVAL_FAILED'
-                        }
-                        else {
-                            $sanitizedRetrieval = $true
-                        }
-                    }
-                }
-                if ($reason -in @(
-                    'VALIDATION.CANDIDATE_MISMATCH'
-                    'VALIDATION.PAYLOAD_MISMATCH'
-                    'VALIDATION.SANITIZED_RETRIEVAL_FAILED'
-                )) {
-                    break
+                else {
+                    'VALIDATION.CLEANUP_RESERVE_ACTIVE'
                 }
             }
+            elseif ([string] $Platform.CancelAt -eq 'Readiness') {
+                Enter-AzureValidationRoundCleanupMode -Platform $Platform
+                $reason = 'VALIDATION.CANCELLED'
+                $common.Cancelled = $true
+                $common.CancelPhase = 'Readiness'
+            }
+            elseif (-not [bool] $Platform.GuestReady) {
+                Enter-AzureValidationRoundCleanupMode -Platform $Platform
+                $reason = 'VALIDATION.GUEST_NOT_READY'
+            }
+            else {
+                $guestReady = $true
+                $guestControl = 'VmAgentRunCommand'
+                foreach ($step in @(
+                    @{ Operation = 'TransferPayload'; Flag = 'transfer'; Phase = 'Transfer' }
+                    @{ Operation = 'VerifyCandidate'; Flag = 'candidate'; Phase = 'Execution' }
+                    @{ Operation = 'VerifyPayload'; Flag = 'payload'; Phase = 'Execution' }
+                    @{ Operation = 'RunLocalOnly'; Flag = 'local'; Phase = 'Execution' }
+                    @{ Operation = 'RunApprovedEgress'; Flag = 'egress'; Phase = 'Execution' }
+                    @{ Operation = 'RunAssessment'; Flag = 'assessment'; Phase = 'Execution' }
+                    @{ Operation = 'RetrieveSanitized'; Flag = 'retrieve'; Phase = 'Retrieval' }
+                )) {
+                    $clock = Get-AzureValidationRoundClockState -Platform $Platform -Plan $Plan
+                    if ([bool] $clock.ExpiryReached -or [bool] $clock.CleanupReserveActive) {
+                        Enter-AzureValidationRoundCleanupMode -Platform $Platform
+                        $common.ExpiryReached = [bool] $clock.ExpiryReached
+                        $common.CleanupReserveActive = [bool] $clock.CleanupReserveActive
+                        $reason = if ([bool] $clock.ExpiryReached) {
+                            'VALIDATION.EXPIRY_REACHED'
+                        }
+                        else {
+                            'VALIDATION.CLEANUP_RESERVE_ACTIVE'
+                        }
+                        break
+                    }
+                    if (-not [bool] $Platform.NewTestsAllowed) {
+                        break
+                    }
+                    if ([string] $Platform.CancelAt -eq [string] $step.Phase) {
+                        Enter-AzureValidationRoundCleanupMode -Platform $Platform
+                        $reason = 'VALIDATION.CANCELLED'
+                        $common.Cancelled = $true
+                        $common.CancelPhase = [string] $step.Phase
+                        break
+                    }
+                    if ([string] $step.Flag -eq 'retrieve' -and
+                        -not [bool] $Platform.EvidenceExportAllowed) {
+                        break
+                    }
+
+                    $guest = Invoke-AzureValidationRoundGuest -Platform $Platform `
+                        -Operation ([string] $step.Operation)
+                    if ([bool] $guest.CredentialOffered) {
+                        Enter-AzureValidationRoundCleanupMode -Platform $Platform
+                        $credentialExposed = $true
+                        $reason = 'VALIDATION.BOOTSTRAP_CREDENTIAL_EXPOSED'
+                        break
+                    }
+                    switch ([string] $step.Flag) {
+                        'transfer' { }
+                        'candidate' {
+                            if (-not [bool] $guest.Ok) {
+                                $reason = 'VALIDATION.CANDIDATE_MISMATCH'
+                                break
+                            }
+                            $candidateVerified = $true
+                        }
+                        'payload' {
+                            if (-not [bool] $guest.Ok) {
+                                $reason = 'VALIDATION.PAYLOAD_MISMATCH'
+                                break
+                            }
+                            $payloadVerified = $true
+                        }
+                        'local' { $localOnlyChecked = $true }
+                        'egress' { $approvedEgressChecked = $true }
+                        'assessment' {
+                            $assessmentExecuted = $true
+                            if (-not [bool] $guest.Ok) {
+                                $assessmentFailed = $true
+                                $reason = 'VALIDATION.ASSESSMENT_FAILED'
+                            }
+                        }
+                        'retrieve' {
+                            if ($assessmentFailed) {
+                                $sanitizedRetrieval = $true
+                            }
+                            elseif (-not [bool] $guest.Ok) {
+                                $reason = 'VALIDATION.SANITIZED_RETRIEVAL_FAILED'
+                            }
+                            else {
+                                $sanitizedRetrieval = $true
+                            }
+                        }
+                    }
+                    if ($reason -in @(
+                        'VALIDATION.CANDIDATE_MISMATCH'
+                        'VALIDATION.PAYLOAD_MISMATCH'
+                        'VALIDATION.SANITIZED_RETRIEVAL_FAILED'
+                    )) {
+                        Enter-AzureValidationRoundCleanupMode -Platform $Platform
+                        break
+                    }
+                }
+            }
+        }
+
+        if ([string] $Platform.CancelAt -eq 'Teardown') {
+            Enter-AzureValidationRoundCleanupMode -Platform $Platform
+            $reason = 'VALIDATION.CANCELLED'
+            $common.Cancelled = $true
+            $common.CancelPhase = 'Teardown'
         }
     }
     catch {
@@ -777,6 +1464,7 @@ function Invoke-AzureValidationRound {
         if (-not $created) {
             throw
         }
+        Enter-AzureValidationRoundCleanupMode -Platform $Platform
         if ($reason -eq 'VALIDATION.ZERO_RESIDUE_PROVEN') {
             $reason = 'VALIDATION.GUEST_NOT_READY'
         }
@@ -787,60 +1475,36 @@ function Invoke-AzureValidationRound {
         # assumption is that destroy names only privately recorded tokens.
         # Safe failure is ResidueRemains, never Completed, and never a
         # throw that ApplicationMain would map to REQUEST_INVALID.
-        if ($created) {
-            try {
-                $teardownCompleted = [bool] (Invoke-AzureValidationRoundDestroy -Platform $Platform)
-            }
-            catch {
-                $teardownCompleted = $false
-            }
-            try {
-                Remove-AzureValidationRoundLocalMaterial -PrivateWorkspacePath $PrivateWorkspacePath `
-                    -Policy $policy
-            }
-            catch {
-            }
+        if ($acquiredLease) {
+            $Platform.LeaseHeld = $false
         }
     }
 
-    $absence = Get-AzureValidationRoundAbsence -Platform $Platform `
-        -PrivateWorkspacePath $PrivateWorkspacePath -Policy $policy
-    $azureAbsent = [bool] $absence.TransientEmpty -and
-        [bool] $absence.HostPeeringAbsent -and
-        [bool] $absence.ExactIdsAbsent -and
-        [bool] $absence.TransferRemoved -and
-        [bool] $absence.TagSweepEmpty -and
-        [bool] $absence.PersistentPresent
-
-    $stateRemoved = $false
-    $nextEligible = $false
-    $zeroResidue = $false
-    if ($azureAbsent) {
-        # State removal is the last privilege. The threat is deleting the
-        # only recovery map while a NIC or peering still exists. The
-        # mechanism is independent Azure absence first, then state and
-        # journal removal, then a local unprotected-material check. The
-        # trust assumption is that absence was rechecked, not inferred
-        # from a destroy exit code. Safe failure is to keep state.
-        $Platform.TerraformStatePresent = $false
-        Remove-AzureValidationRoundLocalMaterial -PrivateWorkspacePath $PrivateWorkspacePath `
-            -Policy $policy -IncludingRecovery:$true
-        $absence = Get-AzureValidationRoundAbsence -Platform $Platform `
-            -PrivateWorkspacePath $PrivateWorkspacePath -Policy $policy
-        $zeroResidue = [bool] $absence.TransientEmpty -and
-            [bool] $absence.HostPeeringAbsent -and
-            [bool] $absence.UnprotectedAbsent -and
-            [bool] $absence.RecoveryAbsent
-        if ($zeroResidue) {
-            $stateRemoved = $true
-            $nextEligible = $true
-        }
-        else {
-            $reason = 'VALIDATION.RESIDUE_REMAINS'
-        }
+    if ([string] $Platform.CleanupMode -eq 'RoundCleanupMode') {
+        $common.CleanupMode = 'RoundCleanupMode'
+        $common.NewTestsStopped = $true
+        $common.EvidenceExportStopped = $true
     }
-    else {
+
+    $cleanup = Complete-AzureValidationRoundCleanup -Platform $Platform `
+        -Policy $policy -PrivateWorkspacePath $PrivateWorkspacePath
+    $teardownCompleted = [bool] $cleanup.TeardownCompleted
+    $zeroResidue = [bool] $cleanup.ZeroResidue
+    $stateRemoved = [bool] $cleanup.StateRemoved
+    $nextEligible = [bool] $cleanup.NextEligible
+    $absence = $cleanup.Absence
+    $common.UnresolvedTargetPreserved = [bool] $cleanup.UnresolvedPreserved
+    $common.UnrelatedTargetPreserved = [bool] $cleanup.UnrelatedPreserved
+    $common.CleanupPending = [bool] $cleanup.CleanupPending
+    $common.OperationsRecordRetained = [bool] $cleanup.OperationsRecordRetained
+    $common.DocumentedIncident = [bool] $cleanup.DocumentedIncident
+    if (-not $zeroResidue) {
         $reason = 'VALIDATION.RESIDUE_REMAINS'
+        $common.CleanupMode = 'CleanupPending'
+    }
+    elseif ($reason -eq 'VALIDATION.ZERO_RESIDUE_PROVEN' -and
+        [string] $cleanup.Reason -eq 'VALIDATION.ZERO_RESIDUE_PROVEN') {
+        $reason = 'VALIDATION.ZERO_RESIDUE_PROVEN'
     }
 
     $state = if (-not $zeroResidue) {
