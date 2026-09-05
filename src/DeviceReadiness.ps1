@@ -2319,7 +2319,7 @@ function Invoke-DeviceReadinessSlice {
         $certificateRequested=[bool]$sliceSelection.certificateRequested
         $connectivityRequested=[bool]$sliceSelection.connectivityRequested
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
-        if($identityRequested -and (Test-AssessmentCollectionStage -Stage identity)){
+        if($identityRequested -and (Enter-AssessmentCollectionStageIfActive -Stage identity)){
             $sliceStage='IDENTITY'
             $identityCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-IdentityEnrollmentCollection -Policy $identityPolicy `
@@ -2328,7 +2328,7 @@ function Invoke-DeviceReadinessSlice {
             $processRelationship=[string]$identityCollector.processRelationship
             $collectionStarted=$true
         }
-        if($resourceRequested -and (Test-AssessmentCollectionStage -Stage resource)){
+        if($resourceRequested -and (Enter-AssessmentCollectionStageIfActive -Stage resource)){
             $sliceStage='RESOURCE_DEPENDENCIES'
             $resourceCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-ResourceDependenciesCollection -Policy $resourcePolicy `
@@ -2346,7 +2346,7 @@ function Invoke-DeviceReadinessSlice {
                 );$exception.Data['ReasonCode']='RESOURCE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception
             }
         }
-        if($networkRequested -and (Test-AssessmentCollectionStage -Stage network)){
+        if($networkRequested -and (Enter-AssessmentCollectionStageIfActive -Stage network)){
             $sliceStage='NETWORK_TOPOLOGY'
             $networkCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-NetworkTopologyCollection -Policy $networkPolicy `
@@ -2360,7 +2360,7 @@ function Invoke-DeviceReadinessSlice {
             $collectionStarted=$true
             if(-not [bool]$networkCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Network Topology worker cleanup was not verified.');$exception.Data['ReasonCode']='NETWORK.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
         }
-        if($softwareRequested -and (Test-AssessmentCollectionStage -Stage software)){
+        if($softwareRequested -and (Enter-AssessmentCollectionStageIfActive -Stage software)){
             $sliceStage='SOFTWARE_INVENTORY'
             $softwareCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-SoftwareInventoryCollection -Policy $softwarePolicy -ValidationScenario $softwareScenario
@@ -2371,7 +2371,7 @@ function Invoke-DeviceReadinessSlice {
             $collectionStarted=$true
             if(-not [bool]$softwareCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Software Inventory worker cleanup was not verified.');$exception.Data['ReasonCode']='SOFTWARE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
         }
-        if($certificateRequested -and (Test-AssessmentCollectionStage -Stage certificate)){
+        if($certificateRequested -and (Enter-AssessmentCollectionStageIfActive -Stage certificate)){
             $sliceStage='CERTIFICATE_TRUST'
             $certificateCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-CertificateTrustCollection -Policy $certificatePolicy -ValidationScenario $certificateScenario
@@ -2382,7 +2382,7 @@ function Invoke-DeviceReadinessSlice {
             $collectionStarted=$true
             if(-not [bool]$certificateCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Certificate Trust cleanup was not verified.');$exception.Data['ReasonCode']='CERTIFICATE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
         }
-        if($connectivityRequested -and (Test-AssessmentCollectionStage -Stage connectivity)){
+        if($connectivityRequested -and (Enter-AssessmentCollectionStageIfActive -Stage connectivity)){
             $sliceStage='MICROSOFT_CONNECTIVITY'
             $connectivityCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-MicrosoftConnectivityCollection -Policy $connectivityPolicy `
@@ -2400,7 +2400,7 @@ function Invoke-DeviceReadinessSlice {
             }
         }
         $sliceStage='PRIVILEGE'
-        if (($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) -and (Test-AssessmentCollectionStage -Stage Privilege)) {
+        if (($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) -and (Enter-AssessmentCollectionStageIfActive -Stage Privilege)) {
             $privilegeResult = Invoke-PrivilegedCollectionPlan `
                 -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
                 -AssessmentUserContext 'subject:assessment-user:primary' `
@@ -2431,7 +2431,7 @@ function Invoke-DeviceReadinessSlice {
                 if ($privilegeResult.PSObject.Properties['PrivateFirmwareCollectorResult']) {
                     $firmwareCollector = $privilegeResult.PrivateFirmwareCollectorResult
                 }
-                elseif ($privilegeResult.state -eq 'Unavailable') {
+                elseif ($privilegeResult.state -in @('Unavailable','Cancelled')) {
                     $firmwareCollector = New-FirmwareReadinessPrivilegeGapResult `
                         -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
                 }
@@ -2450,7 +2450,7 @@ function Invoke-DeviceReadinessSlice {
             if($administratorRequested){
                 if($privilegeResult.PSObject.Properties['PrivateAdministratorCollectorResult']){
                     $administratorCollector=$privilegeResult.PrivateAdministratorCollectorResult
-                }elseif($privilegeResult.state -eq 'Unavailable'){
+                }elseif($privilegeResult.state -in @('Unavailable','Cancelled')){
                     $administratorCollector=New-AdministratorExposurePrivilegeGapResult `
                         -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
                 }else{
@@ -2465,7 +2465,7 @@ function Invoke-DeviceReadinessSlice {
             if($effectivePolicyRequested){
                 if($privilegeResult.PSObject.Properties['PrivateEffectivePolicyCollectorResult']){
                     $effectivePolicyCollector=$privilegeResult.PrivateEffectivePolicyCollectorResult
-                }elseif($privilegeResult.state -eq 'Unavailable'){
+                }elseif($privilegeResult.state -in @('Unavailable','Cancelled')){
                     $effectivePolicyCollector=New-EffectivePolicyPrivilegeGapResult `
                         -PrivilegeResult $privilegeResult -Policy $effectivePolicy `
                         -ValidationFixture $isFixture
@@ -2477,7 +2477,7 @@ function Invoke-DeviceReadinessSlice {
                 }
             }
         }
-        if($identityRequested -and (Test-AssessmentCollectionStage -Stage identity)){
+        if($identityRequested -and (Enter-AssessmentCollectionStageIfActive -Stage identity)){
             $sliceStage='SYSTEM_IDENTITY'
             $systemPlanResult=New-SystemCollectionPlan -PreparationPlan $PreparationPlan `
                 -PreparationPlanDigest $PlanDigest

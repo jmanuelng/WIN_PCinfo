@@ -1647,7 +1647,7 @@ function Enter-AssessmentCollectionStage {
         -ConvertToJsonCommand (Get-Command ConvertTo-Json -CommandType Cmdlet)
 }
 
-function Test-AssessmentCollectionStage {
+function Enter-AssessmentCollectionStageIfActive {
     param([Parameter(Mandatory)] [string] $Stage)
     if ((Get-AssessmentCancellationToken).IsCancellationRequested) { return $false }
     Enter-AssessmentCollectionStage -Stage $Stage

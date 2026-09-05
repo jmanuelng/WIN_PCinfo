@@ -1,5 +1,6 @@
 [CmdletBinding()]
-param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Wpf, [switch] $HoldRunLock)
+param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
+    [switch] $Wpf, [switch] $HoldRunLock)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -37,12 +38,13 @@ function Invoke-MicrosoftConnectivityCollection { param($Policy, [switch]$Live, 
     Invoke-ControlledMicrosoftConnectivityCollection -Policy $Policy -ValidationScenario LocalOnly -NetworkBehavior LocalOnly }
 function Invoke-PrivilegedCollectionPlan { param($PreparationPlan, $PlanDigest, $AssessmentUserContext,
     $AssessmentUserSid, $LocalPackageProtector, $ValidationScenario, $FirmwareScenario,
-    $AdministratorScenario, $EffectivePolicyScenario)
+    $AdministratorScenario, $EffectivePolicyScenario, $CancellationToken)
     Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
         -AssessmentUserContext $AssessmentUserContext -AssessmentUserSid 'S-1-5-21-100-200-300-1001' `
         -LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation `
-        -FirmwareScenario Supported -AdministratorScenario LocalPrincipal -EffectivePolicyScenario Workgroup }
+        -FirmwareScenario Supported -AdministratorScenario LocalPrincipal -EffectivePolicyScenario Workgroup -CancellationToken $CancellationToken }
 function Invoke-SystemCollectionPlan { param($Plan, $PlanDigest, $ValidationScenario)
+    $script:StatusDeskTransport.State.SystemInvoked=$true
     Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess }
 function Invoke-ApprovedCollectorProcess { param($OperationId, $DeviceReadinessScenario, $CancellationToken)
     Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -DeviceReadinessScenario Complete -CancellationToken $CancellationToken }
@@ -54,6 +56,12 @@ if ($CancelAfterIdentity) {
 if ($CancelAfterResource) {
     $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty }',
         'Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty; $script:StatusDeskTransport.Cancellation.Cancel() }')
+}
+if ($CancelDuringPrivilege) {
+    $moduleText = $moduleText.Replace('Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
+        '$script:StatusDeskTransport.Cancellation.CancelAfter(1500); Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
+    $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
+        '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
 }
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 $request = Get-AutomationRequest -LiteralPath (Join-Path $PSScriptRoot 'fixtures/automation-request.json') `
@@ -88,8 +96,13 @@ try {
         $uiWatch = [Diagnostics.Stopwatch]::StartNew()
         $reportCloser.Add_Tick({
             if ($null -ne $uiState.Window -and $uiState.Window.OwnedWindows.Count -gt 0) {
-                $uiState.ReportObserved=$true
-                $uiState.Window.OwnedWindows[0].Close()
+                $reportWindow=$uiState.Window.OwnedWindows[0]
+                $document=$reportWindow.Content.Document
+                if ($null -ne $document -and $null -ne $document.body -and
+                    [string]$document.body.innerText -like '*WIN-PCInfo Comprehensive Local Assessment*') {
+                    $uiState.ReportObserved=$true
+                    $reportWindow.Close()
+                }
             }
             if ($uiWatch.Elapsed.TotalSeconds -gt 90 -and $null -ne $uiState.Window) {
                 $uiState.Failure='WPF test exceeded its deadline.'
@@ -103,11 +116,7 @@ try {
                 $uiState.Clicked=$true
                 $window.FindName('Approve').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
             }
-            if ($window.OwnedWindows.Count -gt 0) {
-                $uiState.ReportObserved=$true
-                $window.OwnedWindows[0].Close()
-            }
-            elseif ($window.FindName('OpenReport').IsEnabled -and -not $uiState.ReportClicked) {
+            if ($window.FindName('OpenReport').IsEnabled -and -not $uiState.ReportClicked) {
                 $uiState.ReportClicked=$true
                 $window.FindName('OpenReport').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
             }
@@ -147,7 +156,7 @@ try {
         Assert-Equal $false $terminal.collectionStarted 'lock contention starts no collector'
         return
     }
-    Assert-Equal $(if($CancelAfterIdentity -or $CancelAfterResource){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
+    Assert-Equal $(if($CancelAfterIdentity -or $CancelAfterResource -or $CancelDuringPrivilege){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
     Assert-Equal $true $terminal.collectionStarted 'ordinary collection actually executed'
     Assert-Equal $preparation.planDigest $terminal.planDigest 'approval and terminal bind the same frozen plan'
     $summary = $session.Transport.State.Completion | ConvertFrom-Json
@@ -159,6 +168,13 @@ try {
     Assert-Equal $true (@($record.observations).Count -gt 0) 'real engine carries controlled source observations'
     Assert-Equal $true (@($record.findings).Count -gt 0) 'rules derive evidence-linked advisory interpretation'
     Assert-Equal $true (@($record.recommendations).Count -gt 0) 'report retains useful follow-up'
+    if ($CancelDuringPrivilege) {
+        Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'privileged cancellation schedules no later SYSTEM worker'
+        Assert-Equal $true (@($record.coverage | Where-Object state -eq Cancelled).Count -ge 4) 'stopped prerequisites stay explicitly Cancelled'
+        $policyFinding=@($record.findings | Where-Object ruleId -eq 'rule:cross-domain.policy-modernization/1.0.0')[0]
+        Assert-Equal 'Indeterminate' $policyFinding.outcome 'uncollected policy evidence never becomes a successful negative'
+        Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
+    }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
     if (-not ($CancelAfterIdentity -or $CancelAfterResource)) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `

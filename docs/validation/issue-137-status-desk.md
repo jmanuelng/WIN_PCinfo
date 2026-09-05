@@ -75,7 +75,7 @@ Recorded red cases:
   the shared lock; its test cleanup now releases only a lock actually acquired.
   The isolated test proves a held lock refuses collection.
 
-All 13 initial focused files passed in fresh installed PowerShell Core 7.6.5 x64
+All 13 initial focused files passed in **172.69 seconds** in fresh installed PowerShell Core 7.6.5 x64
 processes using `-NoLogo -NoProfile -File tests/<name>.Tests.ps1`:
 StatusDesk, StatusDeskWpf, StatusDeskCancellation, PreparationSummary,
 DeviceReadinessApplication, FirmwareReadinessContract,
@@ -85,6 +85,19 @@ SoftwareInventoryNativeSource and CertificateTrustNativeSource.
 StatusDeskLock separately passed. WPF uses the same installed executable with STA.
 The affected StatusDesk/WPF checks are refreshed after final adapter corrections.
 Changed PowerShell parser and `git diff --check` gates pass.
+
+The first independent reviews examined `56f40ab7...e56642e`. Standards found no
+hard violations and one low-priority naming judgment: the scheduling predicate
+also entered a stage. It is now named `Enter-AssessmentCollectionStageIfActive`.
+Spec found one actionable gap: cancellation inside the active privileged worker
+threw before protecting earlier source envelopes. A new controlled native
+privileged-worker cancellation test reproduced Cancelled with no package. The
+verified stopped worker now contributes Cancelled prerequisite coverage and
+continues safe partial finalization. Its wider partial record exposed a null
+cross-domain policy evidence-reference list; the renderer's canonical finding
+constructor now preserves an empty array. No evidence or successful negative is
+invented. The strengthened WPF check requires the actual HTML DOM/headline to load,
+then closes the owned report and verifies plaintext cleanup.
 
 The full integrated gate is intentionally scheduled after the required reviews,
 per the maintainer's latest cadence. The earlier pre-#136 full pass remains
