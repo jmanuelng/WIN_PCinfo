@@ -536,6 +536,14 @@ function New-RecipientProfileSetup {
     $profilePublished = $false
     $cleanupVerified = $true
     try {
+        # A repeat must not mint another persistent identity just to discover
+        # that its profile cannot be published. Keep the writer's independent
+        # create-new check as well, since the destination may change afterward.
+        $destination = [System.IO.Path]::GetFullPath($OutputPath)
+        if (-not [System.IO.Directory]::Exists([System.IO.Path]::GetDirectoryName($destination)) -or
+            [System.IO.File]::Exists($destination) -or [System.IO.Directory]::Exists($destination)) {
+            throw 'Recipient setup requires an unused profile destination.'
+        }
         $created = if ($null -ne $SyntheticCreatedCertificate) {
             $SyntheticCreatedCertificate.protectionLevel = $SyntheticProtectionLevel
             $SyntheticCreatedCertificate

@@ -12,6 +12,11 @@ Do not post a real Recipient Profile or fingerprint to an issue, Discussion, CI 
 
 ## Create a Recipient Profile in the separate consultant workflow
 
+For the approved personal test identities, first follow the
+[repeat-safe certificate and signing procedure](personal-evaluation-certificates.md).
+An existing profile destination is rejected before creating another identity.
+Reconcile interrupted setup with its private ownership inventory before retrying.
+
 Run this only as the Windows user who will receive packages. Choose a new file path in an existing local directory, read the whole command, and deliberately include `-ConfirmRecipientSetup`:
 
 ```powershell
