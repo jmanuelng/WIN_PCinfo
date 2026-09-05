@@ -38,6 +38,12 @@ review fixed point: `6cecce6834a8e6ad3e916c9c3b1ba971d0b58aa5`.
   negative test. This is neither a product failure nor a passing gate. Earlier
   AdministratorExposure and AttestedPreview groups passed. The owned session
   was confirmed terminated before review corrections began.
+- Corrected-code full gate attempt: exit 1 after 217.44 seconds at the build
+  manifest regression, whose expected resource list omitted the two new launcher
+  inputs. All preceding Azure groups passed. The owning-slice repair updates the
+  expected manifest with both literal source paths; it changes no product bytes.
+  Focused BuildDeterminism and PortableDistribution checks pass, confirming exact
+  source provenance, complete inventory and unchanged deterministic identities.
 - Final full gate: pending `pwsh.exe -NoLogo -NoProfile -File ./tests/Run-Tests.ps1` using
   the explicitly selected installed PowerShell Core 7.6.5 executable on Windows.
   Final result, elapsed time and candidate identities will be recorded below.
@@ -49,8 +55,9 @@ judgment call, **Duplicated Code**, in portable script encoding. The separate
 encoding implementations disagreed about BOM presence and removed `@ec` from
 the packaged CMD. The correction consolidates normalization/encoding with an
 explicit BOM option. A regression executing packaged CMD Help reproduced the
-shell error, then passed with the complete generated application. Affected
-correction review is pending.
+shell error, then passed with the complete generated application. Independent
+affected review of `56c02a1...551d9e5`: resolved, no new hard violations or
+actionable smells. This review was read-only and did not run tests.
 
 ## Spec review
 
@@ -70,7 +77,11 @@ Initial independent review of `56c02a1`: three findings; no scope creep.
    tested rejection retains its specific portable reason; a later real host
    reaches `RUNTIME.ELIGIBLE` without collection.
 
-Focused regressions pass; affected correction review is pending.
+Focused regressions pass. Independent affected review of `56c02a1...551d9e5`:
+all three findings resolved, no new missing requirements, incorrect behavior or
+scope creep. The encoding correction's actual packaged CMD-to-application Help
+test supplies generated-artifact evidence. This review was read-only and did not
+run tests; final full-suite and live acceptance remain separate gates.
 
 ## Artifact and live disposition
 

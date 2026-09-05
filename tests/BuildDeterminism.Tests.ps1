@@ -81,6 +81,8 @@ $expectedApplicationResourcePaths = @($expectedSourcePaths) + @(
     'build/AttestedPreview.ps1'
     'build/Attest-Preview.ps1'
     'build/Start-WIN-PCInfo.ps1'
+    'build/RuntimeHost.ps1'
+    'build/Start-WIN-PCInfo.cmd'
     'schemas/assessment-run-request.schema.json'
     'schemas/preparation-plan.schema.json'
     'schemas/assessment-record.schema.json'
