@@ -28,11 +28,29 @@ Assert-Equal 20 $result.ExitCode 'unavailable GUI remains a visible NotStarted b
 Assert-Equal 'GUI.ADAPTER_UNAVAILABLE' $result.ReasonCode 'the next owning slice is explicit'
 
 $mustNotLaunch = { throw 'Unexpected application launch at a rejected boundary.' }
+$originalOutput = [Console]::Out
+$capturedOutput = [IO.StringWriter]::new()
+try {
+    [Console]::SetOut($capturedOutput)
+    $terminalExit = Write-WinPCInfoLaunchResult -Gui -ShowGuidance { param($Text) } -Result ([pscustomobject]@{
+        ExitCode = 50; ReasonCode = ''; StandardError = ''
+        StandardOutput = '{"recordType":"win-pcinfo.terminal","outcome":"CleanupIncomplete","exitCode":50,"reasonCode":"CLEANUP.INCOMPLETE","collectionStarted":true,"cleanup":{"verified":false}}'
+    })
+}
+finally { [Console]::SetOut($originalOutput) }
+$preserved = @($capturedOutput.ToString().Trim() -split "`r?`n" | ConvertFrom-Json)
+$capturedOutput.Dispose()
+Assert-Equal 1 $preserved.Count 'GUI failure must emit exactly one existing terminal'
+Assert-Equal 'CleanupIncomplete' $preserved[0].outcome 'GUI guidance cannot rewrite the outcome'
+Assert-Equal $true $preserved[0].collectionStarted 'GUI guidance cannot deny prior collection'
+Assert-Equal $false $preserved[0].cleanup.verified 'GUI guidance cannot invent cleanup success'
+Assert-Equal 50 $terminalExit 'GUI preserves the application exit code'
+$result = Invoke-WinPCInfoPortableEntry -ApplicationPath $application -Gui `
+    -CandidatePaths @($hostPath) -ReadSignature $validSignature `
+    -Probe { [pscustomobject]@{ Eligible = $false; ReasonCode = 'LAUNCH.POLICY_REJECTED' } } -Launch $mustNotLaunch
+Assert-Equal 'LAUNCH.POLICY_REJECTED' $result.ReasonCode 'policy-blocked runtime probing is not missing installation'
 foreach ($case in @(
     @{ Name = 'absent'; Paths = @(); Signature = $validSignature; Reason = 'RUNTIME.HOST_MISSING' }
-    @{ Name = 'prerelease'; Paths = @('C:\synthetic\preview\pwsh.exe'); Signature = $validSignature; Reason = 'RUNTIME.HOST_MISSING' }
-    @{ Name = 'incompatible'; Paths = @('C:\synthetic\incompatible\pwsh.exe'); Signature = $validSignature; Reason = 'RUNTIME.HOST_MISSING' }
-    @{ Name = 'rejected'; Paths = @('C:\synthetic\rejected\pwsh.exe'); Signature = $validSignature; Reason = 'RUNTIME.HOST_MISSING' }
     @{ Name = 'signature'; Paths = @($hostPath); Signature = { [pscustomobject]@{ Status = 'HashMismatch' } }; Reason = 'LAUNCH.SIGNATURE_INVALID' }
 )) {
     $result = Invoke-WinPCInfoPortableEntry -ApplicationPath $application -Gui `
@@ -73,6 +91,25 @@ $runtimeOnly = Invoke-GeneratedApplication -PowerShellPath $hostPath -CandidateP
 Assert-Equal 0 $runtimeOnly.ExitCode 'runtime probe cannot load a fixture or accept preparation'
 Assert-Equal 'RUNTIME.ELIGIBLE' $runtimeOnly.Records[-1].reasonCode 'the generated policy passes on the real installed host'
 Assert-Equal $false $runtimeOnly.Records[-1].collectionStarted 'runtime probe has no assessment authority'
+
+$cmdProcess = [Diagnostics.Process]::new()
+$cmdProcess.StartInfo = [Diagnostics.ProcessStartInfo]::new()
+$cmdProcess.StartInfo.FileName = Join-Path $env:WINDIR 'System32/cmd.exe'
+$cmdProcess.StartInfo.Arguments = '/d /c ""' + (Join-Path $packageRoot 'Start-WIN-PCInfo.cmd') + '" -Workflow Help"'
+$cmdProcess.StartInfo.UseShellExecute = $false
+$cmdProcess.StartInfo.RedirectStandardOutput = $true
+$cmdProcess.StartInfo.RedirectStandardError = $true
+try {
+    $null = $cmdProcess.Start()
+    $cmdOut = $cmdProcess.StandardOutput.ReadToEndAsync()
+    $cmdError = $cmdProcess.StandardError.ReadToEndAsync()
+    $cmdProcess.WaitForExit()
+    Assert-Equal '' $cmdError.GetAwaiter().GetResult() 'the generated double-click entry executes without shell errors'
+    Assert-Equal 0 $cmdProcess.ExitCode 'explicit passive Help preserves its successful exit through CMD'
+    $cmdRecords = @($cmdOut.GetAwaiter().GetResult().Trim() -split "`r?`n" | ConvertFrom-Json)
+    Assert-Equal 'HELP.DISCOVERY_COMPLETE' $cmdRecords[-1].reasonCode 'CMD reaches the real generated application'
+}
+finally { $cmdProcess.Dispose() }
 
 # Remove only this test's newly created extraction, after resolving ownership.
 $ownedRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar

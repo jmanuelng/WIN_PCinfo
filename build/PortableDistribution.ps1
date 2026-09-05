@@ -9,14 +9,12 @@ function Get-PortableDistributionSha256 {
     }
 }
 
-function ConvertTo-Utf8BomCrlfBytes {
-    param([Parameter(Mandatory)] [string] $LiteralPath)
-
-    $text = [System.IO.File]::ReadAllText($LiteralPath)
-    $normalized = ($text -replace "`r`n", "`n" -replace "`r", "`n").TrimEnd("`n") + "`n"
+function ConvertTo-PortableScriptBytes {
+    param([Parameter(Mandatory)] [string] $Text, [switch] $IncludeBom)
+    $normalized = ($Text -replace "`r`n", "`n" -replace "`r", "`n").TrimEnd("`n") + "`n"
     $crlf = $normalized -replace "`n", "`r`n"
-    $utf8Bom = [System.Text.UTF8Encoding]::new($true)
-    $utf8Bom.GetBytes($crlf)
+    $encoding = [System.Text.UTF8Encoding]::new([bool] $IncludeBom)
+    [byte[]] ($encoding.GetPreamble() + $encoding.GetBytes($crlf))
 }
 
 function ConvertTo-DeterministicJsonBytes {
@@ -323,13 +321,10 @@ function Get-PortableGoverningResources {
     $helperSource = Join-Path $RepositoryRoot (($Policy.helperSourcePath -split '/') -join [System.IO.Path]::DirectorySeparatorChar)
     $hostSource = [IO.File]::ReadAllText((Join-Path $RepositoryRoot 'build/RuntimeHost.ps1'))
     $helperText = [IO.File]::ReadAllText($helperSource).Replace('# __RUNTIME_HOST_FUNCTIONS__', $hostSource)
-    $helperText = ($helperText -replace "`r`n", "`n" -replace "`r", "`n") -replace "`n", "`r`n"
-    $helperBytes = [byte[]] (@(0xEF, 0xBB, 0xBF) + [Text.UTF8Encoding]::new($false).GetBytes($helperText))
+    $helperBytes = ConvertTo-PortableScriptBytes -Text $helperText -IncludeBom
     $helperDigest = Get-PortableDistributionSha256 -Bytes $helperBytes
     $null = $resources.Add((New-PortableFileRecord -Path $Policy.helperPackagePath -Class 'helper' -Bytes $helperBytes))
-    $entryBytes = ConvertTo-Utf8BomCrlfBytes -LiteralPath (Join-Path $RepositoryRoot 'build/Start-WIN-PCInfo.cmd')
-    # cmd.exe does not accept a UTF-8 BOM before its first command.
-    $entryBytes = [byte[]] $entryBytes[3..($entryBytes.Length - 1)]
+    $entryBytes = ConvertTo-PortableScriptBytes -Text ([IO.File]::ReadAllText((Join-Path $RepositoryRoot 'build/Start-WIN-PCInfo.cmd')))
     $null = $resources.Add((New-PortableFileRecord -Path 'Start-WIN-PCInfo.cmd' -Class 'helper' -Bytes $entryBytes))
 
     $firstRunSource = Join-Path $RepositoryRoot (($Policy.firstRunSourcePath -split '/') -join [System.IO.Path]::DirectorySeparatorChar)

@@ -33,17 +33,44 @@ review fixed point: `6cecce6834a8e6ad3e916c9c3b1ba971d0b58aa5`.
   packaged Help now completes with exit 0. Full portable package authentication,
   Windows PowerShell rejection and guided/automation parity focused checks pass.
 - PowerShell parser check and `git diff --check`: Pass.
-- Full gate: running `pwsh.exe -NoLogo -NoProfile -File ./tests/Run-Tests.ps1` using
+- Initial full gate: environment/sandbox denial, exit 1 after 180.84 seconds,
+  when AzureValidationAdmission attempted its existing synthetic public-workspace
+  negative test. This is neither a product failure nor a passing gate. Earlier
+  AdministratorExposure and AttestedPreview groups passed. The owned session
+  was confirmed terminated before review corrections began.
+- Final full gate: pending `pwsh.exe -NoLogo -NoProfile -File ./tests/Run-Tests.ps1` using
   the explicitly selected installed PowerShell Core 7.6.5 executable on Windows.
   Final result, elapsed time and candidate identities will be recorded below.
 
 ## Standards review
 
-Pending independent review of the committed diff from the fixed point.
+Initial independent review of `56c02a1`: no established hard violations; one
+judgment call, **Duplicated Code**, in portable script encoding. The separate
+encoding implementations disagreed about BOM presence and removed `@ec` from
+the packaged CMD. The correction consolidates normalization/encoding with an
+explicit BOM option. A regression executing packaged CMD Help reproduced the
+shell error, then passed with the complete generated application. Affected
+correction review is pending.
 
 ## Spec review
 
-Pending independent review against issue #135 and relevant inherited contracts.
+Initial independent review of `56c02a1`: three findings; no scope creep.
+
+1. Probe policy failures became missing runtime. The correction carries typed
+   policy rejection through candidate selection and portable guidance. Red
+   observed `RUNTIME.HOST_MISSING`; green preserves `LAUNCH.POLICY_REJECTED`.
+2. GUI rejection duplicated and rewrote the terminal. The correction preserves
+   the existing terminal and displays guidance separately. Regression evidence
+   retains one CleanupIncomplete terminal, exit 50, collection started and
+   cleanup unverified; guidance cannot invent a safe terminal.
+3. Named candidate cases shared one unconditional rejection. Those placeholders
+   were replaced by ten distinct real generated-application runtime negatives
+   at the synthetic process boundary, plus executable signature rejection,
+   policy-process rejection and actual later eligible-host execution. Every
+   tested rejection retains its specific portable reason; a later real host
+   reaches `RUNTIME.ELIGIBLE` without collection.
+
+Focused regressions pass; affected correction review is pending.
 
 ## Artifact and live disposition
 
