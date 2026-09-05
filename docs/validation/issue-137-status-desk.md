@@ -5,8 +5,8 @@ Scope: [#137](https://github.com/jmanuelng/WIN_PCinfo/issues/137), under
 [#37](https://github.com/jmanuelng/WIN_PCinfo/issues/37). Fixed review/start revision:
 `56f40ab7fb9e3ab4262c8799e019e4c4b80ad3a1`.
 
-Status: implementation and focused synthetic validation complete; independent
-reviews and integrated full-suite checkpoint are pending at this revision.
+Status: implementation, focused synthetic validation, independent reviews and the
+combined **132-file integrated regression gate pass** on the final governed inputs.
 Real signing, trust, device collection and signed GUI-to-HTML acceptance remain
 **Pending #160**. September 6 remains the private handoff target; this automated
 slice does not establish that handoff or reset its deadline.
@@ -89,7 +89,7 @@ ComprehensiveReportApplication, NetworkTopologyNativeSource,
 SoftwareInventoryNativeSource and CertificateTrustNativeSource.
 StatusDeskLock separately passed. WPF uses the same installed executable with STA.
 The affected StatusDesk/WPF checks are refreshed after final adapter corrections.
-Changed PowerShell parser and `git diff --check` gates pass.
+All 24 changed PowerShell files pass the parser, and `git diff --check` passes.
 
 The first independent reviews examined `56f40ab7...e56642e`. Standards found no
 hard violations and one low-priority naming judgment: the scheduling predicate
@@ -104,9 +104,76 @@ constructor now preserves an empty array. No evidence or successful negative is
 invented. The strengthened WPF check requires the actual HTML DOM/headline to load,
 then closes the owned report and verifies plaintext cleanup.
 
-The full integrated gate is intentionally scheduled after the required reviews,
-per the maintainer's latest cadence. The earlier pre-#136 full pass remains
-historical and is not validation of these changed bytes.
+## Independent review
+
+Standards: zero remaining hard violations or actionable judgments. The initial
+naming judgment is resolved. Spec: zero remaining actionable findings; the active
+privileged-worker cancellation gap is resolved. Both independent reviewers
+rechecked the affected cancellation, exact generated-entry callback, first-run
+documentation and explicit build-source expectation corrections. No duplicate
+review layer or tests were run by the reviewers.
+
+## Integrated checkpoint and candidate
+
+Final implementation/test revision:
+`ce05fbda65a1701c7d0eab433493d905ab997c4e`. The local DCO commits are
+`e56642e` (production path), `ab1460c` (active privileged cancellation), `59accb5`
+(generated callback scope), `53a9e49` (first-run documentation) and `ce05fbd`
+(exact source-provenance expectation). A later evidence-only commit records the
+completed gate without changing governed candidate inputs.
+
+The initial full-suite command was installed `pwsh -NoLogo -NoProfile -File
+tests/Run-Tests.ps1`. It stopped after **211.64 seconds**, exit 1, at
+`BuildDeterminism.Tests.ps1`: the explicit expected source set omitted the new
+Status desk module. Adding that source retained the exact source-set equality and
+all per-resource hash assertions. Its focused rerun passed, including LF/CRLF
+mirror builds and relocated generated-app checks.
+
+Two governed first-run pages still said the GUI was unavailable and were corrected
+during the early initial run. Their final write times were **21:48:36.5408122 UTC**
+and **21:48:37.5683804 UTC** on September 5. The immediate log observation and
+subsequent observations through 21:49 showed only `AdministratorExposure.Tests`
+completed and `AdministratorExposureApplication.Tests` running. Those two files
+are refreshed on the frozen final inputs. Fourteen later files completed after
+the freeze before the build-test failure. A separate run covers the two refreshed
+files and all 115 previously unrun files. This is an explicitly combined gate,
+not a claim that the interrupted initial run validated one unchanged candidate.
+The resumed **117-file segment passed**, exit **0**, in **3044.43 seconds**
+(50 minutes 44.43 seconds). Its final-input file set, the fourteen retained
+post-freeze files and the corrected focused build check were compared with the
+repository's test-file inventory: their union is exactly **132 of 132 files**.
+The initial failed segment's 211.64 seconds is separate, and the focused build
+check's duration was not captured. No unchanged full-suite restart was performed.
+
+The resumed method used the same installed host, UTF-8 console setup and sequential
+file invocation as `tests/Run-Tests.ps1`, selecting the two named prefix files plus
+test filenames sorting after `BuildDeterminism.Tests.ps1`. Local ignored logs are
+`.test-output/issue137-full.log`, `.test-output/issue137-resumed.log` and matching
+JSON timing/exit records. The suffix includes final-input documentation and
+portable determinism/application tests, all six Status desk files, the three
+cancellation variants, actual WPF HTML DOM loading and all SYSTEM application
+paths. The final Status desk synthetic test-root inventory is empty; owned report
+viewing plaintext was verified removed. Standard harness/build outputs remain
+ignored synthetic artifacts.
+
+The final canonical build reproduced these unsigned precursor identities from the
+focused deterministic build after the governed documentation freeze:
+
+- Generated application SHA-256:
+  `efecf42cf6d1d102e9e828878b88c742c9cb65182425c796a5910f509d1a4900`.
+- Portable ZIP SHA-256:
+  `2d9e0deed8713a2dd0f17ea9955e9894e24934e241d540b46ddd29237140d59d`.
+
+Candidate paths are `artifacts/WIN-PCInfo.ps1` and
+`artifacts/WIN-PCInfo-2.0.0-preview.1-portable.zip`, with the expanded portable
+folder beside them. Final build evidence is the ignored
+`.test-output/issue137-final-build.json`. These are unsigned precursor artifacts;
+no real certificate, trust, signing, assessment or publication action occurred.
+
+Validation documentation is explicitly excluded from packaged documents by
+`build/PortableDistribution.ps1`; final evidence updates do not change these
+candidate bytes. The earlier pre-#136 full pass remains historical and is not
+validation of these changed bytes.
 
 ## Requirement contribution and next owners
 
