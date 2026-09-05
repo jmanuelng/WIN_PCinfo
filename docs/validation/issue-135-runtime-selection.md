@@ -99,9 +99,11 @@ shell error, then passed with the complete generated application. Independent
 affected review of `56c02a1...551d9e5`: resolved, no new hard violations or
 actionable smells. This review was read-only and did not run tests.
 The separate `551d9e5...778c518` manifest/evidence review found no hard violations
-or actionable smells; prior implementation review remains valid. The final
-bounded smoke-host/test/evidence correction requires its affected review before
-handoff.
+or actionable smells; prior implementation review remains valid. Affected review
+of `778c518...a47d761` likewise found no hard violations or new actionable smells.
+It confirmed the narrow active-host correction, generated Help regressions,
+reserved GUI distinction, and explicit blocked-gate evidence. No tests or edits
+were performed by the reviewer.
 
 ## Spec review
 
@@ -127,8 +129,11 @@ scope creep. The encoding correction's actual packaged CMD-to-application Help
 test supplies generated-artifact evidence. This review was read-only and did not
 run tests; final full-suite and live acceptance remain separate gates.
 The separate `551d9e5...778c518` manifest/evidence review found no missing
-requirements, incorrect behavior or scope creep. The final bounded
-smoke-host/test/evidence correction requires its affected review before handoff.
+requirements, incorrect behavior or scope creep. Affected review of
+`778c518...a47d761` likewise found no new findings: smoke arguments and all release
+authority remain unchanged, the host correction is within the admitted #135
+scope, and the evidence makes no unsupported closure claim. No tests or edits
+were performed by the reviewer; prior reviews remain valid.
 
 ## Artifact and live disposition
 
