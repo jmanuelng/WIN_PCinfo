@@ -5,8 +5,8 @@ Scope: [#138](https://github.com/jmanuelng/WIN_PCinfo/issues/138), under
 [#37](https://github.com/jmanuelng/WIN_PCinfo/issues/37). Exact implementation and
 review starting point: `1a55d448780c948db566787ff91a834455d7e7f9`.
 
-Status: implementation complete; final focused validation and independent review
-are in progress. Actual delivered-app acceptance remains **Pending** in
+Status: **automated implementation Pass; Standards 0 and Spec 0 remaining
+findings**. Actual delivered-app acceptance remains **Pending** in
 [#161](https://github.com/jmanuelng/WIN_PCinfo/issues/161). September 6 remains
 the private handoff target, with timing and complete-scope acceptance at risk.
 No live assessment, actual SYSTEM task creation, elevation, signing, trust change,
@@ -32,7 +32,10 @@ installation, cloud operation or publication belongs to this evidence.
   registration with its exact ownership digest, durably written before persistent
   task creation. Recovery validates task definition and restricted access before
   stopping/deleting it, then checks registration, captured instances and engine
-  processes. Legacy 1.0.0 filesystem-only journals remain readable.
+  processes. A missing registration requires a durable prior absence witness
+  plus an independent current-instance check. Missing or contradicted proof
+  retains CleanupIncomplete and the journal, including an interrupted deletion.
+  Legacy 1.0.0 filesystem-only journals remain readable.
 - A subsequent launch holds the device-wide Active Run Lock while inspecting
   residue. Recovery requires a deliberate action and preparation approval. The
   Status desk exposes Recover owned residue; automation retains the existing
@@ -79,12 +82,89 @@ The final focused batch runs these twelve files in fresh installed PowerShell
 processes: StatusDeskActiveActions, StatusDeskRecovery, SystemTaskRecovery,
 SystemTaskAbsence, SystemCollectionPlan, EvidenceWorkspaceRecovery,
 EvidenceWorkspacePolicy, EvidenceWorkspaceApplication, ProtectedPackageWriteFailure,
-DeviceReadinessApplication, StatusDeskLock and StatusDesk. Final results, measured
-timings, exact candidate identities and separate review reports follow when the
-batch completes. No whole-suite run is claimed: the user's September 5 cadence
+DeviceReadinessApplication, StatusDeskLock and StatusDesk. All twelve passed in
+356.46 seconds. The review correction then passed SystemTaskRecovery,
+SystemTaskAbsence, SystemCollectionPlan, EvidenceWorkspaceRecovery,
+DeviceReadinessContract and StatusDeskRecovery, plus actual WPF SYSTEM Close and
+locked-residue failure: eight affected checks in 120.69 seconds. All twelve
+changed PowerShell scripts parse; schema checks and `git diff --check` pass.
+No whole-suite run is claimed: the user's September 5 cadence
 reserves the next integrated gate for #158/final acceptance unless an observed
 regression justifies expanding it. #137's preceding full pass is historical for
 the bytes changed here.
+
+The Spec review's additional red case reproduced premature journal retirement
+when a task registration was missing but a controlled engine survived. The
+correction requires durable absence evidence and independent current-instance
+observation; both the surviving-engine negative and a current instance
+contradicting an older witness now pass. If deletion was interrupted before its
+absence proof was persisted, recovery conservatively retains the journal for
+deliberate inspection; it cannot infer safety from a missing registration.
+
+## Measured timing and provisional resources
+
+| Actual WPF action / controlled worker | First progress ms | Maximum active gap ms | Acknowledgment ms | Cancellation to terminal ms | Sampled private / working set MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cancel / privileged | 1476 | 2542 | 5 | 6670 | 555 / 755 |
+| Close / privileged | 559 | 2573 | 5 | 6569 | 539 / 704 |
+| Cancel / SYSTEM | 1239 | 2561 | 4 | 8881 | 515 / 688 |
+| Close / SYSTEM, correction revision | 1292 | 2609 | 5 | 8605 | 521 / 697 |
+| Cancel / cooperative native | 1433 | 2537 | 4 | 7134 | 534 / 735 |
+| Close / uncooperative native | 1277 | 2569 | 6 | 8284 | 556 / 730 |
+
+**Pass** for the three required timing limits in these generated integrations.
+Cooperative and hard native termination modes are asserted separately, and every
+case asserts protected partial reopening and owned cleanup. The initial matrix
+used implementation commit `984170e`; the affected correction checks used
+`30cf94a`. The initial SYSTEM Close also passed (521 / 2557 / 5 / 8653 ms).
+
+Cancellation cleanup was below the provisional two-minute budget in all sampled
+cases. Private memory was below 768 MiB, but **working set exceeded the provisional
+512 MiB target** in every listed case. These are sampled host measurements that
+include deterministic building, generated-module loading, compilation and WPF,
+not isolated delivered-app or aggregate child-process resource acceptance. The
+working-set finding is not waived. #158/#161 must measure the final actual
+candidate and deliberately confirm or version provisional resource budgets.
+Workspace/package/report disk measurements and actual-device timing remain
+Pending for that session.
+
+## Candidate and review record
+
+- Initial cohesive DCO implementation: `984170e59104f90900ec4b537782ba0065e8e5e9`.
+- DCO review correction and final source revision:
+  `30cf94aff48874f1ccafa1bd5007824285899ebd`.
+- Final unsigned generated application SHA-256:
+  `5ad728854b93bcd970a9c8d6d123aede5af51add9e3b45fa86d7c0ba83dbb7a7`.
+- Final unsigned portable ZIP SHA-256:
+  `9fe0a713001612884d35e40569923d4514c2ce2767d08a308a468bbc3670a3ce`.
+
+The final build completed in 3.52 seconds. `BuildDeterminism.Tests.ps1` also
+passed in 49.71 seconds, comparing exact generated bytes across two output
+directories and verifying source provenance. Candidates remain in ignored
+`artifacts/`; scoped synthetic run workspaces were removed after tests. The
+ignored final build record is `.test-output/issue138-final-build.json`; focused
+and correction result records are beside it. The build excludes validation
+documentation, so this evidence update does not change candidate bytes. These
+unsigned artifacts do not renew the separately frozen #160 candidate's evidence,
+establish trust, or authorize a live assessment.
+
+## Standards
+
+Initial review: 0 hard violations, 0 blocking findings, 1 nonblocking naming
+judgment. `ValidationCleanupVerified` was renamed to `CleanupVerified`, with its
+existing public alias retained for compatibility. Correction-only review of
+`984170e...30cf94a`: **0 hard violations, 0 blocking findings, 0 nonblocking
+judgments**. The reviewer confirmed bounded observation, required durable witness,
+negative regression coverage and DCO. No remaining Standards issue.
+
+## Spec
+
+Initial review: one P1 finding for treating missing task registration as proof of
+absence. The surviving-engine red test reproduced it. Correction-only review of
+`984170e...30cf94a`: **0 actionable findings**. The reviewer confirmed durable
+absence proof, independent current-instance checks, retained CleanupIncomplete
+when evidence is missing, and compatibility. No scope creep or new Spec
+regression found. Actual live evidence remains Pending under #161.
 
 ## Requirement register contribution and next owners
 
@@ -93,7 +173,7 @@ the bytes changed here.
 | #37 stories 14–18,57,63,68,74; #134 stories 9–14,16 | Ordinary cancel/close, serialized activity, cleanup-only recovery, honest terminals and protected partial/no-result paths | #158 aggregates final regression; #161 observes every delivered workflow |
 | CAP-0015 / CAP-0017; CMP-0031,0032,0045,0046 | Device-wide exclusion, cancellation through actual supervised workers, absence proofs and truthful cleanup/integrity precedence | #139 deepens actual privilege ownership/activation; #161 real Cancel and Close separately |
 | CAP-0018 / CAP-0020; CMP-0024,0026,0027,0047,0052,0055 | Durable ownership, protected partial packages, restricted recovery and retained uncertainty | #152 completes reopening/export; #154 finalizes evidence/package boundary failures; #161 actual local/recipient/recovery acceptance |
-| First progress ≤5 seconds; heartbeat gaps ≤10 seconds; acknowledgment ≤2 seconds | Measured through generated WPF integration; final matrix pending below | #161 actual delivered-candidate timing; #158 overall regression |
+| First progress ≤5 seconds; heartbeat gaps ≤10 seconds; acknowledgment ≤2 seconds | Pass in the measured generated WPF matrix above | #161 actual delivered-candidate timing; #158 overall regression |
 | Provisional cleanup/resource budgets | Synthetic test-host sampling only; no live budget acceptance | #158/#161 measure final candidate; keep any over-budget value explicit |
 
 These rows contribute to the published #158 allocation; they do not close shared
