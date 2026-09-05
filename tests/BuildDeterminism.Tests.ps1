@@ -30,6 +30,7 @@ Assert-True ($first.buildTool.sha256 -match '^[0-9a-f]{64}$') 'the build tool di
 $expectedSourcePaths = @(
     'src/ApplicationHeader.ps1'
     'src/Contracts.ps1'
+    'src/StatusDesk.ps1'
     'src/ContractValidator.ps1'
     'src/RuntimeCompatibility.ps1'
     'src/Preparation.ps1'
