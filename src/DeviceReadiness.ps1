@@ -240,7 +240,7 @@ function New-DeviceReadinessAssessmentRecord {
         [Parameter(Mandatory)] $Policy,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
         [Parameter()] [ValidateSet('', 'Partial', 'Unavailable', 'Malformed', 'Failed',
-            'Denied', 'ProhibitedMaterialBlocked')]
+            'Denied', 'ProhibitedMaterialBlocked', 'Cancelled')]
         [string] $CoverageStateOverride = '',
         [Parameter()] [string] $CoverageReasonCode = ''
     )
@@ -266,7 +266,7 @@ function New-DeviceReadinessAssessmentRecord {
     $observations = [System.Collections.Generic.List[object]]::new()
     $provenance = [System.Collections.Generic.List[object]]::new()
     $collectionExaminedFields = $CoverageStateOverride -notin @(
-        'Unavailable', 'Malformed', 'Failed', 'ProhibitedMaterialBlocked'
+        'Unavailable', 'Malformed', 'Failed', 'ProhibitedMaterialBlocked', 'Cancelled'
     )
     if ($collectionExaminedFields) {
         foreach ($field in $fieldSpecs) {
@@ -591,7 +591,7 @@ function Complete-ValidatedDeviceReadinessAssessmentRecord {
     }
     $coverage = @($ValidatedRecord.coverage)[0]
     $sourceFailureState = [string]$coverage.state -in @(
-        'Unavailable','Malformed','Failed','Denied','ProhibitedMaterialBlocked'
+        'Unavailable','Malformed','Failed','Denied','ProhibitedMaterialBlocked','Cancelled'
     )
     if (-not $sourceFailureState) {
         Add-ValidatedDeviceContextDerivations -Record $ValidatedRecord -Policy $Policy `
@@ -1985,6 +1985,9 @@ function Get-DeviceReadinessFailureDisposition {
     )
 
     switch ($ReasonCode) {
+        'RUN.CANCELLED' {
+            [pscustomobject]@{outcome='Cancelled';exitCode=30;reasonCode=$ReasonCode;cleanupVerified=$true}
+        }
         'FIRMWARE.PRIVILEGE_TIMED_OUT' {
             [pscustomobject]@{outcome='TimedOut';exitCode=40;reasonCode=$ReasonCode;cleanupVerified=$true}
         }
@@ -2186,8 +2189,28 @@ function Invoke-DeviceReadinessSlice {
     $terminalRecord = $null
     $sliceStage='POLICY'
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
+    $activeLock = $null
+    $lockOwned = $false
+    $script:AssessmentCollectionSequence = 4
     try {
-        $policy = Get-DeviceReadinessPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
+        $activeLock = [Threading.Mutex]::new($false, [string](Get-AssessmentRunLifecyclePolicy).activeRunLock.name)
+        $lockOwned = $false
+        try { $lockOwned = $activeLock.WaitOne(0) }
+        catch [Threading.AbandonedMutexException] {
+            $activeLock.ReleaseMutex()
+            Write-DeviceReadinessTerminal -Outcome NotStarted -ExitCode 20 -ReasonCode 'RUN.STALE_OWNER_RECOVERED' `
+                -CollectionStarted $false -ValidationFixture $false -CleanupVerified $false `
+                -RequestDigest $RequestDigest -PlanDigest $PlanDigest -ConvertToJsonCommand $ConvertToJsonCommand
+            return 20
+        }
+        if (-not $lockOwned) {
+            # The common finally disposes the lock.
+            Write-DeviceReadinessTerminal -Outcome NotStarted -ExitCode 20 -ReasonCode 'RUN.ACTIVE_LOCK_HELD' `
+                -CollectionStarted $false -ValidationFixture $false -CleanupVerified $true `
+                -RequestDigest $RequestDigest -PlanDigest $PlanDigest -ConvertToJsonCommand $ConvertToJsonCommand
+            return 20
+        }
+            $policy = Get-DeviceReadinessPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $firmwarePolicy = Get-FirmwareReadinessPolicy `
             -ConvertFromJsonCommand $ConvertFromJsonCommand
         $identityPolicy = Get-IdentityEnrollmentPolicy `
@@ -2296,7 +2319,7 @@ function Invoke-DeviceReadinessSlice {
         $certificateRequested=[bool]$sliceSelection.certificateRequested
         $connectivityRequested=[bool]$sliceSelection.connectivityRequested
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
-        if($identityRequested){
+        if($identityRequested -and (Test-AssessmentCollectionStage -Stage identity)){
             $sliceStage='IDENTITY'
             $identityCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-IdentityEnrollmentCollection -Policy $identityPolicy `
@@ -2305,7 +2328,7 @@ function Invoke-DeviceReadinessSlice {
             $processRelationship=[string]$identityCollector.processRelationship
             $collectionStarted=$true
         }
-        if($resourceRequested){
+        if($resourceRequested -and (Test-AssessmentCollectionStage -Stage resource)){
             $sliceStage='RESOURCE_DEPENDENCIES'
             $resourceCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-ResourceDependenciesCollection -Policy $resourcePolicy `
@@ -2323,7 +2346,7 @@ function Invoke-DeviceReadinessSlice {
                 );$exception.Data['ReasonCode']='RESOURCE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception
             }
         }
-        if($networkRequested){
+        if($networkRequested -and (Test-AssessmentCollectionStage -Stage network)){
             $sliceStage='NETWORK_TOPOLOGY'
             $networkCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-NetworkTopologyCollection -Policy $networkPolicy `
@@ -2337,7 +2360,7 @@ function Invoke-DeviceReadinessSlice {
             $collectionStarted=$true
             if(-not [bool]$networkCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Network Topology worker cleanup was not verified.');$exception.Data['ReasonCode']='NETWORK.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
         }
-        if($softwareRequested){
+        if($softwareRequested -and (Test-AssessmentCollectionStage -Stage software)){
             $sliceStage='SOFTWARE_INVENTORY'
             $softwareCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-SoftwareInventoryCollection -Policy $softwarePolicy -ValidationScenario $softwareScenario
@@ -2348,7 +2371,7 @@ function Invoke-DeviceReadinessSlice {
             $collectionStarted=$true
             if(-not [bool]$softwareCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Software Inventory worker cleanup was not verified.');$exception.Data['ReasonCode']='SOFTWARE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
         }
-        if($certificateRequested){
+        if($certificateRequested -and (Test-AssessmentCollectionStage -Stage certificate)){
             $sliceStage='CERTIFICATE_TRUST'
             $certificateCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-CertificateTrustCollection -Policy $certificatePolicy -ValidationScenario $certificateScenario
@@ -2359,7 +2382,7 @@ function Invoke-DeviceReadinessSlice {
             $collectionStarted=$true
             if(-not [bool]$certificateCollector.cleanupVerified){$exception=[InvalidOperationException]::new('The Certificate Trust cleanup was not verified.');$exception.Data['ReasonCode']='CERTIFICATE.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception}
         }
-        if($connectivityRequested){
+        if($connectivityRequested -and (Test-AssessmentCollectionStage -Stage connectivity)){
             $sliceStage='MICROSOFT_CONNECTIVITY'
             $connectivityCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
                 Invoke-MicrosoftConnectivityCollection -Policy $connectivityPolicy `
@@ -2377,7 +2400,7 @@ function Invoke-DeviceReadinessSlice {
             }
         }
         $sliceStage='PRIVILEGE'
-        if ($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) {
+        if (($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) -and (Test-AssessmentCollectionStage -Stage Privilege)) {
             $privilegeResult = Invoke-PrivilegedCollectionPlan `
                 -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
                 -AssessmentUserContext 'subject:assessment-user:primary' `
@@ -2385,7 +2408,7 @@ function Invoke-DeviceReadinessSlice {
                     [string]$identityCollector.privateAssessmentUserSid
                 }else{''}) `
                 -LocalPackageProtector 'protector:initiating-windows-user' `
-                -ValidationScenario $privilegeScenario -FirmwareScenario $firmwareScenario `
+                -ValidationScenario $privilegeScenario -FirmwareScenario $firmwareScenario -CancellationToken (Get-AssessmentCancellationToken) `
                 -AdministratorScenario $(if($administratorRequested){$administratorScenario}else{'None'}) `
                 -EffectivePolicyScenario $(if($effectivePolicyRequested){$effectivePolicyScenario}else{'None'})
             $privilegeState = [string]$privilegeResult.state
@@ -2454,12 +2477,12 @@ function Invoke-DeviceReadinessSlice {
                 }
             }
         }
-        if($identityRequested){
+        if($identityRequested -and (Test-AssessmentCollectionStage -Stage identity)){
             $sliceStage='SYSTEM_IDENTITY'
             $systemPlanResult=New-SystemCollectionPlan -PreparationPlan $PreparationPlan `
                 -PreparationPlanDigest $PlanDigest
             $systemResult=Invoke-SystemCollectionPlan -Plan $systemPlanResult.Plan `
-                -PlanDigest $systemPlanResult.Digest `
+                -PlanDigest $systemPlanResult.Digest -CancellationToken (Get-AssessmentCancellationToken) `
                 -ValidationScenario $(if($isEffectivePolicyFixture -and $effectivePolicyScenario -eq 'DeniedSystem'){
                     'Denied'
                 }elseif([bool]$sliceSelection.usesSyntheticPrerequisites){
@@ -2483,10 +2506,35 @@ function Invoke-DeviceReadinessSlice {
                 $exception.Data['ReasonCode']='IDENTITY.SYSTEM_INTEGRITY_FAILED';throw $exception
             }
         }
+        if ((Get-AssessmentCancellationToken).IsCancellationRequested -and $null -ne $identityCollector) {
+            $stoppedPrivilege = [pscustomobject]@{
+                state='Cancelled'; reasonCode='RUN.CANCELLED'
+                identity=[pscustomobject]@{ assessmentUserContext='subject:assessment-user:primary'; localPackageProtector='protector:initiating-windows-user' }
+            }
+            if ($null -eq $firmwareCollector) {
+                $firmwareCollector = New-FirmwareReadinessPrivilegeGapResult -PrivilegeResult $stoppedPrivilege -ValidationFixture $isFixture
+            }
+            if ($null -eq $systemResult) {
+                $stoppedPlan = New-SystemCollectionPlan -PreparationPlan $PreparationPlan -PreparationPlanDigest $PlanDigest
+                $systemResult = New-SystemCollectionStoppedResult -State Cancelled -ReasonCode 'SYSTEM.CANCELLED_BEFORE_ACTIVATION' `
+                    -CoverageState Cancelled -Context @{
+                        Policy=(Get-SystemCollectionPlanPolicy); Plan=$stoppedPlan.Plan
+                        PlanDigest=$stoppedPlan.Digest; ObservedExecutionContext='StandardUser'
+                    }
+            }
+            if ($null -ne $resourceCollector) {
+                if ($null -eq $administratorCollector) {
+                    $administratorCollector = New-AdministratorExposurePrivilegeGapResult -PrivilegeResult $stoppedPrivilege -ValidationFixture $isFixture
+                }
+                if ($null -eq $effectivePolicyCollector) {
+                    $effectivePolicyCollector = New-EffectivePolicyPrivilegeGapResult -PrivilegeResult $stoppedPrivilege -Policy $effectivePolicy -ValidationFixture $isFixture
+                }
+            }
+        }
         $collectorScenario = if ($isFixture) { $scenario } else { '' }
         $sliceStage='DEVICE_COLLECTOR'
         $collector = Invoke-ApprovedCollectorProcess -OperationId ([string]$policy.collector.operationId) `
-            -DeviceReadinessScenario $collectorScenario
+            -DeviceReadinessScenario $collectorScenario -CancellationToken (Get-AssessmentCancellationToken)
         $collectionStarted = $collectionStarted -or [bool]$collector.Supervision.processStarted
         if (-not $collector.Supervision.completeOwnedTreeAbsent -or
             -not $collector.Supervision.temporaryArtifactsAbsent) {
@@ -2500,12 +2548,25 @@ function Invoke-DeviceReadinessSlice {
                 $disposition = Get-DeviceReadinessNoPayloadDisposition `
                     -Supervision $collector.Supervision -ValidationFixture $isFixture -Scenario $scenario
                 $buildCanonicalRecord = [bool]$disposition.buildCanonicalRecord
+                $collectorCancelled = [string]$collector.Supervision.reasonCode -like 'PROCESS.CANCELLED_*'
+                if ($collectorCancelled -and
+                    $null -ne $identityCollector) {
+                    # Earlier normalized source envelopes remain recoverable.
+                    # The cancelled device envelope supplies explicit missing
+                    # coverage; protect the evidence already obtained.
+                    $buildCanonicalRecord = $true
+                }
                 $coverageOverride = [string]$disposition.coverageState
                 $coverageReason = [string]$disposition.coverageReasonCode
+                if ((Get-AssessmentCancellationToken).IsCancellationRequested -and $buildCanonicalRecord) {
+                    $coverageOverride = 'Cancelled'
+                    $coverageReason = 'COLLECTION.CANCELLED'
+                }
                 if (-not $buildCanonicalRecord) {
                     $outcome = [string]$disposition.outcome
                     $exitCode = [int]$disposition.exitCode
                     $reasonCode = [string]$disposition.reasonCode
+                    if ($collectorCancelled) { $outcome='Cancelled'; $exitCode=30; $reasonCode='RUN.CANCELLED' }
                 }
                 $evidence = [pscustomobject][ordered]@{
                     sourceLocale='und';manufacturer=$null;model=$null;processorName=$null
@@ -2734,6 +2795,9 @@ function Invoke-DeviceReadinessSlice {
                         -Record $record -Policy $crossDomainPolicy
                 }
                 $sliceStage='FINAL_SERIALIZE'
+                if ((Get-AssessmentCancellationToken).IsCancellationRequested) {
+                    $record.run.outcome = 'Cancelled'
+                }
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)
                 )
@@ -3178,6 +3242,9 @@ function Invoke-DeviceReadinessSlice {
                     else {
                         $outcome='CompletedWithGaps';$exitCode=10;$reasonCode='DEVICE_READINESS.COMPLETED_WITH_GAPS'
                     }
+                    if ($packageVerified -and $record.run.outcome -eq 'Cancelled') {
+                        $outcome='Cancelled';$exitCode=30;$reasonCode='RUN.CANCELLED'
+                    }
                 }
             }
         }
@@ -3206,6 +3273,8 @@ function Invoke-DeviceReadinessSlice {
                 $outcome='CleanupIncomplete';$exitCode=60;$reasonCode='DEVICE_READINESS.CLEANUP_INCOMPLETE'
             }
         }
+        if ($lockOwned) { $activeLock.ReleaseMutex() }
+        if ($null -ne $activeLock) { $activeLock.Dispose() }
     }
     if ($isFixture) {
         Write-ContractRecord ([pscustomobject][ordered]@{
@@ -3439,6 +3508,10 @@ function Invoke-DeviceReadinessSlice {
         -ValidationCleanupVerified $cleanupVerified `
         -FinalVerificationSucceeded $packageVerified
     $packageAvailability = [string]$packageDisposition.packageAvailability
+    $statusTransport = Get-Variable -Name StatusDeskTransport -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $statusTransport -and $packageAvailability -eq 'Available' -and $packageVerified) {
+        $statusTransport.Value.State.PackagePath = [string] $package.packagePath
+    }
     if ($packageDisposition.outcome -eq 'CleanupIncomplete') {
         $outcome=[string]$packageDisposition.outcome
         $exitCode=[int]$packageDisposition.exitCode

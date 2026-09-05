@@ -1623,3 +1623,33 @@ function Invoke-ApprovedCollectorProcess {
 
     $collectorResult
 }
+
+function Get-AssessmentCancellationToken {
+    $transport = Get-Variable -Name StatusDeskTransport -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $transport) { return $transport.Value.Cancellation.Token }
+    [Threading.CancellationToken]::None
+}
+
+function Enter-AssessmentCollectionStage {
+    param([Parameter(Mandatory)] [string] $Stage)
+    if ((Get-AssessmentCancellationToken).IsCancellationRequested) {
+        $exception = [OperationCanceledException]::new('Assessment scheduling was cancelled.')
+        $exception.Data['ReasonCode'] = 'RUN.CANCELLED'
+        throw $exception
+    }
+    $sequence = Get-Variable -Name AssessmentCollectionSequence -Scope Script -ErrorAction SilentlyContinue
+    if ($null -eq $sequence) { $script:AssessmentCollectionSequence = 4 }
+    $script:AssessmentCollectionSequence++
+    $transport = Get-Variable -Name StatusDeskTransport -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $transport) { $transport.Value.State.CollectionStarted = $true }
+    Write-ContractRecord (New-ProgressRecord -Sequence $script:AssessmentCollectionSequence -Phase Collection -State Started `
+        -MessageId ('collection.' + $Stage.ToLowerInvariant()) -CompletedUnits 0 -TotalUnits 1) `
+        -ConvertToJsonCommand (Get-Command ConvertTo-Json -CommandType Cmdlet)
+}
+
+function Test-AssessmentCollectionStage {
+    param([Parameter(Mandatory)] [string] $Stage)
+    if ((Get-AssessmentCancellationToken).IsCancellationRequested) { return $false }
+    Enter-AssessmentCollectionStage -Stage $Stage
+    $true
+}

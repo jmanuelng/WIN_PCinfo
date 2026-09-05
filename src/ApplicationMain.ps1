@@ -106,14 +106,6 @@ if ($Workflow -eq 'Verify') {
     exit 0
 }
 
-if ($Mode -eq 'Gui') {
-    # The Status desk adapter is owned by #137. Never silently fall through to
-    # guided assessment while that adapter is unavailable.
-    Write-ContractRecord (New-TerminalRecord -ReasonCode 'GUI.ADAPTER_UNAVAILABLE' -Phase 'Launch') `
-        -ConvertToJsonCommand $convertToJsonCommand
-    exit 20
-}
-
 if ($Workflow -eq 'AdmitValidationRound') {
     # Admission is a local maintainer gate. The threat is hiding the unsigned
     # precursor behind Authenticode while still needing to test template
@@ -1200,6 +1192,18 @@ $validationContext = [pscustomobject][ordered]@{
         $usingResourceDependenciesFixture -or $usingNetworkTopologyFixture -or
         $usingSoftwareInventoryFixture -or $usingCertificateTrustFixture -or
         $usingMicrosoftConnectivityFixture)
+}
+if ($Mode -eq 'Gui') {
+    # Use this already-loaded application's exact module bytes. No adjacent draft,
+    # unreviewed script, fixture authority or second preparation is admitted.
+    $regions = [regex]::Matches($MyInvocation.MyCommand.ScriptBlock.ToString(),
+        '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
+    $moduleText = ($regions | ForEach-Object { $_.Groups[2].Value }) -join "`n"
+    $applicationExitCode = Invoke-StatusDesk -ModuleText $moduleText -LaunchParameters @{
+        Request=$request; RuntimeFacts=$runtimeFacts; ArtifactTrustValid=$artifactTrustValid
+        ValidationContext=$validationContext
+    }
+    exit $applicationExitCode
 }
 $applicationExitCode = Invoke-WinPCInfoLaunch -Request $request -RuntimeFacts $runtimeFacts `
     -Mode $Mode -AcceptPreparation:$AcceptPreparation -ValidationContext $validationContext `

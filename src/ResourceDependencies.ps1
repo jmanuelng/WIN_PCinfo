@@ -685,7 +685,7 @@ function Invoke-BoundedResourceDependenciesSnapshot {
         $native=[WinPCInfo.ProcessSupervisor.NativeRunner]::Run(
             $executable,@('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',$encoded),
             $PSHOME,$environment,$activeMilliseconds,[int]$collector.resultMaximumUtf8Bytes,4096,
-            [Threading.CancellationToken]::None,$event,1,$terminationMilliseconds,$false
+            (Get-AssessmentCancellationToken),$event,1,$terminationMilliseconds,$false
         )
         if($native.Started -and -not [bool]$native.CompleteOwnedTreeAbsent){
             $exception=[InvalidOperationException]::new('The Resource Dependencies worker tree could not be proved absent.')

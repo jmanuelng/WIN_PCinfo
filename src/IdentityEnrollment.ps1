@@ -623,7 +623,7 @@ try {
         $native=[WinPCInfo.ProcessSupervisor.NativeRunner]::Run(
             $executable,@('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',$encodedChild),
             $PSHOME,$environment,$activeMilliseconds,[int]$collector.resultMaximumUtf8Bytes,4096,
-            [Threading.CancellationToken]::None,$event,1,$terminationMilliseconds,$false
+            (Get-AssessmentCancellationToken),$event,1,$terminationMilliseconds,$false
         )
         if(-not $native.Started -or -not [bool]$native.CompleteOwnedTreeAbsent -or
             $native.FailureStage -ne [WinPCInfo.ProcessSupervisor.NativeFailureStage]::None -or
