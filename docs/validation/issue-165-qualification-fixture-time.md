@@ -5,7 +5,9 @@ regression blocking #135 under #134/#37. Starting revision and independent
 Code Review fixed point: `195659552e09479f33518ec3b0ae7a23bfa955ab`.
 
 Status: qualification and release-gate generated regressions and the full
-123-file repository gate pass. Independent review is pending.
+123-file repository gate pass. Independent Spec review passes with no findings;
+Standards review has no hard violations and one accepted nonblocking judgment
+call. The repair is ready for orchestrator integration disposition.
 This record establishes synthetic test behavior only. It does not
 establish live assessment, Preview qualification, Supported status or publication.
 
@@ -83,8 +85,20 @@ elevation was introduced. There were no exclusions or retries.
   negatives, runtime/portable launch tests, guided/automation contracts, synthetic
   Azure/signing/publication gates, report/contract/collector coverage, protected
   package/recipient/export checks and lifecycle/privilege/SYSTEM cleanup cases.
-- Standards axis: pending independent review against the fixed point above.
-- Spec axis: pending independent review against #165 and that same fixed point.
+- Standards axis: no hard documented-standard violations; one nonblocking
+  **Duplicated Code** judgment about the two helpers' short timestamp-formatting
+  and propagation sections. The reviewer found both helpers understandable and
+  extraction unnecessary under documented standards. Retained locally for this
+  bounded two-consumer repair; no required correction remains.
+- Spec axis: **Pass, zero findings** for missing/partial requirements, scope
+  expansion or incorrect behavior.
+
+Both independent read-only axes reviewed
+`195659552e09479f33518ec3b0ae7a23bfa955ab...f34dd75028a4cd8817733d7a8263f35a8e1c6be6`.
+They did not rerun tests. Review found no change requiring another implementation
+or test cycle; the final evidence update records these outcomes only. The
+commits under review were `66b87df` (qualification fixture), `9b9a6c8` (related
+release-gate fixture) and `f34dd75` (complete-gate evidence), all DCO-signed.
 
 The full suite reproduces the exact application and portable-archive digests
 below. It therefore resolves #135's known branch-local full-test blocker on the
