@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "pwsh -NoLogo -NoProfile -File ./build/Build.ps1",
+    "prototype:gui-report": "pwsh -NoLogo -NoProfile -STA -File ./src/prototypes/Issue132.GuiReportExperience.ps1",
     "test": "pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1",
     "sandcastle": "tsx .sandcastle/main.mts --max-parallel 2",
     "sandcastle:canary": "tsx .sandcastle/main.mts --max-iterations 1 --max-parallel 1",
