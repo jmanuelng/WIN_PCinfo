@@ -80,7 +80,7 @@
       "required": ["kind", "contractVersion", "directoryName", "fileName", "maximumUtf8Bytes", "allowedPayloadFields", "prohibitedContent"],
       "properties": {
         "kind": { "const": "win-pcinfo.run-recovery-journal" },
-        "contractVersion": { "const": "1.0.0" },
+        "contractVersion": { "const": "1.1.0" },
         "directoryName": { "const": "recovery" },
         "fileName": { "const": "run-recovery.json" },
         "maximumUtf8Bytes": { "const": 32768 },
@@ -88,11 +88,11 @@
           "type": "array",
           "prefixItems": [
             { "const": "runId" }, { "const": "planDigest" }, { "const": "phase" },
-            { "const": "owner" }, { "const": "artifacts" }, { "const": "cleanup" }
+            { "const": "owner" }, { "const": "artifacts" }, { "const": "cleanup" }, { "const": "systemTasks" }
           ],
           "items": false,
-          "minItems": 6,
-          "maxItems": 6
+          "minItems": 7,
+          "maxItems": 7
         },
         "prohibitedContent": {
           "type": "array",

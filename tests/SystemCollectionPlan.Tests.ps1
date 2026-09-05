@@ -419,7 +419,7 @@ $folder | Add-Member -MemberType ScriptMethod -Name DeleteTask -Value {
 }
 $folder | Add-Member -MemberType ScriptMethod -Name GetTask -Value {
     param($Name)
-    if (-not $script:systemCleanupRegistered) { throw 'Task not found.' }
+    if (-not $script:systemCleanupRegistered) { throw [Runtime.InteropServices.COMException]::new('Synthetic task not found.', -2147024894) }
     [pscustomobject]@{}
 }
 try {

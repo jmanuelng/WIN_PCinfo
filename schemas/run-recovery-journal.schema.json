@@ -7,7 +7,7 @@
   "required": ["kind", "contractVersion", "runId", "planDigest", "phase", "owner", "artifacts", "cleanup"],
   "properties": {
     "kind": { "const": "win-pcinfo.run-recovery-journal" },
-    "contractVersion": { "const": "1.0.0" },
+    "contractVersion": { "enum": ["1.0.0", "1.1.0"] },
     "runId": { "type": "string", "format": "uuid" },
     "planDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "phase": { "enum": ["Preparation", "Collection", "Packaging", "Viewing", "Cleanup", "Terminal"] },
@@ -44,6 +44,17 @@
         ]
       }
     },
+    "systemTasks": {
+      "type": "array", "maxItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["taskName", "definitionSha256"],
+        "properties": {
+          "taskName": { "type": "string", "pattern": "^WINPCInfo-SystemCollection-v1-[0-9a-f]{32}$" },
+          "definitionSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
     "cleanup": {
       "type": "object",
       "additionalProperties": false,
@@ -54,5 +65,8 @@
         "lastReasonCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_.]+$", "maxLength": 128 }
       }
     }
-  }
+  },
+  "allOf": [
+    { "if": { "properties": { "contractVersion": { "const": "1.1.0" } } }, "then": { "required": ["systemTasks"] }, "else": { "not": { "required": ["systemTasks"] } } }
+  ]
 }

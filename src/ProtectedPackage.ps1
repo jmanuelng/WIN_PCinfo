@@ -945,7 +945,7 @@ function New-ProtectedEvidencePackage {
             if (-not (Get-Command Register-FinalizedEvidencePackage -CommandType Function -ErrorAction SilentlyContinue)) {
                 throw 'The finalized package cannot be registered for recovery.'
             }
-            Register-FinalizedEvidencePackage -JournalPath $JournalPath -LiteralPath $finalPath
+            $null = Register-FinalizedEvidencePackage -JournalPath $JournalPath -LiteralPath $finalPath
         }
         [pscustomobject][ordered]@{
             state = 'Verified'
