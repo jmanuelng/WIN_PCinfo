@@ -1408,6 +1408,7 @@ function Register-SystemCollectionTaskOwnership {
     $journal.systemTasks = @([pscustomobject]@{
         taskName = $TaskName
         definitionSha256 = Get-SystemCollectionTaskOwnershipDigest -Definition $Definition
+        absenceVerified = $false
     })
     Write-RunRecoveryJournal -Journal $journal -LiteralPath $JournalPath
 }
@@ -1416,6 +1417,27 @@ function Get-SystemTaskRecoveryFolder {
     $service = New-Object -ComObject 'Schedule.Service'
     $service.Connect()
     $service.GetFolder('\')
+}
+
+function Get-SystemTaskRecoveryInstances {
+    param([Parameter(Mandatory)] [string] $TaskName)
+    $service = New-Object -ComObject 'Schedule.Service'
+    $service.Connect()
+    $instances = $service.GetRunningTasks(1) # Include hidden tasks.
+    if ($instances.Count -gt 4096) { throw 'Task observation exceeds its recovery bound.' }
+    for ($index=1; $index -le $instances.Count; $index++) {
+        $instance = $instances.Item($index)
+        if ([string]$instance.Path -ceq ('\' + $TaskName)) { $instance }
+    }
+}
+
+function Set-SystemCollectionTaskAbsenceVerified {
+    param([Parameter(Mandatory)] $Journal, [Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(Mandatory)] [string] $TaskName)
+    $registration = @($Journal.systemTasks | Where-Object taskName -CEQ $TaskName)
+    if ($registration.Count -ne 1) { throw 'The task absence proof has no unique owned registration.' }
+    $registration[0].absenceVerified = $true
+    Write-RunRecoveryJournal -Journal $Journal -LiteralPath $JournalPath
 }
 
 function Test-SystemTaskRecoveryAccess {
@@ -1431,14 +1453,22 @@ function Test-SystemTaskRecoveryAccess {
 }
 
 function Remove-RecoverySystemCollectionTasks {
-    param([Parameter(Mandatory)] $Journal)
+    param([Parameter(Mandatory)] $Journal, [Parameter(Mandatory)] [string] $JournalPath)
     $processes = [Collections.Generic.List[Diagnostics.Process]]::new()
     try {
         $folder = Get-SystemTaskRecoveryFolder
         foreach ($registration in $Journal.systemTasks) {
             $task = $null
             try { $task = $folder.GetTask([string]$registration.taskName) }
-            catch { if (Test-SystemTaskNotFound -Exception $_.Exception) { continue }; return $false }
+            catch {
+                if (-not (Test-SystemTaskNotFound -Exception $_.Exception)) { return $false }
+                # Deleting a registration does not stop its engine. A missing
+                # registration with no durable prior tree/instance absence proof
+                # is ambiguous, including a crash in the delete/verify window.
+                if (-not $registration.absenceVerified -or
+                    @(Get-SystemTaskRecoveryInstances -TaskName $registration.taskName).Count -ne 0) { return $false }
+                continue
+            }
             if ((Get-SystemCollectionTaskOwnershipDigest -Definition $task.Definition) -cne $registration.definitionSha256 -or
                 -not (Test-SystemTaskRecoveryAccess -Task $task -InitiatingSid $Journal.owner.initiatingUserSid)) { return $false }
             $instances = $task.GetInstances(0)
@@ -1477,6 +1507,8 @@ function Remove-RecoverySystemCollectionTasks {
                 [Threading.Thread]::Sleep(25)
             }
             if (-not $absent) { return $false }
+            if (@(Get-SystemTaskRecoveryInstances -TaskName $registration.taskName).Count -ne 0) { return $false }
+            Set-SystemCollectionTaskAbsenceVerified -Journal $Journal -JournalPath $JournalPath -TaskName $registration.taskName
         }
         $true
     }
@@ -1992,6 +2024,17 @@ function Invoke-SystemCollectionPlan {
             -TaskName $taskName `
             -MaximumMilliseconds ([int] $policy.deadlines.cleanupMaximumMilliseconds)
         $taskAbsent = [bool] $taskCleanup.Absent -and -not $activationCleanupUnverified
+        $journalVariable = Get-Variable -Name AssessmentRunJournalPath -Scope Script -ErrorAction SilentlyContinue
+        if ($taskAbsent -and $workerTreeAbsent -and $null -ne $taskActivation -and
+            $null -ne $journalVariable -and $journalVariable.Value) {
+            try {
+                if (@(Get-SystemTaskRecoveryInstances -TaskName $taskName).Count -ne 0) { throw 'An owned task instance remains.' }
+                $journal = Read-RunRecoveryJournal -LiteralPath $journalVariable.Value
+                if (-not (Test-RunRecoveryJournalCurrentOwner -Journal $journal)) { throw 'The current journal owner changed.' }
+                Set-SystemCollectionTaskAbsenceVerified -Journal $journal -JournalPath $journalVariable.Value -TaskName $taskName
+            }
+            catch { $taskAbsent = $false }
+        }
         $cleanupRetries = [int] $taskCleanup.Retries
         if ($scenario.injectCleanupFailure -and $validationFixture) {
             $cleanupProbe = Invoke-SystemCollectionSyntheticCleanupProbe `

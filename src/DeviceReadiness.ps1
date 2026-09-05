@@ -1934,7 +1934,7 @@ function Get-DeviceReadinessPackageDisposition {
     param(
         [Parameter()] $Package,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
-        [Parameter(Mandatory)] [bool] $ValidationCleanupVerified,
+        [Parameter(Mandatory)] [Alias('ValidationCleanupVerified')] [bool] $CleanupVerified,
         [Parameter(Mandatory)] [bool] $FinalVerificationSucceeded
     )
 
@@ -1950,7 +1950,7 @@ function Get-DeviceReadinessPackageDisposition {
     else { '' }
 
     $cleanupUncertain = $packageState -eq 'CleanupIncomplete' -or
-        (-not $ValidationCleanupVerified) -or
+        (-not $CleanupVerified) -or
         ($FinalVerificationSucceeded -and -not $ValidationFixture -and
             ([string]::IsNullOrWhiteSpace($packagePath) -or
                 -not [System.IO.File]::Exists($packagePath)))
@@ -3252,7 +3252,7 @@ function Invoke-DeviceReadinessSlice {
                     if (-not $packageVerified) {
                         $packageDisposition = Get-DeviceReadinessPackageDisposition `
                             -Package $package -ValidationFixture $isFixture `
-                            -ValidationCleanupVerified $true `
+                            -CleanupVerified $true `
                             -FinalVerificationSucceeded $packageVerified
                         $outcome=[string]$packageDisposition.outcome
                         $exitCode=[int]$packageDisposition.exitCode
@@ -3550,7 +3550,7 @@ function Invoke-DeviceReadinessSlice {
         $recipientKeyProtection -eq 'RSA-OAEP-SHA-256'
     $packageDisposition = Get-DeviceReadinessPackageDisposition `
         -Package $package -ValidationFixture $isFixture `
-        -ValidationCleanupVerified $cleanupVerified `
+        -CleanupVerified $cleanupVerified `
         -FinalVerificationSucceeded $packageVerified
     $packageAvailability = [string]$packageDisposition.packageAvailability
     $statusTransport = Get-Variable -Name StatusDeskTransport -Scope Script -ErrorAction SilentlyContinue

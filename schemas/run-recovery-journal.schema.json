@@ -48,10 +48,11 @@
       "type": "array", "maxItems": 1,
       "items": {
         "type": "object", "additionalProperties": false,
-        "required": ["taskName", "definitionSha256"],
+        "required": ["taskName", "definitionSha256", "absenceVerified"],
         "properties": {
           "taskName": { "type": "string", "pattern": "^WINPCInfo-SystemCollection-v1-[0-9a-f]{32}$" },
-          "definitionSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          "definitionSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "absenceVerified": { "type": "boolean" }
         }
       }
     },

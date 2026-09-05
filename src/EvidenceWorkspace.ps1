@@ -765,7 +765,7 @@ function Invoke-StaleRunRecovery {
     }
 
     if ($journal.PSObject.Properties['systemTasks'] -and @($journal.systemTasks).Count -gt 0 -and
-        -not (Remove-RecoverySystemCollectionTasks -Journal $journal)) {
+        -not (Remove-RecoverySystemCollectionTasks -Journal $journal -JournalPath $journalFullPath)) {
         Set-RunRecoveryIncomplete -Journal $journal -JournalPath $journalFullPath -Attempts 1 -ReasonCode RECOVERY.SYSTEM_TASK_UNVERIFIED
         return New-StaleRunRecoveryResult -Outcome CleanupIncomplete -ReasonCode RECOVERY.SYSTEM_TASK_UNVERIFIED `
             -CleanupVerified $false -CleanupAttempts 1
