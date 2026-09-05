@@ -305,7 +305,12 @@ function Get-PortableGoverningResources {
     param(
         [Parameter(Mandatory)] [string] $RepositoryRoot,
         [Parameter(Mandatory)] $Policy,
-        [Parameter(Mandatory)] [string] $BuildToolDigest
+        [Parameter(Mandatory)] [string] $BuildToolDigest,
+        [string] $SignedHelperPath,
+        [scriptblock] $ReadSignature = {
+            param($Path)
+            Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $Path -ErrorAction Stop
+        }
     )
 
     $resources = New-Object System.Collections.Generic.List[object]
@@ -322,6 +327,35 @@ function Get-PortableGoverningResources {
     $hostSource = [IO.File]::ReadAllText((Join-Path $RepositoryRoot 'build/RuntimeHost.ps1'))
     $helperText = [IO.File]::ReadAllText($helperSource).Replace('# __RUNTIME_HOST_FUNCTIONS__', $hostSource)
     $helperBytes = ConvertTo-PortableScriptBytes -Text $helperText -IncludeBom
+    if (-not [string]::IsNullOrWhiteSpace($SignedHelperPath)) {
+        # Sign the generated launcher first, then bind those fixed signed bytes
+        # into the application before signing it. Otherwise signing the helper
+        # invalidates its governing digest. A valid signature alone cannot admit
+        # unrelated code: compare the complete generated payload too. Hold a
+        # read-only file lock while Windows verifies the same literal file.
+        $literalHelper = [IO.Path]::GetFullPath($SignedHelperPath)
+        $stream = [IO.File]::Open($literalHelper, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        try {
+            if ($stream.Length -le 0 -or $stream.Length -gt 1MB) { throw 'Signed helper exceeds its byte bound.' }
+            [byte[]] $signedBytes = [byte[]]::new([int]$stream.Length)
+            $stream.ReadExactly($signedBytes)
+            $signature = & $ReadSignature $literalHelper
+            if ([string]$signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) {
+                throw 'Signed helper failed Authenticode admission.'
+            }
+            $encoding = [Text.UTF8Encoding]::new($false, $true)
+            $signedText = $encoding.GetString($signedBytes)
+            $signatureMatch = [regex]::Match($signedText,
+                '(?s)\A(?<payload>.*?)\r\n# SIG # Begin signature block\r\n(?:# [A-Za-z0-9+/=]+\r\n)+# SIG # End signature block(?:\r\n)?\z')
+            if (-not $signatureMatch.Success -or
+                $signatureMatch.Groups['payload'].Value.TrimEnd("`r", "`n") -cne
+                $encoding.GetString([byte[]]$helperBytes).TrimEnd("`r", "`n")) {
+                throw 'Signed helper differs from the generated launcher for this build.'
+            }
+            $helperBytes = $signedBytes
+        }
+        finally { $stream.Dispose() }
+    }
     $helperDigest = Get-PortableDistributionSha256 -Bytes $helperBytes
     $null = $resources.Add((New-PortableFileRecord -Path $Policy.helperPackagePath -Class 'helper' -Bytes $helperBytes))
     $entryBytes = ConvertTo-PortableScriptBytes -Text ([IO.File]::ReadAllText((Join-Path $RepositoryRoot 'build/Start-WIN-PCInfo.cmd')))

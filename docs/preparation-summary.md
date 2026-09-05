@@ -31,6 +31,14 @@ The plan digest appears with the summary and terminal record. If the request or 
 
 ## Choose network behavior
 
+Local protection readiness now checks an in-memory 32-byte random value through
+the package engine's initiating-user CurrentUser protection/unprotection route.
+Recovered bytes must match exactly; controllable probe buffers are cleared on
+success and failure. No certificate, package, workspace or assessment evidence is
+created by this check. Readiness proves present usability only. The separate
+[personal evaluation certificate procedure](personal-evaluation-certificates.md)
+prepares the approved trust and optional recipient setup for the live session.
+
 `LocalOnly` plans zero assessment network requests. Network-dependent capabilities remain visible and later report honest unavailable or not-attempted coverage.
 
 `MicrosoftConnectivityEnabled` plans only the release-bound catalog documented in [Microsoft service connectivity and enrollment discovery](microsoft-connectivity-and-enrollment-dns.md). It does not allow automatic telemetry, authenticated Microsoft cloud collection, tenant API access, arbitrary internet access, Azure resource changes, or device network reconfiguration.

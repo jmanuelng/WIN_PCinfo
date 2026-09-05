@@ -145,10 +145,8 @@ function Get-ActivePreparationFacts {
         $freeDiskAvailable = $false
     }
 
-    # This slice has no initiating-user-bound Local Package Protector. Generic
-    # runtime cryptography is not substituted for that domain component: the
-    # real prerequisite remains unresolved without creating a key, package,
-    # protected file, or recipient material.
+    # Probe the initiating user's existing protector without creating evidence,
+    # certificates, or a workspace. The probe clears all controllable buffers.
     [pscustomobject][ordered]@{
         artifactTrustValid = $ArtifactTrustValid
         definitionIntegrityValid = $true
@@ -158,10 +156,7 @@ function Get-ActivePreparationFacts {
             [pscustomobject][ordered]@{ id = 'required-free-disk-available'; resolved = $freeDiskAvailable }
             [pscustomobject][ordered]@{
                 id = 'local-package-protector-available'
-                # The cryptographic primitive alone is not the initiating-user-
-                # bound Local Package Protector. That component is delivered by
-                # a later slice, so a real run remains NotStarted until it exists.
-                resolved = $false
+                resolved = Test-LocalPackageProtectorAvailability
             }
             [pscustomobject][ordered]@{ id = 'recipient-profile-resolved'; resolved = $true }
             [pscustomobject][ordered]@{ id = 'windows-feature-change-not-required'; resolved = $true }

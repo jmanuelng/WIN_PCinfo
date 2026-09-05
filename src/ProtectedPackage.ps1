@@ -231,10 +231,11 @@ function Protect-ProtectedPackageContentKey {
         # The ciphertext is bound to this Windows user profile and this device;
         # neither an elevated alternate administrator nor copied package bytes
         # can unwrap it. DPAPI authenticates the wrapped key and fails closed.
-        [System.Security.Cryptography.ProtectedData]::Protect(
+        # Preserve the provider buffer as one object so the caller can clear it.
+        return ,([System.Security.Cryptography.ProtectedData]::Protect(
             $ContentKey, $entropy,
             [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-        )
+        ))
     }
     finally { [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($entropy) }
 }
@@ -247,12 +248,42 @@ function Unprotect-ProtectedPackageContentKey {
         [string] $policy.envelope.keyProtection.additionalEntropyUtf8
     )
     try {
-        [System.Security.Cryptography.ProtectedData]::Unprotect(
+        return ,([System.Security.Cryptography.ProtectedData]::Unprotect(
             $ProtectedContentKey, $entropy,
             [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-        )
+        ))
     }
     finally { [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($entropy) }
+}
+
+function Test-LocalPackageProtectorAvailability {
+    # Threat: approving collection with an unusable or wrong-context protector
+    # can strand evidence. Use the same CurrentUser DPAPI boundary as packaging
+    # in the initiating process, before privilege dispatch. A bounded random
+    # probe stays in memory; provider failure or changed bytes leave preparation
+    # unresolved. This proves present usability, not future recovery or trust.
+    [byte[]] $probe = [byte[]]::new(32)
+    [byte[]] $wrapped = $null
+    [byte[]] $recovered = $null
+    try {
+        if (-not (Test-ProtectedPackageKnownAnswer).verified) { return $false }
+        [System.Security.Cryptography.RandomNumberGenerator]::Fill($probe)
+        $wrapped = Protect-ProtectedPackageContentKey -ContentKey $probe
+        if ($null -eq $wrapped -or $wrapped.Length -eq 0 -or $wrapped.Length -gt 4096) {
+            return $false
+        }
+        $recovered = Unprotect-ProtectedPackageContentKey -ProtectedContentKey $wrapped
+        if ($null -eq $recovered -or $recovered.Length -ne $probe.Length) { return $false }
+        Test-ProtectedPackageBytesEqual -Left $probe -Right $recovered
+    }
+    catch { $false }
+    finally {
+        foreach ($buffer in @($probe, $wrapped, $recovered)) {
+            if ($null -ne $buffer) {
+                [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($buffer)
+            }
+        }
+    }
 }
 
 function Test-ProtectedPackageAssessmentRecord {

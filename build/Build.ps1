@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string] $OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts/WIN-PCInfo.ps1')
+    [string] $OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts/WIN-PCInfo.ps1'),
+    [Parameter()]
+    [string] $SignedHelperPath
 )
 
 Set-StrictMode -Version Latest
@@ -626,7 +628,7 @@ $preparationDigest = Get-Sha256Hex -Bytes $preparationBytes
 $buildToolDigestForPackage = Get-Sha256Hex -Bytes (Get-Utf8LfBytes -LiteralPath $PSCommandPath)
 $portablePolicy = $portableDistributionPolicyJson | ConvertFrom-Json -Depth 20
 $portableGoverning = Get-PortableGoverningResources -RepositoryRoot $repositoryRoot `
-    -Policy $portablePolicy -BuildToolDigest $buildToolDigestForPackage
+    -Policy $portablePolicy -BuildToolDigest $buildToolDigestForPackage -SignedHelperPath $SignedHelperPath
 $portableGoverningBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
     ($portableGoverning.EmbeddedTable | ConvertTo-Json -Compress -Depth 30)
 )
