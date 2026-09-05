@@ -14,7 +14,8 @@ handoff target; complete delivered-workflow acceptance belongs to #161.
 ## Prepared private packet
 
 The packet and instantiated ownership record are outside public source, with
-access confined to the initiating user and SYSTEM. They contain the exact private
+explicit initiating-user/SYSTEM access and the environment's managed sandbox read
+access recorded privately. They contain the exact private
 paths, checked runtime/tool prerequisites, bounded prior-session reconciliation,
 source snapshot, unsigned precursor, executable inventory, separate signing copy,
 reserved output locations and pending observation worksheet. Existing identities,
