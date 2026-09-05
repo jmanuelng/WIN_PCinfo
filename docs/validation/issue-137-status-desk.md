@@ -74,6 +74,11 @@ Recorded red cases:
 - The lock test first overlapped another focused engine test, which correctly held
   the shared lock; its test cleanup now releases only a lock actually acquired.
   The isolated test proves a held lock refuses collection.
+- An additional unchanged generated-entry test found that dynamic closure modules
+  hid script-scoped callback helpers. STA callbacks now retain the active dialog
+  scope. The exact generated `-Mode Gui` entry displays preparation and declines
+  successfully; the approval-to-report WPF test also passes after this correction.
+  The failed fixture-only test child was verified and stopped without collection.
 
 All 13 initial focused files passed in **172.69 seconds** in fresh installed PowerShell Core 7.6.5 x64
 processes using `-NoLogo -NoProfile -File tests/<name>.Tests.ps1`:

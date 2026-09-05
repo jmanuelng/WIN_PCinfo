@@ -162,7 +162,7 @@ function Show-StatusDeskReport {
                 (-not $eventArgs.Uri.IsFile -or $eventArgs.Uri.LocalPath -cne $allowedPath)) {
                 $eventArgs.Cancel = $true
             }
-        }.GetNewClosure())
+        })
         $browser.Navigate([uri]::new($allowedPath))
         $null = $window.ShowDialog()
     }
@@ -189,6 +189,8 @@ function Invoke-StatusDesk {
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $timer = [System.Windows.Threading.DispatcherTimer]::new()
     $timer.Interval = [TimeSpan]::FromMilliseconds(100)
+    # Handlers run synchronously on this STA while ShowDialog keeps this scope
+    # alive. A dynamic closure module would lose the generated script's helpers.
     $controls.Approve.Add_Click({
         if ($state.Preparation) {
             $summary = $state.Preparation | ConvertFrom-Json
@@ -196,13 +198,13 @@ function Invoke-StatusDesk {
             $controls.Approve.IsEnabled=$false; $controls.Decline.IsEnabled=$false; $controls.Cancel.IsEnabled=$true
             $controls.Status.Text='Assessment running'
         }
-    }.GetNewClosure())
+    })
     $controls.Decline.Add_Click({
         Set-StatusDeskDecision -Session $session -Approve $false -PlanDigest 'declined'
         $controls.Approve.IsEnabled=$false; $controls.Decline.IsEnabled=$false
-    }.GetNewClosure())
-    $controls.Cancel.Add_Click({ $session.Transport.Cancellation.Cancel(); $controls.Status.Text='Cancelling — stopping owned work and finalizing safely…'; $controls.Cancel.IsEnabled=$false }.GetNewClosure())
-    $controls.Close.Add_Click({ $window.Close() }.GetNewClosure())
+    })
+    $controls.Cancel.Add_Click({ $session.Transport.Cancellation.Cancel(); $controls.Status.Text='Cancelling — stopping owned work and finalizing safely…'; $controls.Cancel.IsEnabled=$false })
+    $controls.Close.Add_Click({ $window.Close() })
     $controls.OpenReport.Add_Click({
         $result = Show-StatusDeskReport -PackagePath $session.Transport.State.PackagePath -Owner $window
         if (-not $result.verified) {
@@ -219,7 +221,7 @@ function Invoke-StatusDesk {
             else { $controls.Status.Text='Report unavailable — temporary viewing cleanup verified' }
             $controls.OpenReport.IsEnabled=$false
         }
-    }.GetNewClosure())
+    })
     $window.Add_Closing({
         param($sender, $eventArgs)
         if (-not $session.Completed) {
@@ -228,7 +230,7 @@ function Invoke-StatusDesk {
             Set-StatusDeskDecision -Session $session -Approve $false -PlanDigest 'closing'
             $controls.Status.Text='Closing — waiting for owned work and cleanup…'
         }
-    }.GetNewClosure())
+    })
     $timer.Add_Tick({
         $controls.Elapsed.Text='Elapsed ' + $watch.Elapsed.ToString('hh\:mm\:ss')
         if ($session.Transport.State.Preparation -and -not $state.Preparation) {
@@ -263,7 +265,7 @@ function Invoke-StatusDesk {
             else { $controls.Details.Text += "`nNo usable package or report is available." }
             if ($state.Closing -and $terminal.cleanup.verified) { $window.Close() }
         }
-    }.GetNewClosure())
+    })
     try {
         if ($null -ne $ViewReady) { & $ViewReady $window $session }
         $timer.Start(); $null=$window.ShowDialog()
