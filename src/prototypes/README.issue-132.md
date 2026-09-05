@@ -4,10 +4,14 @@
 
 Question: which PowerShell GUI and HTML report information hierarchy lets a beginner run a bounded assessment confidently while giving a consultant useful, honest evidence?
 
+## Selected direction
+
+The maintainer selected **B — Status desk** because it reads as an application rather than a web portal. The selected visual palette is white and light grey with restrained blue accents; blue replaces the earlier green/teal accent in both the WPF surface and the matching HTML report. Variants A and C remain only as primary-source comparison evidence on this throwaway branch.
+
 This is a new prototype surface because WIN-PCInfo has no existing GUI page in which to mount the variations. It deliberately offers three structurally different directions in one WPF window:
 
 - **A — Guided journey:** a visible five-step route, plain-language preparation, and result actions in a separate rail.
-- **B — Status desk:** a compact operating surface with persistent scope facts, an event timeline, and report actions beside the terminal state.
+- **B — Status desk (selected):** a compact operating surface with persistent scope facts, an event timeline, and report actions beside the terminal state.
 - **C — Focus first:** one large immediate decision with supporting rationale and technical state kept secondary.
 
 Each direction opens a matching, self-contained HTML report sample. All report data is plainly synthetic, and each report includes a denied identity/enrollment source so incomplete evidence cannot look like a clean bill of health.

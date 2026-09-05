@@ -27,11 +27,11 @@ $script:reports = @{
 }
 $script:variantMetadata = [ordered]@{
     A = 'Guided journey'
-    B = 'Status desk'
+    B = 'Status desk — selected'
     C = 'Focus first'
 }
 $script:state = [ordered]@{
-    Variant = 'A'
+    Variant = 'B'
     Scenario = 'Gaps'
     Running = $false
     StepIndex = -1
@@ -161,22 +161,22 @@ function Get-VariantXaml {
     if ($Variant -eq 'B') {
         return @'
 <UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <Grid Background="#0C1821" Margin="0">
+  <Grid Background="#E8EDF2" Margin="0">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <Grid Margin="24,20,24,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-      <Border Grid.Column="0" Background="#142733" Padding="14" Margin="0,0,8,0"><StackPanel><TextBlock Text="PROFILE" Foreground="#7F9AA9" FontSize="11"/><TextBlock Text="Local readiness" Foreground="White" FontSize="18"/></StackPanel></Border>
-      <Border Grid.Column="1" Background="#142733" Padding="14" Margin="0,0,8,0"><StackPanel><TextBlock Text="NETWORK" Foreground="#7F9AA9" FontSize="11"/><TextBlock Text="0 planned requests" Foreground="#64D8CB" FontSize="18"/></StackPanel></Border>
-      <Border Grid.Column="2" Background="#142733" Padding="14" Margin="0,0,8,0"><StackPanel><TextBlock Text="APPROVAL" Foreground="#7F9AA9" FontSize="11"/><TextBlock Text="One frozen plan" Foreground="White" FontSize="18"/></StackPanel></Border>
-      <Border Grid.Column="3" Background="#142733" Padding="14"><StackPanel><TextBlock Text="OUTPUT" Foreground="#7F9AA9" FontSize="11"/><TextBlock Text="Protected + HTML" Foreground="White" FontSize="18"/></StackPanel></Border>
+      <Border Grid.Column="0" Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="14" Margin="0,0,8,0"><StackPanel><TextBlock Text="PROFILE" Foreground="#687986" FontSize="11"/><TextBlock Text="Local readiness" Foreground="#1F3447" FontSize="18"/></StackPanel></Border>
+      <Border Grid.Column="1" Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="14" Margin="0,0,8,0"><StackPanel><TextBlock Text="NETWORK" Foreground="#687986" FontSize="11"/><TextBlock Text="0 planned requests" Foreground="#2F6FA8" FontSize="18"/></StackPanel></Border>
+      <Border Grid.Column="2" Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="14" Margin="0,0,8,0"><StackPanel><TextBlock Text="APPROVAL" Foreground="#687986" FontSize="11"/><TextBlock Text="One frozen plan" Foreground="#1F3447" FontSize="18"/></StackPanel></Border>
+      <Border Grid.Column="3" Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="14"><StackPanel><TextBlock Text="OUTPUT" Foreground="#687986" FontSize="11"/><TextBlock Text="Protected + HTML" Foreground="#1F3447" FontSize="18"/></StackPanel></Border>
     </Grid>
     <Grid Grid.Row="1" Margin="24,0,24,16"><Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <Border Grid.Column="0" Background="#F0F4F5" Padding="20" Margin="0,0,12,0">
+      <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="20" Margin="0,0,12,0">
         <StackPanel>
           <TextBlock Text="Run controls" FontSize="23" FontWeight="SemiBold" Foreground="#102B3A"/>
           <TextBlock Text="Inspect happy, partial, and safe-failure states without collecting anything." TextWrapping="Wrap" Foreground="#4D6472" Margin="0,5,0,18"/>
           <TextBlock Text="SIMULATED OUTCOME" FontSize="11" FontWeight="Bold"/>
           <ComboBox x:Name="ScenarioSelector" Margin="0,7,0,16" MinHeight="34"><ComboBoxItem Tag="Gaps" Content="Completed with gaps"/><ComboBoxItem Tag="Complete" Content="Completed"/><ComboBoxItem Tag="Failure" Content="Integrity failed"/></ComboBox>
-          <Button x:Name="RunButton" Content="Approve plan / Run" Padding="14,10" Background="#0B897D" Foreground="White" FontWeight="SemiBold"/>
+          <Button x:Name="RunButton" Content="Approve plan / Run" Padding="14,10" Background="#2F6FA8" Foreground="White" FontWeight="SemiBold"/>
           <Button x:Name="CancelButton" Content="Cancel safely" Padding="14,9" Margin="0,8,0,0"/>
           <Separator Margin="0,18"/>
           <TextBlock Text="EXPOSED PROTOTYPE STATE" FontSize="11" FontWeight="Bold"/>
@@ -184,21 +184,21 @@ function Get-VariantXaml {
         </StackPanel>
       </Border>
       <Grid Grid.Column="1"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <Border Background="#142733" Padding="20"><StackPanel>
-          <TextBlock x:Name="PhaseText" Foreground="#64D8CB" FontWeight="Bold"/>
-          <TextBlock x:Name="StatusText" Foreground="White" FontSize="27" FontWeight="SemiBold" Margin="0,3,0,0"/>
-          <TextBlock x:Name="DetailText" Foreground="#BBD0DA" TextWrapping="Wrap" Margin="0,5,0,0"/>
-          <ProgressBar x:Name="ProgressBar" Height="7" Margin="0,16,0,0" Maximum="100" Foreground="#64D8CB"/>
+        <Border Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="20"><StackPanel>
+          <TextBlock x:Name="PhaseText" Foreground="#2F6FA8" FontWeight="Bold"/>
+          <TextBlock x:Name="StatusText" Foreground="#1F3447" FontSize="27" FontWeight="SemiBold" Margin="0,3,0,0"/>
+          <TextBlock x:Name="DetailText" Foreground="#526878" TextWrapping="Wrap" Margin="0,5,0,0"/>
+          <ProgressBar x:Name="ProgressBar" Height="7" Margin="0,16,0,0" Maximum="100" Foreground="#2F6FA8" Background="#DCE3E8"/>
         </StackPanel></Border>
-        <Border Grid.Row="1" Background="#F8FAFA" Padding="20"><StackPanel><TextBlock Text="EVENT TIMELINE" FontSize="12" FontWeight="Bold" Foreground="#506773"/><ListBox x:Name="TimelineList" Margin="0,10,0,0" BorderThickness="0" Background="Transparent"/></StackPanel></Border>
-        <Border Grid.Row="2" Background="#E5EBED" Padding="16"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <Border Grid.Row="1" Background="#F5F7F9" BorderBrush="#CBD3DA" BorderThickness="1,0,1,0" Padding="20"><StackPanel><TextBlock Text="EVENT TIMELINE" FontSize="12" FontWeight="Bold" Foreground="#506773"/><ListBox x:Name="TimelineList" Margin="0,10,0,0" BorderThickness="0" Background="Transparent"/></StackPanel></Border>
+        <Border Grid.Row="2" Background="#E1E7EC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="16"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
           <TextBlock Text="Report actions unlock only for usable terminal results." VerticalAlignment="Center" Foreground="#4D6472"/>
-          <Button x:Name="OpenReportButton" Grid.Column="1" Content="Open report" Padding="14,8" Margin="8,0" Background="#15354A" Foreground="White"/>
+          <Button x:Name="OpenReportButton" Grid.Column="1" Content="Open report" Padding="14,8" Margin="8,0" Background="#2F6FA8" Foreground="White"/>
           <Button x:Name="SaveReportButton" Grid.Column="2" Content="Save HTML for consultant" Padding="14,8"/>
         </Grid></Border>
       </Grid>
     </Grid>
-    <TextBlock Grid.Row="2" Text="Dense operational direction • optimized for repeat operators and consultant handoff" Foreground="#7F9AA9" Margin="24,0,24,14"/>
+    <TextBlock Grid.Row="2" Text="Selected direction • app-like status desk in white, grey, and blue" Foreground="#526878" Margin="24,0,24,14"/>
   </Grid>
 </UserControl>
 '@
@@ -467,7 +467,7 @@ $script:window.Add_PreviewKeyDown({
 })
 $script:window.Add_Closed({ $script:timer.Stop() })
 
-Show-Variant -Variant 'A'
+Show-Variant -Variant 'B'
 
 if (-not [string]::IsNullOrWhiteSpace($CaptureDirectory)) {
     $captureRoot = [System.IO.Path]::GetFullPath($CaptureDirectory)
