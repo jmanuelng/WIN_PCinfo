@@ -19,6 +19,7 @@
   "requiredPackagePaths": [
     "WIN-PCInfo.ps1",
     "Start-WIN-PCInfo.ps1",
+    "Start-WIN-PCInfo.cmd",
     "FIRST-RUN.md",
     "NOTICE.txt",
     "package-manifest.json",

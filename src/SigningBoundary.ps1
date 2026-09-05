@@ -768,7 +768,9 @@ function Invoke-SigningBoundarySmoke {
     # no assessment arguments. The trust assumption is that Help cannot
     # collect. Safe failure is to keep smoked false.
     if ([string]::IsNullOrWhiteSpace($PowerShellPath)) {
-        $PowerShellPath = (Get-Command pwsh -CommandType Application).Source
+        # Reuse the explicit host running this session; PATH may contain several
+        # installations. This changes no signing admission or smoke arguments.
+        $PowerShellPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     }
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $PowerShellPath

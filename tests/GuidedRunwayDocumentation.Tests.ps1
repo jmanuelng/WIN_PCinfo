@@ -13,14 +13,14 @@ $policy = Get-Content -LiteralPath (
 
 $headerText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src/ApplicationHeader.ps1') -Raw
 $allowedWorkflows = @(
-    'Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease'
+    'Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease'
 )
 $allowedModes = @('Guided', 'Automation')
 Assert-Equal $true (
-    $headerText.Contains("ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')")
-) 'Help, About, Verify, VerifyAttestation, AdmitValidationRound, RunValidationRound, RecoverValidationRound, EvaluateReleaseGates, SignAndVerifyCandidate, QualifyPreviewCandidate, and PublishPreviewRelease are first-class generated-application workflows'
-Assert-Equal $true ($headerText.Contains("ValidateSet('Guided', 'Automation')")) `
-    'Guided and Automation remain the implemented launch modes'
+    $headerText.Contains("ValidateSet('Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')")
+) 'CheckRuntime and the existing generated-application workflows are declared explicitly'
+Assert-Equal $true ($headerText.Contains("ValidateSet('Guided', 'Automation', 'Gui')")) `
+    'Guided and Automation remain available alongside the reserved Gui entry'
 
 $documentTexts = [ordered]@{}
 foreach ($document in @($policy.documents)) {

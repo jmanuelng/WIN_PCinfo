@@ -20,6 +20,23 @@ This package is an unsigned precursor. It is not the later timestamped signed di
 
 ## Start from Windows PowerShell
 
+For the GUI entry, double-click `Start-WIN-PCInfo.cmd`. It retains visible failure
+guidance if Windows policy prevents the PowerShell helper itself from starting.
+The helper selects one verified eligible executable and requests NoProfile/STA
+without elevation. Missing application, invalid signature and missing eligible
+runtime stop before assessment. It never changes execution policy or unblocks a
+download. The production Status desk is pending issue #137; until connected, its
+entry returns `GUI.ADAPTER_UNAVAILABLE` instead of starting a console assessment.
+
+GUI and assessment launch require a valid application signature. The unsigned
+source build permits only an exact passive Help, About, Verify or CheckRuntime
+request through the helper; this cannot authorize assessment. An invalid or
+altered signature is rejected even for those requests. Personally signed GUI
+acceptance remains pending the dedicated live sessions #160 and #161.
+
+Explicit application arguments retain guided-console and redirected automation
+behavior and exit codes. Use `-Mode Guided` for console preparation.
+
 Windows PowerShell 5.1 may only locate an eligible `pwsh` host or print official retry guidance. It is not a second assessment engine.
 
 ```text

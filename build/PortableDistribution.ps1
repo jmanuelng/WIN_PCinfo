@@ -9,14 +9,12 @@ function Get-PortableDistributionSha256 {
     }
 }
 
-function ConvertTo-Utf8BomCrlfBytes {
-    param([Parameter(Mandatory)] [string] $LiteralPath)
-
-    $text = [System.IO.File]::ReadAllText($LiteralPath)
-    $normalized = ($text -replace "`r`n", "`n" -replace "`r", "`n").TrimEnd("`n") + "`n"
+function ConvertTo-PortableScriptBytes {
+    param([Parameter(Mandatory)] [string] $Text, [switch] $IncludeBom)
+    $normalized = ($Text -replace "`r`n", "`n" -replace "`r", "`n").TrimEnd("`n") + "`n"
     $crlf = $normalized -replace "`n", "`r`n"
-    $utf8Bom = [System.Text.UTF8Encoding]::new($true)
-    $utf8Bom.GetBytes($crlf)
+    $encoding = [System.Text.UTF8Encoding]::new([bool] $IncludeBom)
+    [byte[]] ($encoding.GetPreamble() + $encoding.GetBytes($crlf))
 }
 
 function ConvertTo-DeterministicJsonBytes {
@@ -159,6 +157,7 @@ function New-PortableDependencyInventory {
     param(
         [Parameter(Mandatory)] [string] $BuildToolDigest,
         [Parameter(Mandatory)] [string] $HelperDigest,
+        [Parameter(Mandatory)] [string] $EntryDigest,
         [Parameter(Mandatory)] [string] $CanonicalizationDigest
     )
 
@@ -238,6 +237,16 @@ function New-PortableDependencyInventory {
                 license = 'MIT'
                 provenance = 'package-helper'
             }
+            [pscustomobject][ordered]@{
+                id = 'win-pcinfo-double-click-entry'
+                role = 'helper'
+                product = 'Start-WIN-PCInfo.cmd'
+                version = '1.0.0'
+                bundled = $true
+                digest = $EntryDigest
+                license = 'MIT'
+                provenance = 'repository-build/Start-WIN-PCInfo.cmd'
+            }
         )
     }
 }
@@ -310,9 +319,13 @@ function Get-PortableGoverningResources {
     }
 
     $helperSource = Join-Path $RepositoryRoot (($Policy.helperSourcePath -split '/') -join [System.IO.Path]::DirectorySeparatorChar)
-    $helperBytes = ConvertTo-Utf8BomCrlfBytes -LiteralPath $helperSource
+    $hostSource = [IO.File]::ReadAllText((Join-Path $RepositoryRoot 'build/RuntimeHost.ps1'))
+    $helperText = [IO.File]::ReadAllText($helperSource).Replace('# __RUNTIME_HOST_FUNCTIONS__', $hostSource)
+    $helperBytes = ConvertTo-PortableScriptBytes -Text $helperText -IncludeBom
     $helperDigest = Get-PortableDistributionSha256 -Bytes $helperBytes
     $null = $resources.Add((New-PortableFileRecord -Path $Policy.helperPackagePath -Class 'helper' -Bytes $helperBytes))
+    $entryBytes = ConvertTo-PortableScriptBytes -Text ([IO.File]::ReadAllText((Join-Path $RepositoryRoot 'build/Start-WIN-PCInfo.cmd')))
+    $null = $resources.Add((New-PortableFileRecord -Path 'Start-WIN-PCInfo.cmd' -Class 'helper' -Bytes $entryBytes))
 
     $firstRunSource = Join-Path $RepositoryRoot (($Policy.firstRunSourcePath -split '/') -join [System.IO.Path]::DirectorySeparatorChar)
     $firstRunBytes = Get-Utf8LfBytes -LiteralPath $firstRunSource
@@ -333,7 +346,8 @@ function Get-PortableGoverningResources {
     )
 
     $inventory = New-PortableDependencyInventory -BuildToolDigest $BuildToolDigest `
-        -HelperDigest $helperDigest -CanonicalizationDigest $canonicalizationDigest
+        -HelperDigest $helperDigest -EntryDigest (Get-PortableDistributionSha256 -Bytes $entryBytes) `
+        -CanonicalizationDigest $canonicalizationDigest
     $inventoryBytes = ConvertTo-DeterministicJsonBytes -Value $inventory
     $null = $resources.Add((New-PortableFileRecord -Path 'dependency-inventory.json' -Class 'definition' -Bytes $inventoryBytes))
 

@@ -49,6 +49,13 @@ A missing, altered, substituted, or unauthenticated governing resource returns `
 
 ## Windows PowerShell helper
 
+The helper and test host share deterministic runtime selection and probe the
+generated application's release compatibility policy before choosing a host.
+`Start-WIN-PCInfo.cmd` selects GUI mode with NoProfile/STA and keeps bootstrap
+failure guidance visible. Explicit arguments preserve guided-console and
+automation behavior. See `FIRST-RUN.md` for signature admission, safe retries,
+and the pending Status desk adapter and live acceptance.
+
 The extracted `Start-WIN-PCInfo.ps1` helper is not the assessment engine. On Windows PowerShell 5.1 it may only find `pwsh` and relaunch the generated application, or print Microsoft's installation URL and stop.
 
 Invoking `WIN-PCInfo.ps1` directly with Windows PowerShell still returns `RUNTIME.EDITION_UNSUPPORTED`. That is intentional: the generated application does not relaunch from the wrong host.
