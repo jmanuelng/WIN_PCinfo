@@ -11,6 +11,9 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $manifestSchemaPath = Join-Path $repositoryRoot 'schemas/release-evidence-manifest.schema.json'
 $matrixSchemaPath = Join-Path $repositoryRoot 'schemas/preview-capability-matrix.schema.json'
 $completePath = Join-Path $PSScriptRoot 'fixtures/release-evidence-pack-complete-presigning.json'
+# Generate disposable synthetic observations relative to one captured UTC instant.
+# The stored fixture and the generated application's evaluation clock are unchanged.
+$syntheticFixtureNow = [datetimeoffset]::UtcNow
 $workRoot = Join-Path $repositoryRoot '.test-output/release-gates-application'
 if (Test-Path -LiteralPath $workRoot) {
     Remove-Item -LiteralPath $workRoot -Recurse -Force
@@ -28,16 +31,24 @@ function New-BoundPackPath {
     param(
         [Parameter(Mandatory)] [string] $SourcePath,
         [Parameter(Mandatory)] [string] $Name,
+        [Parameter()] [datetimeoffset] $SyntheticObservedAt = $syntheticFixtureNow.AddDays(-1),
         [Parameter()] [scriptblock] $Mutate
     )
 
     $pack = Get-Content -LiteralPath $SourcePath -Raw | ConvertFrom-Json -Depth 30
+    Assert-Equal $true $pack.synthetic 'relative test dates require a synthetic pack'
+    $observedAt = $SyntheticObservedAt.ToUniversalTime().ToString(
+        'o', [System.Globalization.CultureInfo]::InvariantCulture
+    )
+    $pack.observedAt = $observedAt
     $pack.bindings.generatedContentSha256 = $candidateDigest
     $pack.bindings.ledgerSha256 = $ledgerDigest
     foreach ($gate in @($pack.gates)) {
+        $gate.observedAt = $observedAt
         $gate.generatedContentSha256 = $candidateDigest
     }
     foreach ($scenario in @($pack.scenarios)) {
+        $scenario.observedAt = $observedAt
         $scenario.generatedContentSha256 = $candidateDigest
     }
     if ($null -ne $Mutate) {
@@ -103,6 +114,38 @@ try {
     Assert-Equal 'RELEASE.GATES_EVALUATED' $terminal[0].reasonCode `
         'the terminal reason records that the gate finished'
     Assert-Equal $false $terminal[0].collectionStarted 'completed evaluation never collects'
+
+    # Exceed the existing 30-day Client VM window by a full day.
+    $expiredPath = New-BoundPackPath -SourcePath $completePath -Name 'expired-synthetic.json' `
+        -SyntheticObservedAt $syntheticFixtureNow.AddDays(-31)
+    $expired = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow', 'EvaluateReleaseGates',
+        '-ReleaseEvidencePackPath', $expiredPath
+    )
+    Assert-Equal 0 $expired.ExitCode 'expired evidence completes gate evaluation'
+    $expiredManifest = @($expired.Records | Where-Object recordType -eq 'win-pcinfo.release-evidence-manifest')
+    $expiredTerminal = @($expired.Records | Where-Object recordType -eq 'win-pcinfo.terminal')
+    Assert-Equal 1 $expiredManifest.Count 'expired evidence emits one sanitized manifest'
+    Assert-Equal $false $expiredManifest[0].unsignedContentQualified 'expired evidence cannot qualify content'
+    Assert-Equal $false $expiredManifest[0].finalArtifactQualified 'expired evidence cannot qualify an artifact'
+    Assert-Equal $true ('GATE.EXPIRED' -in @($expiredManifest[0].promotion.blockingReasons)) `
+        'expired evidence records the stable gate expiry reason'
+    Assert-Equal $true $expiredManifest[0].syntheticEvidenceOnly 'expired evidence stays visibly synthetic'
+    Assert-Equal $false $expiredManifest[0].collectionStarted 'expired evaluation never collects'
+    Assert-Equal $false $expiredManifest[0].promotion.previewPromotionReady 'expired evidence cannot promote a Preview'
+    Assert-Equal $false $expiredManifest[0].promotion.publicationAuthorized 'expired evidence cannot authorize publication'
+    $expiredClientGates = @($expiredManifest[0].gates | Where-Object freshnessClass -eq 'ClientVmValidation')
+    Assert-Equal 3 $expiredClientGates.Count 'the manifest retains three required Client VM gates'
+    foreach ($gate in $expiredClientGates) {
+        Assert-Equal 'Expired' $gate.result 'each aged Client VM gate expires'
+        Assert-Equal $true $gate.expired 'each aged Client VM gate has an explicit expiry flag'
+        Assert-Equal $true $gate.candidateBound 'expired evidence still binds the actual candidate'
+    }
+    Assert-Equal 1 $expiredTerminal.Count 'expired evidence emits one terminal record'
+    Assert-Equal 'Completed' $expiredTerminal[0].outcome 'expiry is a completed gate evaluation'
+    Assert-Equal 'RELEASE.GATES_EVALUATED' $expiredTerminal[0].reasonCode `
+        'expired evidence preserves the gate evaluation terminal contract'
+    Assert-Equal $false $expiredTerminal[0].collectionStarted 'expired gate evaluation never collects'
 
     $missing = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Workflow', 'EvaluateReleaseGates'

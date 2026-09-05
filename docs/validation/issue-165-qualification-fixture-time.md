@@ -4,26 +4,29 @@ Scope: [#165](https://github.com/jmanuelng/WIN_PCinfo/issues/165), the bounded
 regression blocking #135 under #134/#37. Starting revision and independent
 Code Review fixed point: `195659552e09479f33518ec3b0ae7a23bfa955ab`.
 
-Status: focused regression passes; full repository gate and independent review
-are pending. This record establishes synthetic test behavior only. It does not
+Status: qualification and release-gate generated regressions pass. The full
+repository gate and independent review are pending.
+This record establishes synthetic test behavior only. It does not
 establish live assessment, Preview qualification, Supported status or publication.
 
 ## Clock strategy and boundary
 
 The generated public application retains its production UTC evaluation clock.
-Only `tests/PreviewQualificationApplication.Tests.ps1` changes. Each run captures
-one UTC instant and creates disposable requests from the explicitly synthetic
-complete fixture. Before assigning dates, setup requires the request and evidence
+The repairs change `tests/PreviewQualificationApplication.Tests.ps1` and the
+same-cause consumer `tests/ReleaseGatesApplication.Tests.ps1`. Each test captures
+one UTC instant and creates disposable inputs from its explicitly synthetic
+complete fixture. Before assigning dates, qualification setup requires the request and evidence
 pack synthetic flags and the `SyntheticProjection` evidence kind. It writes
-invariant UTC observation times into the synthetic pack, gates and scenarios:
+invariant UTC observation times into the synthetic pack, gates and scenarios.
+Release-gate setup likewise requires its pack's synthetic flag before dating it:
 
 - Positive: one day before that captured instant, safely inside freshness limits.
 - Expired negative: 31 days before that same instant, beyond the existing 30-day
   Client VM window with a full day of margin.
 
-The checked-in August 1 fixture remains unchanged; it is still used with a fixed
-evaluation clock by the qualification module tests and read by the policy/schema
-test. These are the only other consumers. No real evidence is loaded or renewed.
+Both checked-in August 1 fixtures remain unchanged. Each still has only its
+module test (fixed evaluation clock), policy/schema test and generated application
+test as consumers. No real evidence is loaded or renewed.
 The generated request keeps exact current content and ledger digest bindings and
 the existing explicitly synthetic final-artifact identity. These synthetic
 identities are not evidence of real signing or final-artifact execution.
@@ -47,6 +50,11 @@ followed by the repository-relative test path below.
 | Final `tests/PreviewQualificationApplication.Tests.ps1` with 31-day-old negative | Green, exit 0 | 16.82 s |
 | Qualification module, qualification policy, ReleaseGates module, BuildDeterminism | All four pass, exit 0 | 56.69 s combined |
 | PowerShell parser and `git diff --check` | Pass | Not separately timed |
+| Related `tests/ReleaseGatesApplication.Tests.ps1` | Red, exit 1: expected qualified content, received false from static August pre-signing evidence | 7.35 s |
+| Release-gate positive with recent synthetic dates | Green, exit 0 | 13.08 s |
+| Added release-gate expired assertion temporarily supplied recent observations | Red, exit 1: expected unqualified, received qualified | 8.84 s |
+| Release-gate negative after aging observations | Test assertion referenced nonexistent `promotion.eligible`; corrected to documented `previewPromotionReady` and `publicationAuthorized` | 9.38 s, exit 1 |
+| Final `tests/ReleaseGatesApplication.Tests.ps1` | Positive and expired negative green, exit 0 | 14.42 s |
 
 The generated positive retains Approved/Qualify, exact candidate binding,
 schema-valid packet/manifest, one completed terminal, no collection/publication
@@ -56,6 +64,9 @@ content and final artifact unqualified, one Completed/`QUALIFY.DENIED` terminal,
 no collection/publication and verified cleanup. The module regressions retain
 missing, product-failed, invalidated, wrong-candidate and expired evidence cases;
 ReleaseGates retains 90-day cloud expiry and dishonest freshness-class rejection.
+The additional generated release-gate case preserves exact candidate bindings,
+reports all three Client VM gates Expired, and denies content qualification and
+Preview promotion/publication while completing evaluation without collection.
 
 ## Integrated completion gate and review
 
