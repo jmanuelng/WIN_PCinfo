@@ -561,7 +561,8 @@ function Invoke-PreviewPublicationLaunchSmoke {
     # Help invocation with no assessment arguments. The trust assumption
     # is that Help cannot collect. Safe failure is to keep the smoke failed.
     if ([string]::IsNullOrWhiteSpace($PowerShellPath)) {
-        $PowerShellPath = (Get-Command pwsh -CommandType Application).Source
+        # Keep the admitted session's explicit host instead of re-resolving PATH.
+        $PowerShellPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     }
     if (-not (Test-Path -LiteralPath $CandidatePath -PathType Leaf)) {
         return $false

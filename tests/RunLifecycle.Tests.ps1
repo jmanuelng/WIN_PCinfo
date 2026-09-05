@@ -450,7 +450,7 @@ if (-not `$owned -or -not `$signalled) { exit 1 }
         [System.Text.Encoding]::Unicode.GetBytes($ownerScript)
     )
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = (Get-Command pwsh -CommandType Application).Source
+    $startInfo.FileName = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     $startInfo.UseShellExecute = $false
     $null = $startInfo.ArgumentList.Add('-NoLogo')
     $null = $startInfo.ArgumentList.Add('-NoProfile')
@@ -513,7 +513,7 @@ exit 0
         [System.Text.Encoding]::Unicode.GetBytes($abandonedScript)
     )
     $abandonedStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $abandonedStartInfo.FileName = (Get-Command pwsh -CommandType Application).Source
+    $abandonedStartInfo.FileName = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     $abandonedStartInfo.UseShellExecute = $false
     foreach ($argument in @(
         '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $abandonedPayload

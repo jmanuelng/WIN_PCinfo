@@ -29,6 +29,15 @@ try {
     Assert-Equal 'PREPARATION.DECLINED' $result.Records[-1].reasonCode 'the application actually executes'
     Assert-Equal $true $result.Records[-1].runtime.eligible 'the installed host passes live safety probes'
     Assert-Equal $false $result.Records[-1].collectionStarted 'this controlled launch cannot collect'
+    . (Join-Path $repositoryRoot 'src/SigningBoundary.ps1')
+    . (Join-Path $repositoryRoot 'src/PreviewQualification.ps1')
+    . (Join-Path $repositoryRoot 'src/PreviewPublication.ps1')
+    Assert-Equal $true (Invoke-SigningBoundarySmoke -SignedScriptPath $candidatePath) `
+        'signing smoke reaches generated Help despite ambiguous installed-host inventory'
+    Assert-Equal $true (Invoke-PreviewQualificationLaunchSmoke -CandidatePath $candidatePath) `
+        'qualification smoke reaches generated Help under the explicit active host'
+    Assert-Equal $true (Invoke-PreviewPublicationLaunchSmoke -CandidatePath $candidatePath) `
+        'publication smoke reaches generated Help without changing release authority'
 }
 finally { Remove-Item Function:\Get-Command }
 
