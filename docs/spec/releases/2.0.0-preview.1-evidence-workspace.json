@@ -31,11 +31,11 @@
   },
   "journal": {
     "kind": "win-pcinfo.run-recovery-journal",
-    "contractVersion": "1.0.0",
+    "contractVersion": "1.1.0",
     "directoryName": "recovery",
     "fileName": "run-recovery.json",
     "maximumUtf8Bytes": 32768,
-    "allowedPayloadFields": ["runId", "planDigest", "phase", "owner", "artifacts", "cleanup"],
+    "allowedPayloadFields": ["runId", "planDigest", "phase", "owner", "artifacts", "cleanup", "systemTasks"],
     "prohibitedContent": [
       "AssessmentObservation",
       "AssessmentRecord",

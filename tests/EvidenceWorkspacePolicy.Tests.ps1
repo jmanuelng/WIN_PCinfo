@@ -38,7 +38,7 @@ Assert-Equal $false $policy.temporaryEvidence.secureErasureClaim `
     'ordinary verified deletion is not described as forensic erasure'
 Assert-Equal 32768 $policy.journal.maximumUtf8Bytes `
     'the non-secret recovery journal has a stable size bound'
-Assert-Equal 'runId|planDigest|phase|owner|artifacts|cleanup' `
+Assert-Equal 'runId|planDigest|phase|owner|artifacts|cleanup|systemTasks' `
     (@($policy.journal.allowedPayloadFields) -join '|') `
     'the journal has no generic evidence, credential, or metadata channel'
 Assert-Equal 'CleanupOnly' $policy.recovery.mode `

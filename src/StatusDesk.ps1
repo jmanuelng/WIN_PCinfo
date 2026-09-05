@@ -6,7 +6,12 @@ function New-StatusDeskTransport {
         State = [hashtable]::Synchronized(@{
             Preparation = ''; Completion = ''; Terminal = ''; PackagePath = ''
             ApprovedDigest = ''; Decision = 'Declined'; CollectionStarted = $false
+            FirstProgressMilliseconds = -1L; LastProgressMilliseconds = 0L
+            MaximumProgressGapMilliseconds = 0L; ProgressSequence = 0
+            CancellationRequestedMilliseconds = -1L; TerminalMilliseconds = -1L
         })
+        Clock = [Diagnostics.Stopwatch]::StartNew()
+        RecordGate = [object]::new()
         DecisionReady = [Threading.ManualResetEventSlim]::new($false)
         Cancellation = [Threading.CancellationTokenSource]::new()
     }
@@ -14,19 +19,48 @@ function New-StatusDeskTransport {
 
 function Send-StatusDeskRecord {
     param([Parameter(Mandatory)] $Transport, [Parameter(Mandatory)] $Record)
-    $json = Microsoft.PowerShell.Utility\ConvertTo-Json -InputObject $Record -Compress -Depth 30
-    switch ([string] $Record.recordType) {
-        'win-pcinfo.preparation-summary' { $Transport.State.Preparation = $json }
-        'win-pcinfo.completion-summary' { $Transport.State.Completion = $json }
-        'win-pcinfo.terminal' { $Transport.State.Terminal = $json }
+    [Threading.Monitor]::Enter($Transport.RecordGate)
+    try {
+        if ($Record.recordType -eq 'win-pcinfo.terminal') {
+            $Transport.State.TerminalMilliseconds = $Transport.Clock.ElapsedMilliseconds
+            $Transport.State.MaximumProgressGapMilliseconds = [Math]::Max($Transport.State.MaximumProgressGapMilliseconds,
+                $Transport.Clock.ElapsedMilliseconds - $Transport.State.LastProgressMilliseconds)
+        }
+        if ($Record.recordType -eq 'win-pcinfo.progress') {
+            $elapsed = $Transport.Clock.ElapsedMilliseconds
+            if ($Transport.State.FirstProgressMilliseconds -lt 0) { $Transport.State.FirstProgressMilliseconds = $elapsed }
+            else {
+                $Transport.State.MaximumProgressGapMilliseconds = [Math]::Max(
+                    $Transport.State.MaximumProgressGapMilliseconds, $elapsed - $Transport.State.LastProgressMilliseconds)
+            }
+            $Transport.State.LastProgressMilliseconds = $elapsed
+            $Transport.State.ProgressSequence++
+            $Record.sequence = $Transport.State.ProgressSequence
+        }
+        $json = Microsoft.PowerShell.Utility\ConvertTo-Json -InputObject $Record -Compress -Depth 30
+        switch ([string] $Record.recordType) {
+            'win-pcinfo.preparation-summary' { $Transport.State.Preparation = $json }
+            'win-pcinfo.completion-summary' { $Transport.State.Completion = $json }
+            'win-pcinfo.terminal' { $Transport.State.Terminal = $json }
+        }
+        # Serialized worker and UI activity writers; immutable strings cross the thread boundary. Terminal
+        # and approval slots are independent of lossy, bounded activity history.
+        if (-not $Transport.Events.TryAdd($json)) {
+            [string] $discarded = ''
+            $null = $Transport.Events.TryTake([ref] $discarded)
+            $null = $Transport.Events.TryAdd($json)
+        }
     }
-    # Single worker writer; immutable strings cross the thread boundary. Terminal
-    # and approval slots are independent of lossy, bounded activity history.
-    if (-not $Transport.Events.TryAdd($json)) {
-        [string] $discarded = ''
-        $null = $Transport.Events.TryTake([ref] $discarded)
-        $null = $Transport.Events.TryAdd($json)
-    }
+    finally { [Threading.Monitor]::Exit($Transport.RecordGate) }
+}
+
+function Request-StatusDeskCancellation {
+    param([Parameter(Mandatory)] $Session)
+    if ($Session.Transport.Cancellation.IsCancellationRequested) { return }
+    $Session.Transport.State.CancellationRequestedMilliseconds = $Session.Transport.Clock.ElapsedMilliseconds
+    $Session.Transport.Cancellation.Cancel()
+    Send-StatusDeskRecord -Transport $Session.Transport -Record (New-ProgressRecord -Sequence 0 `
+        -Phase Cancellation -State Acknowledged -MessageId cancellation.acknowledged -CompletedUnits 0 -TotalUnits 1)
 }
 
 
@@ -99,7 +133,7 @@ function New-StatusDeskWindow {
  <DockPanel Grid.Row="2" Margin="0,0,0,14"><TextBlock Name="Elapsed" DockPanel.Dock="Right" Text="Elapsed 00:00"/><TextBlock Name="Status" Text="Checking preparation…" FontSize="20" FontWeight="SemiBold"/></DockPanel>
  <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Background="White" Padding="16"><TextBlock Name="Details" TextWrapping="Wrap" Text="Checking the installed runtime, frozen definition and local protection. No assessment collection has started."/></ScrollViewer>
  <GroupBox Grid.Row="4" Header="Activity" Margin="0,14,0,14"><ListBox Name="Timeline" Background="White" BorderThickness="0"/></GroupBox>
- <WrapPanel Grid.Row="5"><Button Name="Approve" Content="_Approve and start" IsEnabled="False"/><Button Name="Decline" Content="_Decline"/><Button Name="Cancel" Content="_Cancel assessment" IsEnabled="False"/><Button Name="OpenReport" Content="_Open report" IsEnabled="False"/><Button Name="Close" Content="C_lose"/></WrapPanel>
+ <WrapPanel Grid.Row="5"><Button Name="Approve" Content="_Approve and start" IsEnabled="False"/><Button Name="Decline" Content="_Decline"/><Button Name="Cancel" Content="_Cancel assessment" IsEnabled="False"/><Button Name="OpenReport" Content="_Open report" IsEnabled="False"/><Button Name="Recover" Content="_Recover owned residue" Visibility="Collapsed"/><Button Name="Close" Content="C_lose"/></WrapPanel>
  </Grid>
 </Window>
 '@
@@ -135,6 +169,9 @@ function Get-StatusDeskPreparationText {
     $lines.Add('Planning estimate: ' + $plan.estimates.durationMinutes + ' minutes; workspace ' + $plan.estimates.workspaceDiskMiB + ' MiB; protected package ' + $plan.estimates.protectedPackageDiskMiB + ' MiB. These are estimates, not a countdown.')
     $lines.Add('Windows feature and device configuration changes: none.')
     $lines.Add('Cleanup: remove owned temporary state and verify absence; retain protected results. Recovery is cleanup only, never collection resume.')
+    if ($plan.cleanup.staleRunRecovery.requested) {
+        $lines.Add('This invocation requests recovery only. It will inspect registered residue in this destination and end without starting collection. Foreign or ambiguous resources remain untouched.')
+    }
     foreach ($limitation in $plan.limitations) { $lines.Add([string]$limitation) }
     if (-not $Summary.readyForApproval) { $lines.Add('Unresolved prerequisites: ' + ($Summary.criticalPrerequisites.unresolved -join ', ')) }
     $lines.Add('')
@@ -183,9 +220,9 @@ function Invoke-StatusDesk {
     $window = New-StatusDeskWindow
     $controls = @{}
     foreach ($name in @('ScopeFact','AuthorityFact','NetworkFact','OutputFact','Elapsed','Status',
-        'Details','Timeline','Approve','Decline','Cancel','OpenReport','Close')) { $controls[$name] = $window.FindName($name) }
+        'Details','Timeline','Approve','Decline','Cancel','OpenReport','Recover','Close')) { $controls[$name] = $window.FindName($name) }
     $session = Start-StatusDeskSession -ModuleText $ModuleText -LaunchParameters $LaunchParameters
-    $state = @{ Preparation=''; Closing=$false; TerminalShown=$false; ViewingCleanupFailed=$false }
+    $state = @{ Preparation=''; Closing=$false; TerminalShown=$false; ViewingCleanupFailed=$false; RecoveryRequested=$false }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $timer = [System.Windows.Threading.DispatcherTimer]::new()
     $timer.Interval = [TimeSpan]::FromMilliseconds(100)
@@ -203,8 +240,9 @@ function Invoke-StatusDesk {
         Set-StatusDeskDecision -Session $session -Approve $false -PlanDigest 'declined'
         $controls.Approve.IsEnabled=$false; $controls.Decline.IsEnabled=$false
     })
-    $controls.Cancel.Add_Click({ $session.Transport.Cancellation.Cancel(); $controls.Status.Text='Cancelling — stopping owned work and finalizing safely…'; $controls.Cancel.IsEnabled=$false })
+    $controls.Cancel.Add_Click({ Request-StatusDeskCancellation $session; $controls.Status.Text='Cancelling — stopping owned work and finalizing safely…'; $controls.Cancel.IsEnabled=$false })
     $controls.Close.Add_Click({ $window.Close() })
+    $controls.Recover.Add_Click({ $state.RecoveryRequested=$true; $window.Close() })
     $controls.OpenReport.Add_Click({
         $result = Show-StatusDeskReport -PackagePath $session.Transport.State.PackagePath -Owner $window
         if (-not $result.verified) {
@@ -226,13 +264,20 @@ function Invoke-StatusDesk {
         param($sender, $eventArgs)
         if (-not $session.Completed) {
             $eventArgs.Cancel=$true; $state.Closing=$true
-            $session.Transport.Cancellation.Cancel()
+            Request-StatusDeskCancellation $session
             Set-StatusDeskDecision -Session $session -Approve $false -PlanDigest 'closing'
             $controls.Status.Text='Closing — waiting for owned work and cleanup…'
         }
     })
     $timer.Add_Tick({
         $controls.Elapsed.Text='Elapsed ' + $watch.Elapsed.ToString('hh\:mm\:ss')
+        if (-not $session.Pending.IsCompleted -and
+            $session.Transport.Clock.ElapsedMilliseconds - $session.Transport.State.LastProgressMilliseconds -ge 2500) {
+            # This heartbeat proves the controller is responsive while waiting;
+            # it never asserts that a blocked source made collection progress.
+            Send-StatusDeskRecord -Transport $session.Transport -Record (New-ProgressRecord -Sequence 0 `
+                -Phase RunControl -State Heartbeat -MessageId controller.waiting-for-worker -CompletedUnits 0 -TotalUnits 1)
+        }
         if ($session.Transport.State.Preparation -and -not $state.Preparation) {
             $state.Preparation=$session.Transport.State.Preparation
             $summary=$state.Preparation | ConvertFrom-Json
@@ -240,6 +285,7 @@ function Invoke-StatusDesk {
             $controls.NetworkFact.Text=$summary.plan.network.behavior
             $controls.OutputFact.Text='Encrypted · recipient ' + $summary.plan.output.recipientProfile.mode
             $controls.Details.Text=Get-StatusDeskPreparationText $summary
+            if ($summary.plan.cleanup.staleRunRecovery.requested) { $controls.Approve.Content='_Approve recovery only' }
             $controls.Status.Text=if($summary.readyForApproval){'Ready for your approval'}else{'Preparation unavailable'}
             $controls.Approve.IsEnabled=$summary.readyForApproval -and -not $session.Transport.DecisionReady.IsSet
         }
@@ -260,9 +306,13 @@ function Invoke-StatusDesk {
             if ($session.Transport.State.Completion) {
                 $summary=$session.Transport.State.Completion | ConvertFrom-Json
                 $controls.Details.Text += "`nProtected package: " + $summary.packageAvailability + "`nLocal access: " + $summary.resultSharingGuidance.localAccess + "`nRecipient access: " + $summary.resultSharingGuidance.recipientAccess + "`nResults are Restricted Diagnostic Evidence. Do not publish them."
-                $controls.OpenReport.IsEnabled=$summary.packageVerified -and $summary.packageAvailability -eq 'Available' -and [bool]$session.Transport.State.PackagePath
+                $controls.OpenReport.IsEnabled=$terminal.outcome -ne 'IntegrityFailed' -and $summary.packageVerified -and $summary.packageAvailability -eq 'Available' -and [bool]$session.Transport.State.PackagePath
             }
             else { $controls.Details.Text += "`nNo usable package or report is available." }
+            if ($terminal.reasonCode -like 'RECOVERY.*' -and -not $terminal.cleanup.verified) {
+                $controls.Recover.Visibility='Visible'
+                $controls.Details.Text += "`nRecovery inspects only registered residue in the approved destination. Preserve protected packages and recovery records. Foreign or ambiguous paths need deliberate inspection. No collection resumes."
+            }
             if ($state.Closing -and $terminal.cleanup.verified) { $window.Close() }
         }
     })
@@ -275,6 +325,12 @@ function Invoke-StatusDesk {
         if ($session.Completed) {
             $session.Transport.Cancellation.Dispose(); $session.Transport.DecisionReady.Dispose(); $session.Transport.Events.Dispose()
         }
+    }
+    if ($state.RecoveryRequested) {
+        $nextLaunch = $LaunchParameters.Clone()
+        $nextLaunch.Request = $LaunchParameters.Request | ConvertTo-Json -Depth 40 | ConvertFrom-Json -Depth 40
+        $nextLaunch.Request.automationChoices.allowStaleRecovery = $true
+        return Invoke-StatusDesk -ModuleText $ModuleText -LaunchParameters $nextLaunch -ViewReady $ViewReady
     }
     $session.ExitCode
 }

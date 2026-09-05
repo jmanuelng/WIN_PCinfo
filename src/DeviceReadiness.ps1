@@ -1934,7 +1934,7 @@ function Get-DeviceReadinessPackageDisposition {
     param(
         [Parameter()] $Package,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
-        [Parameter(Mandatory)] [bool] $ValidationCleanupVerified,
+        [Parameter(Mandatory)] [Alias('ValidationCleanupVerified')] [bool] $CleanupVerified,
         [Parameter(Mandatory)] [bool] $FinalVerificationSucceeded
     )
 
@@ -1950,7 +1950,7 @@ function Get-DeviceReadinessPackageDisposition {
     else { '' }
 
     $cleanupUncertain = $packageState -eq 'CleanupIncomplete' -or
-        ($ValidationFixture -and -not $ValidationCleanupVerified) -or
+        (-not $CleanupVerified) -or
         ($FinalVerificationSucceeded -and -not $ValidationFixture -and
             ([string]::IsNullOrWhiteSpace($packagePath) -or
                 -not [System.IO.File]::Exists($packagePath)))
@@ -2191,17 +2191,19 @@ function Invoke-DeviceReadinessSlice {
     $outcome = 'CompletedWithGaps'; $exitCode = 10; $reasonCode = 'DEVICE_READINESS.EVIDENCE_UNAVAILABLE'
     $activeLock = $null
     $lockOwned = $false
+    $runJournal = $null
+    $runWorkspace = $null
+    $abandonedLock = $false
     $script:AssessmentCollectionSequence = 4
     try {
         $activeLock = [Threading.Mutex]::new($false, [string](Get-AssessmentRunLifecyclePolicy).activeRunLock.name)
         $lockOwned = $false
         try { $lockOwned = $activeLock.WaitOne(0) }
         catch [Threading.AbandonedMutexException] {
-            $activeLock.ReleaseMutex()
-            Write-DeviceReadinessTerminal -Outcome NotStarted -ExitCode 20 -ReasonCode 'RUN.STALE_OWNER_RECOVERED' `
-                -CollectionStarted $false -ValidationFixture $false -CleanupVerified $false `
-                -RequestDigest $RequestDigest -PlanDigest $PlanDigest -ConvertToJsonCommand $ConvertToJsonCommand
-            return 20
+            # Windows transferred the abandoned lock to this thread. Keep it
+            # while inspecting durable ownership, never silently resume collection.
+            $lockOwned = $true
+            $abandonedLock = $true
         }
         if (-not $lockOwned) {
             # The common finally disposes the lock.
@@ -2209,6 +2211,28 @@ function Invoke-DeviceReadinessSlice {
                 -CollectionStarted $false -ValidationFixture $false -CleanupVerified $true `
                 -RequestDigest $RequestDigest -PlanDigest $PlanDigest -ConvertToJsonCommand $ConvertToJsonCommand
             return 20
+        }
+        if (-not $isFixture) {
+            $destination = [IO.Path]::GetFullPath($ApprovedOutputDestination)
+            $recovery = Invoke-AssessmentRecoveryGate -Destination $destination `
+                -Authorized ([bool]$PreparationPlan.cleanup.staleRunRecovery.requested)
+            if ($abandonedLock -and $null -eq $recovery) {
+                $recovery = New-StaleRunRecoveryResult -Outcome CleanupIncomplete -ReasonCode RECOVERY.OWNER_UNVERIFIED `
+                    -CleanupVerified $false -CleanupAttempts 0
+            }
+            if ($null -ne $recovery) {
+                $recoveryExit = if ($recovery.outcome -eq 'CleanupIncomplete') { 60 } else { 20 }
+                Write-DeviceReadinessTerminal -Outcome $recovery.outcome -ExitCode $recoveryExit -ReasonCode $recovery.reasonCode `
+                    -CollectionStarted $false -ValidationFixture $false -CleanupVerified $recovery.cleanup.verified `
+                    -RequestDigest $RequestDigest -PlanDigest $PlanDigest -ConvertToJsonCommand $ConvertToJsonCommand
+                return $recoveryExit
+            }
+            $null = [IO.Directory]::CreateDirectory($destination)
+            $runWorkspace = New-EvidenceWorkspace -RequestedBasePath $destination -RunId ([guid]::NewGuid())
+            if ($runWorkspace.state -ne 'Created') { throw 'The approved Evidence Workspace could not be created.' }
+            $runJournal = New-RunRecoveryJournal -Workspace $runWorkspace -RecoveryBasePath $destination `
+                -PlanDigest $PlanDigest -Phase Collection
+            $script:AssessmentRunJournalPath = [string]$runJournal.journalPath
         }
             $policy = Get-DeviceReadinessPolicy -ConvertFromJsonCommand $ConvertFromJsonCommand
         $firmwarePolicy = Get-FirmwareReadinessPolicy `
@@ -3187,8 +3211,7 @@ function Invoke-DeviceReadinessSlice {
                         # not the caller's earlier relative request text. That
                         # closes working-directory drift between approval and
                         # packaging without inventing a new destination.
-                        $destination = [System.IO.Path]::GetFullPath($ApprovedOutputDestination)
-                        $null = [System.IO.Directory]::CreateDirectory($destination)
+                        $destination = [string]$runWorkspace.workspacePath
                     }
                     $artifacts = [ordered]@{
                         'assessment-record.json'=$recordBytes
@@ -3209,7 +3232,8 @@ function Invoke-DeviceReadinessSlice {
                         -AdministratorCollector $administratorCollector -IdentityCollector $identityCollector
                     $package = New-ProtectedEvidencePackage -DestinationDirectory $destination `
                         -Artifacts $artifacts -AssessmentContractSetVersion $contractSetVersion `
-                        -Completeness $packageCompleteness -ApprovedRecipient $ApprovedRecipient
+                        -Completeness $packageCompleteness -ApprovedRecipient $ApprovedRecipient `
+                        -JournalPath $(if ($null -ne $runJournal) { [string]$runJournal.journalPath } else { '' })
                     if ($package.verified) {
                         $recipientKeyProtection = [string](
                             Get-ProtectedPackageEnvelopeHeader $package.packagePath
@@ -3228,7 +3252,7 @@ function Invoke-DeviceReadinessSlice {
                     if (-not $packageVerified) {
                         $packageDisposition = Get-DeviceReadinessPackageDisposition `
                             -Package $package -ValidationFixture $isFixture `
-                            -ValidationCleanupVerified $true `
+                            -CleanupVerified $true `
                             -FinalVerificationSucceeded $packageVerified
                         $outcome=[string]$packageDisposition.outcome
                         $exitCode=[int]$packageDisposition.exitCode
@@ -3273,6 +3297,27 @@ function Invoke-DeviceReadinessSlice {
                 $outcome='CleanupIncomplete';$exitCode=60;$reasonCode='DEVICE_READINESS.CLEANUP_INCOMPLETE'
             }
         }
+        if ($null -ne $runJournal -and $cleanupVerified) {
+            try {
+                if ($packageVerified) {
+                    # The verified protected result is retained outside the
+                    # transient workspace before its journal can be retired.
+                    $retainedPath = Join-Path ([IO.Path]::GetFullPath($ApprovedOutputDestination)) ([IO.Path]::GetFileName($package.packagePath))
+                    [IO.File]::Move($package.packagePath, $retainedPath)
+                    $package.packagePath = $retainedPath
+                }
+                $cleanup = Invoke-StaleRunRecovery -JournalPath $runJournal.journalPath -CurrentRunCleanup
+                $cleanupVerified = [bool]$cleanup.cleanup.verified
+            }
+            catch { $cleanupVerified = $false }
+        }
+        elseif ($null -eq $runJournal -and $null -ne $runWorkspace -and $runWorkspace.state -eq 'Created') {
+            # Journal creation failed. Preserve the unregistered boundary;
+            # guessing ownership here would defeat interruption recovery.
+            $cleanupVerified = $false
+        }
+        if (-not $cleanupVerified) { $outcome='CleanupIncomplete'; $exitCode=60; $reasonCode='RUN.CLEANUP_INCOMPLETE' }
+        Remove-Variable -Name AssessmentRunJournalPath -Scope Script -ErrorAction SilentlyContinue
         if ($lockOwned) { $activeLock.ReleaseMutex() }
         if ($null -ne $activeLock) { $activeLock.Dispose() }
     }
@@ -3505,7 +3550,7 @@ function Invoke-DeviceReadinessSlice {
         $recipientKeyProtection -eq 'RSA-OAEP-SHA-256'
     $packageDisposition = Get-DeviceReadinessPackageDisposition `
         -Package $package -ValidationFixture $isFixture `
-        -ValidationCleanupVerified $cleanupVerified `
+        -CleanupVerified $cleanupVerified `
         -FinalVerificationSucceeded $packageVerified
     $packageAvailability = [string]$packageDisposition.packageAvailability
     $statusTransport = Get-Variable -Name StatusDeskTransport -Scope Script -ErrorAction SilentlyContinue

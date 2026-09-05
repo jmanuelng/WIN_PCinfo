@@ -1,8 +1,16 @@
 [CmdletBinding()]
 param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
-    [switch] $Wpf, [switch] $HoldRunLock)
+    [switch] $Wpf, [switch] $HoldRunLock,
+    [ValidateSet('None','Cancel','Close')] [string] $ActiveAction = 'None',
+    [ValidateSet('Privilege','System','NativeCooperative','NativeHard')] [string] $ActiveWorker = 'Privilege',
+    [switch] $RequireRecoveryJournal,
+    [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
+    [switch] $RecoveryAuthorized, [string] $InterruptHandoffPath = '',
+    [ValidateSet('None','Integrity','Cleanup')] [string] $FailureKind = 'None')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 $candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
@@ -43,9 +51,9 @@ function Invoke-PrivilegedCollectionPlan { param($PreparationPlan, $PlanDigest, 
         -AssessmentUserContext $AssessmentUserContext -AssessmentUserSid 'S-1-5-21-100-200-300-1001' `
         -LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation `
         -FirmwareScenario Supported -AdministratorScenario LocalPrincipal -EffectivePolicyScenario Workgroup -CancellationToken $CancellationToken }
-function Invoke-SystemCollectionPlan { param($Plan, $PlanDigest, $ValidationScenario)
+function Invoke-SystemCollectionPlan { param($Plan, $PlanDigest, $ValidationScenario, $CancellationToken)
     $script:StatusDeskTransport.State.SystemInvoked=$true
-    Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess }
+    Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess -CancellationToken $CancellationToken }
 function Invoke-ApprovedCollectorProcess { param($OperationId, $DeviceReadinessScenario, $CancellationToken)
     Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -DeviceReadinessScenario Complete -CancellationToken $CancellationToken }
 '@
@@ -63,10 +71,54 @@ if ($CancelDuringPrivilege) {
     $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
         '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
 }
+if ($ActiveAction -ne 'None') {
+    $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy',
+        '[Threading.Thread]::Sleep(11500); Invoke-ControlledResourceDependenciesCollection -Policy')
+    if ($ActiveWorker -eq 'Privilege') {
+        $moduleText = $moduleText.Replace('Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
+            '$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp(); $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
+        $moduleText = $moduleText.Replace('-EffectivePolicyScenario Workgroup -CancellationToken $CancellationToken }',
+            '-EffectivePolicyScenario Workgroup -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.cleanup.verified; $result }')
+        $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
+            '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
+    }
+    elseif ($ActiveWorker -eq 'System') {
+        $moduleText = $moduleText.Replace('Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess -CancellationToken $CancellationToken }',
+            '$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp(); $result=Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario Cancellation -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.cleanup.verified -and $result.cleanup.taskAbsent -and $result.cleanup.workerTreeAbsent -and $result.cleanup.pipeAbsent; $result }')
+    }
+    else {
+        $fixture = if ($ActiveWorker -eq 'NativeCooperative') { 'cooperative-cancel' } else { 'hard-cancel' }
+        $moduleText = $moduleText.Replace('Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -DeviceReadinessScenario Complete -CancellationToken $CancellationToken }',
+            ('$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp(); $result=Invoke-ControlledApprovedCollectorProcess -OperationId fixture:synthetic.' + $fixture + ' -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.Supervision.completeOwnedTreeAbsent -and $result.Supervision.temporaryArtifactsAbsent; $script:StatusDeskTransport.State.TerminationMode=$result.Supervision.terminationMode; $result }'))
+    }
+}
+if ($RequireRecoveryJournal) {
+    $moduleText = $moduleText.Replace('Invoke-ControlledIdentityEnrollmentCollection -Policy',
+        '$script:StatusDeskTransport.State.JournalObserved=(Test-Path -LiteralPath $Parameters.Request.outputDestination) -and @(Get-ChildItem -LiteralPath $Parameters.Request.outputDestination -Filter WINPCInfo-Recovery-v1-* -Directory).Count -eq 1; Invoke-ControlledIdentityEnrollmentCollection -Policy')
+}
+if ($InterruptHandoffPath) {
+    $handoffLiteral = "'" + $InterruptHandoffPath.Replace("'", "''") + "'"
+    $moduleText = $moduleText.Replace('Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
+        "[IO.File]::WriteAllText($handoffLiteral, 'registered-before-supervised-worker'); Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan")
+    $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
+        '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
+}
+if ($FailureKind -eq 'Integrity') {
+    $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
+        '-LocalPackageProtector $LocalPackageProtector -ValidationScenario AlteredPlan')
+}
+elseif ($FailureKind -eq 'Cleanup') {
+    $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty }',
+        '$result=Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty; $temporary=Add-TemporaryEvidence -JournalPath $script:AssessmentRunJournalPath -Content ([Text.Encoding]::UTF8.GetBytes("synthetic locked residue")); $script:StatusDeskTransport.State.SyntheticLock=[IO.File]::Open($temporary.literalPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None); $result }')
+}
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
+if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
+$ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
+if (-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Test output must remain in its owned test boundary.' }
 $request = Get-AutomationRequest -LiteralPath (Join-Path $PSScriptRoot 'fixtures/automation-request.json') `
     -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
 $request.outputDestination = $testRoot
+$request.automationChoices.allowStaleRecovery = [bool]$RecoveryAuthorized
 $context = @{ IsFixture = $false }
 foreach ($name in @('Preparation','Contract','Run','PrivilegedCollection','SystemCollection',
     'EvidenceWorkspace','ProtectedPackage','RecipientSharing','DeviceReadiness','IdentityEnrollment',
@@ -88,7 +140,7 @@ try {
     if ($Wpf) {
         Add-Type -AssemblyName PresentationFramework
         $null = [System.Windows.Window]
-        $uiState = @{ Session=$null; Window=$null; Clicked=$false; ReportClicked=$false; ReportObserved=$false; Failure='' }
+        $uiState = @{ Session=$null; Window=$null; Clicked=$false; ReportClicked=$false; ReportObserved=$false; Failure=''; ActionSent=$false; ResponsiveTicks=0; Acknowledged=$false; AcknowledgmentMilliseconds=-1; PeakPrivateBytes=0L; PeakWorkingSetBytes=0L }
         $driver = [System.Windows.Threading.DispatcherTimer]::new()
         $driver.Interval = [TimeSpan]::FromMilliseconds(100)
         $reportCloser = [System.Windows.Threading.DispatcherTimer]::new()
@@ -112,10 +164,27 @@ try {
         $driver.Add_Tick({
             $window=$uiState.Window
             if ($null -eq $window) { return }
+            $ownProcess=[Diagnostics.Process]::GetCurrentProcess()
+            try {
+                $uiState.PeakPrivateBytes=[Math]::Max($uiState.PeakPrivateBytes,$ownProcess.PrivateMemorySize64)
+                $uiState.PeakWorkingSetBytes=[Math]::Max($uiState.PeakWorkingSetBytes,$ownProcess.WorkingSet64)
+            } finally { $ownProcess.Dispose() }
             if ($window.FindName('Approve').IsEnabled -and -not $uiState.Clicked) {
                 $uiState.Clicked=$true
                 $window.FindName('Approve').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
             }
+            if ($ActiveAction -ne 'None' -and -not $uiState.ActionSent -and
+                $uiState.Session.Transport.State.ContainsKey('ControlledWorkerStarted') -and
+                [Diagnostics.Stopwatch]::GetElapsedTime($uiState.Session.Transport.State.ControlledWorkerStarted).TotalMilliseconds -ge 1500) {
+                $uiState.ActionSent=$true
+                $actionWatch=[Diagnostics.Stopwatch]::StartNew()
+                if ($ActiveAction -eq 'Close') { $window.Close() }
+                else { $window.FindName('Cancel').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent)) }
+                $uiState.Acknowledged=$actionWatch.ElapsedMilliseconds -le 2000 -and $window.FindName('Status').Text -match 'Cancelling|Closing'
+                $uiState.AcknowledgmentMilliseconds=$actionWatch.ElapsedMilliseconds
+            }
+            if ($uiState.ActionSent -and -not $uiState.Session.Completed) { $uiState.ResponsiveTicks++ }
+            if ($ActiveAction -eq 'Close' -and -not $uiState.Session.Completed) { return }
             if ($window.FindName('OpenReport').IsEnabled -and -not $uiState.ReportClicked) {
                 $uiState.ReportClicked=$true
                 $window.FindName('OpenReport').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
@@ -137,7 +206,21 @@ try {
         finally { $driver.Stop(); $reportCloser.Stop() }
         $session=$uiState.Session
         Assert-Equal $true $uiState.Clicked 'actual STA WPF approval control starts the same worker'
-        Assert-Equal $true $uiState.ReportObserved ('actual Open report opens the protected HTML window: ' + $uiState.Failure)
+        if ($FailureKind -ne 'None') {
+            Assert-Equal $false $uiState.ReportClicked 'failure disables the actual report control'
+            Assert-Equal $(if($FailureKind -eq 'Integrity'){'IntegrityFailed'}else{'CleanupIncomplete'}) $uiState.Window.FindName('Status').Text 'GUI displays the authoritative failure precedence'
+        }
+        elseif ($ActiveAction -eq 'None') { Assert-Equal $true $uiState.ReportObserved ('actual Open report opens the protected HTML window: ' + $uiState.Failure) }
+        else {
+            Assert-Equal $true $uiState.ActionSent 'active action reaches the actual waiting privileged worker'
+            Assert-Equal $true $uiState.Acknowledged 'actual control acknowledges cancellation within two seconds'
+            Assert-Equal $true ($uiState.ResponsiveTicks -ge 3) 'dispatcher remains responsive throughout supervised finalization'
+            Assert-Equal $true $session.Transport.State.ControlledWorkerCleanup 'active action verifies owned privileged process tree and channel absence'
+            Assert-Equal $true ($session.Transport.State.FirstProgressMilliseconds -le 5000) 'first generated application progress arrives within five seconds'
+            Assert-Equal $true ($session.Transport.State.MaximumProgressGapMilliseconds -le 10000) 'sustained generated application progress gaps stay within ten seconds'
+            if ($ActiveWorker -like 'Native*') { Assert-Equal $(if ($ActiveWorker -eq 'NativeCooperative') {'Cooperative'}else{'Hard'}) $session.Transport.State.TerminationMode 'native worker uses the expected cooperative or bounded hard stop' }
+            Write-Output ('TIMING: action={0}; worker={1}; first={2}ms; maximumGap={3}ms; acknowledgment={4}ms; cancellationToTerminal={5}ms; sampledPrivateMiB={6}; sampledWorkingSetMiB={7}' -f $ActiveAction,$ActiveWorker,$session.Transport.State.FirstProgressMilliseconds,$session.Transport.State.MaximumProgressGapMilliseconds,$uiState.AcknowledgmentMilliseconds,($session.Transport.State.TerminalMilliseconds-$session.Transport.State.CancellationRequestedMilliseconds),[Math]::Round($uiState.PeakPrivateBytes/1MB),[Math]::Round($uiState.PeakWorkingSetBytes/1MB))
+        }
     }
     else { $session = Start-StatusDeskSession -ModuleText $moduleText -LaunchParameters $launch }
     $watch = [Diagnostics.Stopwatch]::StartNew()
@@ -150,14 +233,37 @@ try {
     while (-not (Complete-StatusDeskSession $session) -and $watch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 25 }
     Assert-Equal $true $session.Completed 'ordinary collector chain reaches bounded completion'
     $terminal = $session.Transport.State.Terminal | ConvertFrom-Json
+    if ($FailureKind -ne 'None') {
+        $expectedOutcome=if($FailureKind -eq 'Integrity'){'IntegrityFailed'}else{'CleanupIncomplete'}
+        Assert-Equal $expectedOutcome $terminal.outcome 'structured terminal preserves integrity/cleanup precedence'
+        Assert-Equal $(if($FailureKind -eq 'Integrity'){50}else{60}) $session.ExitCode 'exit status preserves integrity/cleanup precedence'
+        $completion=$session.Transport.State.Completion | ConvertFrom-Json
+        Assert-Equal $expectedOutcome $completion.assessment.outcome 'completion record agrees with GUI and exit'
+        Assert-Equal '' $session.Transport.State.PackagePath 'failure exposes no unverified report action'
+        if ($FailureKind -eq 'Cleanup') {
+            Assert-Equal $false $terminal.cleanup.verified 'surviving locked residue is not cleanup success'
+            Assert-Equal 1 @(Get-ChildItem -LiteralPath $testRoot -Filter WINPCInfo-Recovery-v1-* -Directory).Count 'cleanup uncertainty preserves durable recovery state'
+        }
+        return
+    }
+    if ($RecoveryExpectedReason) {
+        Assert-Equal $RecoveryExpectedReason $terminal.reasonCode 'ordinary generated recovery has the expected truthful terminal'
+        Assert-Equal $false $terminal.collectionStarted 'recovery never starts or resumes collection'
+        Assert-Equal '' $session.Transport.State.PackagePath 'recovery exposes no newly collected report'
+        return
+    }
     if ($HoldRunLock) {
         Assert-Equal 'NotStarted' $terminal.outcome 'the actual scheduler refuses a concurrent run'
         Assert-Equal 'RUN.ACTIVE_LOCK_HELD' $terminal.reasonCode 'lock contention has an honest terminal reason'
         Assert-Equal $false $terminal.collectionStarted 'lock contention starts no collector'
         return
     }
-    Assert-Equal $(if($CancelAfterIdentity -or $CancelAfterResource -or $CancelDuringPrivilege){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
+    Assert-Equal $(if($CancelAfterIdentity -or $CancelAfterResource -or $CancelDuringPrivilege -or $ActiveAction -ne 'None'){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
     Assert-Equal $true $terminal.collectionStarted 'ordinary collection actually executed'
+    if ($RequireRecoveryJournal) {
+        Assert-Equal $true $session.Transport.State.JournalObserved 'ordinary assessment registers durable ownership before the first source executes'
+        Assert-Equal 0 @(Get-ChildItem -LiteralPath $testRoot -Filter WINPCInfo-Recovery-v1-* -Directory).Count 'successful finalization removes the journal after owned transient absence'
+    }
     Assert-Equal $preparation.planDigest $terminal.planDigest 'approval and terminal bind the same frozen plan'
     $summary = $session.Transport.State.Completion | ConvertFrom-Json
     Assert-Equal 'Available' $summary.packageAvailability 'a usable protected result survives completion'
@@ -184,6 +290,7 @@ try {
     foreach ($bytes in $opened.artifacts.Values) { [Security.Cryptography.CryptographicOperations]::ZeroMemory([byte[]]$bytes) }
 }
 finally {
+    if ($null -ne $session -and $session.Transport.State.ContainsKey('SyntheticLock')) { $session.Transport.State.SyntheticLock.Dispose() }
     if ($null -ne $runLock) { if ($runLockOwned) { $runLock.ReleaseMutex() }; $runLock.Dispose() }
     if ($null -ne $session -and -not $session.Completed) {
         $session.Transport.Cancellation.Cancel()
@@ -198,6 +305,6 @@ finally {
     $resolved = [IO.Path]::GetFullPath($testRoot)
     $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
     if (-not $resolved.StartsWith($ownedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected synthetic cleanup target.' }
-    if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }
+    if (-not $RecoveryDestination -and (Test-Path -LiteralPath $resolved)) { Remove-Item -LiteralPath $resolved -Recurse -Force }
 }
 Write-Output 'PASS: generated Status desk worker executes controlled comprehensive collectors, protects a useful offline report, and cleans viewing.'

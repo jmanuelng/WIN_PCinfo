@@ -460,6 +460,7 @@ function New-RunRecoveryJournal {
                 finalized = $false
             }
         )
+        systemTasks = @()
         cleanup = [pscustomobject][ordered]@{
             state = 'Pending'
             attempts = 0
@@ -639,7 +640,9 @@ function Set-RunRecoveryIncomplete {
 }
 
 function Invoke-StaleRunRecovery {
-    param([Parameter(Mandatory)] [string] $JournalPath)
+    param([Parameter(Mandatory)] [string] $JournalPath,
+        [Parameter(DontShow)] [switch] $CurrentRunCleanup,
+        [Parameter()] [string] $ExpectedWorkspaceBase = '')
 
     $journalFullPath = [System.IO.Path]::GetFullPath($JournalPath)
     $pendingJournalPath = $journalFullPath + '.new'
@@ -666,7 +669,7 @@ function Invoke-StaleRunRecovery {
             -ReasonCode 'RECOVERY.JOURNAL_INVALID' -CleanupVerified $false -CleanupAttempts 0
     }
     $expectedJournalDirectory = 'WINPCInfo-Recovery-v1-' + [string] $journal.runId
-    if ($currentSid -ne [string] $journal.owner.initiatingUserSid -or
+    if (-not $fixedJournalName -or $currentSid -ne [string] $journal.owner.initiatingUserSid -or
         [System.IO.Path]::GetFileName($journalDirectory) -ne $expectedJournalDirectory -or
         -not (Test-EvidenceAccessBoundary -LiteralPath $journalDirectory `
             -ExpectedOwnerSid ([string] $journal.owner.initiatingUserSid))) {
@@ -676,7 +679,12 @@ function Invoke-StaleRunRecovery {
     }
 
     $ownerState = Get-RunRecoveryOwnerState -Owner $journal.owner
-    if ($ownerState -eq 'Live') {
+    $currentOwner = $CurrentRunCleanup -and (Test-RunRecoveryJournalCurrentOwner -Journal $journal)
+    if ($CurrentRunCleanup -and -not $currentOwner) {
+        return New-StaleRunRecoveryResult -Outcome 'CleanupIncomplete' `
+            -ReasonCode 'RECOVERY.OWNER_UNVERIFIED' -CleanupVerified $false -CleanupAttempts 0
+    }
+    if ($ownerState -eq 'Live' -and -not $currentOwner) {
         return New-StaleRunRecoveryResult -Outcome 'NotStarted' `
             -ReasonCode 'RECOVERY.LIVE_OWNER' -CleanupVerified $false -CleanupAttempts 0
     }
@@ -704,6 +712,13 @@ function Invoke-StaleRunRecovery {
             -ReasonCode 'RECOVERY.OWNERSHIP_UNVERIFIED' -CleanupVerified $false -CleanupAttempts 0
     }
     $workspace = $workspaceArtifacts[0]
+    if ($ExpectedWorkspaceBase -and -not [string]::Equals(
+        [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath([string]$workspace.path)),
+        [IO.Path]::GetFullPath($ExpectedWorkspaceBase).TrimEnd([IO.Path]::DirectorySeparatorChar),
+        [StringComparison]::OrdinalIgnoreCase)) {
+        return New-StaleRunRecoveryResult -Outcome CleanupIncomplete -ReasonCode RECOVERY.OWNERSHIP_UNVERIFIED `
+            -CleanupVerified $false -CleanupAttempts 0
+    }
     $policy = Get-EvidenceWorkspacePolicy
     $expectedWorkspaceName = [string] $policy.workspace.directoryNamePrefix + [string] $journal.runId
     if ([System.IO.Path]::GetFileName([string] $workspace.path) -ne $expectedWorkspaceName) {
@@ -749,6 +764,12 @@ function Invoke-StaleRunRecovery {
             -ReasonCode 'RECOVERY.OWNERSHIP_UNVERIFIED' -CleanupVerified $false -CleanupAttempts 0
     }
 
+    if ($journal.PSObject.Properties['systemTasks'] -and @($journal.systemTasks).Count -gt 0 -and
+        -not (Remove-RecoverySystemCollectionTasks -Journal $journal -JournalPath $journalFullPath)) {
+        Set-RunRecoveryIncomplete -Journal $journal -JournalPath $journalFullPath -Attempts 1 -ReasonCode RECOVERY.SYSTEM_TASK_UNVERIFIED
+        return New-StaleRunRecoveryResult -Outcome CleanupIncomplete -ReasonCode RECOVERY.SYSTEM_TASK_UNVERIFIED `
+            -CleanupVerified $false -CleanupAttempts 1
+    }
     $preservedPackages = @($journal.artifacts | Where-Object {
         $_.kind -eq 'ProtectedEvidencePackage' -and $_.cleanupAction -eq 'Preserve' -and $_.finalized
     } | Where-Object {
@@ -857,6 +878,40 @@ function Invoke-StaleRunRecovery {
     New-StaleRunRecoveryResult -Outcome 'NotStarted' `
         -ReasonCode 'RECOVERY.STALE_RESIDUE_REMOVED' -CleanupVerified $true `
         -CleanupAttempts $attempt -WorkspacePreserved ($preservedPackages.Count -gt 0)
+}
+
+function Invoke-AssessmentRecoveryGate {
+    param([Parameter(Mandatory)] [string] $Destination, [Parameter(Mandatory)] [bool] $Authorized)
+    if (-not [IO.Directory]::Exists($Destination)) {
+        if ($Authorized) { return New-StaleRunRecoveryResult -Outcome NotStarted -ReasonCode RECOVERY.NO_RESIDUE -CleanupVerified $true -CleanupAttempts 0 }
+        return
+    }
+    # Inspect only immediate, fixed-namespace entries in the approved destination.
+    # Each journal still has to prove its ACL, owner, exact identities and paths.
+    $paths = @(Get-ChildItem -LiteralPath $Destination -Filter 'WINPCInfo-Recovery-v1-*' -Directory -Force |
+        Select-Object -First 33)
+    if ($paths.Count -eq 0) {
+        if ($Authorized) { return New-StaleRunRecoveryResult -Outcome NotStarted -ReasonCode RECOVERY.NO_RESIDUE -CleanupVerified $true -CleanupAttempts 0 }
+        return
+    }
+    if (-not $Authorized) {
+        return New-StaleRunRecoveryResult -Outcome NotStarted -ReasonCode RECOVERY.DELIBERATE_ACTION_REQUIRED `
+            -CleanupVerified $false -CleanupAttempts 0
+    }
+    if ($paths.Count -gt 32) {
+        return New-StaleRunRecoveryResult -Outcome CleanupIncomplete -ReasonCode RECOVERY.JOURNAL_LIMIT `
+            -CleanupVerified $false -CleanupAttempts 0
+    }
+    foreach ($path in $paths) {
+        if (($path.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            return New-StaleRunRecoveryResult -Outcome CleanupIncomplete -ReasonCode RECOVERY.OWNERSHIP_UNVERIFIED `
+                -CleanupVerified $false -CleanupAttempts 0
+        }
+        $result = Invoke-StaleRunRecovery -JournalPath (Join-Path $path.FullName 'run-recovery.json') -ExpectedWorkspaceBase $Destination
+        if (-not $result.cleanup.verified) { return $result }
+    }
+    # Even successful recovery ends this invocation. A fresh approved run is required.
+    $result
 }
 
 function Test-EvidenceArtifactWithinWorkspace {
