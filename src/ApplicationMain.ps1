@@ -22,6 +22,15 @@ if (-not $moduleFacts.contractCommandProvenance) {
 }
 $convertToJsonCommand = $moduleFacts.convertToJsonCommand
 $convertFromJsonCommand = $moduleFacts.convertFromJsonCommand
+# The portable bootstrap probes this exact generated application's policy.
+# This branch has no request, fixture, preparation, or assessment authority.
+if ($Workflow -eq 'CheckRuntime') {
+    $runtimeCheck = Test-RuntimeCompatibility -Facts (Get-ActiveRuntimeFacts -ModuleFacts $moduleFacts)
+    $terminal = New-TerminalRecord -ReasonCode $runtimeCheck.ReasonCode -RuntimeResult $runtimeCheck -Phase 'RuntimeCompatibility'
+    if ($runtimeCheck.Eligible) { $terminal.outcome = 'Completed'; $terminal.exitCode = 0 }
+    Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+    exit $terminal.exitCode
+}
 $artifactTrustValid = Test-ApplicationArtifactTrust -LiteralPath $PSCommandPath `
     -AuthenticodeCommand $moduleFacts.authenticodeCommand
 
@@ -95,6 +104,14 @@ if ($Workflow -eq 'Verify') {
     $terminal.exitCode = 0
     Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
     exit 0
+}
+
+if ($Mode -eq 'Gui') {
+    # The Status desk adapter is owned by #137. Never silently fall through to
+    # guided assessment while that adapter is unavailable.
+    Write-ContractRecord (New-TerminalRecord -ReasonCode 'GUI.ADAPTER_UNAVAILABLE' -Phase 'Launch') `
+        -ConvertToJsonCommand $convertToJsonCommand
+    exit 20
 }
 
 if ($Workflow -eq 'AdmitValidationRound') {

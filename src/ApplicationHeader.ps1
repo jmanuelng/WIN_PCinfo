@@ -57,7 +57,7 @@ param(
     # an immutable-tag rule. The trust assumption is that the request
     # is synthetic. Safe failure is NotStarted, or an evaluated
     # denial that cannot create a GitHub release.
-    [ValidateSet('Assessment', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')]
+    [ValidateSet('Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -69,7 +69,7 @@ param(
     [string] $CandidateArchivePath,
 
     [Parameter()]
-    [ValidateSet('Guided', 'Automation')]
+    [ValidateSet('Guided', 'Automation', 'Gui')]
     [string] $Mode = 'Guided',
 
     [Parameter()]
@@ -296,3 +296,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Contract output is UTF-8 even from an Explorer launch with no inherited
+# console. The runtime probe still verifies strict decoding and JSON behavior.
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
+$OutputEncoding = [Text.UTF8Encoding]::new($false)

@@ -17,6 +17,19 @@ This behavior does not create a Preview Release or a supported-capability claim.
 
 ## Required PowerShell host
 
+The portable entry and shared generated-application test helper enumerate PATH
+application matches in order, followed by the documented Program Files locations.
+They deduplicate literal paths, reject unverified executables before execution,
+and choose the first candidate that passes the generated application's
+`CheckRuntime` workflow. This diagnostic workflow uses the exact policy below,
+ignores assessment/fixture inputs, and never starts collection. Selection does
+not install or repair a runtime. Tests may explicitly select an executable to
+verify an incompatible host's public rejection contract.
+
+The application initializes UTF-8 input/output even without an inherited console;
+the existing UTF-8 test-host setup is retained. Runtime eligibility still requires
+the strict encoding, module provenance, cryptography, and process checks below.
+
 Use an already installed PowerShell host with all of these properties:
 
 - `PSEdition` is `Core`.
