@@ -208,7 +208,7 @@ function New-CrossDomainFinding {
         ruleId = [string] $Rule.ruleId
         targetSubjectId = $TargetSubjectId
         outcome = [string] $OutcomeResult.outcome
-        evidenceReferences = Get-CrossDomainEvidenceReferences -Findings $SourceFindings
+        evidenceReferences = @(Get-CrossDomainEvidenceReferences -Findings $SourceFindings)
     }
     if ([string] $OutcomeResult.outcome -in @('Indeterminate', 'NotApplicable')) {
         $finding.reasonCode = [string] $OutcomeResult.reasonCode

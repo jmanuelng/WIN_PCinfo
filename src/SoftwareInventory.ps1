@@ -909,7 +909,7 @@ function Invoke-BoundedSoftwareInventorySnapshot {
             $executable, @('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',$encoded),
             (Split-Path -Parent $executable), $environment, $activeMilliseconds,
             [int]$collector.resultMaximumUtf8Bytes, 4096,
-            [Threading.CancellationToken]::None, $event, 1,
+            (Get-AssessmentCancellationToken), $event, 1,
             $terminationMilliseconds, $false
         )
         if ($native.Started -and -not $native.CompleteOwnedTreeAbsent) {

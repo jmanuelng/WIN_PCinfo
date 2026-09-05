@@ -437,7 +437,7 @@ function Invoke-PreparationGate {
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $RuntimeResult,
         [Parameter(Mandatory)] [bool] $ArtifactTrustValid,
-        [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
+        [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation', 'Gui')] [string] $Mode,
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
         [Parameter(Mandatory)] $ValidationContext,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,
@@ -525,7 +525,16 @@ function Invoke-PreparationGate {
         return 20
     }
 
-    $accepted = if ($Mode -eq 'Automation') {
+    $accepted = if ($Mode -eq 'Gui') {
+        # Only the displayed immutable digest is an approval. The worker retains
+        # the request, definition, recipient and plan; the UI receives JSON copies.
+        $script:StatusDeskTransport.DecisionReady.Wait()
+        $script:StatusDeskTransport.State.Decision -eq 'Accepted' -and
+            $script:StatusDeskTransport.State.ApprovedDigest -ceq $planResult.Digest -and
+            -not $script:StatusDeskTransport.Cancellation.IsCancellationRequested -and
+            (Get-ObjectDigest -Value $planResult.Plan -ConvertToJsonCommand $ConvertToJsonCommand) -ceq $planResult.Digest
+    }
+    elseif ($Mode -eq 'Automation') {
         $AcceptPreparation
     }
     else {

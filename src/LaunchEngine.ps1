@@ -3,7 +3,7 @@ function Invoke-WinPCInfoLaunch {
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $RuntimeFacts,
         [Parameter(Mandatory)] [bool] $ArtifactTrustValid,
-        [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation')] [string] $Mode,
+        [Parameter(Mandatory)] [ValidateSet('Guided', 'Automation', 'Gui')] [string] $Mode,
         [Parameter(Mandatory)] [bool] $AcceptPreparation,
         [Parameter(Mandatory)] $ValidationContext,
         [Parameter(Mandatory)] $ConvertFromJsonCommand,

@@ -54,7 +54,7 @@ generated application's release compatibility policy before choosing a host.
 `Start-WIN-PCInfo.cmd` selects GUI mode with NoProfile/STA and keeps bootstrap
 failure guidance visible. Explicit arguments preserve guided-console and
 automation behavior. See `FIRST-RUN.md` for signature admission, safe retries,
-and the pending Status desk adapter and live acceptance.
+the Status desk controls, and pending personally signed live acceptance.
 
 The extracted `Start-WIN-PCInfo.ps1` helper is not the assessment engine. On Windows PowerShell 5.1 it may only find `pwsh` and relaunch the generated application, or print Microsoft's installation URL and stop.
 

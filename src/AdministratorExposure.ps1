@@ -148,7 +148,7 @@ function Test-AdministratorExposureCollectorPayload {
     if ($names.Count -ne $allowed.Count -or
         (@($names|Sort-Object)-join '|') -ne (@($allowed|Sort-Object)-join '|') -or
         [string]$Payload.groupSid -ne 'S-1-5-32-544' -or
-        [string]$Payload.enumerationState -notin @('Complete','Partial','Denied','Malformed','Failed') -or
+        [string]$Payload.enumerationState -notin @('Complete','Partial','Denied','Malformed','Failed','Cancelled') -or
         $Payload.enumerationComplete -isnot [bool] -or
         [string]$Payload.limitation -ne 'DirectMembersOnly' -or
         [string]$Payload.sourceLocale -notmatch '^(?:und|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)$' -or
@@ -163,7 +163,7 @@ function Test-AdministratorExposureCollectorPayload {
     # array is not an empty Administrators group. Only the Complete state may
     # set this bit; source-wide failure states must carry no identity at all.
     if (($Payload.enumerationState -eq 'Complete') -ne [bool]$Payload.enumerationComplete -or
-        ($Payload.enumerationState -in @('Denied','Malformed','Failed') -and (
+        ($Payload.enumerationState -in @('Denied','Malformed','Failed','Cancelled') -and (
             @($Payload.directMembers).Count -ne 0 -or
             [int]$Payload.sourceReturnedEntries -ne 0 -or
             [int]$Payload.duplicateEntriesRemoved -ne 0
@@ -251,7 +251,7 @@ function New-AdministratorExposurePrivilegeGapResult {
             executionContext=if($ValidationFixture){'Synthetic'}else{'Administrator'}
         }
         payload=[pscustomobject][ordered]@{
-            sourceLocale='und';groupSid='S-1-5-32-544';enumerationState='Denied'
+            sourceLocale='und';groupSid='S-1-5-32-544';enumerationState=$(if($PrivilegeResult.state -eq 'Cancelled'){'Cancelled'}else{'Denied'})
             enumerationComplete=$false;directMembers=@();sourceReturnedEntries=0
             duplicateEntriesRemoved=0;limitation='DirectMembersOnly'
         }
@@ -262,7 +262,8 @@ function Get-AdministratorExposureCoverageReason {
     param([Parameter(Mandatory)] [string] $State)
     switch ($State) {
         'Partial' { 'COLLECTION.LOCAL_ADMINISTRATORS_PARTIAL' }
-        'Denied' { 'COLLECTION.LOCAL_ADMINISTRATORS_DENIED' }
+          'Denied' { 'COLLECTION.LOCAL_ADMINISTRATORS_DENIED' }
+          'Cancelled' { 'COLLECTION.LOCAL_ADMINISTRATORS_CANCELLED' }
         'Malformed' { 'COLLECTION.LOCAL_ADMINISTRATORS_MALFORMED' }
         default { 'COLLECTION.LOCAL_ADMINISTRATORS_FAILED' }
     }

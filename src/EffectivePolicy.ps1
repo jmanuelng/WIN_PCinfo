@@ -1267,8 +1267,8 @@ function New-EffectivePolicyPrivilegeGapResult {
         [Parameter(Mandatory)]$Policy,
         [Parameter(Mandatory)][bool]$ValidationFixture
     )
-    $state=if([string]$PrivilegeResult.state -eq 'Unavailable'){'Denied'}else{'Failed'}
-    $reason=if($state -eq 'Denied'){'POLICY.ADMINISTRATOR_SOURCE_DENIED'}else{'POLICY.ADMINISTRATOR_SOURCE_FAILED'}
+    $state=if([string]$PrivilegeResult.state -eq 'Cancelled'){'Cancelled'}elseif([string]$PrivilegeResult.state -eq 'Unavailable'){'Denied'}else{'Failed'}
+    $reason=if($state -eq 'Cancelled'){'POLICY.ADMINISTRATOR_SOURCE_CANCELLED'}elseif($state -eq 'Denied'){'POLICY.ADMINISTRATOR_SOURCE_DENIED'}else{'POLICY.ADMINISTRATOR_SOURCE_FAILED'}
     $payload=New-EffectivePolicySyntheticPayload -Policy $Policy -Scenario 'DeniedAdministrator'
     foreach($scope in $payload.scopeStates){$scope.state=$state;$scope.reasonCode=$reason}
     foreach($layer in $payload.layerStates.PSObject.Properties){$layer.Value=$state}

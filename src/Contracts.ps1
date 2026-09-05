@@ -189,5 +189,10 @@ function Write-ContractRecord {
 
     # Contract records use stdout directly so invoking the Engine from another
     # PowerShell function cannot accidentally capture progress as a return value.
+    $transport = Get-Variable -Name StatusDeskTransport -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $transport) {
+        Send-StatusDeskRecord -Transport $transport.Value -Record $Record
+        return
+    }
     [System.Console]::Out.WriteLine((& $ConvertToJsonCommand -InputObject $Record -Compress -Depth 20))
 }

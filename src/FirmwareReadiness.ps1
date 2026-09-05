@@ -44,7 +44,7 @@ function Test-FirmwareReadinessCollectorPayload {
         (@($names | Sort-Object) -join '|') -ne (@($allowedNames | Sort-Object) -join '|')) {
         return $false
     }
-    $states = @('Complete','Unavailable','Denied','Unsupported','Malformed','TimedOut','Failed')
+    $states = @('Complete','Unavailable','Denied','Unsupported','Malformed','TimedOut','Failed','Cancelled')
     if ([string]$Payload.firmwareState -notin $states -or
         [string]$Payload.secureBootState -notin $states -or
         [string]$Payload.tpmState -notin $states) {
@@ -134,6 +134,7 @@ function Get-FirmwareCoverageReason {
         'Unsupported' { "COLLECTION.$prefix`_SOURCE_UNSUPPORTED" }
         'Malformed' { "COLLECTION.$prefix`_PAYLOAD_MALFORMED" }
         'TimedOut' { "COLLECTION.$prefix`_DEADLINE_EXCEEDED" }
+        'Cancelled' { "COLLECTION.$prefix`_CANCELLED" }
         'Failed' { "COLLECTION.$prefix`_COLLECTOR_FAILED" }
         default { "COLLECTION.$prefix`_SOURCE_UNAVAILABLE" }
     }

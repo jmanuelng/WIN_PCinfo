@@ -25,8 +25,10 @@ guidance if Windows policy prevents the PowerShell helper itself from starting.
 The helper selects one verified eligible executable and requests NoProfile/STA
 without elevation. Missing application, invalid signature and missing eligible
 runtime stop before assessment. It never changes execution policy or unblocks a
-download. The production Status desk is pending issue #137; until connected, its
-entry returns `GUI.ADAPTER_UNAVAILABLE` instead of starting a console assessment.
+download. The production Status desk displays the frozen preparation plan before
+approval, runs the comprehensive assessment and offers Open report when a verified
+protected package is available. Decline starts no collection. Cancel stops new
+collection scheduling while owned work and protected finalization finish safely.
 
 GUI and assessment launch require a valid application signature. The unsigned
 source build permits only an exact passive Help, About, Verify or CheckRuntime

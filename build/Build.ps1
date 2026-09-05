@@ -16,6 +16,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $sourcePaths = @(
     'src/ApplicationHeader.ps1'
     'src/Contracts.ps1'
+    'src/StatusDesk.ps1'
     'src/ContractValidator.ps1'
     'src/RuntimeCompatibility.ps1'
     'src/Preparation.ps1'
