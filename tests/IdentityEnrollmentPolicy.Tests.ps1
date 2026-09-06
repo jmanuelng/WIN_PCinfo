@@ -83,7 +83,9 @@ $expectedTasks = @(
     'task:confirm-tenant-device-assignment/1.0.0',
     'task:confirm-tenant-compliance/1.0.0',
     'task:confirm-tenant-licensing/1.0.0',
-    'task:confirm-organization-enrollment-intent/1.0.0'
+    'task:confirm-organization-enrollment-intent/1.0.0',
+    'task:confirm-approved-administrator-context/1.0.0',
+    'task:confirm-recovery-escrow/1.0.0'
 )
 Assert-Equal ($expectedTasks -join '|') (@($policy.discoveryTasks.definitionId) -join '|') `
     'tenant-only questions remain bounded discovery tasks rather than local claims'
@@ -97,7 +99,7 @@ Assert-Equal ($expectedScenarios -join '|') (@($policy.validationScenarios) -joi
     'the issue-defined identity and enrollment validation matrix is closed'
 
 $policyText = Get-Content -LiteralPath $policyPath -Raw
-if ($policyText -match '(?i)dsregcmd|password|accessToken|refreshToken|privateKey|recovery') {
+if ($policyText -match '(?i)dsregcmd|password|accessToken|refreshToken|privateKey|recoveryKey') {
     throw 'The identity policy admits localized text parsing or prohibited secret material.'
 }
 

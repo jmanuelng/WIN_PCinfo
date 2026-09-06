@@ -5,6 +5,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('Privilege','System','NativeCooperative','NativeHard')] [string] $ActiveWorker = 'Privilege',
     [switch] $RequireRecoveryJournal, [switch] $RequireFrontLoadedPrivilege,
     [string] $ReadinessSourceScenario = '',
+    [string] $IdentitySourceScenario = '',
     [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
@@ -127,6 +128,10 @@ if ($ReadinessSourceScenario) {
     . (Join-Path $PSScriptRoot 'ReadinessSourceAdapters.ps1')
     $moduleText = Add-ControlledReadinessSources -ModuleText $moduleText -Scenario $ReadinessSourceScenario
 }
+if ($IdentitySourceScenario) {
+    . (Join-Path $PSScriptRoot 'IdentitySourceAdapters.ps1')
+    $moduleText = Add-ControlledIdentitySources -ModuleText $moduleText -Scenario $IdentitySourceScenario
+}
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
 $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
@@ -248,6 +253,7 @@ try {
     if (-not $Wpf) { Set-StatusDeskDecision -Session $session -Approve $true -PlanDigest $preparation.planDigest }
     while (-not (Complete-StatusDeskSession $session) -and $watch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 25 }
     Assert-Equal $true $session.Completed 'ordinary collector chain reaches bounded completion'
+    if ($IdentitySourceScenario -and $session.Transport.State.ContainsKey('IdentitySourceFailure')) { throw ($session.Transport.State.IdentitySourceFailure + ' ' + $session.Transport.State.IdentityPrivilegeReason) }
     $terminal = $session.Transport.State.Terminal | ConvertFrom-Json
     if ($FailureKind -ne 'None') {
         $expectedOutcome=if($FailureKind -eq 'Integrity'){'IntegrityFailed'}else{'CleanupIncomplete'}
@@ -314,6 +320,9 @@ try {
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
     if ($ReadinessSourceScenario) {
         Assert-ReadinessSourceReport -Record $record -Html $html -Scenario $ReadinessSourceScenario
+    }
+    if ($IdentitySourceScenario) {
+        Assert-IdentitySourceReport -Record $record -Html $html -Scenario $IdentitySourceScenario
     }
     if (-not ($CancelAfterIdentity -or $CancelAfterResource)) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `

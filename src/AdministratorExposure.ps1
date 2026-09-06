@@ -281,16 +281,16 @@ function New-AdministratorExposureObservation {
         [Parameter(Mandatory)] [string] $CollectedAt,
         [Parameter(Mandatory)] [string] $SourceLocale,
         [Parameter()] $Value,
-        [Parameter()] [switch] $ObservedAbsent
+        [Parameter()] [switch] $SourceReportedUnknown
     )
     $observationId="observation:administrator-$Suffix`:$RunId"
     $provenanceId="provenance:administrator-$Suffix`:$RunId"
     $observation=[ordered]@{
         observationId=$observationId;fieldId=$FieldId;subjectId=$SubjectId
         provenanceId=$provenanceId
-        valueState=if($ObservedAbsent){'ObservedAbsent'}else{'ObservedValue'}
+        valueState=if($SourceReportedUnknown){'SourceReportedUnknown'}else{'ObservedValue'}
     }
-    if(-not $ObservedAbsent){$observation.value=$Value}
+    if(-not $SourceReportedUnknown){$observation.value=$Value}
     [pscustomobject][ordered]@{
         observation=[pscustomobject]$observation
         provenance=[pscustomobject][ordered]@{
@@ -368,7 +368,7 @@ function Add-AdministratorExposureEvidenceRecord {
                     ObservedExecutionContext=$observedExecutionContext;CollectedAt=$collectedAt
                     SourceLocale=[string]$payload.sourceLocale;Value=$field.value
                 }
-                if($field.ContainsKey('absent') -and $field.absent){$parameters.ObservedAbsent=$true}
+                if($field.ContainsKey('absent') -and $field.absent){$parameters.SourceReportedUnknown=$true}
                 $pair=New-AdministratorExposureObservation @parameters
                 $observations.Add($pair.observation);$provenance.Add($pair.provenance)
             }
@@ -459,6 +459,9 @@ function Complete-ValidatedAdministratorExposureAssessmentRecord {
         throw 'The administrator Rule Evaluation exceeded its release deadline.'
     }
     $Record.findings=@($Record.findings)+[pscustomobject]$finding
+    foreach ($task in @($Record.recommendations | Where-Object definitionId -eq 'task:confirm-approved-administrator-context/1.0.0')) {
+        $task.findingIds=@($task.findingIds)+[string]$finding.findingId
+    }
     $Record.run.outcome=if(@($Record.coverage|Where-Object state -ne Complete).Count -eq 0){
         'Completed'
     }else{'CompletedWithGaps'}

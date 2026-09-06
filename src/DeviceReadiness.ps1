@@ -1292,10 +1292,11 @@ $discoveryGuidance
 <dt>Microsoft Entra registration type</dt><dd>$($values['field:device.entra-registration.type'])</dd>
 <dt>Registration finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$registrationFinding.outcome))</dd>
 <dt>Work-or-school coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$workSchoolCoverage.state))</dd>
-<dt>Device-default work-or-school registration observed</dt><dd>$($values['field:device.work-school-registration.present'])</dd>
+<dt>Assessment User default work-or-school registration observed</dt><dd>$($values['field:device.work-school-registration.present'])</dd>
 <dt>SYSTEM MDM-source coverage</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$systemCoverage.state))</dd>
 <dt>Enrollment-context finding</dt><dd>$([Net.WebUtility]::HtmlEncode([string]$enrollmentFinding.outcome))</dd></dl>
-<p>These locale-neutral local sources cannot establish tenant assignment, compliance, licensing, or organizational intent. They do not authenticate to Microsoft Entra or Intune and do not join, register, enroll, disconnect, or modify an account.</p>
+<p>The default work-account query describes only the verified user's context. A device join can hide separate work accounts; unavailable coverage does not mean no account or enrollment. SYSTEM provider availability is a local dependency signal and does not prove enrollment.</p>
+<p>These locale-neutral local sources cannot establish tenant assignment, compliance, licensing, recovery escrow, or organizational intent. The discovery tasks below assign those checks to authorized roles without retrieving recovery secrets. WIN-PCInfo does not authenticate to Microsoft Entra or Intune and does not join, register, enroll, disconnect, or modify an account.</p>
 $identityGuidance
 "@
     }else{''}
@@ -3169,7 +3170,7 @@ function Invoke-DeviceReadinessSlice {
                     if($null -ne $identityCollector){
                         $reportVerified=$reportVerified -and
                             $reportText.Contains('Registration, join, and enrollment context') -and
-                            $reportText.Contains('cannot establish tenant assignment, compliance, licensing, or organizational intent')
+                            $reportText.Contains('cannot establish tenant assignment, compliance, licensing, recovery escrow, or organizational intent')
                     }
                     if($null -ne $administratorCollector){
                         $reportVerified=$reportVerified -and
