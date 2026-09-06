@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string[]]$Scenario=@('Configured','Absent','Denied','Unsupported','Malformed','Partial','Unavailable','UnknownContext','Windows10','Stopped','tr-TR'))
+param([string[]]$Scenario=@('Configured','Absent','Denied','RegistryDenied','Unsupported','Malformed','Partial','Unavailable','UnknownContext','Windows10','Stopped','tr-TR'))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')

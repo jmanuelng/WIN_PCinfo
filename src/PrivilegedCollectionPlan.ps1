@@ -1341,10 +1341,18 @@ function Read-SecurityResult {
 
 function Get-PlatformFailureState {
     param($Failure)
-    if($Failure.Exception -is [IO.InvalidDataException] -or $Failure.Exception -is [Text.DecoderFallbackException]){'Malformed'}
-    elseif($Failure.Exception -is [IO.EndOfStreamException]){'Unavailable'}
-    elseif($Failure.Exception -is [OperationCanceledException]){'TimedOut'}
-    else{Get-WorkerAccessState $Failure}
+    # Registry/CIM method invocation may wrap the typed source exception.
+    # Inspect a bounded chain; never classify using localized message text.
+    $exception=$Failure.Exception
+    for($depth=0;$depth -lt 8 -and $null -ne $exception;$depth++){
+        if($exception -is [UnauthorizedAccessException]){return 'Denied'}
+        if($exception -is [PlatformNotSupportedException]){return 'Unsupported'}
+        if($exception -is [IO.InvalidDataException] -or $exception -is [Text.DecoderFallbackException]){return 'Malformed'}
+        if($exception -is [IO.EndOfStreamException]){return 'Unavailable'}
+        if($exception -is [OperationCanceledException]){return 'TimedOut'}
+        $exception=$exception.InnerException
+    }
+    Get-WorkerAccessState $Failure
 }
 
 function Read-CiToolJson {

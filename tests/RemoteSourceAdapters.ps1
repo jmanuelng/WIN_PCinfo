@@ -70,6 +70,7 @@ function Open-ControlledRemoteKey {
     `$key=[pscustomobject]@{}
     `$key|Add-Member ScriptMethod Dispose {}
     `$key|Add-Member ScriptMethod GetValue {param(`$Name,`$Default,`$Options)
+        if('__CASE__' -eq 'RegistryDenied'){throw [UnauthorizedAccessException]::new()}
         if('__CASE__' -eq 'Absent'){return `$null}
         if('__CASE__' -eq 'Malformed'){return '1'}
         switch(`$Name){
@@ -147,6 +148,7 @@ function Assert-RemoteSourceReport {
         $expected='Complete'
         if($Scenario -in @('Denied','Unsupported')){$expected=$Scenario}
         if($Scenario -eq 'Unavailable'){$expected='Unavailable'}
+        if($Scenario -eq 'RegistryDenied' -and ($scope -match '^(windows-update|legacy-auth)\.' -or $scope -in @('rdp.connections','rdp.listener','winrm.configuration','winrm.authentication'))){$expected='Denied'}
         if($Scenario -eq 'Absent' -and $scope -notmatch '^(windows-update|legacy-auth)\.'){ $expected='Unavailable' }
         if($Scenario -eq 'Malformed' -and $scope -notin @('winrm.listener','smb.server','rdp.listener')){$expected='Malformed'}
         if($Scenario -eq 'Malformed' -and $scope -eq 'rdp.listener'){$expected='Malformed'}
