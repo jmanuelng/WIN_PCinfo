@@ -1207,7 +1207,13 @@ function Get-SecurityCommand {
     $path=[IO.Path]::Combine([Environment]::SystemDirectory,'WindowsPowerShell','v1.0','Modules',$moduleName,($moduleName+'.psd1'))
     try {
         return (Microsoft.PowerShell.Core\Import-Module -Name $path -PassThru -Scope Local -ErrorAction Stop).ExportedCommands[$Name]
-    } catch { }
+    } catch {
+        # Only an absent inbox module is Unsupported. Defer other discovery
+        # failures to the caller's source-specific exception classification.
+        if($_.Exception -isnot [IO.FileNotFoundException]){
+            $failure=$_;return {throw $failure}.GetNewClosure()
+        }
+    }
     $null
 }
 

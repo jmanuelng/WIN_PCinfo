@@ -35,7 +35,8 @@ function Get-PrivilegedCollectionWorkerSource {
 [Threading.Thread]::CurrentThread.CurrentUICulture=[Globalization.CultureInfo]::GetCultureInfo(`$culture)
 function Import-ControlledSecurityModule {
     param(`$Name, [switch]`$PassThru, `$Scope, `$ErrorAction)
-    if('__CASE__' -eq 'Unsupported'){throw 'Synthetic inbox module unavailable.'}
+    if('__CASE__' -eq 'Unsupported'){throw [IO.FileNotFoundException]::new('Synthetic inbox module unavailable.')}
+    if('__CASE__' -eq 'ImportDenied'){throw [UnauthorizedAccessException]::new('Synthetic module denied.')}
     if(`$Name -notmatch 'WindowsPowerShell[\\/]v1.0[\\/]Modules[\\/](Defender[\\/]Defender|NetSecurity[\\/]NetSecurity)\.psd1$' -or -not `$PassThru -or `$Scope -ne 'Local'){throw 'Unexpected module source.'}
     `$commands=@{}
     foreach(`$operation in @('Get-MpPreference','Get-MpComputerStatus','Get-NetFirewallProfile')){`$commands[`$operation]=Microsoft.PowerShell.Core\Get-Command -Name ('Get-Controlled'+`$operation.Substring(4)) -CommandType Function}
@@ -119,6 +120,7 @@ function Assert-SecuritySourceReport {
         if($Scenario -eq 'Unavailable' -and $scope -notlike 'smartscreen.*'){$expected='Unavailable'}
         if($Scenario -eq 'Unsupported' -and $scope -notlike 'smartscreen.*'){$expected='Unsupported'}
         if($Scenario -eq 'Denied'){$expected='Denied'}
+        if($Scenario -eq 'ImportDenied' -and $scope -notlike 'smartscreen.*'){$expected='Denied'}
         if($Scenario -in @('AsrBound','AsrMismatch') -and $scope -eq 'defender.asr'){$expected='Partial'}
         if($Scenario -eq 'NetworkMissing' -and $scope -eq 'defender.network-protection'){$expected='Partial'}
         if($Scenario -eq 'SmartScreenMissing' -and $scope -like 'smartscreen.*'){$expected='Unavailable'}
@@ -140,10 +142,10 @@ function Assert-SecuritySourceReport {
         Assert-Equal $true ([bool]$provenance.collectedAt) 'security evidence retains collection time'
         Assert-Equal $(if($Scenario -in @('es-MX','tr-TR','ja-JP','ar-SA')){$Scenario}else{'en-US'}) $provenance.sourceLocale 'source culture cannot change stable security semantics'
     }
-    if($Scenario -notin @('MalformedRuntime','Unavailable','Unsupported','Denied')){
+    if($Scenario -notin @('MalformedRuntime','Unavailable','Unsupported','Denied','ImportDenied')){
         Assert-Equal $(if($Scenario -eq 'Passive'){'Passive Mode'}else{'Normal'}) @($Record.observations|Where-Object fieldId -eq 'field:policy.defender.running-mode')[0].value 'runtime is distinct from preferences'
     }
-    if($Scenario -in @('Unavailable','Unsupported','Denied')){
+    if($Scenario -in @('Unavailable','Unsupported','Denied','ImportDenied')){
         Assert-Equal 0 @($Record.observations|Where-Object fieldId -like 'field:policy.defender.*').Count 'no returned security data cannot imply a protection state'
         return
     }

@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string[]]$Scenario=@('Active','Passive','Unsupported','Denied','Unavailable',
+param([string[]]$Scenario=@('Active','Passive','Unsupported','ImportDenied','Denied','Unavailable',
     'NullRuntime','MalformedRuntime','FirewallPartial','AsrEmpty','AsrBound',
     'AsrMismatch','NetworkMissing','SmartScreenMissing','SmartScreenMalformed',
     'es-MX','tr-TR','ja-JP','ar-SA'))
