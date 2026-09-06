@@ -713,12 +713,12 @@ function Get-LiveIdentityEnrollmentPayload {
             -InfoPresent ([bool]$workSchoolSnapshot.AadInfoPresent)
     }
     $entraType = if ($registrationAadState -eq 'Complete') {
-        switch ([int]$registrationSnapshot.AadJoinType) {
+        if (-not [bool]$registrationSnapshot.AadInfoPresent) { 'None' }
+        else { switch ([int]$registrationSnapshot.AadJoinType) {
             1 { 'EntraJoined' }
             2 { 'EntraRegistered' }
-            0 { 'None' }
             default { 'Unknown' }
-        }
+        } }
     } else { $null }
     $registrationState = if($registrationFailureState){$registrationFailureState}
     elseif ((Test-IdentityNativeAccessDeniedCode ([int]$registrationSnapshot.DomainError)) -or
@@ -751,7 +751,8 @@ function Get-LiveIdentityEnrollmentPayload {
         } else { 'Unavailable' }
     }
     $workSchoolType=if($workSchoolState -eq 'Complete'){
-        switch([int]$workSchoolSnapshot.AadJoinType){1{'EntraJoined'}2{'EntraRegistered'}0{'None'}default{'Unknown'}}
+        if (-not [bool]$workSchoolSnapshot.AadInfoPresent) { 'None' }
+        else { switch([int]$workSchoolSnapshot.AadJoinType){1{'EntraJoined'}2{'EntraRegistered'}default{'Unknown'}} }
     }else{$null}
     # NetGetAadJoinInformation(NULL) prefers the device join on a joined
     # device. That result cannot prove absence of separate user work accounts.

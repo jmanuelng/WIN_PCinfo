@@ -8,7 +8,7 @@ function Add-ControlledIdentitySources {
         'WorkSchoolDenied','Unavailable','AadMalformed','NoJoinSuccess','UnknownJoin','Administrator','LocalSystem','SessionChanged',
         'AdminDenied','AdminUnavailable','AdminEmpty','AdminPartial','SystemDenied','SystemUnavailable','SystemAbsent')]
         [string] $Scenario)
-    $ModuleText=$ModuleText.Replace("if (`$scenario -eq '') { `$scenario = 'InvalidFixture' }", "`$script:StatusDeskTransport.State.IdentitySourceFailure=`$_.Exception.Message; if (`$scenario -eq '') { `$scenario = 'InvalidFixture' }")
+    $ModuleText=$ModuleText.Replace("if (`$scenario -eq '') { `$scenario = 'InvalidFixture' }", "`$script:StatusDeskTransport.State.IdentitySourceFailure=(`$_.Exception.Message + ' ' + `$_.ScriptStackTrace); if (`$scenario -eq '') { `$scenario = 'InvalidFixture' }")
     $ModuleText=$ModuleText.Replace('$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }', '$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $script:StatusDeskTransport.State.IdentityPrivilegeReason=$result.reasonCode; $result }')
     if ($Scenario -like 'Admin*' -and $Scenario -ne 'Administrator') {
         $ModuleText=Add-ControlledAdministratorSources -ModuleText $ModuleText -Scenario $Scenario
@@ -54,7 +54,7 @@ namespace WinPCInfo.IdentityEnrollment {
    if (scenario == "Unavailable") result.AadError=1168;
    if (scenario == "AadMalformed") result.AadError=1;
    if (scenario == "NoJoinSuccess") { result.AadInfoPresent=false; result.AadJoinType=0; }
-   if (scenario == "UnknownJoin") { result.DomainJoinStatus=0; result.AadJoinType=9; }
+   if (scenario == "UnknownJoin") { result.DomainJoinStatus=2; result.AadJoinType=0; }
    return result;
   }
  }

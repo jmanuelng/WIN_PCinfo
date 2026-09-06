@@ -99,6 +99,11 @@ Assert-Equal 'Synthetic' $memberEnvelopes[0].executionContext 'the fixture never
 Assert-Equal 2 @($record.subjects|Where-Object kind -eq SecurityPrincipal).Count `
     'nested membership is not expanded into guessed effective principals'
 
+$contradictoryEmpty=$record | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30
+@($contradictoryEmpty.observations | Where-Object fieldId -eq 'field:device.local-administrators.direct-member-count')[0].value=0
+Assert-Equal $false (Test-CanonicalRecord $contradictoryEmpty).accepted `
+    'an empty enumeration claim cannot hide retained principal observations'
+
 $denied=New-IdentityReadyRecord
 $deniedCollector=Invoke-AdministratorExposureCollection -Policy $administratorPolicy -ValidationScenario Denied
 $denied=Add-AdministratorExposureEvidenceRecord -Record $denied -CollectorResult $deniedCollector -Policy $administratorPolicy

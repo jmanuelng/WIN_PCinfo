@@ -133,7 +133,7 @@ $userFinding = @($record.findings | Where-Object {
 })[0]
 Assert-Equal 'ExpectedCondition' $userFinding.outcome `
     'a uniquely verified interactive session establishes the Assessment User Context'
-Assert-Equal 4 @($record.recommendations | Where-Object {
+Assert-Equal 6 @($record.recommendations | Where-Object {
     $_.kind -eq 'TenantSideDiscoveryTask'
 }).Count 'local Entra and MDM evidence creates bounded tenant questions, not tenant claims'
 Assert-Equal 1 @($record.coverage | Where-Object {
