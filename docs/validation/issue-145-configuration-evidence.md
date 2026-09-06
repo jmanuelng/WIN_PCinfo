@@ -185,3 +185,13 @@ Deterministic build independently reproduced the final `405f39b0…` candidate.
 No whole-suite, live, signing, observer or missing-field acceptance result is
 inferred. Source and focused checks are committed; root should run fresh reviews
 before treating this checkpoint as review-approved or deciding #145 closure.
+
+## Orchestrator independent review result
+
+Fresh root reviewers inspected `19b45d6c84b22ff4006d78454b514c2baf0f6714...a0935fa7fff25bd583541624d9d46accde6af49a` after the clean worker checkpoint released an active slot. The earlier unstarted status above is historical. Neither reviewer reran tests or changed sources.
+
+**Standards:** zero documented-standard violations; one nonblocking possible Duplicated Code judgment for the mirrored SMB client/server normalization loops (`src/PrivilegedCollectionPlan.ps1` around lines2040/2071). Separate source calls and explicit reason codes remain appropriate; optional extraction is not an acceptance blocker.
+
+**Spec:** two P1 implementation blockers remain. Certificate authentication has no executing request-free source. Effective WinRM listener state, transport and port likewise have no executing source. All four fields remain normative in the frozen CAP-0008 contract. Service state and policy settings cannot establish listener configuration; honest Constrained/Partial coverage and the #161 handoff do not satisfy implementation closure. No additional scope creep or independently established defect was identified.
+
+**Disposition:** #145 stays OPEN and incomplete. Its safe source repairs are committed and focused-tested but have not been delivered at this checkpoint. Root may continue independent #146/#147 work; neither depends on #145. A bounded fresh #145 continuation must implement the missing sources, refresh affected exact-candidate tests/evidence and obtain affected reviews before closure. No live collection, requirement waiver or fixture substitution is authorized by this review. This review-record addition changes documentation only; source and candidate bytes recorded above are unchanged.
