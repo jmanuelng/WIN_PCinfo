@@ -475,29 +475,28 @@ function Get-CrossDomainGuidanceModel {
     }
 }
 
-function Get-AssessmentReportFindingAnchors {
-    param([Parameter(Mandatory)]$Record)
-    $anchors = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
-    foreach ($finding in $Record.findings) { $anchors.Add([string]$finding.findingId, 'f' + $anchors.Count) }
-    $anchors
-}
-
 function New-CrossDomainGuidanceHtml {
     param(
         [Parameter(Mandatory)] $Record,
         [Parameter(Mandatory)] $Policy,
-        [Parameter()] $ReferenceLookup
+        [Parameter()] $ReferenceLookup,
+        [Parameter(Mandatory)] $FindingAnchors,
+        [Parameter(Mandatory)] $ObservationAnchors
     )
 
     $model = Get-CrossDomainGuidanceModel -Record $Record -Policy $Policy
     if (@($model.findings).Count -eq 0) { return '' }
     # Record-order aliases are stable for identical canonical rendering inputs.
-    $anchors = Get-AssessmentReportFindingAnchors -Record $Record
+    $anchors = $FindingAnchors
 
     $findingRows = @($model.findings | ForEach-Object {
         $findingId = [string]$_.findingId
         $ruleId = [string]$_.ruleId
         $rule = @($Policy.rules | Where-Object ruleId -eq $ruleId)[0]
+        $canonicalFinding = @($Record.findings | Where-Object findingId -eq $findingId)[0]
+        $evidence = @($canonicalFinding.evidenceReferences | ForEach-Object {
+            '<a href="#' + $ObservationAnchors[[string]$_.observationId] + '">' + $ObservationAnchors[[string]$_.observationId] + '</a>'
+        }) -join ' '
         $sources = @($Record.findings | Where-Object ruleId -in @($rule.sourceRuleIds) | ForEach-Object {
             $key = [string]$_.findingId
             $suffix = ':' + [string]$Record.run.runId
@@ -514,6 +513,8 @@ function New-CrossDomainGuidanceHtml {
         }
         '<li id="' + [Net.WebUtility]::HtmlEncode([string]$anchors[$findingId]) + '"><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + ':</strong> ' +
         [Net.WebUtility]::HtmlEncode([string] $_.outcome) + $severity + $confidence +
+        '<br>Finding: ' + [Net.WebUtility]::HtmlEncode($findingId) +
+        '<br>Rule: ' + [Net.WebUtility]::HtmlEncode($ruleId) + '<br>Evidence: ' + $evidence +
         '<br>Source findings: ' + $sources + '</li>'
     })
     $stepRows = @($model.pathRecommendations | ForEach-Object {

@@ -17,12 +17,28 @@ function Set-SoftwareReportTestValues {
     }
 }
 
+function Expand-SoftwareReportText {
+    param([string]$Html)
+    $suffixes = @{}
+    foreach ($match in [regex]::Matches($Html, '(?s)<li id="st(\d+)"><code>(.*?)</code>')) {
+        $suffixes[$match.Groups[1].Value] = $match.Groups[2].Value
+    }
+    # Decode only the explicitly declared text suffix links. Compare the full
+    # reconstructed values against every protected canonical registration.
+    [regex]::Replace($Html, '<a href="#st(\d+)">\[suffix \d+\]</a>', {
+        param($match)
+        Assert-Equal $true $suffixes.ContainsKey($match.Groups[1].Value) 'every suffix resolves to exact retained text'
+        $suffixes[$match.Groups[1].Value]
+    })
+}
+
 function Assert-SoftwareReportEvidence {
     param($Record,[string]$Html)
+    $expandedHtml = Expand-SoftwareReportText -Html $Html
     Assert-Equal 128 @($Record.subjects|Where-Object kind -eq Application).Count 'all registrations survive protected reopening'
     Assert-Equal 8 @($Record.coverage|Where-Object { $_.scopeId -like 'scope:software.*' -and $_.state -eq 'Complete' }).Count 'all software source scopes remain Complete'
     Assert-Equal 128 @($Record.softwareRecognition|Where-Object outcome -eq Unrecognized).Count 'recognition remains conservative for every registration'
-    $software=[regex]::Match($Html,'(?s)<summary>Restricted installed-software evidence</summary>(.*?)</details>').Groups[1].Value
+    $software=[regex]::Match($expandedHtml,'(?s)<summary>Restricted installed-software evidence</summary>(.*?)</details>').Groups[1].Value
     $rows=@(foreach($table in [regex]::Matches($software,'(?s)<table><caption>(.*?)</caption>.*?<tbody>(.*?)</table>')){
         $prefix=[regex]::Match($table.Groups[1].Value,'Field prefix: ([^ ]+)').Groups[1].Value
         $metadata=@{}
@@ -30,8 +46,8 @@ function Assert-SoftwareReportEvidence {
             $metadata[$prefix+$item.Groups[1].Value]=[Net.WebUtility]::HtmlDecode($item.Groups[2].Value)
         }
         $fields=@([regex]::Matches($table.Value,'<th scope="col">([^<]*)')|ForEach-Object {$prefix+$_.Groups[1].Value})
-        foreach($row in [regex]::Matches($table.Groups[2].Value,'(?s)<tr>(<td>.*?)(?=<tr>|$)')){
-            $cells=@([regex]::Matches($row.Groups[1].Value,'(?s)<td>(.*?)(?=<td>|$)')|ForEach-Object {[Net.WebUtility]::HtmlDecode($_.Groups[1].Value)})
+        foreach($row in [regex]::Matches($table.Groups[2].Value,'(?s)<tr>(<td(?: id="o\d+")?>.*?)(?=<tr>|$)')){
+            $cells=@([regex]::Matches($row.Groups[1].Value,'(?s)<td(?: id="o\d+")?>(.*?)(?=<td|$)')|ForEach-Object {[Net.WebUtility]::HtmlDecode($_.Groups[1].Value)})
             Assert-Equal $fields.Count $cells.Count 'each software value has its own declared column'
             $values=$metadata.Clone()
             for($index=0;$index -lt $fields.Count;$index++){$values[$fields[$index]]=$cells[$index]}
@@ -50,7 +66,7 @@ function Assert-SoftwareReportEvidence {
         }
     }
     Assert-Equal $false ($Html -match '<script\b') 'the complete evidence report remains usable without scripts'
-    $securityRows=[regex]::Matches($Html,'<tr><td>([^<]*)<td>([^<]*)<td>([^<]*)<td><a href="#ss(\d+)">')
+    $securityRows=[regex]::Matches($Html,'<tr><td>([^<]*)<td(?: id="o\d+")?>([^<]*)<td>([^<]*)<td><a href="#ss(\d+)">')
     Assert-Equal $true ($securityRows.Count -gt 0) 'the compact security table retains observable evidence'
     foreach($row in $securityRows){
         $id=[Net.WebUtility]::HtmlDecode($row.Groups[3].Value)

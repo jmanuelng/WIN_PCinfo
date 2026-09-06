@@ -334,7 +334,7 @@ function Assert-RemoteSourceReport {
         Assert-Equal $expected $origin.sourceId 'each field keeps its declared structured source'
         Assert-Equal $true ([bool]$origin.collectedAt) 'collection time survives protected reopening'
         $parts = [regex]::Match($Html, 'Prefix: <code>([^<]*)</code>; suffix: <code>([^<]*)</code>')
-        $references = @([regex]::Matches($Html, '<tr><td>[^<]*<td>[^<]*<td>([^<]*)<td><a href="#ss\d+">') | ForEach-Object {
+        $references = @([regex]::Matches($Html, '<tr><td>[^<]*<td(?: id="o\d+")?>[^<]*<td>([^<]*)<td><a href="#ss\d+">') | ForEach-Object {
             $cell = [Net.WebUtility]::HtmlDecode($_.Groups[1].Value)
             if ($cell.StartsWith('Full: ', [StringComparison]::Ordinal)) { $cell.Substring(6) }
             else { [Net.WebUtility]::HtmlDecode($parts.Groups[1].Value) + $cell + [Net.WebUtility]::HtmlDecode($parts.Groups[2].Value) }

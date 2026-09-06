@@ -7,7 +7,7 @@ function Get-EffectivePolicySha256 {
 }
 
 function New-EffectivePolicySecurityReportSection {
-    param([Parameter(Mandatory)]$Record)
+    param([Parameter(Mandatory)]$Record, $ObservationAnchors)
     # The caller has validated this record. Coverage binds each observation to
     # its scope; display labels never select evidence or change rule outcomes.
     $titles=[ordered]@{
@@ -94,7 +94,7 @@ function New-EffectivePolicySecurityReportSection {
             $field = [string]$observation.fieldId
             $field = if ($field.StartsWith('field:policy.', [StringComparison]::Ordinal)) { $field.Substring(13) } else { 'Full: ' + $field }
             '<tr><td>'+[Net.WebUtility]::HtmlEncode($field)+
-                '<td>'+[Net.WebUtility]::HtmlEncode($value)+
+                '<td'+$(if($null -ne $ObservationAnchors -and $ObservationAnchors.ContainsKey([string]$id)){' id="'+$ObservationAnchors[[string]$id]+'"'})+'>'+[Net.WebUtility]::HtmlEncode($value)+
                 '<td>'+[Net.WebUtility]::HtmlEncode($reference)+
                 '<td><a href="#ss'+$sourceNumber+'">'+$sourceNumber+'</a></tr>'
         }

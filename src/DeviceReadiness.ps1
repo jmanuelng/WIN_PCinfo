@@ -1136,6 +1136,30 @@ function Test-AssessmentCompletionSummaryConsistency {
         [bool] $guidance.prohibitedPublicSharing
 }
 
+function Get-AssessmentReportTextSuffix {
+    param([Parameter(Mandatory)][string]$Value)
+    $start = $Value.Length - 256
+    # Keep a supplementary Unicode character in one visible text fragment.
+    if ([char]::IsLowSurrogate($Value[$start])) { $start++ }
+    $Value.Substring($start)
+}
+
+function New-AssessmentObservationReportValue {
+    param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Anchors)
+    $value = if ($Observation.valueState -eq 'ObservedValue') { [string]$Observation.value } else { [string]$Observation.valueState }
+    $value = [Net.WebUtility]::HtmlEncode($value)
+    if ($Anchors.ContainsKey([string]$Observation.observationId)) {
+        '<span id="' + $Anchors[[string]$Observation.observationId] + '">' + $value + '</span>'
+    } else { $value }
+}
+
+function Get-AssessmentReportFindingAnchors {
+    param([Parameter(Mandatory)]$Record)
+    $anchors = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
+    foreach ($finding in $Record.findings) { $anchors.Add([string]$finding.findingId, 'f' + $anchors.Count) }
+    $anchors
+}
+
 function New-DeviceReadinessReportBytes {
     param(
         [Parameter(Mandatory)] $Record,
@@ -1176,6 +1200,12 @@ function New-DeviceReadinessReportBytes {
         $_.findingId -like 'finding:tpm-readiness:*'
     } | Select-Object -First 1
     $coverage = @($Record.coverage)[0]
+    $observationAnchors = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
+    $referencedObservations = @($Record.findings.evidenceReferences.observationId | Select-Object -Unique)
+    for ($index = 0; $index -lt $Record.observations.Count; $index++) {
+        $id = [string]$Record.observations[$index].observationId
+        if ($id -in $referencedObservations) { $observationAnchors.Add($id, 'o' + $index) }
+    }
     $values = @{}
     foreach ($fieldId in @(
         'field:device.manufacturer', 'field:device.model', 'field:device.processor.name',
@@ -1221,6 +1251,13 @@ function New-DeviceReadinessReportBytes {
     else {
         'Virtualization could not be determined from the available evidence. Physical hardware, firmware, TPM-attestation, OEM, and performance claims remain unproven.'
     }
+    foreach ($observation in $Record.observations) {
+        $values[[string]$observation.fieldId] = New-AssessmentObservationReportValue -Observation $observation -Anchors $observationAnchors
+    }
+    $activation = $values['field:device.windows.activation-state']
+    $virtualization = $values['field:device.virtualization.detected']
+    $formFactor = $values['field:device.form-factor']
+    $batteryPresence = $values['field:device.battery.presence']
     $firmwareSection = if ($null -ne $firmwareFinding) {
         $firmwareCoverage = @($Record.coverage | Where-Object {
             $_.scopeId -eq 'scope:device.firmware-context'
@@ -1328,7 +1365,7 @@ $identityGuidance
             $memberSubjectId=[string]$_.subjectId;$memberValues=@{}
             foreach($item in @($Record.observations|Where-Object subjectId -eq $memberSubjectId)){
                 $memberValues[[string]$item.fieldId]=if($item.valueState -eq 'ObservedValue'){
-                    [Net.WebUtility]::HtmlEncode([string]$item.value)
+                    New-AssessmentObservationReportValue -Observation $item -Anchors $observationAnchors
                 }else{'Not resolved'}
             }
             '<li><strong>SID:</strong> '+$memberValues['field:principal.windows.sid']+
@@ -1477,9 +1514,7 @@ $identityGuidance
         $networkCoverageLabel = if($connectivityImplemented){'Connectivity coverage'}elseif($connectivityEnabled){'Enabled-operation coverage finding'}else{'Local Only coverage finding'}
         $networkCoverageOutcome=if($null -ne $localOnlyFinding){[string]$localOnlyFinding.outcome}else{'Reported separately'}
         $topologyRows=@($Record.observations|Where-Object fieldId -like 'field:network.*'|ForEach-Object {
-            $renderedValue=if($_.valueState -eq 'ObservedValue'){
-                [Net.WebUtility]::HtmlEncode([string]$_.value)
-            }else{[Net.WebUtility]::HtmlEncode([string]$_.valueState)}
+            $renderedValue=New-AssessmentObservationReportValue -Observation $_ -Anchors $observationAnchors
             '<li><strong>'+[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+
                 '</strong>: '+$renderedValue+'</li>'
         })
@@ -1510,6 +1545,20 @@ $identityGuidance
         $softwareSubjects=@($Record.subjects|Where-Object subjectId -like 'subject:software:*')
         $hasRecognition=$null -ne $Record.PSObject.Properties['softwareRecognition']
         $recognitionItems=if($hasRecognition){@($Record.softwareRecognition)}else{@()}
+        # A repeated long text suffix may be displayed once without merging
+        # registrations. Each cell keeps its exact prefix and an explicit link
+        # to the remaining characters; short or unique values stay inline.
+        $suffixCounts = [Collections.Generic.Dictionary[string,int]]::new([StringComparer]::Ordinal)
+        foreach ($observation in $Record.observations) {
+            if ($observation.fieldId -like 'field:software.*' -and $observation.valueState -eq 'ObservedValue' -and
+                ([string]$observation.value).Length -ge 384) {
+                $tail = Get-AssessmentReportTextSuffix -Value ([string]$observation.value)
+                if (-not $suffixCounts.ContainsKey($tail)) { $suffixCounts.Add($tail, 0) }
+                $suffixCounts[$tail]++
+            }
+        }
+        $suffixLookup = [Collections.Generic.Dictionary[string,int]]::new([StringComparer]::Ordinal)
+        $suffixRows = [Collections.Generic.List[string]]::new()
         $registrations=@($softwareSubjects|ForEach-Object {
             $subjectId=[string]$_.subjectId
             $items=@($Record.observations|Where-Object subjectId -eq $subjectId)
@@ -1554,7 +1603,23 @@ $identityGuidance
                 # this optional end tag saves markup, never evidence bytes.
                 # This is text content, not an attribute: quotes and Unicode
                 # need no entity expansion. Escape every markup delimiter.
-                '<td>'+$value.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;')
+                $display = $value.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;')
+                if ($value.Length -ge 384) {
+                    $tail = Get-AssessmentReportTextSuffix -Value $value
+                    if ($suffixCounts.ContainsKey($tail) -and $suffixCounts[$tail] -gt 1) {
+                        if (-not $suffixLookup.ContainsKey($tail)) {
+                            $number = $suffixLookup.Count
+                            $suffixLookup.Add($tail, $number)
+                            $suffixRows.Add('<li id="st' + $number + '"><code>' +
+                                $tail.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;') + '</code></li>')
+                        }
+                        $display = $value.Substring(0, $value.Length - $tail.Length).Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;') +
+                            '<a href="#st' + $suffixLookup[$tail] + '">[suffix ' + $suffixLookup[$tail] + ']</a>'
+                    }
+                }
+                '<td'+$(if($observation.Count -gt 0 -and $observationAnchors.ContainsKey([string]$observation[0].observationId)){
+                    ' id="'+$observationAnchors[[string]$observation[0].observationId]+'"'
+                })+'>'+$display
             })
             $row='<tr>'+($cells -join '')
             if(-not $hasRecognition -or $sharedRecognition){return $row+'</tr>'}
@@ -1603,6 +1668,7 @@ $identityGuidance
 <p>WIN-PCInfo reads explicit 32-bit and 64-bit uninstall registration views, inventory-only Windows Installer APIs, and Windows package identities. It never invokes Win32_Product, a consistency check, repair, install, uninstall, package-content inspection, binary hashing, profile loading, or network lookup.</p>
 <p>Software recognition is an annotation, not an Assessment Finding. It adds a conservative family and migration-role label without claiming compatibility, health, licensing, safety, support, Intune readiness, Defender readiness, or deployment success. Unrecognized is not a warning or suspicion; NotEvaluated leaves ordinary inventory authoritative. Catalog revision and provenance appear with identity matches. Live WinGet package availability is not evaluated in Preview.1.</p>
 <details><summary>Restricted installed-software evidence</summary>$($tables -join '')</details>
+$(if ($suffixRows.Count) { '<details><summary>Exact shared software text suffixes</summary><p>A cell with [suffix N] means its displayed prefix immediately followed by every character in suffix N below, with no added space. This preserves the full provider value and each separate registration.</p><ol start="0">' + ($suffixRows -join '') + '</ol></details>' })
 <p>Display name and publisher are metadata, not identity. Versions are preserved as provider text without semantic-version assumptions. An observed registration does not prove compatibility, support, licensing, safety, health, approval, or migration success; confirm retained dependencies against the target design.</p>
 "@
     }else{''}
@@ -1630,7 +1696,7 @@ $identityGuidance
         $certificateRows=@($certificateSubjects|ForEach-Object {
             $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
             $lines=@($items|Where-Object valueState -eq ObservedValue|ForEach-Object {
-                '<strong>'+[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+':</strong> '+[Net.WebUtility]::HtmlEncode([string]$_.value)
+                '<strong>'+[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+':</strong> '+(New-AssessmentObservationReportValue -Observation $_ -Anchors $observationAnchors)
             });'<li>'+($lines -join '<br>')+'</li>'
         })
 @"
@@ -1659,7 +1725,7 @@ $identityGuidance
             $items=@($Record.observations|Where-Object subjectId -eq $subjectId)
             '<li>'+(@($items|ForEach-Object {
                 [Net.WebUtility]::HtmlEncode([string]$_.fieldId)+': '+
-                [Net.WebUtility]::HtmlEncode($(if($_.valueState -eq 'ObservedValue'){[string]$_.value}else{[string]$_.valueState}))
+                (New-AssessmentObservationReportValue -Observation $_ -Anchors $observationAnchors)
             }) -join '<br>')+'</li>'
         })
 @"
@@ -1702,7 +1768,7 @@ $identityGuidance
         -MicrosoftConnectivityPolicy $MicrosoftConnectivityPolicy `
         -CrossDomainPolicy $crossDomainPolicy
     $jsonCommand = $ExecutionContext.InvokeCommand.GetCommand('ConvertTo-Json', [Management.Automation.CommandTypes]::Cmdlet)
-    $renderInputs = [ordered]@{ renderer = 'assessment-report/1.1.0'; language = 'en'; record = $Record
+    $renderInputs = [ordered]@{ renderer = 'assessment-report/1.1.1'; language = 'en'; record = $Record
         definitions = @($FirmwarePolicy,$IdentityEnrollmentPolicy,$AdministratorExposurePolicy,$EffectivePolicyPolicy,
             $ResourceDependenciesPolicy,$NetworkTopologyPolicy,$SoftwareInventoryPolicy,$CertificateTrustPolicy,
             $MicrosoftConnectivityPolicy,$crossDomainPolicy) }
@@ -1721,14 +1787,15 @@ $identityGuidance
         $referenceLookup.Add($_, $number)
         '<li id="ref-' + $number + '">' + [Net.WebUtility]::HtmlEncode($_) + '</li>'
     })
+    $findingAnchors = Get-AssessmentReportFindingAnchors -Record $Record
     if ($null -ne $crossDomainModel) {
-        $crossDomainSection = New-CrossDomainGuidanceHtml -Record $Record -Policy $crossDomainPolicy -ReferenceLookup $referenceLookup
+        $crossDomainSection = New-CrossDomainGuidanceHtml -Record $Record -Policy $crossDomainPolicy -ReferenceLookup $referenceLookup `
+            -FindingAnchors $findingAnchors -ObservationAnchors $observationAnchors
     }
     $assessmentRecommendations = Get-AssessmentReportRecommendationDetails `
         -Record $Record -DefinitionLookup $definitionLookup -Kind AssessmentRecommendation
     $tenantTasks = Get-AssessmentReportRecommendationDetails `
         -Record $Record -DefinitionLookup $definitionLookup -Kind TenantSideDiscoveryTask
-    $findingAnchors = if ($null -ne $crossDomainModel) { Get-AssessmentReportFindingAnchors -Record $Record } else { @{} }
     $prioritizedResults = Get-AssessmentReportPrioritizedResults -Record $Record `
         -CrossDomainModel $crossDomainModel
     $reportOutcome = Get-AssessmentReportOutcomeLabel -Outcome ([string] $Record.run.outcome)
@@ -1853,7 +1920,15 @@ $identityGuidance
             default { 'device' }
         }
         $key = $findingAnchors[[string]$localFinding.findingId]
-        $familyAnchors[$family] += '<span id="' + [Net.WebUtility]::HtmlEncode($key) + '"></span>'
+        $links = @($localFinding.evidenceReferences | ForEach-Object {
+            '<a href="#' + $observationAnchors[[string]$_.observationId] + '">' + $observationAnchors[[string]$_.observationId] + '</a>'
+        }) -join ' '
+        $familyAnchors[$family] += '<details id="' + $key + '"><summary>' +
+            [Net.WebUtility]::HtmlEncode([string]$localFinding.findingId) + '</summary>Rule: ' +
+            [Net.WebUtility]::HtmlEncode([string]$localFinding.ruleId) + '<br>' +
+            [Net.WebUtility]::HtmlEncode([string]$localFinding.outcome) +
+            $(if ($localFinding.PSObject.Properties['reasonCode']) { ': ' + [Net.WebUtility]::HtmlEncode([string]$localFinding.reasonCode) }) + '; ' +
+            $(if ($links) { $links } else { 'No observation references.' }) + '</details>'
     }
     $html = @"
 <!doctype html>
@@ -1865,6 +1940,7 @@ $identityGuidance
 :root { color-scheme: light; font-family: "Segoe UI", Tahoma, sans-serif; line-height: 1.45; }
 body { margin: 0 auto; max-width: 8.5in; padding: 1.25rem; color: #14213d; background: #F3F5F8; }
 a { color: #1765AE; }
+code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .skip-link { position: absolute; left: 0.75rem; top: -3rem; background: #ffffff; padding: 0.5rem 0.75rem; border: 2px solid #14213d; }
 .skip-link:focus-visible { top: 0.75rem; }
 nav { margin: 1rem 0; padding: 0.75rem 1rem; border: 1px solid #CBD5E1; background: #FFFFFF; }
@@ -1929,7 +2005,7 @@ summary { cursor: pointer; font-weight: 600; }
 </section>
 <section id="evidence">
 <h2>Evidence and provenance</h2>
-<details><summary>Report derivation</summary><p>$DerivationKind; renderer assessment-report/1.1.0, English. Input SHA-256 (record and definitions): $inputDigest. Source report SHA-256: $SourceReportSha256. References fN/rN use zero-based canonical finding/recommendation positions.</p></details>
+<details><summary>Report derivation</summary><p>$DerivationKind; renderer assessment-report/1.1.1, English. Input SHA-256 (record and definitions): $inputDigest. Source report SHA-256: $SourceReportSha256. References fN/rN/oN use zero-based canonical finding/recommendation/observation positions in assessment-record.json; each observation identifies its field, subject and provenance.</p></details>
 <p><strong>Observations:</strong> The detailed sections below preserve bounded Windows observations and provenance without relabeling them as findings.</p>
 <h2>Device, Windows, activation, and power context</h2><p>$summary</p>
 $($familyAnchors['device'])
@@ -1955,7 +2031,7 @@ $($familyAnchors['firmware'])$firmwareSection
 $administratorSection
 </div>
 <div id="family-policy">$($familyAnchors['policy'])$effectivePolicySection
-$(if($null -ne $policyFinding){New-EffectivePolicySecurityReportSection -Record $Record})
+$(if($null -ne $policyFinding){New-EffectivePolicySecurityReportSection -Record $Record -ObservationAnchors $observationAnchors})
 </div>
 <div id="family-resource">$($familyAnchors['resource'])$resourceSection</div>
 <div id="family-network">$($familyAnchors['network'])$networkSection</div>
@@ -1980,6 +2056,24 @@ $crossDomainSection
 </body>
 </html>
 "@
+    # Link existing resource evidence and provide the remaining exact referenced
+    # observations once. No value-based matching can conflate identical values.
+    foreach ($id in $observationAnchors.Keys) {
+        $html = $html.Replace('id="' + [Net.WebUtility]::HtmlEncode($id) + '"', 'id="' + $observationAnchors[$id] + '"')
+    }
+    $unrendered = @($Record.observations | Where-Object {
+        $observationAnchors.ContainsKey([string]$_.observationId) -and
+        -not $html.Contains('id="' + $observationAnchors[[string]$_.observationId] + '"')
+    })
+    $referenceRows = @($unrendered | ForEach-Object {
+        $value = if ($_.valueState -eq 'ObservedValue') { [string]$_.value } else { [string]$_.valueState }
+        '<tr><td>' + [Net.WebUtility]::HtmlEncode([string]$_.fieldId) + '<td>' +
+            [Net.WebUtility]::HtmlEncode([string]$_.subjectId) + '<td id="' +
+            $observationAnchors[[string]$_.observationId] + '">' +
+            $value.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;') + '</tr>'
+    })
+    $html = $html.Replace('</main>', '<details><summary>Additional referenced observations</summary><div class="evidence-table" tabindex="0" role="region" aria-label="Referenced evidence"><table><thead><tr><th scope="col">Field</th><th scope="col">Subject</th><th scope="col">Observed value or state</th></tr></thead><tbody>' +
+        ($referenceRows -join '') + '</tbody></table></div></details></main>')
     $recommendationIndex = 0
     foreach ($recommendation in $Record.recommendations) {
         $id = [Net.WebUtility]::HtmlEncode([string]$recommendation.recommendationId)
