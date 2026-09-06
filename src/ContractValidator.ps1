@@ -286,7 +286,9 @@ function Get-AssessmentReferenceReason {
         }
     }
     if ($Record.PSObject.Properties['softwareRecognition']) {
-        $applicationSubjects = @($Record.subjects | Where-Object kind -eq 'Application')
+        $applicationSubjects = @($Record.subjects | Where-Object {
+            $_.kind -eq 'Application' -and [string]$_.subjectId -match '^subject:software:[0-9]+$'
+        })
         $applicationSubjectIds = @($applicationSubjects | ForEach-Object { [string]$_.subjectId })
         $annotationSubjects = @($Record.softwareRecognition | ForEach-Object { [string]$_.subjectId })
         if ('software-recognition-annotations' -notin @($Record.requiredFeatures) -or

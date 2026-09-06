@@ -473,7 +473,11 @@ function Add-SoftwareRecognitionAnnotations {
     if ($Record.PSObject.Properties['softwareRecognition']) {
         throw 'Software Recognition annotations cannot be added twice.'
     }
-    $applicationSubjects = @($Record.subjects | Where-Object kind -eq 'Application' |
+    # Other collectors also emit Application subjects (for example printer
+    # drivers). Only software inventory subjects belong to this annotation set.
+    $applicationSubjects = @($Record.subjects | Where-Object {
+        $_.kind -eq 'Application' -and [string]$_.subjectId -match '^subject:software:[0-9]+$'
+    } |
         Sort-Object { [int]([string]$_.subjectId).Substring('subject:software:'.Length) })
     if ($Entries.Count -ne $applicationSubjects.Count -or $Entries.Count -gt 128) {
         throw 'Software Recognition requires one authoritative application subject per input entry.'

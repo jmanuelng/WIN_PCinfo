@@ -20,12 +20,12 @@
     "collectorId": "collector:windows.resource-dependencies",
     "collectorVersion": "1.0.0",
     "operationId": "observe-user-dependencies",
-    "source": "Release-owned projection of CurrentUser mapped-resource definitions and exact CIM resource, printer, driver, and peripheral properties",
+    "source": "Release-owned local user definitions, level-zero session connections, level-four printer cache, local print registry and exact peripheral CIM metadata",
     "executionContext": "StandardUser",
     "privilege": "NoElevation",
     "networkBehavior": "OfflineOnly",
     "executable": "ActiveMicrosoftSignedPowerShellHost",
-    "dependencies": ["Microsoft.Win32.Registry", "Windows CIM provider"],
+    "dependencies": ["Microsoft.Win32.Registry", "Windows CIM provider", "NetUseEnumLevel0LocalServer", "EnumPrintersLevel4LocalCache"],
     "mayPrompt": false,
     "mayInstall": false,
     "mayDownload": false,
@@ -49,22 +49,22 @@
       "limitation": "DefinitionsOnlyNoConnectionNoCredentialOrContentAccess"
     },
     {
-      "sourceId": "source:windows.cim.network-connections",
-      "interface": "Win32_NetworkConnection",
-      "approvedProperties": ["LocalName", "RemoteName", "ConnectionState", "ProviderName"],
-      "limitation": "ConnectionMetadataOnlyNoRemoteEnumeration"
+      "sourceId": "source:windows.local.connection-table",
+      "interface": "NetUseEnumLocalServerLevel0",
+      "approvedProperties": ["LocalName", "RemoteName"],
+      "limitation": "CurrentLogonSessionNamesOnlyNoHealthOrProviderOrRemoteEnumeration"
     },
     {
       "sourceId": "source:windows.local.mapped-resource-correlation",
-      "interface": "ReleaseOwnedCurrentUserNetworkAndWin32NetworkConnectionCorrelation",
+      "interface": "ReleaseOwnedCurrentUserNetworkAndNetUseEnumLevel0Correlation",
       "approvedProperties": ["LocalName", "RemotePath", "RemoteName", "ConnectionState", "ProviderName"],
       "limitation": "ExactLocalNameCorrelationOnlyNoRemoteEnumerationOrCredentialAccess"
     },
     {
-      "sourceId": "source:windows.cim.printers-and-drivers",
-      "interface": "Win32_PrinterAndWin32_PrinterDriver",
-      "approvedProperties": ["Name", "PortName", "DriverName", "Network", "Local", "Default", "WorkOffline", "Manufacturer", "DriverVersion", "InfName"],
-      "limitation": "ConfigurationMetadataOnlyNoPrintJobsOrPrinting"
+      "sourceId": "source:windows.local.print-cache",
+      "interface": "EnumPrintersLevel4AndFixedLocalPrintRegistry",
+      "approvedProperties": ["Name", "Attributes", "Device", "Port", "Printer Driver", "Manufacturer", "DriverVersion", "InfPath", "EnvironmentKeyName", "DriverModelKeyName"],
+      "limitation": "LocalCacheAndConfigurationOnlyRemoteUncachedDetailsUnknownNoPrintJobsOrPrinting"
     },
     {
       "sourceId": "source:windows.cim.common-peripheral-drivers",
@@ -78,7 +78,7 @@
     {"scopeId":"scope:resource.mapped-drives","fieldIds":["field:resource.mapped-drive.local-name","field:resource.mapped-drive.remote-endpoint","field:resource.mapped-drive.connection-state","field:resource.mapped-drive.provider-name"]},
     {"scopeId":"scope:resource.unc-connections","fieldIds":["field:resource.share.endpoint","field:resource.connection-state","field:resource.provider-name"]},
     {"scopeId":"scope:resource.printers","fieldIds":["field:resource.printer.name","field:resource.printer.port-name","field:resource.printer.driver-name","field:resource.printer.network","field:resource.printer.default","field:resource.printer.offline"]},
-    {"scopeId":"scope:resource.printer-drivers","fieldIds":["field:resource.printer-driver.name","field:resource.printer-driver.manufacturer","field:resource.printer-driver.version","field:resource.printer-driver.inf-name"]},
+    {"scopeId":"scope:resource.printer-drivers","fieldIds":["field:resource.printer-driver.name","field:resource.printer-driver.manufacturer","field:resource.printer-driver.version","field:resource.printer-driver.inf-name","field:resource.printer-driver.environment","field:resource.printer-driver.driver-model"]},
     {"scopeId":"scope:resource.common-peripherals","fieldIds":["field:resource.peripheral.class","field:resource.peripheral.name","field:resource.peripheral.manufacturer","field:resource.peripheral.driver-provider","field:resource.peripheral.driver-version","field:resource.peripheral.driver-inf-name","field:resource.peripheral.driver-signed"]}
   ],
   "rules": [
@@ -86,10 +86,10 @@
       "findingKind":"user-resource-migration-dependencies","ruleId":"rule:resource.user-migration-dependencies/1.0.0","operationId":"op:rule.resource.user-migration-dependencies.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":104,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"
     },
     {
-      "findingKind":"peripheral-migration-dependencies","ruleId":"rule:resource.peripheral-migration-dependencies/1.0.0","operationId":"op:rule.resource.peripheral-migration-dependencies.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":88,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"
+      "findingKind":"peripheral-migration-dependencies","ruleId":"rule:resource.peripheral-migration-dependencies/1.0.0","operationId":"op:rule.resource.peripheral-migration-dependencies.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":104,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"
     },
     {
-      "findingKind":"resource-dependency-coverage","ruleId":"rule:resource.dependency-coverage/1.0.0","operationId":"op:rule.resource.dependency-coverage.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":192,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"
+      "findingKind":"resource-dependency-coverage","ruleId":"rule:resource.dependency-coverage/1.0.0","operationId":"op:rule.resource.dependency-coverage.evaluate","source":"ReleaseEmbeddedValidatedObservationRule","executionContext":"InProcessValidatedAssessmentRecord","privilege":"NoElevation","networkBehavior":"OfflineOnly","executable":"NoneInProcess","dependencies":[],"mayPrompt":false,"mayInstall":false,"mayDownload":false,"maySelfElevate":false,"writesAllowed":false,"maximumAttempts":1,"deadlineMilliseconds":100,"maximumInputObservations":208,"maximumOutputFindings":1,"cleanup":"NoArtifacts","missingEvidenceOutcome":"Indeterminate"
     }
   ],
   "recommendations": [

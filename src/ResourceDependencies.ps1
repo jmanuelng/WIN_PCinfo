@@ -92,7 +92,7 @@ function New-ResourceDependenciesSyntheticPayload {
         driverName='Synthetic Universal Driver';network=$true;default=$false;offline=$false
     }
     $driverItem=[pscustomobject][ordered]@{
-        name='Synthetic Universal Driver';manufacturer='Synthetic Vendor'
+        name='Synthetic Universal Driver';environment='Windows x64';driverModel='Version-3';manufacturer='Synthetic Vendor'
         version='1.0.0.0';infName='synthetic-printer.inf'
     }
     $peripheralItem=[pscustomobject][ordered]@{
@@ -115,7 +115,7 @@ function New-ResourceDependenciesSyntheticPayload {
                 driverName='Synthetic Local Driver';network=$false;default=$true;offline=$false
             })
             $drivers=@($driverItem,[pscustomobject][ordered]@{
-                name='Synthetic Local Driver';manufacturer='Synthetic Vendor'
+                name='Synthetic Local Driver';environment='Windows x64';driverModel='Version-3';manufacturer='Synthetic Vendor'
                 version='1.0.0.1';infName='synthetic-local.inf'
             })
         }
@@ -134,7 +134,7 @@ function New-ResourceDependenciesSyntheticPayload {
             $mapped=@(0..7|ForEach-Object {[pscustomobject][ordered]@{localName="$([char](82+$_)):";remoteEndpoint="\\synthetic-file\bounded-$($_+1)";connectionState='Connected';providerName='Microsoft Windows Network'}})
             $unc=@(0..7|ForEach-Object {[pscustomobject][ordered]@{remoteEndpoint="\\synthetic-file\unc-$($_+1)";connectionState='Connected';providerName='Microsoft Windows Network'}})
             $printers=@(0..7|ForEach-Object {[pscustomobject][ordered]@{name="Synthetic Printer $($_+1)";portName="SYNTHETIC-$($_+1):";driverName="Synthetic Driver $($_+1)";network=$true;default=$false;offline=$false}})
-            $drivers=@(0..7|ForEach-Object {[pscustomobject][ordered]@{name="Synthetic Driver $($_+1)";manufacturer='Synthetic Vendor';version="1.0.0.$_";infName="synthetic-$_.inf"}})
+            $drivers=@(0..7|ForEach-Object {[pscustomobject][ordered]@{name="Synthetic Driver $($_+1)";environment='Windows x64';driverModel='Version-3';manufacturer='Synthetic Vendor';version="1.0.0.$_";infName="synthetic-$_.inf"}})
             $peripherals=@(0..7|ForEach-Object {[pscustomobject][ordered]@{class='USB';name="Synthetic Peripheral $($_+1)";manufacturer='Synthetic Vendor';driverProvider='Synthetic Provider';driverVersion="2.0.0.$_";driverInfName="synthetic-device-$_.inf";driverSigned=$true}})
         }
         'Duplicates'{
@@ -147,7 +147,7 @@ function New-ResourceDependenciesSyntheticPayload {
         'LongUnicode'{
             $mapped=@([pscustomobject][ordered]@{localName='Ü:';remoteEndpoint='\\synthetic-file\迁移-Δοκιμή-équipe';connectionState='Connected';providerName='Réseau Windows'})
             $printers=@([pscustomobject][ordered]@{name='Imprimante-東京-Δοκιμή';portName='PORT-É:';driverName='Pilote-统一';network=$true;default=$false;offline=$false})
-            $drivers=@([pscustomobject][ordered]@{name='Pilote-统一';manufacturer='Fabricant-É';version='3.0.0.0';infName='pilote-unicode.inf'})
+            $drivers=@([pscustomobject][ordered]@{name='Pilote-统一';environment='Windows x64';driverModel='Version-3';manufacturer='Fabricant-É';version='3.0.0.0';infName='pilote-unicode.inf'})
             $peripherals=@([pscustomobject][ordered]@{class='USB';name='Périphérique-東京';manufacturer='Fabricant-É';driverProvider='Fournisseur-Δ';driverVersion='3.0.0.1';driverInfName='unicode-device.inf';driverSigned=$true})
         }
         'AlternateAdministrator'{$relationship='AlternateAdministrator';$observedContext='Administrator';$state='Denied';$reason='RESOURCE.ASSESSMENT_USER_CONTEXT_REQUIRED'}
@@ -155,7 +155,7 @@ function New-ResourceDependenciesSyntheticPayload {
         'NonEnglish'{
             $sourceLocale='fr-FR';$mapped=@([pscustomobject][ordered]@{localName='T:';remoteEndpoint='\\synthetic-file\équipe';connectionState='Connected';providerName='Réseau Windows'})
             $printers=@([pscustomobject][ordered]@{name='Imprimante Étage';portName='PORT-É:';driverName='Pilote Français';network=$true;default=$true;offline=$false})
-            $drivers=@([pscustomobject][ordered]@{name='Pilote Français';manufacturer='Fabricant';version='4.0.0.0';infName='francais.inf'})
+            $drivers=@([pscustomobject][ordered]@{name='Pilote Français';environment='Windows x64';driverModel='Version-3';manufacturer='Fabricant';version='4.0.0.0';infName='francais.inf'})
             $peripherals=@([pscustomobject][ordered]@{class='Mouse';name='Souris ergonomique';manufacturer='Fabricant';driverProvider='Fournisseur';driverVersion='4.0.0.1';driverInfName='souris.inf';driverSigned=$true})
         }
         default{throw 'The Resource Dependencies scenario is not release-owned.'}
@@ -229,13 +229,17 @@ function Test-ResourceDependenciesCollectorPayload {
         }
         foreach($item in @($Payload.printers)){
             if(-not (Test-ResourceDependencyObjectShape $item @('name','portName','driverName','network','default','offline')) -or
-                -not (Test-ResourceDependencyString $item.name 512) -or -not (Test-ResourceDependencyString $item.portName 512) -or
-                -not (Test-ResourceDependencyString $item.driverName 512) -or $item.network -isnot [bool] -or
-                $item.default -isnot [bool] -or $item.offline -isnot [bool]){return $false}
+                -not (Test-ResourceDependencyString $item.name 512) -or -not (Test-ResourceDependencyString $item.portName 512 -AllowNull) -or
+                -not (Test-ResourceDependencyString $item.driverName 512 -AllowNull) -or $item.network -isnot [bool] -or
+                ($null -ne $item.default -and $item.default -isnot [bool]) -or
+                ($null -ne $item.offline -and $item.offline -isnot [bool])){return $false}
         }
         foreach($item in @($Payload.printerDrivers)){
-            if(-not (Test-ResourceDependencyObjectShape $item @('name','manufacturer','version','infName')) -or
+            if(-not (Test-ResourceDependencyObjectShape $item @('name','environment','driverModel','manufacturer','version','infName')) -or
                 -not (Test-ResourceDependencyString $item.name 512) -or
+                -not (Test-ResourceDependencyString $item.environment 128) -or
+                -not (Test-ResourceDependencyString $item.driverModel 32) -or
+                [string]$item.driverModel -notmatch '^Version-[0-9]+$' -or
                 -not (Test-ResourceDependencyString $item.manufacturer 512 -AllowNull) -or
                 -not (Test-ResourceDependencyString $item.version 128 -AllowNull) -or
                 -not (Test-ResourceDependencyString $item.infName 260 -AllowNull)){return $false}
@@ -280,8 +284,8 @@ function Copy-ResourceDependenciesCollectorPayload {
         processRelationship=[string]$Payload.processRelationship
         mappedDrives=@($Payload.mappedDrives|Sort-Object localName -Unique|ForEach-Object {[pscustomobject][ordered]@{localName=[string]$_.localName;remoteEndpoint=[string]$_.remoteEndpoint;connectionState=[string]$_.connectionState;providerName=if($null -eq $_.providerName){$null}else{[string]$_.providerName}}})
         uncConnections=@($Payload.uncConnections|Sort-Object remoteEndpoint -Unique|ForEach-Object {[pscustomobject][ordered]@{remoteEndpoint=[string]$_.remoteEndpoint;connectionState=[string]$_.connectionState;providerName=if($null -eq $_.providerName){$null}else{[string]$_.providerName}}})
-        printers=@($Payload.printers|Sort-Object name -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;portName=[string]$_.portName;driverName=[string]$_.driverName;network=[bool]$_.network;default=[bool]$_.default;offline=[bool]$_.offline}})
-        printerDrivers=@($Payload.printerDrivers|Sort-Object name -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};version=if($null -eq $_.version){$null}else{[string]$_.version};infName=if($null -eq $_.infName){$null}else{[string]$_.infName}}})
+        printers=@($Payload.printers|Sort-Object name -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;portName=if($null -eq $_.portName){$null}else{[string]$_.portName};driverName=if($null -eq $_.driverName){$null}else{[string]$_.driverName};network=[bool]$_.network;default=if($null -eq $_.default){$null}else{[bool]$_.default};offline=if($null -eq $_.offline){$null}else{[bool]$_.offline}}})
+        printerDrivers=@($Payload.printerDrivers|Sort-Object name,environment,driverModel -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;environment=[string]$_.environment;driverModel=[string]$_.driverModel;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};version=if($null -eq $_.version){$null}else{[string]$_.version};infName=if($null -eq $_.infName){$null}else{[string]$_.infName}}})
         peripherals=@($Payload.peripherals|Sort-Object class,name,driverVersion -Unique|ForEach-Object {[pscustomobject][ordered]@{class=[string]$_.class;name=[string]$_.name;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};driverProvider=if($null -eq $_.driverProvider){$null}else{[string]$_.driverProvider};driverVersion=if($null -eq $_.driverVersion){$null}else{[string]$_.driverVersion};driverInfName=if($null -eq $_.driverInfName){$null}else{[string]$_.driverInfName};driverSigned=[bool]$_.driverSigned}})
         scopeStates=@($Payload.scopeStates|ForEach-Object {[pscustomobject][ordered]@{scopeId=[string]$_.scopeId;state=[string]$_.state;reasonCode=[string]$_.reasonCode}})
         executionContext=[string]$Payload.executionContext
@@ -489,7 +493,10 @@ function Get-ResourceDependenciesLiveSource {
     # object after validation cannot make an elevated or different user appear
     # to be the Assessment User Context.
 @'
+Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+$PSModuleAutoLoadingPreference='None'
+Microsoft.PowerShell.Core\Import-Module -Name ([IO.Path]::Combine($PSHOME,'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1')) -ErrorAction Stop
 function New-Scope([string]$id){[pscustomobject][ordered]@{scopeId=$id;state='Complete';reasonCode=''}}
 function Set-Scope([object[]]$scopes,[string]$id,[string]$state,[string]$reason){
     $item=@($scopes|Where-Object scopeId -eq $id)[0]
@@ -498,7 +505,12 @@ function Set-Scope([object[]]$scopes,[string]$id,[string]$state,[string]$reason)
     }
 }
 function Get-FailureState([Exception]$exception){
-    if($exception -is [UnauthorizedAccessException] -or $exception.HResult -eq -2147024891){'Denied'}else{'Failed'}
+    for($depth=0;$depth -lt 8 -and $null -ne $exception;$depth++){
+        if($exception -is [UnauthorizedAccessException] -or $exception.HResult -eq -2147024891 -or
+            ($exception -is [ComponentModel.Win32Exception] -and $exception.NativeErrorCode -eq 5)){return 'Denied'}
+        $exception=$exception.InnerException
+    }
+    'Failed'
 }
 function Get-FailureReason([string]$state){if($state -eq 'Denied'){'RESOURCE.SOURCE_ACCESS_DENIED'}else{'RESOURCE.SOURCE_FAILED'}}
 function Add-BoundedUnique(
@@ -513,6 +525,12 @@ function Get-CanonicalLocalName([string]$value){
     $trimmed=$value.Trim().TrimEnd(':')
     if($trimmed -notmatch '^[A-Za-z]$'){return $null}
     "$($trimmed.ToUpperInvariant()):"
+}
+function Read-ResourcePeripheralDrivers {
+    # Fixed native Core module, with no module-path or compatibility fallback.
+    Microsoft.PowerShell.Core\Import-Module -Name ([IO.Path]::Combine($PSHOME,'Modules/CimCmdlets/CimCmdlets.psd1')) -ErrorAction Stop
+    $command=Get-Command 'CimCmdlets\Get-CimInstance' -CommandType Cmdlet -ErrorAction Stop
+    & $command -ClassName Win32_PnPSignedDriver -Property DeviceClass,DeviceName,Manufacturer,DriverProviderName,DriverVersion,InfName,IsSigned -ErrorAction Stop
 }
 $utf8=[Text.UTF8Encoding]::new($false,$true)
 $expectedSid=[string]$env:WINPCINFO_RESOURCE_ASSESSMENT_SID
@@ -530,8 +548,10 @@ $maximumDrivers=[int]$env:WINPCINFO_RESOURCE_MAX_DRIVERS
 $maximumPeripherals=[int]$env:WINPCINFO_RESOURCE_MAX_PERIPHERALS
 $classCatalog=@([string]$env:WINPCINFO_RESOURCE_CLASSES -split '\|')
 $scopes=@(
-    New-Scope 'scope:resource.mapped-drives',New-Scope 'scope:resource.unc-connections',
-    New-Scope 'scope:resource.printers',New-Scope 'scope:resource.printer-drivers',
+    New-Scope 'scope:resource.mapped-drives'
+    New-Scope 'scope:resource.unc-connections'
+    New-Scope 'scope:resource.printers'
+    New-Scope 'scope:resource.printer-drivers'
     New-Scope 'scope:resource.common-peripherals'
 )
 $mappedSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -559,8 +579,43 @@ try{
 }catch{$state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.mapped-drives' $state (Get-FailureReason $state)}
 
 $uncSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
+$connectionBoundExceeded=$false
 try{
-    $null=Get-CimInstance -ClassName Win32_NetworkConnection -Property LocalName,RemoteName,ConnectionState,ProviderName -ErrorAction Stop | ForEach-Object {
+    # Level zero returns only local/remote names for this logon session. Higher
+    # levels include credential fields and are excluded even as transient data.
+    Add-Type -TypeDefinition @"
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+namespace WinPCInfo.ResourceDependencies {
+ public static class Connections {
+  [StructLayout(LayoutKind.Sequential)] struct Info {public IntPtr Local;public IntPtr Remote;}
+  public sealed class Row {public string LocalName;public string RemoteName;}
+  [DllImport("netapi32.dll",CharSet=CharSet.Unicode)]
+  [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+  static extern int NetUseEnum(string server,int level,out IntPtr buffer,int maximum,out int count,out int total,ref int resume);
+  [DllImport("netapi32.dll")]
+  [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+  static extern int NetApiBufferFree(IntPtr buffer);
+  public static Row[] Read(out bool exceeded){
+   IntPtr buffer=IntPtr.Zero; int count,total,resume=0; exceeded=false;
+   try{
+    int error=NetUseEnum(null,0,out buffer,65536,out count,out total,ref resume);
+    if(error!=0 && error!=234)throw new Win32Exception(error);
+    exceeded=error==234 || count>17;
+    if(count<0 || (count>0 && buffer==IntPtr.Zero))throw new InvalidOperationException("Invalid connection buffer.");
+    Row[] rows=new Row[Math.Min(count,17)]; int width=Marshal.SizeOf<Info>();
+    for(int i=0;i<rows.Length;i++){
+     Info info=Marshal.PtrToStructure<Info>(IntPtr.Add(buffer,i*width));
+     rows[i]=new Row{LocalName=Marshal.PtrToStringUni(info.Local),RemoteName=Marshal.PtrToStringUni(info.Remote)};
+    }
+    return rows;
+   }finally{if(buffer!=IntPtr.Zero)NetApiBufferFree(buffer);}
+  }
+ }
+}
+"@ -ErrorAction Stop
+    $null=[WinPCInfo.ResourceDependencies.Connections]::Read([ref]$connectionBoundExceeded) | ForEach-Object {
         $row=$_
         $rawLocal=[string]$row.LocalName
         $local=Get-CanonicalLocalName $rawLocal
@@ -572,18 +627,26 @@ try{
             $reason=if($null -eq $local){'RESOURCE.UNC_CONNECTION_MALFORMED'}else{'RESOURCE.MAPPED_DRIVE_MALFORMED'}
             Set-Scope $scopes $targetScope 'Partial' $reason;return
         }
-        $state=if([string]$row.ConnectionState -eq 'Connected'){'Connected'}elseif([string]$row.ConnectionState -eq 'Disconnected'){'Disconnected'}else{'Unavailable'}
+        $state='Unavailable'
         if($null -ne $local){
-            # A live network row is authoritative for the same local designator. Replacing the
-            # registry-only definition avoids presenting a remembered mapping as disconnected.
+            # The local session table supersedes a remembered target, but does
+            # not establish server reachability or current connection health.
+            # Retain the already-read provider only for the exact same drive
+            # and endpoint. A stale remembered target cannot describe this row.
+            $provider=$null
+            if($mappedSet.ContainsKey($local) -and [string]::Equals(
+                [string]$mappedSet[$local].remoteEndpoint,[string]$row.RemoteName,
+                [StringComparison]::Ordinal)){
+                $provider=$mappedSet[$local].providerName
+            }
             Add-BoundedUnique $mappedSet $local ([pscustomobject][ordered]@{
                 localName=$local;remoteEndpoint=[string]$row.RemoteName;connectionState=$state
-                providerName=if($row.ProviderName -is [string]){[string]$row.ProviderName}else{$null}
+                providerName=$provider
             }) $maximumMapped $scopes 'scope:resource.mapped-drives' $true
         }else{
             Add-BoundedUnique $uncSet ([string]$row.RemoteName) ([pscustomobject][ordered]@{
                 remoteEndpoint=[string]$row.RemoteName;connectionState=$state
-                providerName=if($row.ProviderName -is [string]){[string]$row.ProviderName}else{$null}
+                providerName=$null
             }) $maximumUnc $scopes 'scope:resource.unc-connections' $false
         }
     }
@@ -591,20 +654,97 @@ try{
     $state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.unc-connections' $state (Get-FailureReason $state)
     Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.CONNECTION_STATE_UNAVAILABLE'
 }
+if($connectionBoundExceeded){
+    Set-Scope $scopes 'scope:resource.mapped-drives' 'Partial' 'RESOURCE.EVIDENCE_BOUND_EXCEEDED'
+    Set-Scope $scopes 'scope:resource.unc-connections' 'Partial' 'RESOURCE.EVIDENCE_BOUND_EXCEEDED'
+}
 $mapped=@($mappedSet.Values|Sort-Object localName,remoteEndpoint)
 $unc=@($uncSet.Values|Sort-Object remoteEndpoint)
 
 $printerSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $null=Get-CimInstance -ClassName Win32_Printer -Property Name,PortName,DriverName,Network,Local,Default,WorkOffline -ErrorAction Stop | ForEach-Object {
+    # Level 4 reads the local registry/cache. Other levels can open every
+    # remote printer, including disconnected connections; they are forbidden.
+    Add-Type -TypeDefinition @"
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+namespace WinPCInfo.ResourceDependencies {
+ public static class PrinterCache {
+  [StructLayout(LayoutKind.Sequential)] struct Info {public IntPtr Name;public IntPtr Server;public uint Attributes;}
+  public sealed class Row {public string Name;public uint Attributes;}
+  [DllImport("winspool.drv",EntryPoint="EnumPrintersW",CharSet=CharSet.Unicode,SetLastError=true)]
+  [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+  static extern bool EnumPrinters(uint flags,string name,uint level,IntPtr data,uint size,out uint needed,out uint count);
+  public static Row[] Read(){
+   uint needed,count; bool ok=EnumPrinters(6,null,4,IntPtr.Zero,0,out needed,out count);
+   int error=Marshal.GetLastWin32Error();
+   if(!ok && error!=122)throw new Win32Exception(error);
+   if(needed==0)return new Row[0];
+   if(needed>131072)throw new InvalidOperationException("Printer cache bound exceeded.");
+   IntPtr buffer=Marshal.AllocHGlobal((int)needed);
+   try {
+    uint size=needed;
+    if(!EnumPrinters(6,null,4,buffer,size,out needed,out count))throw new Win32Exception(Marshal.GetLastWin32Error());
+    int width=Marshal.SizeOf<Info>();
+    if(needed>size || (ulong)count*(uint)width>size)throw new InvalidOperationException("Invalid printer cache buffer.");
+    // One excess row lets the reducer record its declared evidence bound.
+    Row[] rows=new Row[Math.Min(count,9)];
+    for(int i=0;i<rows.Length;i++){
+     Info info=Marshal.PtrToStructure<Info>(IntPtr.Add(buffer,i*width));
+     rows[i]=new Row{Name=Marshal.PtrToStringUni(info.Name),Attributes=info.Attributes};
+    }
+    return rows;
+   }finally{Marshal.FreeHGlobal(buffer);}
+  }
+ }
+}
+"@ -ErrorAction Stop
+    $defaultName=$null
+    $defaultKey=$null
+    try{
+        $defaultKey=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows NT\CurrentVersion\Windows',$false)
+        if($null -ne $defaultKey){
+            $defaultValue=$defaultKey.GetValue('Device',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+            if($defaultValue -is [string]){
+                $lastComma=$defaultValue.LastIndexOf(',')
+                if($lastComma -gt 0){
+                    $driverComma=$defaultValue.LastIndexOf(',',$lastComma-1)
+                    if($driverComma -gt 0){$defaultName=$defaultValue.Substring(0,$driverComma)}
+                }
+            }
+        }
+    }catch{Set-Scope $scopes 'scope:resource.printers' 'Partial' 'RESOURCE.PRINTER_DEFAULT_UNAVAILABLE'
+    }finally{if($null -ne $defaultKey){$defaultKey.Dispose()}}
+    $null=[WinPCInfo.ResourceDependencies.PrinterCache]::Read() | ForEach-Object {
         $row=$_
-        if($row.Name -isnot [string] -or $row.PortName -isnot [string] -or $row.DriverName -isnot [string] -or
-            $null -eq $row.Network -or $null -eq $row.Default -or $null -eq $row.WorkOffline){
+        if($row.Name -isnot [string] -or [string]::IsNullOrWhiteSpace($row.Name)){
             Set-Scope $scopes 'scope:resource.printers' 'Partial' 'RESOURCE.PRINTER_MALFORMED';return
         }
+        $port=$null;$driver=$null;$offline=$null
+        # Only a local printer name can select this fixed local configuration
+        # subkey. A cached UNC name is never used as a registry or file path.
+        if([string]$row.Name -notmatch '[\\/]'){
+            $printerKey=$null
+            try{
+                $printerKey=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey(('SYSTEM\CurrentControlSet\Control\Print\Printers\'+[string]$row.Name),$false)
+                if($null -ne $printerKey){
+                    $port=$printerKey.GetValue('Port',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                    $driver=$printerKey.GetValue('Printer Driver',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                    $attributes=$printerKey.GetValue('Attributes',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                    if($attributes -is [int]){$offline=([int]$attributes -band 0x400) -ne 0}
+                }
+            }catch{Set-Scope $scopes 'scope:resource.printers' 'Partial' 'RESOURCE.PRINTER_CACHE_DETAILS_UNAVAILABLE'
+            }finally{if($null -ne $printerKey){$printerKey.Dispose()}}
+        }
+        if($null -eq $port -or $null -eq $driver -or $null -eq $offline -or $null -eq $defaultName){
+            Set-Scope $scopes 'scope:resource.printers' 'Partial' 'RESOURCE.PRINTER_CACHE_DETAILS_UNAVAILABLE'
+        }
         Add-BoundedUnique $printerSet ([string]$row.Name) ([pscustomobject][ordered]@{
-            name=[string]$row.Name;portName=[string]$row.PortName;driverName=[string]$row.DriverName
-            network=[bool]$row.Network;default=[bool]$row.Default;offline=[bool]$row.WorkOffline
+            name=[string]$row.Name;portName=$port;driverName=$driver
+            network=([uint32]$row.Attributes -band 0x10) -ne 0
+            default=if($null -eq $defaultName){$null}else{[string]::Equals([string]$row.Name,$defaultName,[StringComparison]::OrdinalIgnoreCase)}
+            offline=$offline
         }) $maximumPrinters $scopes 'scope:resource.printers' $false
     }
 }catch{$state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.printers' $state (Get-FailureReason $state)}
@@ -612,21 +752,42 @@ $printers=@($printerSet.Values|Sort-Object name)
 
 $driverSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $null=Get-CimInstance -ClassName Win32_PrinterDriver -Property Name,Manufacturer,DriverVersion,InfName -ErrorAction Stop | ForEach-Object {
-        $row=$_
-        if($row.Name -isnot [string]){Set-Scope $scopes 'scope:resource.printer-drivers' 'Partial' 'RESOURCE.PRINTER_DRIVER_MALFORMED';return}
-        Add-BoundedUnique $driverSet ([string]$row.Name) ([pscustomobject][ordered]@{
-            name=[string]$row.Name;manufacturer=if($row.Manufacturer -is [string]){[string]$row.Manufacturer}else{$null}
-            version=if($null -eq $row.DriverVersion){$null}else{[Convert]::ToString($row.DriverVersion,[Globalization.CultureInfo]::InvariantCulture)}
-            infName=if($row.InfName -is [string]){[string]$row.InfName}else{$null}
-        }) $maximumDrivers $scopes 'scope:resource.printer-drivers' $false
-    }
+    $environments=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Print\Environments',$false)
+    try{
+        if($null -ne $environments){foreach($environment in $environments.GetSubKeyNames()){
+            $versions=$environments.OpenSubKey(($environment+'\Drivers'),$false)
+            try{
+                if($null -ne $versions){foreach($versionName in $versions.GetSubKeyNames()){
+                    if($versionName -notmatch '^Version-[0-9]+$'){continue}
+                    $versionKey=$versions.OpenSubKey($versionName,$false)
+                    try{
+                        if($null -ne $versionKey){foreach($name in $versionKey.GetSubKeyNames()){
+                            $driverKey=$versionKey.OpenSubKey($name,$false)
+                            try{
+                                if($null -eq $driverKey){Set-Scope $scopes 'scope:resource.printer-drivers' 'Partial' 'RESOURCE.PRINTER_DRIVER_MALFORMED';continue}
+                                $manufacturer=$driverKey.GetValue('Manufacturer',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                                $version=$driverKey.GetValue('DriverVersion',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                                $inf=$driverKey.GetValue('InfPath',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                                # An INF path is metadata only: retain the basename and never open it.
+                                if($inf -is [string]){$inf=$inf.Split([char[]]'\/')[-1]}
+                                Add-BoundedUnique $driverSet (($name,$environment,$versionName|ConvertTo-Json -Compress)) ([pscustomobject][ordered]@{
+                                    name=[string]$name;environment=[string]$environment;driverModel=[string]$versionName;manufacturer=$manufacturer
+                                    version=if($null -eq $version){$null}else{[Convert]::ToString($version,[Globalization.CultureInfo]::InvariantCulture)}
+                                    infName=$inf
+                                }) $maximumDrivers $scopes 'scope:resource.printer-drivers' $false
+                            }finally{if($null -ne $driverKey){$driverKey.Dispose()}}
+                        }}
+                    }finally{if($null -ne $versionKey){$versionKey.Dispose()}}
+                }}
+            }finally{if($null -ne $versions){$versions.Dispose()}}
+        }}
+    }finally{if($null -ne $environments){$environments.Dispose()}}
 }catch{$state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.printer-drivers' $state (Get-FailureReason $state)}
-$drivers=@($driverSet.Values|Sort-Object name)
+$drivers=@($driverSet.Values|Sort-Object name,environment,driverModel)
 
 $peripheralSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
-    $null=Get-CimInstance -ClassName Win32_PnPSignedDriver -Property DeviceClass,DeviceName,Manufacturer,DriverProviderName,DriverVersion,InfName,IsSigned -ErrorAction Stop |
+    $null=Read-ResourcePeripheralDrivers |
         Where-Object {[string]$_.DeviceClass -in $classCatalog} | ForEach-Object {
         $row=$_
         if($row.DeviceName -isnot [string] -or [string]$row.DeviceClass -notin $classCatalog -or $null -eq $row.IsSigned){
@@ -654,6 +815,20 @@ $xml=[Management.Automation.PSSerializer]::Serialize($payload,8)
 '@
 }
 
+function ConvertTo-ResourceDependenciesEncodedCommand {
+    param([Parameter(Mandatory)][string]$Source)
+    $output=[IO.MemoryStream]::new()
+    try{
+        $gzip=[IO.Compression.GZipStream]::new($output,[IO.Compression.CompressionLevel]::Optimal,$true)
+        try{$bytes=[Text.Encoding]::UTF8.GetBytes($Source);$gzip.Write($bytes,0,$bytes.Length)}finally{$gzip.Dispose()}
+        $payload=[Convert]::ToBase64String($output.ToArray())
+    }finally{$output.Dispose()}
+    $bootstrap='$b=[Convert]::FromBase64String('''+$payload+''');$m=[IO.MemoryStream]::new($b);$g=[IO.Compression.GZipStream]::new($m,[IO.Compression.CompressionMode]::Decompress);$r=[IO.StreamReader]::new($g,[Text.Encoding]::UTF8);try{&([scriptblock]::Create($r.ReadToEnd()))}finally{$r.Dispose();$g.Dispose();$m.Dispose()}'
+    $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
+    if($encoded.Length -gt 30000){throw 'The release-owned Resource Dependencies worker exceeds the command-line bound.'}
+    $encoded
+}
+
 function Invoke-BoundedResourceDependenciesSnapshot {
     param([Parameter(Mandatory)]$Policy,[Parameter(Mandatory)][string]$AssessmentUserSid)
     Initialize-ProcessSupervisorNativeType
@@ -661,7 +836,7 @@ function Invoke-BoundedResourceDependenciesSnapshot {
     $terminationMilliseconds=[Math]::Min(1000,[Math]::Max(1,[Math]::Floor($maximumMilliseconds/4)))
     $activeMilliseconds=[Math]::Max(1,$maximumMilliseconds-$terminationMilliseconds)
     $source=Get-ResourceDependenciesLiveSource
-    $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($source))
+    $encoded=ConvertTo-ResourceDependenciesEncodedCommand -Source $source
     $startedAt=[DateTimeOffset]::UtcNow
     $executable=[IO.Path]::GetFullPath((Join-Path $PSHOME 'pwsh.exe'))
     if(-not [IO.File]::Exists($executable) -or -not [string]::Equals(
@@ -670,6 +845,10 @@ function Invoke-BoundedResourceDependenciesSnapshot {
     }
     $environment=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     $environment['SystemRoot']=[Environment]::GetFolderPath('Windows')
+    $environment['POWERSHELL_TELEMETRY_OPTOUT']='1'
+    $environment['POWERSHELL_UPDATECHECK']='Off'
+    $environment['POWERSHELL_DIAGNOSTICS_OPTOUT']='1'
+    $environment['DOTNET_CLI_TELEMETRY_OPTOUT']='1'
     $environment['WINPCINFO_RESOURCE_ASSESSMENT_SID']=$AssessmentUserSid
     $environment['WINPCINFO_RESOURCE_MAX_MAPPED']=[string]$collector.maximumMappedDrives
     $environment['WINPCINFO_RESOURCE_MAX_UNC']=[string]$collector.maximumUncConnections
@@ -710,8 +889,8 @@ function Invoke-BoundedResourceDependenciesSnapshot {
 function Get-ResourceDependencySourceId {
     param([Parameter(Mandatory)][string]$FieldId)
     if($FieldId -like 'field:resource.mapped-drive.*'){'source:windows.local.mapped-resource-correlation'}
-    elseif($FieldId -like 'field:resource.share.*' -or $FieldId -eq 'field:resource.connection-state' -or $FieldId -eq 'field:resource.provider-name'){'source:windows.cim.network-connections'}
-    elseif($FieldId -like 'field:resource.printer.*' -or $FieldId -like 'field:resource.printer-driver.*'){'source:windows.cim.printers-and-drivers'}
+    elseif($FieldId -like 'field:resource.share.*' -or $FieldId -eq 'field:resource.connection-state' -or $FieldId -eq 'field:resource.provider-name'){'source:windows.local.connection-table'}
+    elseif($FieldId -like 'field:resource.printer.*' -or $FieldId -like 'field:resource.printer-driver.*'){'source:windows.local.print-cache'}
     elseif($FieldId -like 'field:resource.peripheral.*'){'source:windows.cim.common-peripheral-drivers'}
     else{throw "No Resource Dependency source owns $FieldId."}
 }
@@ -782,7 +961,9 @@ function Add-ResourceDependenciesEvidenceRecord {
     foreach($item in @($payload.printerDrivers|Where-Object {$scopeStateById['scope:resource.printer-drivers'] -in @('Complete','Partial')})){
         $subjectId="subject:printer-driver:$index";$subjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='Application'})
         foreach($definition in @(
-            @('name','field:resource.printer-driver.name'),@('manufacturer','field:resource.printer-driver.manufacturer'),
+            @('name','field:resource.printer-driver.name'),
+            @('environment','field:resource.printer-driver.environment'),@('driverModel','field:resource.printer-driver.driver-model'),
+            @('manufacturer','field:resource.printer-driver.manufacturer'),
             @('version','field:resource.printer-driver.version'),@('infName','field:resource.printer-driver.inf-name')
         )){Add-ResourceValue 'scope:resource.printer-drivers' "printer-driver-$index-$($definition[0])" $definition[1] $subjectId $item.($definition[0])}
         $index++

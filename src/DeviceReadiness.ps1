@@ -1418,11 +1418,13 @@ $identityGuidance
         $resourceSubjects=@($Record.subjects|Where-Object {$_.subjectId -like 'subject:mapped-drive:*' -or $_.subjectId -like 'subject:unc-resource:*' -or $_.subjectId -like 'subject:printer:*' -or $_.subjectId -like 'subject:printer-driver:*' -or $_.subjectId -like 'subject:peripheral:*'})
         $rows=@($resourceSubjects|ForEach-Object {
             $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
-            $lines=@($items|Where-Object valueState -eq ObservedValue|ForEach-Object {
-                '<strong>'+[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+':</strong> '+
-                    [Net.WebUtility]::HtmlEncode([string]$_.value)
+            $origin=@($Record.provenance|Where-Object provenanceId -eq $items[0].provenanceId)[0]
+            $lines=@($items|ForEach-Object {
+                $display=if($_.valueState -eq 'ObservedValue'){[string]$_.value}else{[string]$_.valueState}
+                '<span id="'+[Net.WebUtility]::HtmlEncode([string]$_.observationId)+'"><strong>'+[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+':</strong> '+
+                    [Net.WebUtility]::HtmlEncode($display)+'</span>'
             })
-            '<li>'+($lines -join '<br>')+'</li>'
+            '<li><p>'+[Net.WebUtility]::HtmlEncode(($subjectId,[string]$origin.sourceId,[string]$origin.executionContext,[string]$origin.collectedAt,[string]$origin.sourceLocale -join ' / '))+'</p>'+($lines -join '<br>')+'</li>'
         })
         $guidance=@($Record.recommendations|Where-Object {
             $_.definitionId -in @($ResourceDependenciesPolicy.recommendations.definitionId)
@@ -1434,7 +1436,7 @@ $identityGuidance
 @"
 <h2>User resources and peripheral migration dependencies</h2>
 <p>User-resource coverage: $([Net.WebUtility]::HtmlEncode($userCoverage)). Peripheral coverage: $([Net.WebUtility]::HtmlEncode($deviceCoverage)). User finding: $([Net.WebUtility]::HtmlEncode([string]$resourceFinding.outcome)). Peripheral finding: $([Net.WebUtility]::HtmlEncode([string]$peripheralRuleFinding.outcome)).</p>
-<p>These are bounded advisory dependencies from the verified Assessment User Context. WIN-PCInfo does not connect a resource, enumerate share contents, documents, print jobs, credentials, or Wi-Fi keys, print, install or update a driver, or collect PnP identifiers and unrelated serial numbers.</p>
+<p>Names cover SMB and remembered mappings, not DFS/WebDAV sessions or reachability. Uncached print details remain unknown. WIN-PCInfo does not connect a resource, open content or change devices.</p>
 <ul>$($rows -join '')</ul>
 <h3>Migration next steps</h3><ul>$($guidance -join '')</ul>
 <p>Observed local drivers and devices do not promise universal peripheral compatibility. Confirm each retained dependency against the target Windows, management, network, and vendor-support design before migration.</p>

@@ -12,16 +12,18 @@ The Assessment User SID remains private execution state. It is used only to bind
 
 The frozen operation is `observe-user-dependencies`. It runs offline in one Microsoft-signed PowerShell child for at most five seconds, with a 128 KiB output ceiling and verified whole-tree cleanup. It can make one attempt and cannot prompt, install, download, self-elevate, connect a resource, or write Windows state.
 
-The release-owned sources are four Windows interfaces plus one exact, local correlation of the first two:
+The release-owned sources are local Windows interfaces and an exact correlation by local drive name:
 
 - the current user's `Network` registry definitions, opened read-only, for bounded mapped-drive definitions;
-- `Win32_NetworkConnection` for local name, UNC endpoint, connection state, and provider metadata;
-- an exact local-name correlation of those two sources, used to distinguish a live mapped connection from a remembered definition without contacting its endpoint;
-- `Win32_Printer` for name, port, driver binding, network/default/offline flags;
-- `Win32_PrinterDriver` for bounded driver name, manufacturer, version, and INF name; and
+- `NetUseEnum` with a null server and level zero for local SMB session names and UNC endpoints. Higher levels are excluded because they include credential fields. This source does not cover DFS or WebDAV sessions or establish connection health;
+- exact local-name correlation with remembered mappings. Connection health remains `Unavailable`; a remembered definition is never asserted to be connected or disconnected;
+- `EnumPrintersW` with a null name, `LOCAL | CONNECTIONS`, and level four for local cached printer names and network attributes. No remote printer is opened;
+- fixed read-only local print registry paths for port and driver binding, configured Work Offline state, current-user default name, and installed driver name/manufacturer/version/INF basename. An INF path is never opened. Uncached remote details remain `SourceReportedUnknown` with partial printer coverage; and
 - `Win32_PnPSignedDriver`, filtered to `Bluetooth`, `HIDClass`, `Image`, `Keyboard`, `MEDIA`, `Mouse`, `Printer`, and `USB`, for common peripheral and driver metadata.
 
-Each category admits at most eight unique entries. A ninth item is not silently discarded: the first eight remain Restricted evidence under `Partial` coverage with `RESOURCE.EVIDENCE_BOUND_EXCEEDED`. Duplicate source rows are collapsed by stable, case-insensitive local keys before that limit is applied.
+Each category admits at most eight unique entries. A ninth item is not silently discarded: retained evidence has `Partial` coverage with `RESOURCE.EVIDENCE_BOUND_EXCEEDED`. Native enumeration buffers and source output also have hard limits. Duplicate source rows are collapsed by case-insensitive local keys. Missing, malformed or denied categories remain separate from successfully read siblings.
+
+Microsoft documents [level-four printer enumeration](https://learn.microsoft.com/en-us/windows/win32/printdocs/enumprinters) as registry/cache access, while level two opens remote connections. The [NetUseEnum contract](https://learn.microsoft.com/en-us/windows/win32/api/lmuse/nf-lmuse-netuseenum) defines the local-server and level-zero boundary and its SMB-only limitation. These call-surface choices and controlled tests are not a live packet-capture result. Private Windows/provider comparisons and the exact-candidate Local Only egress check remain pending in #161.
 
 The collector never requests or enumerates share contents, documents, print jobs, stored credentials, Wi-Fi profiles or keys, `PNPDeviceID`, device serial numbers, or unrelated device classes. It never sends a print job, connects a drive, installs or updates a driver, or changes a default printer.
 
@@ -43,6 +45,9 @@ pwsh -NoLogo -NoProfile -File ./tests/ResourceDependencies.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/ResourceDependenciesNativeSource.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/ResourceDependenciesContract.Tests.ps1
 pwsh -NoLogo -NoProfile -File ./tests/ResourceDependenciesApplication.Tests.ps1
+pwsh -NoLogo -NoProfile -File ./tests/ResourceSourceApplication.Tests.ps1
 ```
 
 The generated matrix uses identifier-free synthetic fixtures for mapped and disconnected drives, UNC resources, printers, ports and drivers, representative peripherals, empty, denied, partial, duplicate, long-Unicode, alternate-administrator, `SYSTEM`, and non-English cases. Every case crosses Preparation, the canonical record, beginner report, Protected Evidence Package reopen, terminal outcome, and verified validation cleanup without changing the assessed device.
+
+The controlled-source matrix also executes the release-owned resource reducer and supervised worker. Only Windows identity, registry, native enumeration and CIM boundaries are substituted. Canonical validation, software annotation ownership, migration findings, HTML unknown-state/provenance rendering, protection, reopening and cleanup execute normally. No fixture switch is added to the public application.
