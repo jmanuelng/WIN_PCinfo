@@ -6,6 +6,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [switch] $RequireRecoveryJournal, [switch] $RequireFrontLoadedPrivilege,
     [string] $ReadinessSourceScenario = '',
     [string] $IdentitySourceScenario = '',
+    [string] $PolicySourceScenario = '',
     [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
@@ -132,6 +133,14 @@ if ($IdentitySourceScenario) {
     . (Join-Path $PSScriptRoot 'IdentitySourceAdapters.ps1')
     $moduleText = Add-ControlledIdentitySources -ModuleText $moduleText -Scenario $IdentitySourceScenario
 }
+if ($PolicySourceScenario) {
+    $sessionSource=(Get-Command Start-StatusDeskSession).Definition.Replace(
+        '# Never copy an exception (potentially Restricted) into GUI activity.',
+        '$Transport.State.PolicySourceFailure=$_.Exception.Message + '' '' + $_.ScriptStackTrace')
+    . ([scriptblock]::Create('function Start-StatusDeskSession {' + $sessionSource + '}'))
+    . (Join-Path $PSScriptRoot 'PolicySourceAdapters.ps1')
+    $moduleText = Add-ControlledPolicySources -ModuleText $moduleText -Scenario $PolicySourceScenario
+}
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
 $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
@@ -254,6 +263,7 @@ try {
     while (-not (Complete-StatusDeskSession $session) -and $watch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 25 }
     Assert-Equal $true $session.Completed 'ordinary collector chain reaches bounded completion'
     if ($IdentitySourceScenario -and $session.Transport.State.ContainsKey('IdentitySourceFailure')) { throw ($session.Transport.State.IdentitySourceFailure + ' ' + $session.Transport.State.IdentityPrivilegeReason) }
+    if ($PolicySourceScenario -and $session.Transport.State.ContainsKey('PolicySourceFailure')) { throw ($session.Transport.State.PolicySourceFailure + ' ' + $session.Transport.State.PolicyPrivilegeReason) }
     $terminal = $session.Transport.State.Terminal | ConvertFrom-Json
     if ($FailureKind -ne 'None') {
         $expectedOutcome=if($FailureKind -eq 'Integrity'){'IntegrityFailed'}else{'CleanupIncomplete'}
@@ -323,6 +333,9 @@ try {
     }
     if ($IdentitySourceScenario) {
         Assert-IdentitySourceReport -Record $record -Html $html -Scenario $IdentitySourceScenario
+    }
+    if ($PolicySourceScenario) {
+        Assert-PolicySourceReport -Record $record -Html $html -Scenario $PolicySourceScenario
     }
     if (-not ($CancelAfterIdentity -or $CancelAfterResource)) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `

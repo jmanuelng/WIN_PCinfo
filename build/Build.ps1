@@ -689,6 +689,9 @@ $sections = foreach ($sourceFile in $sourceFiles) {
     if ($sourceFile.path -eq 'src/PrivilegedCollectionPlan.ps1') {
         $brokerModule = New-Module -ScriptBlock { param($Path) . $Path } -ArgumentList (Join-Path $repositoryRoot 'src/PrivilegedCollectionPlan.ps1')
         $brokerSource = & $brokerModule { Get-SystemActivationBrokerSource }
+        $contextSource = & $brokerModule { Get-PolicyUserContextSource }
+        $normalizedSource = $normalizedSource.Replace('__POLICY_USER_CONTEXT_SOURCE_BASE64__',
+            [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($contextSource)))
         $normalizedSource = $normalizedSource.Replace('__SYSTEM_ACTIVATION_BROKER_SOURCE_BASE64__',
             [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($brokerSource)))
         $normalizedSource = $normalizedSource.Replace(

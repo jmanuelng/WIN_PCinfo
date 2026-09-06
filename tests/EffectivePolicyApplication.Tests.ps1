@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([string[]] $Scenario = @())
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -57,6 +57,13 @@ $cases=@(
     @{scenario='VirtualMachineSecurity';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='ExpectedCondition';providers=1;firewalls=3;asr=0;bitlockerProtectors=1}
 )
 
+if ($Scenario.Count -gt 0) {
+    foreach ($name in $Scenario) {
+        if ($name -notin $cases.scenario) { throw "Unknown policy application scenario: $name" }
+    }
+    $cases=@($cases | Where-Object scenario -in $Scenario)
+}
+
 foreach($case in $cases){
     if(-not $case.ContainsKey('mdmFinding')){$case.mdmFinding='Informational'}
     if(-not $case.ContainsKey('channelFinding')){$case.channelFinding='ExpectedCondition'}
@@ -67,7 +74,7 @@ foreach($case in $cases){
     if($case.scenario -eq 'SecurityOptions'){
         $case.channelFinding='NeedsAttention';$case.tasks=2
     }
-    if($case.scenario -eq 'DeniedSystem'){
+    if($case.scenario -in @('DeniedAdministrator','DeniedSystem')){
         $case.mdmFinding='Indeterminate';$case.channelFinding='Indeterminate';$case.tasks=2
     }
 }

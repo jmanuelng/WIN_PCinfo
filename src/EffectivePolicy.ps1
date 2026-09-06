@@ -1009,6 +1009,28 @@ function Test-EffectivePolicyCollectorPayload {
     catch{return $false}
 }
 
+function Confirm-EffectivePolicyAssessmentUser {
+    param([Parameter(Mandatory)]$CollectorResult, [Parameter(Mandatory)]$IdentityCollector,
+        [Parameter(Mandatory)]$Policy, [AllowEmptyString()][string]$RequestedSid, [int]$SessionId)
+    if($IdentityCollector.payload.userContextState -eq 'Complete' -and
+        $IdentityCollector.payload.assessmentUserVerified -eq $true -and
+        $IdentityCollector.privateAssessmentUserSid -ceq $RequestedSid -and
+        $IdentityCollector.payload.assessmentUserSessionId -eq $SessionId){return}
+    $payload=$CollectorResult.payload
+    if(@($payload.appliedPolicies|Where-Object target -eq 'User').Count -eq 0 -and
+        @($payload.scopeStates|Where-Object {$_.scopeId -like 'scope:policy.applied.user.*' -and $_.state -eq 'Complete'}).Count -eq 0){return}
+    # A later identity result cannot relabel the earlier user's policy. Remove
+    # only that target before canonical evidence/provenance is constructed.
+    $payload.appliedPolicies=@($payload.appliedPolicies|Where-Object target -ne 'User')
+    $payload.policySettings=@($payload.policySettings|Where-Object target -ne 'User')
+    foreach($scope in $payload.scopeStates|Where-Object scopeId -like 'scope:policy.applied.user.*'){
+        $scope.state=if($IdentityCollector.payload.userContextState -eq 'Denied'){'Denied'}else{'Unavailable'}
+        $scope.reasonCode='POLICY.ASSESSMENT_USER_CONTEXT_CHANGED'
+    }
+    $payload.appliedOrderConflict=@($payload.policySettings|Group-Object target,settingId|Where-Object {@($_.Group.objectId|Select-Object -Unique).Count -gt 1}).Count -gt 0
+    $payload.layerStates.AppliedPolicyEvidence=Get-EffectivePolicyLayerState -ScopeStates @($payload.scopeStates) -ScopeIds @($Policy.layers[0].scopeIds)
+}
+
 function Copy-EffectivePolicyCollectorPayload {
     param([Parameter(Mandatory)]$Payload,[Parameter(Mandatory)]$Policy)
     if(-not (Test-EffectivePolicyCollectorPayload -Payload $Payload -Policy $Policy)){

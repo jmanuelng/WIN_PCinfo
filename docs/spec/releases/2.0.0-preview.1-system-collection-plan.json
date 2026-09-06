@@ -282,7 +282,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "EncodedReleaseSource",
-    "payloadSha256": "8360b04a71e59bfedecd04e33bf3dd46e844f5f9a555246487c826aac0447063"
+    "payloadSha256": "81ca51e027f63154fa40c62b2224dc9820db69f62b5651d317b35f85d21bd99f"
   },
   "channel": {
     "pipeNamePrefix": "WINPCInfo-SystemCollection-v1-",
