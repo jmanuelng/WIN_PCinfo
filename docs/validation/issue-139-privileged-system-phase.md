@@ -152,6 +152,47 @@ session. Record sanitized outcomes and retain detailed observations privately:
 
 ## Completion addendum
 
-Implementation candidate is awaiting its independent Standards/Spec reviews and
-the final focused build/automation results. No implementation closure is claimed
-by this initial evidence commit.
+Implementation and correction commits, all DCO signed:
+
+- `284f1f32834684c17be9fe1cfd9881b274b810d0`: contiguous administrator/SYSTEM phase.
+- `6d6f50dddabb62052f6737bca1af96f40cbca86c`: authenticated recovery ownership,
+  pre-intent cancellation and kernel-backed SYSTEM peer admission.
+- `a828e31b61ede2df99587324ddd3d02d93fa747b`: hold the limited-query identity
+  handle before inspecting Job membership, closing the PID-lifetime race.
+
+Independent Standards review: **0 hard violations, 0 blocking findings**. One
+unchanged nonblocking judgment suggests sharing the two small synthetic process
+launch setups; it is optional and was retained without an additional refactor.
+Independent Spec review: the three findings described above were corrected;
+correction review and the final identity-ordering review report **0 findings**.
+Both reviews inspected the committed changes independently and did not claim
+their own test runs or live acceptance.
+
+The final correction checks passed: broker admission, pre-intent cancellation,
+alternate-administrator recovery, actual controlled peer identity, combined
+administrator/SYSTEM phase, both release policies, twenty SYSTEM source/lifecycle
+cases, all nine generated administrator paths and all nine generated SYSTEM
+paths. The final ordinary generated Status desk flow reached the protected
+offline report and verified viewing cleanup. All 12 changed PowerShell files and
+the generated candidate parse; `git diff --check` is clean.
+
+The deterministic build passed with exact source provenance. A final actual WPF
+Cancel/SYSTEM control check also passed: first progress 1,659 ms, maximum observed
+gap 2,584 ms, acknowledgment 4 ms, cancellation-to-terminal 1,776 ms, private memory
+333 MiB and working set 483 MiB. This is another short synthetic sample and does
+not replace the earlier 662–755 MiB full-host measurement or its pending gate.
+
+Unsigned candidate identities, generated from `a828e31` on 2026-09-06 UTC:
+
+| Retained local artifact | SHA-256 |
+| --- | --- |
+| `artifacts/WIN-PCInfo.ps1` | `d430a384f12669085b20f7c525fedbf2c6933041c0a43c52b6bb0b0eec091d8f` |
+| `artifacts/WIN-PCInfo-2.0.0-preview.1-portable.zip` | `934b618c5f6d378dcdf27312e577b2544a39dfcbf71d16f84c1b8fc7966e4158` |
+
+These ignored build artifacts are retained for orchestrator review. Controlled
+worker, channel, viewing and per-run workspace cleanup passed; reusable ignored
+test/build outputs remain synthetic scratch. No signed candidate was produced or
+modified. The next action is orchestrator delivery of the clean source commits.
+The integrated full repository gate remains with #158/final, and every #161 live
+case above remains Pending. Neither parent issue nor release acceptance is closed
+by this ticket's synthetic evidence.
