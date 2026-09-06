@@ -14,7 +14,7 @@
     "collector": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["collectorId", "collectorVersion", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "standardOutputMaximumBytes", "standardErrorMaximumBytes", "cleanup"],
+      "required": ["collectorId", "collectorVersion", "operationId", "source", "executionContext", "privilege", "networkBehavior", "executable", "dependencies", "mayPrompt", "mayInstall", "mayDownload", "maySelfElevate", "writesAllowed", "maximumAttempts", "deadlineMilliseconds", "standardOutputMaximumBytes", "standardErrorMaximumBytes", "sourceBounds", "cleanup"],
       "properties": {
         "collectorId": { "const": "collector:windows.device-context" },
         "collectorVersion": { "const": "1.0.0" },
@@ -32,6 +32,7 @@
         "deadlineMilliseconds": { "const": 5000 },
         "standardOutputMaximumBytes": { "const": 16384 },
         "standardErrorMaximumBytes": { "const": 4096 },
+        "sourceBounds": { "const": { "activationRows": 16, "enclosureRows": 1, "chassisCodes": 8, "batteryRows": 1, "overflowProbeRows": 1 } },
         "cleanup": { "const": "WindowsJobObjectAndNamedCancellationEventVerifiedAbsent" }
       }
     },

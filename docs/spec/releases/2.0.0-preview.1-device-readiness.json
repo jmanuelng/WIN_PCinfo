@@ -23,6 +23,13 @@
     "deadlineMilliseconds": 5000,
     "standardOutputMaximumBytes": 16384,
     "standardErrorMaximumBytes": 4096,
+    "sourceBounds": {
+      "activationRows": 16,
+      "enclosureRows": 1,
+      "chassisCodes": 8,
+      "batteryRows": 1,
+      "overflowProbeRows": 1
+    },
     "cleanup": "WindowsJobObjectAndNamedCancellationEventVerifiedAbsent"
   },
   "derivations": [

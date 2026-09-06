@@ -666,6 +666,22 @@ $ErrorActionPreference = 'Stop'
 [System.Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 [System.Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 $Operation = [System.Environment]::GetEnvironmentVariable('WINPCINFO_OPERATION_MODE')
+function Get-DeviceSourceAccessState {
+    param($Failure)
+    # Inspect stable exception/provider codes, never localized error text.
+    $cursor = $Failure.Exception
+    while ($null -ne $cursor) {
+        if ($cursor -is [UnauthorizedAccessException] -or
+            ($cursor.HResult -band 0xffff) -eq 5 -or
+            ($cursor.PSObject.Properties['NativeErrorCode'] -and
+                [string]$cursor.NativeErrorCode -eq 'AccessDenied')) { return 'Denied' }
+        if ($cursor -is [PlatformNotSupportedException] -or
+            ($cursor.PSObject.Properties['NativeErrorCode'] -and [string]$cursor.NativeErrorCode -in
+                @('InvalidNamespace','InvalidClass','NotSupported'))) { return 'Unsupported' }
+        $cursor = $cursor.InnerException
+    }
+    'Unavailable'
+}
 function Get-BaseDeviceActualPayload {
     param([Parameter(Mandatory)] [string[]] $ComputerSystemProperties)
 
@@ -747,26 +763,31 @@ if ($Operation -like 'Context*') {
         try {
             $licenseRows = @(Get-CimInstance -ClassName SoftwareLicensingProduct `
                 -Filter "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f'" `
-                -Property LicenseStatus -ErrorAction Stop | Select-Object -First 16)
-            $statusCodes = @($licenseRows | ForEach-Object { [int] $_.LicenseStatus })
-            if (1 -in $statusCodes) { $activationStatus = 1 }
-            elseif ($statusCodes.Count -gt 0) { $activationStatus = [int] $statusCodes[0] }
+                -Property LicenseStatus -ErrorAction Stop | Select-Object -First 17)
+            $statusCodes = @($licenseRows | Where-Object { $null -ne $_.LicenseStatus } |
+                ForEach-Object { [int] $_.LicenseStatus })
+            if ($licenseRows.Count -gt 16) { $activationAvailability = 'Constrained' }
+            elseif (1 -in $statusCodes) { $activationStatus = 1 }
+            elseif ($statusCodes.Count -eq $licenseRows.Count -and $statusCodes.Count -gt 0) { $activationStatus = [int] $statusCodes[0] }
         }
-        catch { $activationAvailability = 'Unavailable' }
+        catch { $activationAvailability = Get-DeviceSourceAccessState -Failure $_ }
 
         $chassisAvailability = 'Available'
         $chassisTypeCodes = $null
         try {
-            $enclosure = @(Get-CimInstance -ClassName Win32_SystemEnclosure `
-                -Property ChassisTypes -ErrorAction Stop | Select-Object -First 1)[0]
+            $enclosures = @(Get-CimInstance -ClassName Win32_SystemEnclosure `
+                -Property ChassisTypes -ErrorAction Stop | Select-Object -First 2)
+            $enclosure = if ($enclosures.Count -eq 1) { $enclosures[0] } else { $null }
+            if ($enclosures.Count -gt 1) { $chassisAvailability = 'Constrained' }
             if ($null -ne $enclosure -and $null -ne $enclosure.ChassisTypes) {
                 $codes = @($enclosure.ChassisTypes | ForEach-Object { [int] $_ } |
-                    Where-Object { $_ -ge 0 -and $_ -le 255 } | Sort-Object -Unique |
-                    Select-Object -First 8)
-                if ($codes.Count -gt 0) { $chassisTypeCodes = $codes -join ',' }
+                    Sort-Object -Unique | Select-Object -First 9)
+                if (@($enclosure.ChassisTypes).Count -gt 8) { $chassisAvailability = 'Constrained' }
+                elseif (@($codes | Where-Object { $_ -lt 0 -or $_ -gt 255 }).Count) { $chassisAvailability = 'Malformed' }
+                elseif ($codes.Count -gt 0) { $chassisTypeCodes = $codes -join ',' }
             }
         }
-        catch { $chassisAvailability = 'Unavailable' }
+        catch { $chassisAvailability = Get-DeviceSourceAccessState -Failure $_ }
 
         $batteryAvailability = 'Available'
         $batteryPresent = $null
@@ -774,15 +795,18 @@ if ($Operation -like 'Context*') {
         $batteryChargePercent = $null
         $batteryRuntimeMinutes = $null
         try {
-            # Win32_Battery is guest-visible and provider-dependent. One exact
-            # instance keeps output bounded; missing properties and documented
+            # Win32_Battery is guest-visible and provider-dependent. A second
+            # instance detects overflow of this device-level projection;
+            # missing properties and documented
             # sentinel-like runtime values remain unknown. Query denial is
             # reduced to an availability code so native error text, paths, and
             # identifiers cannot leak into diagnostics or trigger a retry.
-            $battery = @(Get-CimInstance -ClassName Win32_Battery `
+            $batteries = @(Get-CimInstance -ClassName Win32_Battery `
                 -Property BatteryStatus, EstimatedChargeRemaining, EstimatedRunTime `
-                -ErrorAction Stop | Select-Object -First 1)[0]
-            $batteryPresent = $null -ne $battery
+                -ErrorAction Stop | Select-Object -First 2)
+            $battery = if ($batteries.Count -eq 1) { $batteries[0] } else { $null }
+            if ($batteries.Count -gt 1) { $batteryAvailability = 'Constrained' }
+            else { $batteryPresent = $null -ne $battery }
             if ($batteryPresent) {
                 if ($null -ne $battery.BatteryStatus) { $batteryStatus = [int] $battery.BatteryStatus }
                 if ($null -ne $battery.EstimatedChargeRemaining) {
@@ -797,7 +821,7 @@ if ($Operation -like 'Context*') {
                 }
             }
         }
-        catch { $batteryAvailability = 'Unavailable' }
+        catch { $batteryAvailability = Get-DeviceSourceAccessState -Failure $_ }
 
         $device = $base.device
         $device['activationStatus'] = $activationStatus
@@ -1454,9 +1478,9 @@ function Invoke-ApprovedCollectorProcess {
                 (@($propertyNames | Sort-Object) -join '|') -eq
                     'activationAvailability|activationStatus|architecture|batteryAvailability|batteryChargePercent|batteryPresent|batteryRuntimeMinutes|batteryStatus|build|chassisAvailability|chassisTypeCodes|computerSystemType|hypervisorPresent|manufacturer|memoryBytes|model|operatingSystemSku|processorName|sourceLocale' -and
                 (Test-BoundedBaseDevicePayload -Payload $output) -and
-                [string]$output.activationAvailability -in @('Available','Unavailable','Denied') -and
-                [string]$output.chassisAvailability -in @('Available','Unavailable','Denied') -and
-                [string]$output.batteryAvailability -in @('Available','Unavailable','Denied') -and
+                [string]$output.activationAvailability -in @('Available','Unavailable','Denied','Constrained','Unsupported') -and
+                [string]$output.chassisAvailability -in @('Available','Unavailable','Denied','Constrained','Unsupported','Malformed') -and
+                [string]$output.batteryAvailability -in @('Available','Unavailable','Denied','Constrained','Unsupported') -and
                 ($null -eq $output.activationStatus -or (
                     ($output.activationStatus -is [long] -or $output.activationStatus -is [int]) -and
                     [long]$output.activationStatus -ge 0 -and [long]$output.activationStatus -le 6)) -and

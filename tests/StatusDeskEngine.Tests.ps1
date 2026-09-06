@@ -4,6 +4,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('None','Cancel','Close')] [string] $ActiveAction = 'None',
     [ValidateSet('Privilege','System','NativeCooperative','NativeHard')] [string] $ActiveWorker = 'Privilege',
     [switch] $RequireRecoveryJournal, [switch] $RequireFrontLoadedPrivilege,
+    [string] $ReadinessSourceScenario = '',
     [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
@@ -121,6 +122,10 @@ if ($FailureKind -eq 'Integrity') {
 elseif ($FailureKind -eq 'Cleanup') {
     $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty }',
         '$result=Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty; $temporary=Add-TemporaryEvidence -JournalPath $script:AssessmentRunJournalPath -Content ([Text.Encoding]::UTF8.GetBytes("synthetic locked residue")); $script:StatusDeskTransport.State.SyntheticLock=[IO.File]::Open($temporary.literalPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None); $result }')
+}
+if ($ReadinessSourceScenario) {
+    . (Join-Path $PSScriptRoot 'ReadinessSourceAdapters.ps1')
+    $moduleText = Add-ControlledReadinessSources -ModuleText $moduleText -Scenario $ReadinessSourceScenario
 }
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
@@ -269,7 +274,7 @@ try {
         Assert-Equal $false $terminal.collectionStarted 'lock contention starts no collector'
         return
     }
-    Assert-Equal $(if($CancelAfterIdentity -or $CancelAfterResource -or $CancelDuringPrivilege -or $ActiveAction -ne 'None'){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
+    Assert-Equal $(if($CancelAfterIdentity -or $CancelAfterResource -or $CancelDuringPrivilege -or $ActiveAction -ne 'None' -or $ReadinessSourceScenario -eq 'Cancelled'){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
     Assert-Equal $true $terminal.collectionStarted 'ordinary collection actually executed'
     if ($RequireRecoveryJournal) {
         Assert-Equal $true $session.Transport.State.JournalObserved 'ordinary assessment registers durable ownership before the first source executes'
@@ -307,6 +312,9 @@ try {
         Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
     }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
+    if ($ReadinessSourceScenario) {
+        Assert-ReadinessSourceReport -Record $record -Html $html -Scenario $ReadinessSourceScenario
+    }
     if (-not ($CancelAfterIdentity -or $CancelAfterResource)) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `
         -RequestedArtifact assessment-report.html -ViewingBasePath $testRoot
