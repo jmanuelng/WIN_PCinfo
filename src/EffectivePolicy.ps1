@@ -27,12 +27,30 @@ function New-EffectivePolicySecurityReportSection {
         'applocker.gp-channel'='AppLocker Group Policy channel'
         'applocker.csp-channel'='AppLocker CSP channel'
         'wdac.inventory'='App Control for Business (WDAC) inventory'
+        'windows-update.defer-feature-updates'='Windows Update and WUfB: feature-update deferral signal'
+        'windows-update.defer-quality-updates'='Windows Update and WUfB: quality-update deferral signal'
+        'windows-update.disable-dual-scan'='Windows Update and WUfB: legacy dual-scan signal'
+        'rdp.connections'='RDP connection configuration'
+        'rdp.service'='RDP service configuration and observed state'
+        'rdp.authentication'='RDP authentication configuration'
+        'rdp.listener'='RDP listener configuration'
+        'winrm.service'='WinRM service configuration and observed state'
+        'winrm.configuration'='WinRM policy signals: unencrypted traffic'
+        'winrm.authentication'='WinRM policy signals: authentication'
+        'winrm.listener'='WinRM listener evidence limitation'
+        'smb.client'='SMB client configuration'
+        'smb.server'='SMB server configuration'
+        'smb.smb1-feature'='SMB1 optional-feature state'
+        'legacy-auth.lm-compatibility-level'='Legacy authentication: LAN Manager compatibility signal'
+        'legacy-auth.ntlm-minimum-session-security'='Legacy authentication: NTLM session-security masks'
     }
     $observations=@{};foreach($item in $Record.observations){$observations[[string]$item.observationId]=$item}
     $provenance=@{};foreach($item in $Record.provenance){$provenance[[string]$item.provenanceId]=$item}
     $sections=foreach($key in $titles.Keys){
         $scope=@($Record.coverage|Where-Object scopeId -eq "scope:policy.$key")[0]
         $layer=if($key -like 'smartscreen.*' -or $key -like 'applocker.*' -or $key -in @('defender.asr','defender.network-protection','wdac.inventory')){'Configured Policy Signals'}else{'Current Control State'}
+        if($key -like 'windows-update.*' -or $key -like 'legacy-auth.*' -or $key -in @('rdp.connections','rdp.authentication','rdp.listener','winrm.configuration','winrm.authentication','smb.client','smb.server')){$layer='Configured Policy Signals'}
+        if($key -in @('rdp.service','winrm.service')){$layer='Start mode is configuration; service state is Current Control State'}
         $reason=if($scope.PSObject.Properties['reasonCode']){' ('+[Net.WebUtility]::HtmlEncode([string]$scope.reasonCode)+')'}else{''}
         $rows=foreach($id in $scope.observationIds){
             $observation=$observations[[string]$id];$origin=$provenance[[string]$observation.provenanceId]
@@ -58,8 +76,27 @@ function New-EffectivePolicySecurityReportSection {
     '<section aria-label="Security control evidence"><h2>Security and platform protection</h2>'+
         '<p>These are local, source-backed observations. Defender preferences and SmartScreen registry signals do not prove applied organizational policy or current enforcement. Firewall ActiveStore describes each profile, not reachability. Registration names and category health do not identify a winning antivirus product.</p>'+
         '<p>BitLocker status describes the local OS volume; protector types and counts do not prove recovery escrow. VBS distinguishes configured services from running services. AppLocker Group Policy and CSP remain separate channels, and configured enforcement does not prove an application was blocked. CiTool reports whether a WDAC policy is active; this does not identify its audit options or deployment channel. Unknown channel and incomplete evidence require discovery with the policy owner.</p>'+
+        (New-EffectivePolicyRemoteGuidance -Record $Record)+
         ($sections -join '')+
         '<p>Use the versioned advisory findings and next steps in this report to plan follow-up with the device and security-policy owners. Confirm current state, intended policy, applicable Windows and Defender versions, and tenant-side assignments before considering a change. Passive mode and tamper protection are constraints to investigate, not collection failures or compliance verdicts. Missing or bounded evidence remains a gap. WIN-PCInfo does not change these controls.</p></section>'
+}
+
+function New-EffectivePolicyRemoteGuidance {
+    param([Parameter(Mandatory)]$Record)
+    $build=@($Record.observations|Where-Object { $_.fieldId -eq 'field:device.windows.build' -and $_.valueState -eq 'ObservedValue' })
+    $context='Windows applicability is unknown or outside this guidance catalog. Confirm the OS build and edition before interpreting configuration.'
+    if($build.Count -eq 1){
+        if([long]$build[0].value -in @(19041,19042,19043,19044,19045)){
+            $context='Windows 10 guidance: DisableDualScan is a legacy signal replaced by the scan-source policy; confirm the intended update source with the policy owner.'
+        }elseif([long]$build[0].value -in @(22000,22621,22631,26100,26200)){
+            $context='Windows 11 guidance: DisableDualScan is not supported. A retained registry value is a potentially stale signal, not evidence of scan behavior.'
+        }
+    }
+    '<aside aria-label="Update and remote-management guidance"><h3>Update and remote-management follow-up</h3><p>Guidance: update-remote-auth/1.0.0. '+$context+'</p>'+
+        '<p>Registry values may outlive the policy that wrote them. Deferral periods alone do not establish an active update ring, successful updates, tenant assignments or organization-wide enforcement. Missing values do not establish defaults. Applied Policy Evidence, configured signals and service runtime remain separate.</p>'+
+        '<p>RDP listener configuration does not establish reachability or use. WinRM reads only local Service policy-registry signals and service state. Certificate authentication has no released request-free source; listener state, transport and port are not collected because WSMan queries can make requests even to localhost. These implementation gaps are not evidence that a listener or authentication method is absent. No WSMan request is permitted by this collector in either network mode.</p>'+
+        '<p>SMB client and server signing, encryption and guest settings describe configuration only. EnableSecuritySignature is ignored by SMB2 and newer; it does not prove negotiated signing. SMB1 feature state does not prove use. LAN Manager compatibility and NTLM security masks do not prove authentication traffic, dependencies or organization-wide restrictions.</p>'+
+        '<p>Before migration, ask the device and policy owners to compare these fields with approved policy and separately authorized protocol-use discovery. Verify Windows edition/build applicability, update source, remote-access dependencies and legacy authentication consumers before planning any change. WIN-PCInfo does not enable services, probe endpoints or change these settings.</p></aside>'
 }
 
 function Get-EffectivePolicyPolicy {
@@ -790,12 +827,12 @@ function Test-EffectivePolicyCollectorPayload {
         foreach($scope in $Payload.scopeStates){
             if(-not (Test-ExactProperties $scope @('scopeId','state','reasonCode'))){return $false}
             if($scope.scopeId -isnot [string] -or $scope.state -isnot [string] -or
-                [string]$scope.state -notin @('Complete','Partial','Unavailable','Unsupported','Denied','Malformed','TimedOut','Cancelled','Failed') -or
+                [string]$scope.state -notin @('Complete','Partial','Unavailable','Unsupported','Denied','Malformed','TimedOut','Cancelled','Constrained','Failed') -or
                 ($scope.state -ne 'Complete' -and -not (Test-BoundedString $scope.reasonCode 128 '^[A-Z0-9._-]+$')) -or
                 ($scope.state -eq 'Complete' -and ($scope.reasonCode -isnot [string] -or -not [string]::IsNullOrEmpty($scope.reasonCode)))){return $false}
         }
         foreach($layer in @('AppliedPolicyEvidence','ConfiguredPolicySignals','CurrentControlState')){
-            if($Payload.layerStates.$layer -isnot [string] -or [string]$Payload.layerStates.$layer -notin @('Complete','Partial','Unavailable','Unsupported','Denied','Malformed','TimedOut','Cancelled','Failed')){return $false}
+            if($Payload.layerStates.$layer -isnot [string] -or [string]$Payload.layerStates.$layer -notin @('Complete','Partial','Unavailable','Unsupported','Denied','Malformed','TimedOut','Cancelled','Constrained','Failed')){return $false}
         }
         foreach($layer in $Policy.layers){
             if([string]$Payload.layerStates.([string]$layer.layerId) -ne
@@ -875,10 +912,10 @@ function Test-EffectivePolicyCollectorPayload {
                 [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed') -or
                 [string]$signal.sourceAttribution -ne 'Unproven' -or
                 ($signal.state -ne 'Complete' -and $null -ne $signal.value)){return $false}
-            if([string]$signal.state -eq 'Complete'){
+            if([string]$signal.state -eq 'Complete' -and $null -ne $signal.value){
                 if([string]$signal.catalogId -eq 'windows-update:disable-dual-scan'){
                     if($signal.value -isnot [bool]){return $false}
-                } elseif(-not (Test-BoundedUnsignedInteger $signal.value ([uint64]365))){return $false}
+                } elseif(-not (Test-BoundedUnsignedInteger $signal.value $(if($signal.catalogId -eq 'windows-update:defer-quality-updates'){[uint64]30}else{[uint64]365}))){return $false}
             }
         }
         $legacyIds=@((Get-EffectivePolicyLegacyAuthenticationDefinitions).catalogId)
@@ -888,7 +925,7 @@ function Test-EffectivePolicyCollectorPayload {
                 [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed') -or
                 [string]$signal.sourceAttribution -ne 'Unproven' -or
                 ($signal.state -ne 'Complete' -and $null -ne $signal.value)){return $false}
-            if([string]$signal.state -eq 'Complete' -and -not (Test-BoundedUnsignedInteger $signal.value ([uint64]4294967295))){return $false}
+            if([string]$signal.state -eq 'Complete' -and $null -ne $signal.value -and -not (Test-BoundedUnsignedInteger $signal.value $(if($signal.catalogId -eq 'legacy-auth:lm-compatibility-level'){[uint64]5}else{[uint64]4294967295}))){return $false}
         }
         foreach($provider in @($Payload.antivirusProviders)+@($Payload.firewallProviders)){
             if(-not (Test-ExactProperties $provider @('name','health')) -or
@@ -991,6 +1028,27 @@ function Test-EffectivePolicyCollectorPayload {
             if($null -ne $Payload.smbState.$property -and $Payload.smbState.$property -isnot [bool]){return $false}
         }
         if(-not (Test-NullableBoundedString $Payload.smbState.smb1FeatureState 32 '^[A-Za-z]+$')){return $false}
+        # A Complete group must contain every declared value. Partial groups
+        # may retain typed values, but a failed source cannot donate them.
+        foreach($group in @(
+            @{scope='rdp.connections';target=$Payload.rdpState;properties=@('connectionsAllowed')},
+            @{scope='rdp.service';target=$Payload.rdpState;properties=@('serviceStartMode','serviceState')},
+            @{scope='rdp.authentication';target=$Payload.rdpState;properties=@('userAuthenticationRequired','securityLayer','minimumEncryptionLevel')},
+            @{scope='rdp.listener';target=$Payload.rdpState;properties=@('listenerName','listenerState')},
+            @{scope='winrm.service';target=$Payload.winrmState;properties=@('serviceStartMode','serviceState')},
+            @{scope='winrm.configuration';target=$Payload.winrmState;properties=@('allowUnencrypted')},
+            @{scope='winrm.authentication';target=$Payload.winrmState;properties=@('basicAuthentication','kerberosAuthentication','negotiateAuthentication','certificateAuthentication','credSspAuthentication')},
+            @{scope='winrm.listener';target=$Payload.winrmState;properties=@('listenerState','listenerTransport','listenerPort')},
+            @{scope='smb.client';target=$Payload.smbState;properties=@('clientRequireSigning','clientEnableSigning','clientEnableInsecureGuestLogons')},
+            @{scope='smb.server';target=$Payload.smbState;properties=@('serverRequireSigning','serverEnableSigning','serverEncryptData','serverRejectUnencryptedAccess','serverEnableSmb1')},
+            @{scope='smb.smb1-feature';target=$Payload.smbState;properties=@('smb1FeatureState')}
+        )){
+            $state=@($Payload.scopeStates|Where-Object scopeId -eq ('scope:policy.'+$group.scope))[0].state
+            foreach($name in $group.properties){
+                if($state -eq 'Complete' -and $null -eq $group.target.$name){return $false}
+                if($state -notin @('Complete','Partial') -and $null -ne $group.target.$name){return $false}
+            }
+        }
         if(-not (Test-ExactProperties $Payload.bitLockerSystemVolume @(
             'conversionStatus','protectionStatus','encryptionMethod','lockStatus'
         ))){return $false}
@@ -1790,38 +1848,38 @@ function Add-EffectivePolicyEvidenceRecord {
         Add-PolicyObservation 'scope:policy.rdp.listener' 'rdp-listener-name' 'field:policy.rdp.listener-name' 'subject:device:primary' ([string]$payload.rdpState.listenerName)
     }
     if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.service')[0].state -eq 'Complete'){
-        Add-PolicyObservation 'scope:policy.winrm.service' 'winrm-service-mode' 'field:policy.winrm.service-start-mode' 'subject:device:primary' ([string]$payload.winrmState.serviceStartMode)
-        Add-PolicyObservation 'scope:policy.winrm.service' 'winrm-service-state' 'field:policy.winrm.service-state' 'subject:device:primary' ([string]$payload.winrmState.serviceState)
+        if($null -ne $payload.winrmState.serviceStartMode){Add-PolicyObservation 'scope:policy.winrm.service' 'winrm-service-mode' 'field:policy.winrm.service-start-mode' 'subject:device:primary' ([string]$payload.winrmState.serviceStartMode)}
+        if($null -ne $payload.winrmState.serviceState){Add-PolicyObservation 'scope:policy.winrm.service' 'winrm-service-state' 'field:policy.winrm.service-state' 'subject:device:primary' ([string]$payload.winrmState.serviceState)}
     }
     if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.configuration')[0].state -eq 'Complete'){
-        Add-PolicyObservation 'scope:policy.winrm.configuration' 'winrm-allow-unencrypted' 'field:policy.winrm.allow-unencrypted' 'subject:device:primary' ([bool]$payload.winrmState.allowUnencrypted)
+        if($null -ne $payload.winrmState.allowUnencrypted){Add-PolicyObservation 'scope:policy.winrm.configuration' 'winrm-allow-unencrypted' 'field:policy.winrm.allow-unencrypted' 'subject:device:primary' ([bool]$payload.winrmState.allowUnencrypted)}
     }
-    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.authentication')[0].state -eq 'Complete'){
-        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-basic' 'field:policy.winrm.auth-basic' 'subject:device:primary' ([bool]$payload.winrmState.basicAuthentication)
-        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-kerberos' 'field:policy.winrm.auth-kerberos' 'subject:device:primary' ([bool]$payload.winrmState.kerberosAuthentication)
-        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-negotiate' 'field:policy.winrm.auth-negotiate' 'subject:device:primary' ([bool]$payload.winrmState.negotiateAuthentication)
-        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-certificate' 'field:policy.winrm.auth-certificate' 'subject:device:primary' ([bool]$payload.winrmState.certificateAuthentication)
-        Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-credssp' 'field:policy.winrm.auth-credssp' 'subject:device:primary' ([bool]$payload.winrmState.credSspAuthentication)
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.authentication')[0].state -in @('Complete','Partial')){
+        if($null -ne $payload.winrmState.basicAuthentication){Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-basic' 'field:policy.winrm.auth-basic' 'subject:device:primary' ([bool]$payload.winrmState.basicAuthentication)}
+        if($null -ne $payload.winrmState.kerberosAuthentication){Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-kerberos' 'field:policy.winrm.auth-kerberos' 'subject:device:primary' ([bool]$payload.winrmState.kerberosAuthentication)}
+        if($null -ne $payload.winrmState.negotiateAuthentication){Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-negotiate' 'field:policy.winrm.auth-negotiate' 'subject:device:primary' ([bool]$payload.winrmState.negotiateAuthentication)}
+        if($null -ne $payload.winrmState.certificateAuthentication){Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-certificate' 'field:policy.winrm.auth-certificate' 'subject:device:primary' ([bool]$payload.winrmState.certificateAuthentication)}
+        if($null -ne $payload.winrmState.credSspAuthentication){Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-credssp' 'field:policy.winrm.auth-credssp' 'subject:device:primary' ([bool]$payload.winrmState.credSspAuthentication)}
     }
     if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.listener')[0].state -eq 'Complete'){
-        Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-state' 'field:policy.winrm.listener-state' 'subject:device:primary' ([string]$payload.winrmState.listenerState)
-        Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-transport' 'field:policy.winrm.listener-transport' 'subject:device:primary' ([string]$payload.winrmState.listenerTransport)
-        Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-port' 'field:policy.winrm.listener-port' 'subject:device:primary' ([int]$payload.winrmState.listenerPort)
+        if($null -ne $payload.winrmState.listenerState){Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-state' 'field:policy.winrm.listener-state' 'subject:device:primary' ([string]$payload.winrmState.listenerState)}
+        if($null -ne $payload.winrmState.listenerTransport){Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-transport' 'field:policy.winrm.listener-transport' 'subject:device:primary' ([string]$payload.winrmState.listenerTransport)}
+        if($null -ne $payload.winrmState.listenerPort){Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-port' 'field:policy.winrm.listener-port' 'subject:device:primary' ([int]$payload.winrmState.listenerPort)}
     }
-    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.smb.client')[0].state -eq 'Complete'){
-        Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-require-signing' 'field:policy.smb.client-require-signing' 'subject:device:primary' ([bool]$payload.smbState.clientRequireSigning)
-        Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-enable-signing' 'field:policy.smb.client-enable-signing' 'subject:device:primary' ([bool]$payload.smbState.clientEnableSigning)
-        Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-insecure-guest' 'field:policy.smb.client-enable-insecure-guest-logons' 'subject:device:primary' ([bool]$payload.smbState.clientEnableInsecureGuestLogons)
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.smb.client')[0].state -in @('Complete','Partial')){
+        if($null -ne $payload.smbState.clientRequireSigning){Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-require-signing' 'field:policy.smb.client-require-signing' 'subject:device:primary' ([bool]$payload.smbState.clientRequireSigning)}
+        if($null -ne $payload.smbState.clientEnableSigning){Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-enable-signing' 'field:policy.smb.client-enable-signing' 'subject:device:primary' ([bool]$payload.smbState.clientEnableSigning)}
+        if($null -ne $payload.smbState.clientEnableInsecureGuestLogons){Add-PolicyObservation 'scope:policy.smb.client' 'smb-client-insecure-guest' 'field:policy.smb.client-enable-insecure-guest-logons' 'subject:device:primary' ([bool]$payload.smbState.clientEnableInsecureGuestLogons)}
     }
-    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.smb.server')[0].state -eq 'Complete'){
-        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-require-signing' 'field:policy.smb.server-require-signing' 'subject:device:primary' ([bool]$payload.smbState.serverRequireSigning)
-        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-enable-signing' 'field:policy.smb.server-enable-signing' 'subject:device:primary' ([bool]$payload.smbState.serverEnableSigning)
-        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-encrypt-data' 'field:policy.smb.server-encrypt-data' 'subject:device:primary' ([bool]$payload.smbState.serverEncryptData)
-        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-reject-unencrypted' 'field:policy.smb.server-reject-unencrypted-access' 'subject:device:primary' ([bool]$payload.smbState.serverRejectUnencryptedAccess)
-        Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-enable-smb1' 'field:policy.smb.server-enable-smb1' 'subject:device:primary' ([bool]$payload.smbState.serverEnableSmb1)
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.smb.server')[0].state -in @('Complete','Partial')){
+        if($null -ne $payload.smbState.serverRequireSigning){Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-require-signing' 'field:policy.smb.server-require-signing' 'subject:device:primary' ([bool]$payload.smbState.serverRequireSigning)}
+        if($null -ne $payload.smbState.serverEnableSigning){Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-enable-signing' 'field:policy.smb.server-enable-signing' 'subject:device:primary' ([bool]$payload.smbState.serverEnableSigning)}
+        if($null -ne $payload.smbState.serverEncryptData){Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-encrypt-data' 'field:policy.smb.server-encrypt-data' 'subject:device:primary' ([bool]$payload.smbState.serverEncryptData)}
+        if($null -ne $payload.smbState.serverRejectUnencryptedAccess){Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-reject-unencrypted' 'field:policy.smb.server-reject-unencrypted-access' 'subject:device:primary' ([bool]$payload.smbState.serverRejectUnencryptedAccess)}
+        if($null -ne $payload.smbState.serverEnableSmb1){Add-PolicyObservation 'scope:policy.smb.server' 'smb-server-enable-smb1' 'field:policy.smb.server-enable-smb1' 'subject:device:primary' ([bool]$payload.smbState.serverEnableSmb1)}
     }
     if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.smb.smb1-feature')[0].state -eq 'Complete'){
-        Add-PolicyObservation 'scope:policy.smb.smb1-feature' 'smb1-feature-state' 'field:policy.smb.smb1-feature-state' 'subject:device:primary' ([string]$payload.smbState.smb1FeatureState)
+        if($null -ne $payload.smbState.smb1FeatureState){Add-PolicyObservation 'scope:policy.smb.smb1-feature' 'smb1-feature-state' 'field:policy.smb.smb1-feature-state' 'subject:device:primary' ([string]$payload.smbState.smb1FeatureState)}
     }
     $bitLockerVolumeScope=@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.bitlocker.operating-system-volume')[0]
     if($bitLockerVolumeScope.state -in @('Complete','Partial')){

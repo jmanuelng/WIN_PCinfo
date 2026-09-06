@@ -1004,6 +1004,7 @@ function Complete-EffectivePolicyLayerStates {
             'scope:policy.applied.computer.link','scope:policy.applied.computer.precedence'
         )
         ConfiguredPolicySignals=Get-LayerState @(
+            'scope:policy.rdp.connections','scope:policy.rdp.authentication','scope:policy.rdp.listener','scope:policy.winrm.configuration','scope:policy.winrm.authentication','scope:policy.smb.client','scope:policy.smb.server',
             'scope:policy.security-option.machine-inactivity-limit',
             'scope:policy.security-option.disable-cad',
             'scope:policy.security-option.lm-compatibility-level',
@@ -1025,11 +1026,11 @@ function Complete-EffectivePolicyLayerStates {
             'scope:policy.defender.runtime',
             'scope:policy.firewall.domain-profile','scope:policy.firewall.private-profile',
             'scope:policy.firewall.public-profile',
-            'scope:policy.rdp.connections','scope:policy.rdp.service',
-            'scope:policy.rdp.authentication','scope:policy.rdp.listener',
-            'scope:policy.winrm.service','scope:policy.winrm.configuration',
-            'scope:policy.winrm.authentication','scope:policy.winrm.listener',
-            'scope:policy.smb.client','scope:policy.smb.server',
+            'scope:policy.rdp.service',
+
+            'scope:policy.winrm.service',
+            'scope:policy.winrm.listener',
+
             'scope:policy.smb.smb1-feature',
             'scope:policy.bitlocker.operating-system-volume',
             'scope:policy.bitlocker.protectors','scope:policy.vbs.runtime'
@@ -1152,7 +1153,7 @@ function New-SyntheticEffectivePolicyResult {
 
 function Convert-EffectivePolicyRegistryUnsignedIntegerValue {
     param(
-        [Parameter(Mandatory)]$Value,
+        [Parameter(Mandatory)][AllowNull()]$Value,
         [Parameter()][UInt64]$Maximum = [uint64]4294967295
     )
 
@@ -1191,7 +1192,7 @@ function Convert-EffectivePolicyRegistryUnsignedIntegerValue {
 }
 
 function Convert-EffectivePolicyRegistryBooleanValue {
-    param([Parameter(Mandatory)]$Value)
+    param([Parameter(Mandatory)][AllowNull()]$Value)
 
     if ($Value -is [bool]) { return [bool]$Value }
     $normalized = Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $Value -Maximum 1
@@ -1200,12 +1201,12 @@ function Convert-EffectivePolicyRegistryBooleanValue {
 }
 
 function Get-SecurityCommand {
-    param([ValidateSet('Get-MpPreference','Get-MpComputerStatus','Get-NetFirewallProfile','Get-AppLockerPolicy')][string]$Name)
+    param([ValidateSet('Get-MpPreference','Get-MpComputerStatus','Get-NetFirewallProfile','Get-AppLockerPolicy','Get-SmbClientConfiguration','Get-SmbServerConfiguration','Get-WindowsOptionalFeature')][string]$Name)
     # Windows ships these operations as CDXML functions. Import only the fixed
     # inbox manifest; ambient functions and PSModulePath cannot donate a command.
     # Force native CDXML loading instead of an implicit Windows PowerShell 5.1
     # compatibility process when the inbox manifest lacks a Core edition marker.
-    $moduleName=switch($Name){Get-NetFirewallProfile {'NetSecurity'} Get-AppLockerPolicy {'AppLocker'} default {'Defender'}}
+    $moduleName=switch($Name){Get-NetFirewallProfile {'NetSecurity'} Get-AppLockerPolicy {'AppLocker'} Get-WindowsOptionalFeature {'Dism'} {$_ -in @('Get-SmbClientConfiguration','Get-SmbServerConfiguration')} {'SmbShare'} default {'Defender'}}
     $path=[IO.Path]::Combine([Environment]::SystemDirectory,"WindowsPowerShell\v1.0\Modules\$moduleName\$moduleName.psd1")
     try {
         return (Microsoft.PowerShell.Core\Import-Module -Name $path -PassThru -Scope Local -SkipEditionCheck -ErrorAction Stop).ExportedCommands[$Name]
@@ -1273,8 +1274,8 @@ function Convert-EffectivePolicyServiceStartMode {
 
 function Convert-EffectivePolicyServiceState {
     param($Value)
-    $normalized=([string]$Value).Trim()
-    if($normalized -match '^[A-Za-z]+$'){ $normalized } else { $null }
+    $states=@{'Stopped'='Stopped';'Start Pending'='StartPending';'Stop Pending'='StopPending';'Running'='Running';'Continue Pending'='ContinuePending';'Pause Pending'='PausePending';'Paused'='Paused'}
+    $states[[string]$Value]
 }
 
 function Convert-EffectivePolicyLooseBoolean {
@@ -1309,18 +1310,8 @@ function Convert-EffectivePolicyRdpMinEncryptionLevel {
 
 function Convert-EffectivePolicyOptionalFeatureState {
     param($Value)
-    $normalized=([string]$Value).Trim()
-    if($normalized -match '^[A-Za-z]+$'){ $normalized } else { $null }
-}
-
-function Get-EffectivePolicyWsmanNodeValues {
-    param([Parameter(Mandatory)][string]$Path)
-    $values=@{}
-    foreach($item in @(Get-ChildItem -Path $Path -ErrorAction Stop)){
-        $valueProperty=$item.PSObject.Properties['Value']
-        $values[[string]$item.Name]=if($null -eq $valueProperty){$null}else{$valueProperty.Value}
-    }
-    $values
+    $normalized=[string]$Value
+    if($normalized -in @('Enabled','Disabled','EnablePending','DisablePending','Removed','DisabledWithPayloadRemoved','Superseded','PartiallyInstalled')){$normalized}else{$null}
 }
 
 function Get-EffectivePolicyReferenceId {
@@ -1431,8 +1422,8 @@ function Get-LiveEffectivePolicyResult {
     # DisableDualScan) cross the separate LocalSystem SYSTEM sub-plan and are
     # deliberately not queried here under Administrator. The Administrator seam
     # does, however, own the local structured sources named in the release:
-    # Win32_TSGeneralSetting, WSMan:\\localhost\\Service\\Auth,
-    # WSMan:\\localhost\\Listener, Get-SmbClientConfiguration,
+    # Win32_TSGeneralSetting, finite WinRM Service policy registry,
+    # Get-SmbClientConfiguration,
     # Get-SmbServerConfiguration, Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol,
     # NtlmMinClientSec, and NtlmMinServerSec. Safe failure:
     # each independent source becomes a field-specific gap; an empty or denied
@@ -1620,7 +1611,7 @@ function Get-LiveEffectivePolicyResult {
                 Set-EffectivePolicyScopeState $result @([int]$definition.scopeIndex) Complete ''
             }
         } catch {
-            $state=Get-WorkerAccessState $_
+            $state=Get-PlatformFailureState $_
             $result.windowsUpdateSignals[$definition.signalIndex].state=$state
             Set-EffectivePolicyScopeState $result @([int]$definition.scopeIndex) $state "$($definition.reasonPrefix)_$($state.ToUpperInvariant())"
         }
@@ -1636,23 +1627,19 @@ function Get-LiveEffectivePolicyResult {
             $value=Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $rawValue -Maximum ([uint64]$definition.maximum)
             if($null -ne $rawValue -and $null -eq $value){
                 $result.legacyAuthenticationSignals[$definition.signalIndex].state='Malformed'
-                Set-EffectivePolicyScopeState $result @(19) Partial 'POLICY.LEGACY_AUTH_INCOMPLETE'
             } else {
                 $result.legacyAuthenticationSignals[$definition.signalIndex].state='Complete'
                 $result.legacyAuthenticationSignals[$definition.signalIndex].value=$value
-                if(@($result.legacyAuthenticationSignals|Where-Object state -ne 'Complete').Count -eq 0){
-                    Set-EffectivePolicyScopeState $result @(19) Complete ''
-                }
             }
         } catch {
-            $state=Get-WorkerAccessState $_
+            $state=Get-PlatformFailureState $_
             $result.legacyAuthenticationSignals[$definition.signalIndex].state=$state
-            Set-EffectivePolicyScopeState $result @(19) Partial 'POLICY.LEGACY_AUTH_INCOMPLETE'
         }
     }
-    if([string]$result.scopeStates[18].state -eq 'Failed' -and
-        [string]$result.legacyAuthenticationSignals[0].state -eq 'Complete'){
-        Set-EffectivePolicyScopeState $result @(18) Complete ''
+    foreach($group in @(@{scope=18;indices=@(0)},@{scope=19;indices=@(1,2)})){
+        $states=@($group.indices|ForEach-Object {$result.legacyAuthenticationSignals[$_].state}|Select-Object -Unique)
+        $state=if($states.Count -eq 1){[string]$states[0]}else{'Partial'}
+        Set-EffectivePolicyScopeState $result @($group.scope) $state $(if($state -eq 'Complete'){''}else{"POLICY.LEGACY_AUTH_$($state.ToUpperInvariant())"})
     }
     $preferenceCommand=Get-SecurityCommand Get-MpPreference
     if($null -eq $preferenceCommand){
@@ -1918,7 +1905,7 @@ function Get-LiveEffectivePolicyResult {
             }
         }
     }
-    # Remote-management settings are collected from local service, WMI, WSMan,
+    # Remote-management settings are collected from local service and WMI,
     # and registry surfaces only. The worker never opens a socket, attempts a
     # logon, or probes another endpoint. Trust assumption: these local control
     # surfaces truthfully report configured listener and authentication state.
@@ -1928,14 +1915,16 @@ function Get-LiveEffectivePolicyResult {
         $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Terminal Server',$false)
         try {$rawDenyRdp=if($null -eq $key){$null}else{$key.GetValue('fDenyTSConnections',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
         $denyRdp=Convert-EffectivePolicyRegistryBooleanValue -Value $rawDenyRdp
-        if($null -eq $rawDenyRdp -or $null -eq $denyRdp){
+        if($null -eq $rawDenyRdp){
             Set-EffectivePolicyScopeState $result @(30) Unavailable 'POLICY.RDP_CONNECTIONS_UNAVAILABLE'
+        } elseif($null -eq $denyRdp){
+            Set-EffectivePolicyScopeState $result @(30) Malformed 'POLICY.RDP_CONNECTIONS_MALFORMED'
         } else {
             $result.rdpState.connectionsAllowed=-not [bool]$denyRdp
             Set-EffectivePolicyScopeState $result @(30) Complete ''
         }
     } catch {
-        $state=Get-WorkerAccessState $_
+        $state=Get-PlatformFailureState $_
         Set-EffectivePolicyScopeState $result @(30) $state "POLICY.RDP_CONNECTIONS_$($state.ToUpperInvariant())"
     }
     foreach($serviceDefinition in @(
@@ -1958,16 +1947,15 @@ function Get-LiveEffectivePolicyResult {
             $serviceDefinition.stateTarget.serviceState=$runtimeState
             Set-EffectivePolicyScopeState $result @([int]$serviceDefinition.scopeIndex) Complete ''
         } catch {
-            $state=Get-WorkerAccessState $_
+            $state=Get-PlatformFailureState $_
             Set-EffectivePolicyScopeState $result @([int]$serviceDefinition.scopeIndex) $state "POLICY.$($serviceDefinition.name.ToUpperInvariant())_SERVICE_$($state.ToUpperInvariant())"
         }
     }
     try {
-        $rdpSettings=@(Get-CimInstance -Namespace 'Root\Cimv2\TerminalServices' -ClassName Win32_TSGeneralSetting -Property @(
+        $rdpSettings=@(Get-CimInstance -Namespace 'Root\Cimv2\TerminalServices' -ClassName Win32_TSGeneralSetting -Filter "TerminalName='RDP-Tcp'" -Property @(
             'TerminalName','UserAuthenticationRequired','SecurityLayer','MinEncryptionLevel'
         ) -ErrorAction Stop)
         $rdpSetting=@($rdpSettings|Where-Object { ([string]$_.TerminalName).Trim() -eq 'RDP-Tcp' })
-        if($rdpSetting.Count -eq 0 -and $rdpSettings.Count -eq 1){$rdpSetting=@($rdpSettings[0])}
         if($rdpSetting.Count -ne 1){
             Set-EffectivePolicyScopeState $result @(32,33) Unavailable 'POLICY.RDP_LISTENER_UNAVAILABLE'
         } else {
@@ -1988,115 +1976,91 @@ function Get-LiveEffectivePolicyResult {
             $listenerKey=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey("SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\$listenerName",$false)
             try {$rawEnableListener=if($null -eq $listenerKey){$null}else{$listenerKey.GetValue('fEnableWinStation',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $listenerKey){$listenerKey.Dispose()}}
             $listenerEnabled=Convert-EffectivePolicyRegistryBooleanValue -Value $rawEnableListener
-            if([string]::IsNullOrWhiteSpace($listenerName) -or $null -eq $listenerEnabled -or -not [bool]$listenerEnabled){
+            if($null -eq $rawEnableListener){
                 Set-EffectivePolicyScopeState $result @(33) Unavailable 'POLICY.RDP_LISTENER_UNAVAILABLE'
+            } elseif($null -eq $listenerEnabled){
+                Set-EffectivePolicyScopeState $result @(33) Malformed 'POLICY.RDP_LISTENER_MALFORMED'
             } else {
-                $result.rdpState.listenerState='Present'
+                $result.rdpState.listenerState=if($listenerEnabled){'Present'}else{'Disabled'}
                 $result.rdpState.listenerName=$listenerName
                 Set-EffectivePolicyScopeState $result @(33) Complete ''
             }
         }
     } catch {
-        $state=Get-WorkerAccessState $_
+        $state=Get-PlatformFailureState $_
         if([string]$result.scopeStates[32].state -eq 'Failed'){
             Set-EffectivePolicyScopeState $result @(32) $state "POLICY.RDP_AUTHENTICATION_$($state.ToUpperInvariant())"
         }
         Set-EffectivePolicyScopeState $result @(33) $state "POLICY.RDP_LISTENER_$($state.ToUpperInvariant())"
     }
-    try {
-        $serviceValues=Get-EffectivePolicyWsmanNodeValues -Path 'WSMan:\localhost\Service'
-        $allowUnencrypted=Convert-EffectivePolicyLooseBoolean $serviceValues['AllowUnencrypted']
-        if($serviceValues.Count -eq 0 -or $null -eq $allowUnencrypted){
-            Set-EffectivePolicyScopeState $result @(35) Unavailable 'POLICY.WINRM_CONFIGURATION_UNAVAILABLE'
-        } else {
-            $result.winrmState.allowUnencrypted=$allowUnencrypted
-            Set-EffectivePolicyScopeState $result @(35) Complete ''
-        }
-        $authValues=Get-EffectivePolicyWsmanNodeValues -Path 'WSMan:\localhost\Service\Auth'
-        $authMissing=$false
-        foreach($mapping in @(
-            [ordered]@{name='Basic';target='basicAuthentication'},
-            [ordered]@{name='Kerberos';target='kerberosAuthentication'},
-            [ordered]@{name='Negotiate';target='negotiateAuthentication'},
-            [ordered]@{name='Certificate';target='certificateAuthentication'},
-            [ordered]@{name='CredSSP';target='credSspAuthentication'}
-        )){
-            $value=Convert-EffectivePolicyLooseBoolean $authValues[[string]$mapping.name]
-            if($null -eq $value){$authMissing=$true;continue}
-            $result.winrmState.([string]$mapping.target)=$value
-        }
-        if($authMissing){
-            Set-EffectivePolicyScopeState $result @(36) Partial 'POLICY.WINRM_AUTHENTICATION_INCOMPLETE'
-        } else {
-            Set-EffectivePolicyScopeState $result @(36) Complete ''
-        }
-    } catch {
-        $state=Get-WorkerAccessState $_
-        Set-EffectivePolicyScopeState $result @(35,36) $state "POLICY.WINRM_CONFIGURATION_$($state.ToUpperInvariant())"
+    # WSMan provider reads create requests even against localhost. Read only the
+    # finite ADMX Service policy mappings. They are configured signals; missing
+    # values prove neither defaults nor effective authentication. No approved
+    # request-free listener/certificate-auth source is established in this release.
+    $winrmAuthStates=[Collections.Generic.List[string]]::new()
+    foreach($definition in @(
+        @{valueName='AllowUnencryptedTraffic';target='allowUnencrypted';scopeIndex=35},
+        @{valueName='AllowBasic';target='basicAuthentication';scopeIndex=36},
+        @{valueName='AllowKerberos';target='kerberosAuthentication';scopeIndex=36},
+        @{valueName='AllowNegotiate';target='negotiateAuthentication';scopeIndex=36},
+        @{valueName='AllowCredSSP';target='credSspAuthentication';scopeIndex=36}
+    )){
+        $state='Complete'
+        try {
+            $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\Policies\Microsoft\Windows\WinRM\Service',$false)
+            try {$raw=if($null -eq $key){$null}else{$key.GetValue([string]$definition.valueName,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}}finally{if($null -ne $key){$key.Dispose()}}
+            $value=Convert-EffectivePolicyRegistryBooleanValue -Value $raw
+            if($null -eq $raw){$state='Unavailable'}
+            elseif($null -eq $value){$state='Malformed'}
+            else{$result.winrmState.([string]$definition.target)=$value}
+        } catch {$state=Get-PlatformFailureState $_}
+        if($definition.scopeIndex -eq 35){
+            Set-EffectivePolicyScopeState $result @(35) $state $(if($state -eq 'Complete'){''}else{"POLICY.WINRM_POLICY_$($state.ToUpperInvariant())"})
+        }else{$winrmAuthStates.Add($state)}
     }
-    try {
-        $listenerEntries=[Collections.Generic.List[object]]::new()
-        foreach($listener in @(Get-ChildItem -Path 'WSMan:\localhost\Listener' -ErrorAction Stop)){
-            $listenerValues=Get-EffectivePolicyWsmanNodeValues -Path ([string]$listener.PSPath)
-            $enabled=Convert-EffectivePolicyLooseBoolean $listenerValues['Enabled']
-            $transport=([string]$listenerValues['Transport']).Trim().ToUpperInvariant()
-            $port=Convert-EffectivePolicyRegistryUnsignedIntegerValue -Value $listenerValues['Port'] -Maximum ([uint64]65535)
-            if($enabled -eq $true -and $transport -in @('HTTP','HTTPS') -and $null -ne $port){
-                $listenerEntries.Add([ordered]@{transport=$transport;port=[int]$port})
-            }
-        }
-        if($listenerEntries.Count -ne 1){
-            Set-EffectivePolicyScopeState $result @(37) Unavailable 'POLICY.WINRM_LISTENER_UNAVAILABLE'
-        } else {
-            $listenerEntry=$listenerEntries[0]
-            $result.winrmState.listenerTransport=[string]$listenerEntry.transport
-            $result.winrmState.listenerPort=[int]$listenerEntry.port
-            $result.winrmState.listenerState=if($listenerEntry.transport -eq 'HTTP' -and $listenerEntry.port -eq 5985){
-                'Http5985Only'
-            } elseif($listenerEntry.transport -eq 'HTTPS' -and $listenerEntry.port -eq 5986){
-                'Https5986Only'
-            } else {
-                'Custom'
-            }
-            Set-EffectivePolicyScopeState $result @(37) Complete ''
-        }
-    } catch {
-        $state=Get-WorkerAccessState $_
-        Set-EffectivePolicyScopeState $result @(37) $state "POLICY.WINRM_LISTENER_$($state.ToUpperInvariant())"
-    }
-    $smbClientCommand=Get-Command Get-SmbClientConfiguration -CommandType Cmdlet -ErrorAction SilentlyContinue
+    $authStates=@($winrmAuthStates|Select-Object -Unique)
+    $authState=if($authStates.Count -eq 1 -and $authStates[0] -ne 'Complete'){[string]$authStates[0]}else{'Partial'}
+    Set-EffectivePolicyScopeState $result @(36) $authState $(if($authStates.Count -eq 1 -and $authStates[0] -eq 'Complete'){'POLICY.WINRM_CERTIFICATE_AUTH_SOURCE_NOT_IMPLEMENTED'}elseif($authState -eq 'Partial'){'POLICY.WINRM_AUTH_POLICY_PARTIAL_AND_CERTIFICATE_SOURCE_NOT_IMPLEMENTED'}else{"POLICY.WINRM_AUTH_POLICY_$($authState.ToUpperInvariant())"})
+    Set-EffectivePolicyScopeState $result @(37) Constrained 'POLICY.WINRM_REQUEST_FREE_LISTENER_SOURCE_NOT_IMPLEMENTED'
+    $smbClientCommand=Get-SecurityCommand Get-SmbClientConfiguration
     if($null -eq $smbClientCommand){
         Set-EffectivePolicyScopeState $result @(38) Unsupported 'POLICY.SMB_CLIENT_MODULE_UNAVAILABLE'
     } else {
         try {
             $clientConfig=& $smbClientCommand -ErrorAction Stop
-            $clientMissing=$false
+            if($null -eq $clientConfig){throw [IO.EndOfStreamException]::new()}
+            $clientMissing=$false;$clientMalformed=$false
             foreach($mapping in @(
                 [ordered]@{propertyName='RequireSecuritySignature';target='clientRequireSigning'},
                 [ordered]@{propertyName='EnableSecuritySignature';target='clientEnableSigning'},
                 [ordered]@{propertyName='EnableInsecureGuestLogons';target='clientEnableInsecureGuestLogons'}
             )){
                 $property=$clientConfig.PSObject.Properties[[string]$mapping.propertyName]
-                if($null -eq $property -or $property.Value -isnot [bool]){$clientMissing=$true;continue}
+                if($null -eq $property -or $null -eq $property.Value){$clientMissing=$true;continue}
+                if($property.Value -isnot [bool]){$clientMalformed=$true;continue}
                 $result.smbState.([string]$mapping.target)=[bool]$property.Value
             }
-            if($clientMissing){
+            if($clientMalformed){
+                $result.smbState.clientRequireSigning=$null;$result.smbState.clientEnableSigning=$null;$result.smbState.clientEnableInsecureGuestLogons=$null
+                Set-EffectivePolicyScopeState $result @(38) Malformed 'POLICY.SMB_CLIENT_MALFORMED'
+            } elseif($clientMissing){
                 Set-EffectivePolicyScopeState $result @(38) Partial 'POLICY.SMB_CLIENT_INCOMPLETE'
             } else {
                 Set-EffectivePolicyScopeState $result @(38) Complete ''
             }
         } catch {
-            $state=Get-WorkerAccessState $_
+            $state=Get-PlatformFailureState $_
             Set-EffectivePolicyScopeState $result @(38) $state "POLICY.SMB_CLIENT_$($state.ToUpperInvariant())"
         }
     }
-    $smbServerCommand=Get-Command Get-SmbServerConfiguration -CommandType Cmdlet -ErrorAction SilentlyContinue
+    $smbServerCommand=Get-SecurityCommand Get-SmbServerConfiguration
     if($null -eq $smbServerCommand){
         Set-EffectivePolicyScopeState $result @(39) Unsupported 'POLICY.SMB_SERVER_MODULE_UNAVAILABLE'
     } else {
         try {
             $serverConfig=& $smbServerCommand -ErrorAction Stop
-            $serverMissing=$false
+            if($null -eq $serverConfig){throw [IO.EndOfStreamException]::new()}
+            $serverMissing=$false;$serverMalformed=$false
             foreach($mapping in @(
                 [ordered]@{propertyName='RequireSecuritySignature';target='serverRequireSigning'},
                 [ordered]@{propertyName='EnableSecuritySignature';target='serverEnableSigning'},
@@ -2105,20 +2069,24 @@ function Get-LiveEffectivePolicyResult {
                 [ordered]@{propertyName='EnableSMB1Protocol';target='serverEnableSmb1'}
             )){
                 $property=$serverConfig.PSObject.Properties[[string]$mapping.propertyName]
-                if($null -eq $property -or $property.Value -isnot [bool]){$serverMissing=$true;continue}
+                if($null -eq $property -or $null -eq $property.Value){$serverMissing=$true;continue}
+                if($property.Value -isnot [bool]){$serverMalformed=$true;continue}
                 $result.smbState.([string]$mapping.target)=[bool]$property.Value
             }
-            if($serverMissing){
+            if($serverMalformed){
+                foreach($name in @('serverRequireSigning','serverEnableSigning','serverEncryptData','serverRejectUnencryptedAccess','serverEnableSmb1')){$result.smbState[$name]=$null}
+                Set-EffectivePolicyScopeState $result @(39) Malformed 'POLICY.SMB_SERVER_MALFORMED'
+            } elseif($serverMissing){
                 Set-EffectivePolicyScopeState $result @(39) Partial 'POLICY.SMB_SERVER_INCOMPLETE'
             } else {
                 Set-EffectivePolicyScopeState $result @(39) Complete ''
             }
         } catch {
-            $state=Get-WorkerAccessState $_
+            $state=Get-PlatformFailureState $_
             Set-EffectivePolicyScopeState $result @(39) $state "POLICY.SMB_SERVER_$($state.ToUpperInvariant())"
         }
     }
-    $optionalFeatureCommand=Get-Command Get-WindowsOptionalFeature -CommandType Cmdlet -ErrorAction SilentlyContinue
+    $optionalFeatureCommand=Get-SecurityCommand Get-WindowsOptionalFeature
     if($null -eq $optionalFeatureCommand){
         Set-EffectivePolicyScopeState $result @(40) Unsupported 'POLICY.SMB1_FEATURE_MODULE_UNAVAILABLE'
     } else {
@@ -2136,7 +2104,7 @@ function Get-LiveEffectivePolicyResult {
                 }
             }
         } catch {
-            $state=Get-WorkerAccessState $_
+            $state=Get-PlatformFailureState $_
             Set-EffectivePolicyScopeState $result @(40) $state "POLICY.SMB1_FEATURE_$($state.ToUpperInvariant())"
         }
     }

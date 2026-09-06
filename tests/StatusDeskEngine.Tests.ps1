@@ -10,6 +10,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $PolicySourceScenario = '',
     [string] $SecuritySourceScenario = '',
     [string] $PlatformSourceScenario = '',
+    [string] $RemoteSourceScenario = '',
     [string] $NetworkSourceScenario = '',
     [string] $CertificateSourceScenario = '',
     [string] $ConnectivitySourceScenario = '',
@@ -154,6 +155,10 @@ if ($SecuritySourceScenario) {
 if ($PlatformSourceScenario) {
     . (Join-Path $PSScriptRoot 'PlatformSourceAdapters.ps1')
     $moduleText=Add-ControlledPlatformSources -ModuleText $moduleText -Scenario $PlatformSourceScenario
+}
+if ($RemoteSourceScenario) {
+    . (Join-Path $PSScriptRoot 'RemoteSourceAdapters.ps1')
+    $moduleText=Add-ControlledRemoteSources -ModuleText $moduleText -Scenario $RemoteSourceScenario
 }
 if ($NetworkSourceScenario) {
     . (Join-Path $PSScriptRoot 'NetworkSourceAdapters.ps1')
@@ -300,6 +305,7 @@ try {
     if ($IdentitySourceScenario -and $session.Transport.State.ContainsKey('IdentitySourceFailure')) { throw ($session.Transport.State.IdentitySourceFailure + ' ' + $session.Transport.State.IdentityPrivilegeReason) }
     if ($SecuritySourceScenario -and $session.Transport.State.ContainsKey('SecuritySourceFailure')) { throw $session.Transport.State.SecuritySourceFailure }
     if ($PlatformSourceScenario -and $session.Transport.State.ContainsKey('PlatformSourceFailure')) { throw $session.Transport.State.PlatformSourceFailure }
+    if ($RemoteSourceScenario -and $session.Transport.State.ContainsKey('RemoteSourceFailure')) { throw $session.Transport.State.RemoteSourceFailure }
     if ($PolicySourceScenario -and $session.Transport.State.ContainsKey('PolicySourceFailure')) { throw ($session.Transport.State.PolicySourceFailure + ' ' + $session.Transport.State.PolicyPrivilegeReason) }
     $terminal = $session.Transport.State.Terminal | ConvertFrom-Json
     if ($DeclinePreparation) {
@@ -400,6 +406,7 @@ try {
         Assert-SecuritySourceReport -Record $record -Html $html -Scenario $SecuritySourceScenario
     }
     if ($PlatformSourceScenario) { Assert-PlatformSourceReport -Record $record -Html $html -Scenario $PlatformSourceScenario }
+    if ($RemoteSourceScenario) { Assert-RemoteSourceReport -Record $record -Html $html -Scenario $RemoteSourceScenario }
     if (-not ($CancelAfterIdentity -or $CancelAfterResource)) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `
         -RequestedArtifact assessment-report.html -ViewingBasePath $testRoot

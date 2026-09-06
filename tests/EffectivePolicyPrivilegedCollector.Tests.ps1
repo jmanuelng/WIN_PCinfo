@@ -34,6 +34,15 @@ $canonical=Copy-EffectivePolicyCollectorPayload -Payload $reordered -Policy $pol
 Assert-Equal 'scope:policy.applied.user.identity' $canonical.scopeStates[0].scopeId 'copying restores the declared catalog order'
 $reordered.scopeStates[0]=$reordered.scopeStates[1]
 Assert-Equal $false (Test-EffectivePolicyCollectorPayload -Payload $reordered -Policy $policy) 'a duplicate scope cannot replace a missing scope'
+foreach($case in @('MissingSmb','QualityBound','LmBound')){
+    $candidate=New-EffectivePolicySyntheticPayload -Policy $policy -Scenario Workgroup
+    switch($case){
+        MissingSmb {$candidate.smbState.clientRequireSigning=$null}
+        QualityBound {$candidate.windowsUpdateSignals[1].value=31}
+        LmBound {$candidate.legacyAuthenticationSignals[0].value=6}
+    }
+    Assert-Equal $false (Test-EffectivePolicyCollectorPayload -Payload $candidate -Policy $policy) "typed remote/update/auth admission refuses $case"
+}
 $collectorScopes=@(Get-EffectivePolicyCollectorScopes -Policy $policy)
 Assert-Equal $collectorScopes.Count (@($policy.scopes|Where-Object { [string]$_.scopeId -notlike 'scope:policy.mdm.*' }).Count) `
     'the privileged worker scope catalog carries every non-MDM Effective Policy scope'
@@ -80,18 +89,21 @@ foreach($fragment in @(
     'DeferQualityUpdatesPeriodInDays','DisableDualScan',
     'SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate','NtlmMinClientSec',
     'NtlmMinServerSec','fDenyTSConnections','fEnableWinStation',
-    'Win32_TSGeneralSetting','WSMan:\\localhost\\Service\\Auth',
-    'WSMan:\\localhost\\Listener','Get-SmbClientConfiguration',
+    'Win32_TSGeneralSetting','AllowBasic',
+    'POLICY.WINRM_REQUEST_FREE_LISTENER_SOURCE_NOT_IMPLEMENTED','Get-SmbClientConfiguration',
     'Get-SmbServerConfiguration','Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol',
     'Convert-EffectivePolicyRdpSecurityLayer',
     'Convert-EffectivePolicyRdpMinEncryptionLevel',
     'Convert-EffectivePolicyOptionalFeatureState',
-    'Get-EffectivePolicyWsmanNodeValues'
+    'AllowUnencryptedTraffic'
 )){
     if(-not $workerSource.Contains($fragment)){throw "The live structured policy collector is missing: $fragment"}
 }
 if($workerSource.Contains("namespace='root/RSOP/User'")){
     throw 'The elevated worker must not query an unbound generic user RSoP namespace.'
+}
+if($workerSource.Contains('Get-EffectivePolicyWsmanNodeValues') -or $workerSource -match '(?i)Get-ChildItem\s+-Path\s+[''"]WSMan:|Get-WSManInstance|New-Object\s+-ComObject\s+[''"]WSMan'){
+    throw 'Local Only cannot admit WSMan requests, including requests to localhost.'
 }
 if($workerSource.Contains("'linkOrder'")){
     throw 'The worker must not read undeclared RSoP properties.'

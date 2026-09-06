@@ -23,6 +23,13 @@
       "layerId": "ConfiguredPolicySignals",
       "purpose": "Release-cataloged local registry values and Defender preferences that may be policy-backed but do not prove tenant intent, winning channel, or current enforcement.",
       "scopeIds": [
+        "scope:policy.rdp.connections",
+        "scope:policy.rdp.authentication",
+        "scope:policy.rdp.listener",
+        "scope:policy.winrm.configuration",
+        "scope:policy.winrm.authentication",
+        "scope:policy.smb.client",
+        "scope:policy.smb.server",
         "scope:policy.security-option.machine-inactivity-limit",
         "scope:policy.security-option.disable-cad",
         "scope:policy.security-option.lm-compatibility-level",
@@ -54,16 +61,9 @@
         "scope:policy.firewall.domain-profile",
         "scope:policy.firewall.private-profile",
         "scope:policy.firewall.public-profile",
-        "scope:policy.rdp.connections",
         "scope:policy.rdp.service",
-        "scope:policy.rdp.authentication",
-        "scope:policy.rdp.listener",
         "scope:policy.winrm.service",
-        "scope:policy.winrm.configuration",
-        "scope:policy.winrm.authentication",
         "scope:policy.winrm.listener",
-        "scope:policy.smb.client",
-        "scope:policy.smb.server",
         "scope:policy.smb.smb1-feature",
         "scope:policy.bitlocker.operating-system-volume",
         "scope:policy.bitlocker.protectors",
@@ -175,12 +175,12 @@
     {
       "sourceId": "source:windows.rdp.configuration",
       "interface": "Get-CimInstance Win32_Service,Get-CimInstance Win32_TSGeneralSetting,Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly",
-      "limitation": "ConfigurationServiceAuthenticationAndListenerStateOnlyNoReachability"
+      "limitation": "LocalConfigurationAndServiceOnlyNoReachability"
     },
     {
       "sourceId": "source:windows.winrm.configuration",
-      "interface": "Get-ChildItem WSMan:\\\\localhost\\\\Service,Get-ChildItem WSMan:\\\\localhost\\\\Service\\\\Auth,Get-ChildItem WSMan:\\\\localhost\\\\Listener,Get-CimInstance Win32_Service",
-      "limitation": "ConfigurationServiceAuthenticationAndListenerStateOnlyNoReachability"
+      "interface": "Win32_Service; HKLM Service policy registry: AllowUnencryptedTraffic,AllowBasic,AllowKerberos,AllowNegotiate,AllowCredSSP",
+      "limitation": "LocalConfigurationAndServiceOnlyNoReachability"
     },
     {
       "sourceId": "source:windows.smb.configuration",

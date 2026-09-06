@@ -6302,7 +6302,7 @@
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Service\\AllowUnencrypted"
+        "authoritativeIdentity": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\\AllowUnencryptedTraffic"
       },
       "valueType": "Boolean",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -6324,11 +6324,11 @@
       "capabilityIds": [
         "CAP-0008"
       ],
-      "purpose": "Record the local WinRM Basic authentication setting without inferring actual use.",
+      "purpose": "Record the local WinRM Basic authentication policy-registry signal without inferring actual use.",
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Service\\Auth\\Basic"
+        "authoritativeIdentity": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\\AllowBasic"
       },
       "valueType": "Boolean",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -6350,11 +6350,11 @@
       "capabilityIds": [
         "CAP-0008"
       ],
-      "purpose": "Record the local WinRM Kerberos authentication setting without inferring actual use.",
+      "purpose": "Record the local WinRM Kerberos authentication policy-registry signal without inferring actual use.",
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Service\\Auth\\Kerberos"
+        "authoritativeIdentity": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\\AllowKerberos"
       },
       "valueType": "Boolean",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -6376,11 +6376,11 @@
       "capabilityIds": [
         "CAP-0008"
       ],
-      "purpose": "Record the local WinRM Negotiate authentication setting without inferring actual use.",
+      "purpose": "Record the local WinRM Negotiate authentication policy-registry signal without inferring actual use.",
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Service\\Auth\\Negotiate"
+        "authoritativeIdentity": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\\AllowNegotiate"
       },
       "valueType": "Boolean",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -6432,7 +6432,7 @@
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Service\\Auth\\CredSSP"
+        "authoritativeIdentity": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\\AllowCredSSP"
       },
       "valueType": "Boolean",
       "sensitivity": "RestrictedDiagnosticEvidence",
