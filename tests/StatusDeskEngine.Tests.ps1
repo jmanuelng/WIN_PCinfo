@@ -3,7 +3,9 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [switch] $Wpf, [switch] $HoldRunLock,
     [ValidateSet('None','Cancel','Close')] [string] $ActiveAction = 'None',
     [ValidateSet('Privilege','System','NativeCooperative','NativeHard')] [string] $ActiveWorker = 'Privilege',
-    [switch] $RequireRecoveryJournal,
+    [switch] $RequireRecoveryJournal, [switch] $RequireFrontLoadedPrivilege,
+    [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
+    [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
     [switch] $RecoveryAuthorized, [string] $InterruptHandoffPath = '',
     [ValidateSet('None','Integrity','Cleanup')] [string] $FailureKind = 'None')
@@ -46,17 +48,26 @@ function Invoke-MicrosoftConnectivityCollection { param($Policy, [switch]$Live, 
     Invoke-ControlledMicrosoftConnectivityCollection -Policy $Policy -ValidationScenario LocalOnly -NetworkBehavior LocalOnly }
 function Invoke-PrivilegedCollectionPlan { param($PreparationPlan, $PlanDigest, $AssessmentUserContext,
     $AssessmentUserSid, $LocalPackageProtector, $ValidationScenario, $FirmwareScenario,
-    $AdministratorScenario, $EffectivePolicyScenario, $CancellationToken)
-    Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
+    $AdministratorScenario, $EffectivePolicyScenario, $CancellationToken, $SystemPlanResult, $SystemValidationScenario)
+    $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
         -AssessmentUserContext $AssessmentUserContext -AssessmentUserSid 'S-1-5-21-100-200-300-1001' `
         -LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation `
-        -FirmwareScenario Supported -AdministratorScenario LocalPrincipal -EffectivePolicyScenario Workgroup -CancellationToken $CancellationToken }
-function Invoke-SystemCollectionPlan { param($Plan, $PlanDigest, $ValidationScenario, $CancellationToken)
+        -FirmwareScenario Supported -AdministratorScenario LocalPrincipal -EffectivePolicyScenario Workgroup -CancellationToken $CancellationToken `
+        -SystemPlanResult $SystemPlanResult -SystemValidationScenario SyntheticSuccess
+    $script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }
+function Invoke-SystemCollectionPlan { param($Plan, $PlanDigest, $ValidationScenario, $CancellationToken, $PrivilegeChannel)
     $script:StatusDeskTransport.State.SystemInvoked=$true
-    Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess -CancellationToken $CancellationToken }
+    Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess -CancellationToken $CancellationToken -PrivilegeChannel $PrivilegeChannel }
 function Invoke-ApprovedCollectorProcess { param($OperationId, $DeviceReadinessScenario, $CancellationToken)
     Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -DeviceReadinessScenario Complete -CancellationToken $CancellationToken }
 '@
+if ($PrivilegeOutcome -ne 'AcceptedElevation') {
+    $moduleText=$moduleText.Replace('-ValidationScenario AcceptedElevation', '-ValidationScenario ' + $PrivilegeOutcome)
+}
+if ($RequireFrontLoadedPrivilege) {
+    $moduleText=$moduleText.Replace('Invoke-ControlledIdentityEnrollmentCollection -Policy',
+        'if (-not $script:StatusDeskTransport.State.ContainsKey("PrivilegeCompleted")) { throw "Collection preceded privilege authorization." }; Invoke-ControlledIdentityEnrollmentCollection -Policy')
+}
 if ($CancelAfterIdentity) {
     $moduleText = $moduleText.Replace('Invoke-ControlledIdentityEnrollmentCollection -Policy $Policy -ValidationScenario StandardUser }',
         'Invoke-ControlledIdentityEnrollmentCollection -Policy $Policy -ValidationScenario StandardUser; $script:StatusDeskTransport.Cancellation.Cancel() }')
@@ -75,16 +86,16 @@ if ($ActiveAction -ne 'None') {
     $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy',
         '[Threading.Thread]::Sleep(11500); Invoke-ControlledResourceDependenciesCollection -Policy')
     if ($ActiveWorker -eq 'Privilege') {
-        $moduleText = $moduleText.Replace('Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
+        $moduleText = $moduleText.Replace('$result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
             '$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp(); $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
-        $moduleText = $moduleText.Replace('-EffectivePolicyScenario Workgroup -CancellationToken $CancellationToken }',
-            '-EffectivePolicyScenario Workgroup -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.cleanup.verified; $result }')
+        $moduleText = $moduleText.Replace('$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }',
+            '$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.cleanup.verified; $result }')
         $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
             '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
     }
     elseif ($ActiveWorker -eq 'System') {
-        $moduleText = $moduleText.Replace('Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess -CancellationToken $CancellationToken }',
-            '$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp(); $result=Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario Cancellation -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.cleanup.verified -and $result.cleanup.taskAbsent -and $result.cleanup.workerTreeAbsent -and $result.cleanup.pipeAbsent; $result }')
+        $moduleText = $moduleText.Replace('Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess -CancellationToken $CancellationToken -PrivilegeChannel $PrivilegeChannel }',
+            '$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp(); $result=Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario Cancellation -CancellationToken $CancellationToken -PrivilegeChannel $PrivilegeChannel; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.cleanup.verified -and $result.cleanup.taskAbsent -and $result.cleanup.workerTreeAbsent -and $result.cleanup.pipeAbsent; $result }')
     }
     else {
         $fixture = if ($ActiveWorker -eq 'NativeCooperative') { 'cooperative-cancel' } else { 'hard-cancel' }
@@ -93,8 +104,8 @@ if ($ActiveAction -ne 'None') {
     }
 }
 if ($RequireRecoveryJournal) {
-    $moduleText = $moduleText.Replace('Invoke-ControlledIdentityEnrollmentCollection -Policy',
-        '$script:StatusDeskTransport.State.JournalObserved=(Test-Path -LiteralPath $Parameters.Request.outputDestination) -and @(Get-ChildItem -LiteralPath $Parameters.Request.outputDestination -Filter WINPCInfo-Recovery-v1-* -Directory).Count -eq 1; Invoke-ControlledIdentityEnrollmentCollection -Policy')
+    $moduleText = $moduleText.Replace('$result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
+        '$script:StatusDeskTransport.State.JournalObserved=(Test-Path -LiteralPath $Parameters.Request.outputDestination) -and @(Get-ChildItem -LiteralPath $Parameters.Request.outputDestination -Filter WINPCInfo-Recovery-v1-* -Directory).Count -eq 1; $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
 }
 if ($InterruptHandoffPath) {
     $handoffLiteral = "'" + $InterruptHandoffPath.Replace("'", "''") + "'"
@@ -266,6 +277,15 @@ try {
     }
     Assert-Equal $preparation.planDigest $terminal.planDigest 'approval and terminal bind the same frozen plan'
     $summary = $session.Transport.State.Completion | ConvertFrom-Json
+    if (($CancelDuringPrivilege -or ($ActiveAction -ne 'None' -and $ActiveWorker -in @('Privilege','System'))) -and
+        $summary.packageAvailability -eq 'VerifiedAbsent') {
+        Assert-Equal '' $session.Transport.State.PackagePath 'cancellation before useful evidence does not invent a report'
+        Assert-Equal $true $terminal.cleanup.verified 'early cancellation verifies both privilege and SYSTEM cleanup'
+        if ($CancelDuringPrivilege -or $ActiveWorker -eq 'Privilege') {
+            Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'cancelled administrator work cannot launch SYSTEM'
+        }
+        return
+    }
     Assert-Equal 'Available' $summary.packageAvailability 'a usable protected result survives completion'
     Assert-Equal $true ([bool]$session.Transport.State.PackagePath) 'Open report receives the exact verified package'
     $opened = Read-ProtectedEvidencePackage -LiteralPath $session.Transport.State.PackagePath
@@ -274,6 +294,11 @@ try {
     Assert-Equal $true (@($record.observations).Count -gt 0) 'real engine carries controlled source observations'
     Assert-Equal $true (@($record.findings).Count -gt 0) 'rules derive evidence-linked advisory interpretation'
     Assert-Equal $true (@($record.recommendations).Count -gt 0) 'report retains useful follow-up'
+    if ($PrivilegeOutcome -eq 'ElevationDenied') {
+        Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'denied UAC cannot activate SYSTEM'
+        Assert-Equal $true (@($record.coverage | Where-Object state -eq Complete).Count -gt 0) 'unrelated standard-user coverage survives denial'
+        Assert-Equal $true (@($record.coverage | Where-Object state -in @('Denied','Unavailable')).Count -gt 0) 'denied privilege remains an explicit coverage gap'
+    }
     if ($CancelDuringPrivilege) {
         Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'privileged cancellation schedules no later SYSTEM worker'
         Assert-Equal $true (@($record.coverage | Where-Object state -eq Cancelled).Count -ge 4) 'stopped prerequisites stay explicitly Cancelled'

@@ -1,0 +1,198 @@
+# Issue #139 — one administrator and SYSTEM collection phase
+
+This is synthetic implementation evidence for [#139](https://github.com/jmanuelng/WIN_PCinfo/issues/139),
+not live elevation, real collection, personal acceptance or release qualification.
+The implementation starts at `d9dc6fd58f4b4eff6a82770f70394a76b55585e4` on the
+integration branch. #137 and #138 are merged dependencies. The separately frozen
+#160 candidate and its certificate/trust state were not inspected or changed.
+
+## Implemented behavior
+
+The common generated engine now performs its one possible UAC interaction before
+any collection. An already-elevated coordinator reuses its authority. The three
+release-owned administrator operations finish inside one worker; that worker
+then brokers only the frozen SYSTEM operation before it exits. Standard-user
+collection and package finalization remain in the initiating process.
+
+The SYSTEM broker receives a closed typed configuration bound to the approved
+sub-plan digest. It assembles the existing release-owned worker internally;
+script text, commands, executable paths, journal paths, package protectors and
+recipient data are not activation parameters. The generated artifact embeds the
+reviewed broker source and compressed SYSTEM template, preserving deterministic
+builds and the Windows in-memory launch bound.
+
+The initiating coordinator still creates the one-use SYSTEM pipe and owned Job
+Object, verifies the actual worker PID and protocol, validates evidence, records
+durable task intent before registration, and independently checks current task
+instances before recording an absence witness. The administrator grants task
+access only to the initiating user, its own selected administrator identity and
+SYSTEM; it never gains package access from this channel. Process image checks
+use limited query rights while retaining the exact executable digest check.
+The authenticated readiness frame supplies the selected administrator SID for
+the initiating user's durable journal. The optional `activationSid` field keeps
+older 1.1.0 journals readable; absent values retain the original two-principal
+task access contract. An unrecorded administrator ACE is refused during recovery.
+
+Worker admission uses the kernel pipe PID, membership in the exact coordinator
+Job, an Identification-level pipe token SID and the admitted executable digest.
+A limited-query process handle pins that identity through cleanup. The native
+SID query reverts its thread token synchronously before returning. Scheduler
+engine identity is separate from action identity: Microsoft's
+[EnginePID contract](https://learn.microsoft.com/en-us/windows/win32/taskschd/runningtask-enginepid)
+does not promise action-PID equality. Identification follows Microsoft's
+[pipe identification contract](https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-impersonatenamedpipeclient)
+without enabling additional privileges. Existing conservative scheduler-engine
+absence checks remain; if the engine persists on the acceptance machine, cleanup
+remains unverified and that limitation must be resolved in #161 rather than
+claiming live success from controlled workers.
+
+Denied UAC skips SYSTEM activation and preserves unrelated standard-user evidence
+through the canonical record, encryption and protected HTML opening. Source-scoped
+SYSTEM denial/loss/timeout remains a gap. Protocol or cleanup uncertainty closes
+scheduling. A pre-activation envelope describes the coordinator's failed attempt
+using a schema-valid context while activation remains explicitly `NotStarted`;
+it fabricates no SYSTEM observation. Early cancellation can truthfully have no
+usable report. Cancellation checks SYSTEM cleanup even when no later source may
+start.
+
+## Red/green evidence and focused gates
+
+Tests used the explicitly selected installed PowerShell Core 7.6.5 X64 host,
+`-NoLogo -NoProfile`, and `-STA` for WPF cases. No dependency acquisition, real
+elevation, Task Scheduler registration, live collector, certificate/trust change,
+signing, cloud action or publication was performed.
+
+Observed failures before their corrections:
+
+- The combined phase test could not bind the missing SYSTEM-plan parameter.
+- The generated request-to-record check detected collection before privilege.
+- Duplicate framed properties were accepted by the coordinator reader.
+- Denied UAC reached an invalid canonical SYSTEM context and could not package.
+- The broker's pre-activation refusal tried to clean up an empty task identity.
+- Old early-cancel assertions incorrectly required a report after collection was
+  moved behind the front-loaded privileged phase; they now require honest
+  `VerifiedAbsent`, no report action and verified worker cleanup at that point.
+- Independent review exposed an alternate-administrator recovery ACL mismatch;
+  the new recovery regression failed before authenticated activation identity was
+  recorded, then passed while retaining refusal of an unrelated administrator.
+- Cancellation during the broker readiness exchange returned `CleanupIncomplete`
+  despite verified absence and no recorded intent. The regression now returns
+  `Cancelled` with verified cleanup and no persistent activation authorization.
+- The controlled SYSTEM peer regression failed before the kernel identity seam
+  existed. It now admits the actual Job-owned worker without any scheduler-engine
+  equality assumption and rejects wrong Job, SID, image, digest and expected PID.
+
+Passing focused checks recorded before independent review:
+
+| Boundary | Observed result |
+| --- | --- |
+| `PrivilegedSystemPhase.Tests.ps1` | Real controlled administrator/SYSTEM workers: accepted, reused and alternate authority; SYSTEM denial, worker loss and timeout; no second UAC; preserved protector; re-digested ownership-transfer parameters rejected; actual host signer mismatch rejected before dispatch |
+| `SystemBrokerAdmission.Tests.ps1` | Actual activation/framing boundary refuses arbitrary operation, extra protector, untyped deadline, changed plan and expired input before activation-ready; no activation resources |
+| `CollectionChannelFraming.Tests.ps1` | Duplicate root/nested fields, zero/negative/oversized lengths, truncated frames and invalid UTF-8 rejected |
+| `PrivilegedCollectionPlanPolicy.Tests.ps1` and `PrivilegedCollectionPlan.Tests.ps1` | Closed policy plus nine existing peer, plan, denial, worker-loss, timeout, cancellation and owned-tree checks |
+| `SystemCollectionPlanPolicy.Tests.ps1` and `SystemCollectionPlan.Tests.ps1` | Closed policy plus twenty existing catalog, typed parameter, provenance, result, source-failure and cleanup cases |
+| `SystemTaskAbsence.Tests.ps1` and `SystemTaskRecovery.Tests.ps1` | Missing/failed observation never proves absence; foreign task preserved; exact owned task and independent instance checks retain recovery uncertainty |
+| `SystemBrokerCancellation.Tests.ps1` | Actual coordinator pipe/Job and empty journal, controlled broker transport: cancellation before readiness authorizes no task and reports verified cleanup |
+| `SystemWorkerPeer.Tests.ps1` | Real synthetic release worker, kernel pipe PID, owned Job, Identification SID, limited identity handle and admitted image checks; rejected peers always leave the thread token reverted |
+| `StatusDeskEngine.Tests.ps1 -RequireFrontLoadedPrivilege` | Generated ordinary approved flow reaches encrypted package and protected report |
+| Same test with `-PrivilegeOutcome ElevationDenied`, `AlreadyElevated`, `AlternateAdministrator` | Generated scope/ownership outcomes reach encrypted report; denied scopes remain explicit and standard evidence survives |
+| `StatusDeskCancellation.Tests.ps1` | Cancellation after identity/resource preserves usable partial evidence; active privileged cancellation safely permits no report |
+| Four WPF `StatusDeskEngine` cases: Cancel/Close × Privilege/System, with `-RequireRecoveryJournal` | Actual controls cancel controlled workers; journal precedes sources; owned trees/channels absent; no invented report |
+
+WPF timing observations, in milliseconds; memory is sampled test-host MiB:
+
+| Action/worker | First progress | Maximum observed gap | Acknowledgment | Cancel to terminal | Private / working set |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cancel/Administrator | 1269 | 1774 | 15 | 1777 | 345 / 488 |
+| Close/Administrator | 525 | 1798 | 8 | 1800 | 331 / 472 |
+| Cancel/SYSTEM | 544 | 2584 | 4 | 1827 | 352 / 499 |
+| Close/SYSTEM | 1262 | 2519 | 5 | 1843 | 353 / 500 |
+
+These are short controlled cancellation runs, not live performance acceptance.
+The earlier #138 full test-host working-set samples of 662–755 MiB exceeded the
+provisional 512 MiB budget and remain an explicit #158/#161 measurement obligation.
+No budget or live gate is waived by the lower early-cancel samples here.
+
+Build/automation regression, exact final candidate digests and separate review
+results are recorded in the completion addendum below. The complete 132-plus-file
+repository suite was deliberately not repeated for this ticket, per the current
+testing cadence. #158/final owns the next integrated full gate.
+
+## Requirement register contribution and next owners
+
+| Requirement | Automated contribution | Remaining owner |
+| --- | --- | --- |
+| #37 stories 8–12,15–16,29–30,58,71–72; #134 stories 7,10,12,25 | Common engine's frozen administrator/SYSTEM phase, front-loaded authority, initiating-user ownership, typed IPC, denial continuation and bounded stop | #158 integrated regression; #161 actual privilege and ownership matrix |
+| CAP-0007,0015,0016,0017,0020; CMP-0007,0019,0024,0026,0027,0031,0032,0033,0045,0046,0047,0052,0055 | Existing collectors and protection reused across the actual broker/supervisor seams | Relevant remaining collection/evidence tickets close their portions; #158 reconciles shared components |
+| Cleanup/recovery and provisional budgets | Controlled tree/channel absence and retained uncertain-task semantics | #161 live task/worker absence, interruption and final resource measurement; #158 final candidate gate |
+
+These rows contribute to the published #158 requirement allocation. Parent #134,
+parent #37 and shared capability completion are not claimed. CMP-0061 stays deferred.
+
+## Prepared #161 live cases — all Pending
+
+Use the authorized exact signed acceptance candidate in the intended private
+session. Record sanitized outcomes and retain detailed observations privately:
+
+1. Standard launch: UAC approval once before collection; administrator and actual
+   predefined SYSTEM evidence reach the same initiating-user protected report.
+2. Already-elevated launch: no UAC; report actual source/Assessment User Context
+   constraints rather than relabeling administrator identity as a standard user.
+3. Denied UAC and denied source access: no retry/prompt, unrelated standard work
+   and honest coverage/report survive.
+4. Alternate-administrator UAC: initiating user still owns the workspace,
+   recovery records and local package protector; alternate administrator/SYSTEM
+   receive no package access merely from activation.
+5. Cancel and active-window close during administrator and SYSTEM work as
+   separate cases: measure acknowledgment/cleanup and independently verify exact
+   worker trees, scheduled registration, running instances and temporary plaintext
+   absent. Verify subsequent-run behavior and cleanup-only interrupted recovery.
+6. Measure final complete-run responsiveness and resource budgets. Re-test exact
+   changed candidate bytes; synthetic success establishes no live acceptance.
+
+## Completion addendum
+
+Implementation and correction commits, all DCO signed:
+
+- `284f1f32834684c17be9fe1cfd9881b274b810d0`: contiguous administrator/SYSTEM phase.
+- `6d6f50dddabb62052f6737bca1af96f40cbca86c`: authenticated recovery ownership,
+  pre-intent cancellation and kernel-backed SYSTEM peer admission.
+- `a828e31b61ede2df99587324ddd3d02d93fa747b`: hold the limited-query identity
+  handle before inspecting Job membership, closing the PID-lifetime race.
+
+Independent Standards review: **0 hard violations, 0 blocking findings**. One
+unchanged nonblocking judgment suggests sharing the two small synthetic process
+launch setups; it is optional and was retained without an additional refactor.
+Independent Spec review: the three findings described above were corrected;
+correction review and the final identity-ordering review report **0 findings**.
+Both reviews inspected the committed changes independently and did not claim
+their own test runs or live acceptance.
+
+The final correction checks passed: broker admission, pre-intent cancellation,
+alternate-administrator recovery, actual controlled peer identity, combined
+administrator/SYSTEM phase, both release policies, twenty SYSTEM source/lifecycle
+cases, all nine generated administrator paths and all nine generated SYSTEM
+paths. The final ordinary generated Status desk flow reached the protected
+offline report and verified viewing cleanup. All 12 changed PowerShell files and
+the generated candidate parse; `git diff --check` is clean.
+
+The deterministic build passed with exact source provenance. A final actual WPF
+Cancel/SYSTEM control check also passed: first progress 1,659 ms, maximum observed
+gap 2,584 ms, acknowledgment 4 ms, cancellation-to-terminal 1,776 ms, private memory
+333 MiB and working set 483 MiB. This is another short synthetic sample and does
+not replace the earlier 662–755 MiB full-host measurement or its pending gate.
+
+Unsigned candidate identities, generated from `a828e31` on 2026-09-06 UTC:
+
+| Retained local artifact | SHA-256 |
+| --- | --- |
+| `artifacts/WIN-PCInfo.ps1` | `d430a384f12669085b20f7c525fedbf2c6933041c0a43c52b6bb0b0eec091d8f` |
+| `artifacts/WIN-PCInfo-2.0.0-preview.1-portable.zip` | `934b618c5f6d378dcdf27312e577b2544a39dfcbf71d16f84c1b8fc7966e4158` |
+
+These ignored build artifacts are retained for orchestrator review. Controlled
+worker, channel, viewing and per-run workspace cleanup passed; reusable ignored
+test/build outputs remain synthetic scratch. No signed candidate was produced or
+modified. The next action is orchestrator delivery of the clean source commits.
+The integrated full repository gate remains with #158/final, and every #161 live
+case above remains Pending. Neither parent issue nor release acceptance is closed
+by this ticket's synthetic evidence.

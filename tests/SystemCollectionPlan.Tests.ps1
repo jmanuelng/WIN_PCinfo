@@ -240,8 +240,10 @@ $liveStopped = New-SystemCollectionStoppedResult -State 'Unavailable' `
         PlanDigest = $planResult.Digest
         ObservedExecutionContext = 'NotStarted'
     }
-Assert-Equal 'NotStarted' $liveStopped.collectorResult.Envelope.executionContext `
-    'a live pre-hello failure does not fabricate LocalSystem provenance'
+Assert-Equal $true ($liveStopped.collectorResult.Envelope.executionContext -in @('StandardUser','Administrator')) `
+    'a pre-activation envelope records the coordinator context required by the canonical schema'
+Assert-Equal 'NotStarted' $liveStopped.activation.observedExecutionContext `
+    'a live pre-hello failure does not fabricate LocalSystem activation'
 Assert-Equal $false $liveStopped.activation.localSystemIdentityVerified `
     'a live pre-hello failure explicitly reports that SYSTEM identity was not verified'
 

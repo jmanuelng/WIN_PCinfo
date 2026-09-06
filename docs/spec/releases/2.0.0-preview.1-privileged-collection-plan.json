@@ -29,7 +29,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "CompressedInlineReleaseSource",
-    "payloadSha256": "3bc0f6e0bac99c3961f029cce13ebac7ed5856ad608b41a8b243abb6dfa34327"
+    "payloadSha256": "d1f01f7fef80f4f4ceefc11e130d8a442a045f58fa1213d73682126d738fa16d"
   },
   "deadlines": {
     "connectMaximumMilliseconds": 5000,

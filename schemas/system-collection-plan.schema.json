@@ -303,7 +303,7 @@
         "maximumServerInstances": { "const": 1 },
         "maximumMessageUtf8Bytes": { "type": "integer", "minimum": 256, "maximum": 16384 },
         "nonceBytes": { "type": "integer", "minimum": 32, "maximum": 64 },
-        "acl": { "const": "InitiatingAdministratorAndLocalSystem" },
+        "acl": { "const": "InitiatingUserAndLocalSystem" },
         "requirePeerProcessId": { "const": true },
         "requireLocalSystemSid": { "const": true },
         "requireArtifactDigest": { "const": true },

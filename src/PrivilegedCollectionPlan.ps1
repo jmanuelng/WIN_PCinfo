@@ -1,5 +1,37 @@
 $script:PrivilegedCollectionPlanPolicyBase64 = '__PRIVILEGED_COLLECTION_PLAN_POLICY_BASE64__'
 $script:PrivilegedCollectionPlanPolicyDigest = '__PRIVILEGED_COLLECTION_PLAN_POLICY_SHA256__'
+$script:SystemActivationBrokerSourceBase64 = '__SYSTEM_ACTIVATION_BROKER_SOURCE_BASE64__'
+
+function Get-SystemActivationBrokerSource {
+    if ($script:SystemActivationBrokerSourceBase64 -ne ('__SYSTEM_ACTIVATION_BROKER_' + 'SOURCE_BASE64__')) {
+        return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($script:SystemActivationBrokerSourceBase64))
+    }
+    # Development/build composition reads only named release source functions.
+    # Distributed applications embed these exact bytes and never read a module.
+    $names = @('Get-SystemCollectionWorkerSource','New-SystemCollectionTaskDefinition',
+        'Start-SystemCollectionTransientTask','Get-SystemCollectionOwnedTaskInstances',
+        'Test-SystemCollectionProcessIdsAbsent','Remove-SystemCollectionTransientTask',
+        'Test-SystemTaskNotFound','Invoke-SystemActivationWorker')
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'SystemCollectionPlan.ps1'),[ref]$tokens,[ref]$errors)
+    if ($errors.Count) { throw 'The release SYSTEM activation source is invalid.' }
+    $parts = foreach ($name in $names) {
+        $matches=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name}.GetNewClosure(),$false))
+        if ($matches.Count -ne 1) { throw 'The release SYSTEM activation source is ambiguous.' }
+        if ($name -ceq 'Get-SystemCollectionWorkerSource') {
+            $workerText=& ([scriptblock]::Create($matches[0].Extent.Text + "`nGet-SystemCollectionWorkerSource"))
+            $memory=[IO.MemoryStream]::new()
+            $compressor=[IO.Compression.BrotliStream]::new($memory,[IO.Compression.CompressionLevel]::SmallestSize,$true)
+            try { $bytes=[Text.Encoding]::UTF8.GetBytes($workerText.Replace("`r`n","`n").Replace("`r","`n")); $compressor.Write($bytes,0,$bytes.Length) }
+            finally { $compressor.Dispose() }
+            $encoded=[Convert]::ToBase64String($memory.ToArray()); $memory.Dispose()
+            "function Get-SystemCollectionWorkerSource { `$m=[IO.MemoryStream]::new([Convert]::FromBase64String('$encoded')); `$b=[IO.Compression.BrotliStream]::new(`$m,[IO.Compression.CompressionMode]::Decompress); `$r=[IO.StreamReader]::new(`$b,[Text.Encoding]::UTF8); try { `$r.ReadToEnd() } finally { `$r.Dispose(); `$b.Dispose(); `$m.Dispose() } }"
+        } else { $matches[0].Extent.Text.Replace("`r`n","`n").Replace("`r","`n") }
+    }
+    $encoderAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'PrivilegedCollectionPlan.ps1'),[ref]$tokens,[ref]$errors)
+    $encoder=$encoderAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'ConvertTo-PrivilegedCollectionEncodedCommand'},$false)
+    ($parts + $encoder.Extent.Text.Replace("`r`n","`n").Replace("`r","`n")) -join "`n"
+}
 
 function Get-PrivilegedCollectionPlanSha256 {
     param([Parameter(Mandatory)] [byte[]] $Bytes)
@@ -138,13 +170,11 @@ function Get-PrivilegedCollectionWorkerSource {
     # one tiny framed protocol and three empty-parameter operation identities; it
     # has no command parser, plug-in loader, path parameter, evidence serializer,
     # or credential input.
-    @'
+    $source = @'
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$configurationJson = [System.Text.UTF8Encoding]::new($false, $true).GetString(
-    [System.Convert]::FromBase64String('__PRIVILEGED_WORKER_CONFIGURATION__')
-)
+$configurationJson = '__PRIVILEGED_WORKER_CONFIGURATION__'
 $configurationDocument = [System.Text.Json.JsonDocument]::Parse($configurationJson)
 try {
     $configurationRoot = $configurationDocument.RootElement
@@ -152,13 +182,15 @@ try {
         $configurationRoot.EnumerateObject() | ForEach-Object Name
     )
     if ($configurationRoot.ValueKind -ne [System.Text.Json.JsonValueKind]::Object -or
-        $configurationNames.Count -ne 13 -or
-        @($configurationNames | Sort-Object -Unique).Count -ne 13) {
+        $configurationNames.Count -ne 16 -or
+        @($configurationNames | Sort-Object -Unique).Count -ne 16) {
         throw 'The privilege worker configuration is invalid.'
     }
 }
 finally { $configurationDocument.Dispose() }
 $configuration = $configurationJson | ConvertFrom-Json -Depth 5
+
+__SYSTEM_ACTIVATION_BROKER_SOURCE__
 
 function Test-PrivilegedCollectionSid {
     param($Value)
@@ -2003,17 +2035,19 @@ try {
         $root = $requestDocument.RootElement
         $names = @($root.EnumerateObject() | ForEach-Object Name)
         if ($root.ValueKind -ne [System.Text.Json.JsonValueKind]::Object -or
-            $names.Count -ne 6 -or @($names | Sort-Object -Unique).Count -ne 6 -or
+            $names.Count -ne 7 -or @($names | Sort-Object -Unique).Count -ne 7 -or
             $root.GetProperty('kind').GetString() -ne 'ExecutePlan' -or
             $root.GetProperty('contractVersion').GetString() -ne '1.0.0' -or
             $root.GetProperty('nonce').GetString() -ne $configuration.nonce -or
             $root.GetProperty('planDigest').GetString() -ne $configuration.planDigest -or
+            -not (Test-PrivilegedCollectionSid $root.GetProperty('initiatingSid').GetString()) -or
             $null -eq $root.GetProperty('assessmentUserSid').GetString() -or
             ($root.GetProperty('assessmentUserSid').GetString().Length -gt 0 -and
                 -not (Test-PrivilegedCollectionSid $root.GetProperty('assessmentUserSid').GetString()))) {
             throw 'The privilege request envelope is invalid.'
         }
         $assessmentUserSid=$root.GetProperty('assessmentUserSid').GetString()
+        $initiatingSid=$root.GetProperty('initiatingSid').GetString()
         $allowed = @(
             'observe-firmware-tpm', 'observe-local-administrators',
             'observe-effective-policy'
@@ -2087,6 +2121,9 @@ try {
     }
     $result = $resultBody | ConvertTo-Json -Compress -Depth 5
     Write-Frame -Stream $pipe -Json $result -MaximumBytes $maximumBytes -Token $tokenSource.Token
+    if ($configuration.systemEnabled) {
+        Invoke-SystemActivationWorker -Stream $pipe -Configuration $configuration -InitiatingSid $initiatingSid -Token $tokenSource.Token
+    }
 }
 catch {
     # Never return exception text: it can contain a user, path, policy value, or
@@ -2111,6 +2148,7 @@ finally {
     $tokenSource.Dispose()
 }
 '@
+    $source.Replace('__SYSTEM_ACTIVATION_BROKER_SOURCE__', (Get-SystemActivationBrokerSource))
 }
 
 function Initialize-PrivilegedCollectionPlanNativeType {
@@ -2132,6 +2170,32 @@ namespace WinPCInfo.PrivilegedCollectionPlan
     public static class PipePeer
     {
         [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool QueryFullProcessImageName(IntPtr process, uint flags, System.Text.StringBuilder path, ref int size);
+        [DllImport("kernel32.dll")]
+        private static extern bool CloseHandle(IntPtr handle);
+        public static SafeProcessHandle HoldProcessIdentity(int processId)
+        {
+            IntPtr process = OpenProcess(0x1000, false, processId);
+            if (process == IntPtr.Zero) throw new InvalidOperationException("Unable to hold the worker identity.");
+            return new SafeProcessHandle(process, true);
+        }
+        public static string GetProcessImage(int processId)
+        {
+            IntPtr process = OpenProcess(0x1000, false, processId); // PROCESS_QUERY_LIMITED_INFORMATION
+            if (process == IntPtr.Zero) throw new InvalidOperationException("Unable to inspect the owned worker image.");
+            try
+            {
+                int size = 32768;
+                var path = new System.Text.StringBuilder(size);
+                if (!QueryFullProcessImageName(process, 0, path, ref size))
+                    throw new InvalidOperationException("Unable to identify the owned worker image.");
+                return path.ToString();
+            }
+            finally { CloseHandle(process); }
+        }
+        [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe, out uint processId);
         public static int GetClientProcessId(PipeStream pipe)
         {
@@ -2139,6 +2203,30 @@ namespace WinPCInfo.PrivilegedCollectionPlan
             if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out processId))
                 throw new InvalidOperationException("Unable to bind the worker process.");
             return checked((int)processId);
+        }
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool ImpersonateNamedPipeClient(SafePipeHandle pipe);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool RevertToSelf();
+        public static string GetIdentificationSid(PipeStream pipe)
+        {
+            if (!ImpersonateNamedPipeClient(pipe.SafePipeHandle))
+                throw new InvalidOperationException("Unable to identify the pipe token.");
+            try
+            {
+                using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent(true))
+                {
+                    if (identity == null || identity.ImpersonationLevel != System.Security.Principal.TokenImpersonationLevel.Identification)
+                        throw new InvalidOperationException("The worker did not restrict pipe identification.");
+                    return identity.User.Value;
+                }
+            }
+            finally
+            {
+                // No PowerShell, asynchronous continuation or caller operation
+                // runs while this thread holds even an identification token.
+                if (!RevertToSelf()) Environment.FailFast("Unable to revert pipe identification.");
+            }
         }
     }
 
@@ -2255,6 +2343,24 @@ namespace WinPCInfo.PrivilegedCollectionPlan
                 uint returned;
                 return QueryInformationJobObject(handle, JobObjectBasicProcessIdList,
                     buffer, 65536, out returned) && Marshal.ReadInt32(buffer, 4) == 0;
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+
+        public bool ContainsProcess(int processId)
+        {
+            if (handle == IntPtr.Zero || processId <= 0) return false;
+            IntPtr buffer = Marshal.AllocHGlobal(65536);
+            try
+            {
+                uint returned;
+                if (!QueryInformationJobObject(handle, JobObjectBasicProcessIdList, buffer, 65536, out returned))
+                    return false;
+                int count = Marshal.ReadInt32(buffer, 4);
+                if (count < 0 || count > (65536 - 8) / IntPtr.Size) return false;
+                for (int index = 0; index < count; index++)
+                    if (Marshal.ReadIntPtr(buffer, 8 + index * IntPtr.Size).ToInt64() == processId) return true;
+                return false;
             }
             finally { Marshal.FreeHGlobal(buffer); }
         }
@@ -2410,7 +2516,27 @@ function Read-BoundedCollectionChannelFrame {
     }
     $payload = Read-BoundedCollectionChannelExactBytes -Stream $Stream -Count $length `
         -CancellationToken $CancellationToken
-    [System.Text.UTF8Encoding]::new($false, $true).GetString($payload)
+    $json=[System.Text.UTF8Encoding]::new($false, $true).GetString($payload)
+    $options=[Text.Json.JsonDocumentOptions]::new(); $options.MaxDepth=16
+    $document=[Text.Json.JsonDocument]::Parse($json,$options)
+    try {
+        if ($document.RootElement.ValueKind -ne [Text.Json.JsonValueKind]::Object) { throw 'Collection frames must be objects.' }
+        $pending=[Collections.Generic.Queue[Text.Json.JsonElement]]::new()
+        $pending.Enqueue($document.RootElement)
+        while ($pending.Count) {
+            $element=$pending.Dequeue()
+            if ($element.ValueKind -eq [Text.Json.JsonValueKind]::Object) {
+                $names=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+                foreach ($property in $element.EnumerateObject()) {
+                    if (-not $names.Add($property.Name)) { throw 'The collection frame has ambiguous properties.' }
+                    $pending.Enqueue($property.Value)
+                }
+            } elseif ($element.ValueKind -eq [Text.Json.JsonValueKind]::Array) {
+                foreach ($value in $element.EnumerateArray()) { $pending.Enqueue($value) }
+            }
+        }
+    } finally { $document.Dispose() }
+    $json
 }
 
 function Write-BoundedCollectionChannelFrame {
@@ -2625,6 +2751,8 @@ function Invoke-PrivilegedCollectionPlan {
         })] [string] $AssessmentUserSid = '',
         [Parameter(Mandatory)] [ValidatePattern('^[A-Za-z][A-Za-z0-9._:/-]{0,127}$')]
         [string] $LocalPackageProtector,
+        [Parameter()] $SystemPlanResult,
+        [Parameter()] [AllowEmptyString()] [string] $SystemValidationScenario = '',
         [Parameter()]
         [ValidateSet(
             'Live',
@@ -2669,6 +2797,16 @@ function Invoke-PrivilegedCollectionPlan {
 
     $policy = Get-PrivilegedCollectionPlanPolicy
     $scenario = Get-PrivilegedCollectionValidationScenario -Name $ValidationScenario
+    if ($null -ne $SystemPlanResult) {
+        $systemPolicy=Get-SystemCollectionPlanPolicy
+        $systemScenario=Get-SystemCollectionValidationScenario -Name $SystemValidationScenario
+        if ([bool]$systemScenario.isFixture -ne [bool]$scenario.isFixture -or
+            $SystemPlanResult.Plan.preparationPlanDigest -cne $PlanDigest -or
+            (Get-ObjectDigest -Value $SystemPlanResult.Plan -ConvertToJsonCommand (Get-Command ConvertTo-Json -CommandType Cmdlet)) -cne $SystemPlanResult.Digest -or
+            (Get-SystemCollectionPlanValidationReason -Plan $SystemPlanResult.Plan -Policy $systemPolicy)) {
+            throw 'The SYSTEM sub-plan is outside the approved privileged phase.'
+        }
+    }
     if (($ValidationScenario -eq 'Live' -and (
             $FirmwareScenario -notin @('None','Live') -or
             $AdministratorScenario -notin @('None','Live') -or
@@ -2779,7 +2917,15 @@ function Invoke-PrivilegedCollectionPlan {
     $worker = $null
     $unexpectedClient = $null
     $deadline = [System.Threading.CancellationTokenSource]::CreateLinkedTokenSource($CancellationToken)
-    $deadline.CancelAfter([int] $policy.deadlines.operationMaximumMilliseconds)
+    $phaseMaximumMilliseconds=[int]$policy.deadlines.operationMaximumMilliseconds
+    if ($null -ne $SystemPlanResult) {
+        $phaseMaximumMilliseconds += [int]$systemPolicy.deadlines.operationMaximumMilliseconds +
+            [int]$systemPolicy.deadlines.cleanupMaximumMilliseconds +
+            [int]$systemPolicy.deadlines.cancellationGraceMilliseconds +
+            [int]$systemPolicy.deadlines.terminationVerificationMilliseconds +
+            [int]$policy.deadlines.terminationVerificationMilliseconds
+    }
+    $deadline.CancelAfter($phaseMaximumMilliseconds)
     $channelVerified = $false
     $operations = @()
     $cleanupVerified = $false
@@ -2792,6 +2938,7 @@ function Invoke-PrivilegedCollectionPlan {
     $privateFirmwareCollectorResult = $null
     $privateAdministratorCollectorResult = $null
     $privateEffectivePolicyCollectorResult = $null
+    $privateSystemResult = $null
     try {
         $failureStage = 'CREATE_JOB'
         $ownedJob = [WinPCInfo.PrivilegedCollectionPlan.OwnedJob]::Create(
@@ -2816,7 +2963,7 @@ function Invoke-PrivilegedCollectionPlan {
             pipe = $pipeName
             nonce = $nonce
             maximumBytes = [int] $policy.channel.maximumMessageUtf8Bytes
-            deadlineMilliseconds = [int] $policy.deadlines.operationMaximumMilliseconds
+            deadlineMilliseconds = $phaseMaximumMilliseconds
             coordinatorProcessId = $PID
             executableSha256 = $executableDigest
             workerPayloadSha256 = $workerDigest
@@ -2826,12 +2973,11 @@ function Invoke-PrivilegedCollectionPlan {
             administratorScenario = $AdministratorScenario
             effectivePolicyScenario = $EffectivePolicyScenario
             jobName = $jobName
+            systemEnabled = $null -ne $SystemPlanResult
+            systemPlanDigest = if ($null -ne $SystemPlanResult) { [string]$SystemPlanResult.Digest } else { '' }
+            validationFixture = [bool]$validationFixture
         }
-        $encodedConfiguration = [System.Convert]::ToBase64String(
-            [System.Text.UTF8Encoding]::new($false).GetBytes(
-                ($workerConfiguration | ConvertTo-Json -Compress -Depth 5)
-            )
-        )
+        $configurationLiteral = ($workerConfiguration | ConvertTo-Json -Compress -Depth 5).Replace("'", "''")
         # The policy digest binds the reviewed template. Replacing its one fixed
         # configuration marker happens only in memory after the configuration's
         # closed shape is constructed. The resulting source goes straight to
@@ -2842,7 +2988,7 @@ function Invoke-PrivilegedCollectionPlan {
             throw 'The privilege worker template contains an ambiguous configuration marker.'
         }
         $launchWorkerSource = $workerSource.Replace(
-            '__PRIVILEGED_WORKER_CONFIGURATION__', $encodedConfiguration
+            '__PRIVILEGED_WORKER_CONFIGURATION__', $configurationLiteral
         )
         $failureStage = 'ENCODE_WORKER'
         $inlineWorker = ConvertTo-PrivilegedCollectionInlineCommand -Source $launchWorkerSource
@@ -2921,7 +3067,7 @@ finally { $pipe.Dispose() }
             throw 'The connected pipe client is not the owned worker.'
         }
         $clientImage = [System.IO.Path]::GetFullPath(
-            [System.Diagnostics.Process]::GetProcessById($clientProcessId).MainModule.FileName
+            [WinPCInfo.PrivilegedCollectionPlan.PipePeer]::GetProcessImage($clientProcessId)
         )
         if (-not $clientImage.Equals(
             $approvedExecutable, [System.StringComparison]::OrdinalIgnoreCase
@@ -2959,6 +3105,7 @@ finally { $pipe.Dispose() }
             nonce = $nonce
             planDigest = $PlanDigest
             assessmentUserSid = $AssessmentUserSid
+            initiatingSid = $initiatingSid
             operations = @($PreparationPlan.privilege.privilegedOperations |
                 Where-Object context -eq 'Administrator' | ForEach-Object {
                     [pscustomobject][ordered]@{
@@ -3121,6 +3268,16 @@ finally { $pipe.Dispose() }
         $channelVerified = $true
         $state = 'Completed'
         $reasonCode = 'PRIVILEGE.COMPLETED'
+        if ($null -ne $SystemPlanResult) {
+            $privilegeChannel=@{Stream=$server; Activated=$false}
+            $privateSystemResult=Invoke-SystemCollectionPlan -Plan $SystemPlanResult.Plan -PlanDigest $SystemPlanResult.Digest `
+                -ValidationScenario $SystemValidationScenario -CancellationToken $deadline.Token -PrivilegeChannel $privilegeChannel
+            if (-not $privilegeChannel.Activated) {
+                Write-BoundedCollectionChannelFrame -Stream $server -Json '{"kind":"SkipSystemPlan"}' -MaximumBytes 16384 -CancellationToken $deadline.Token
+                $skipped=(Read-BoundedCollectionChannelFrame -Stream $server -MaximumBytes 16384 -CancellationToken $deadline.Token)|ConvertFrom-Json
+                if ($skipped.kind -cne 'SystemReleased' -or $skipped.absent -ne $true) { throw 'SYSTEM skip cleanup was not verified.' }
+            }
+        }
     }
     catch [System.OperationCanceledException] {
         $state = if ($CancellationToken.IsCancellationRequested) { 'Cancelled' } else { 'TimedOut' }
@@ -3188,7 +3345,7 @@ finally { $pipe.Dispose() }
         $state = 'IntegrityFailed'
         $reasonCode = 'PRIVILEGE.TERMINATION_INCOMPLETE'
     }
-    New-PrivilegedCollectionResult -State $state -ReasonCode $reasonCode `
+    $phaseResult=New-PrivilegedCollectionResult -State $state -ReasonCode $reasonCode `
         -PlanDigest $PlanDigest -AssessmentUserContext $AssessmentUserContext `
         -LocalPackageProtector $LocalPackageProtector `
         -UacInteractionCount $uacInteractionCount -AlreadyElevated $alreadyElevated `
@@ -3198,6 +3355,8 @@ finally { $pipe.Dispose() }
         -PrivateFirmwareCollectorResult $privateFirmwareCollectorResult `
         -PrivateAdministratorCollectorResult $privateAdministratorCollectorResult `
         -PrivateEffectivePolicyCollectorResult $privateEffectivePolicyCollectorResult
+    if ($null -ne $privateSystemResult) { $phaseResult|Add-Member -NotePropertyName PrivateSystemResult -NotePropertyValue $privateSystemResult }
+    $phaseResult
 }
 
 function Read-PrivilegedCollectionPlanFixture {
