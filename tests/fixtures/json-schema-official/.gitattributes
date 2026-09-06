@@ -1,3 +1,4 @@
 # Preserve verified upstream blob bytes, including LICENSE, on every checkout.
-*.json -text
+# Immutable corpus/manifest whitespace is part of the verified bytes.
+*.json -text -whitespace
 LICENSE -text

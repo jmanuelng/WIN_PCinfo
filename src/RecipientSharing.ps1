@@ -796,7 +796,9 @@ function Unprotect-RecipientContentKey {
                 'The recipient key does not match the package wrap.'
             )
         }
-        $rsa.Decrypt(
+        # Transfer the single owned key array; pipeline enumeration would leave
+        # boxed-byte copies that callers cannot clear through their byte[] view.
+        ,$rsa.Decrypt(
             $WrappedContentKey, [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA256
         )
     }

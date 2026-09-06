@@ -1201,7 +1201,8 @@ function New-DeviceReadinessReportBytes {
     } | Select-Object -First 1
     $coverage = @($Record.coverage)[0]
     $observationAnchors = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
-    $referencedObservations = @($Record.findings.evidenceReferences.observationId | Select-Object -Unique)
+    $referencedObservations = @($Record.findings | ForEach-Object { @($_.evidenceReferences) } |
+        ForEach-Object observationId | Select-Object -Unique)
     for ($index = 0; $index -lt $Record.observations.Count; $index++) {
         $id = [string]$Record.observations[$index].observationId
         if ($id -in $referencedObservations) { $observationAnchors.Add($id, 'o' + $index) }
@@ -2335,6 +2336,48 @@ function Get-CombinedAssessmentContractSetVersion {
     elseif($null -ne $IdentityCollector){'1.2.0'}else{'1.1.0'}
 }
 
+function Complete-CancelledAssessmentScopeCoverage {
+    param([Parameter(Mandatory)] $Record, [Parameter(Mandatory)] $ContractDefinition)
+
+    # The approved comprehensive selection survives interruption. A collector
+    # that was never scheduled has no envelope or observations; retain its
+    # declared scope as NotAttempted instead of shrinking the selected profile.
+    $profile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness'
+    $selected = @($ContractDefinition.scopeDefinitions | Where-Object { $profile -in $_.profileIds })
+    $obsolete = @($Record.coverage | Where-Object scopeId -notin $selected.scopeId)
+    if (@($obsolete | Where-Object state -ne 'NotAttempted').Count -gt 0) {
+        throw 'Cancelled assessment cannot discard attempted evidence scopes.'
+    }
+    $obsoleteDiagnostics = @($obsolete | ForEach-Object diagnosticIds)
+    $Record.coverage = @($Record.coverage | Where-Object scopeId -in $selected.scopeId)
+    $Record.diagnostics = @($Record.diagnostics | Where-Object diagnosticId -notin $obsoleteDiagnostics)
+    # The earlier profile's placeholder connectivity advice is superseded by
+    # the selected connectivity scopes, just as in normal connectivity assembly.
+    $obsoleteFindings = @($Record.findings | Where-Object ruleId -eq 'rule:network.local-only-coverage/1.0.0' | ForEach-Object findingId)
+    $Record.findings = @($Record.findings | Where-Object findingId -notin $obsoleteFindings)
+    $Record.recommendations = @($Record.recommendations | Where-Object {
+        @($_.findingIds | Where-Object { $_ -in $obsoleteFindings }).Count -eq 0
+    })
+    foreach ($scope in $selected) {
+        if ($scope.scopeId -in $Record.coverage.scopeId) { continue }
+        $suffix = $scope.scopeId.Substring('scope:'.Length)
+        $diagnosticId = "diagnostic:not-attempted-$suffix`:$($Record.run.runId)"
+        $Record.coverage += [pscustomobject][ordered]@{
+            coverageId = "coverage:not-attempted-$suffix`:$($Record.run.runId)"
+            scopeId = $scope.scopeId; state = 'NotAttempted'
+            reasonCode = 'RUN.CANCELLED_BEFORE_SCHEDULING'
+            observationIds = @(); diagnosticIds = @($diagnosticId)
+        }
+        $Record.diagnostics += [pscustomobject][ordered]@{
+            diagnosticId = $diagnosticId; scopeId = $scope.scopeId; phase = 'Collection'
+            reasonCode = 'RUN.CANCELLED_BEFORE_SCHEDULING'; operatorMessageId = 'collection.not-attempted'
+        }
+    }
+    $Record.run.evidenceProfileId = $profile
+    $Record.contractVersion = $ContractDefinition.contractVersion
+    $Record
+}
+
 function Invoke-DeviceReadinessSlice {
     param(
         [Parameter()] [string] $LiteralPath,
@@ -3127,6 +3170,10 @@ function Invoke-DeviceReadinessSlice {
                 $sliceStage='FINAL_SERIALIZE'
                 if ((Get-AssessmentCancellationToken).IsCancellationRequested) {
                     $record.run.outcome = 'Cancelled'
+                    if (-not $isFixture) {
+                        $record = Complete-CancelledAssessmentScopeCoverage -Record $record `
+                            -ContractDefinition (Get-EmbeddedAssessmentContractSet -ConvertFromJsonCommand $ConvertFromJsonCommand).Definition
+                    }
                 }
                 [byte[]]$recordBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
                     (& $ConvertToJsonCommand -InputObject $record -Compress -Depth 30)

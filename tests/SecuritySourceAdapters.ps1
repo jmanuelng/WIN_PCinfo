@@ -114,7 +114,7 @@ function Get-PrivilegedCollectionPlanPolicy {
 }
 
 function Assert-SecuritySourceReport {
-    param($Record,[string]$Html,[string]$Scenario)
+    param($Record,[string]$Html,[string]$Scenario,[string]$Culture='')
     foreach($scope in @('defender.runtime','defender.asr','defender.network-protection','firewall.domain-profile','firewall.private-profile','firewall.public-profile','smartscreen.shell','smartscreen.app-install-control')){
         $expected=if($Scenario -eq 'NullRuntime' -and $scope -eq 'defender.runtime'){'Partial'}else{'Complete'}
         if($Scenario -in @('MalformedRuntime','CultureMode') -and $scope -eq 'defender.runtime'){$expected='Malformed'}
@@ -142,7 +142,7 @@ function Assert-SecuritySourceReport {
         $expectedSource=if($observation.fieldId -match '\.(asr\.|network-protection)'){'source:windows.defender.preferences'}else{'source:windows.defender.runtime-status'}
         Assert-Equal $expectedSource $provenance.sourceId 'security observations retain authoritative structured provenance'
         Assert-Equal $true ([bool]$provenance.collectedAt) 'security evidence retains collection time'
-        Assert-Equal $(if($Scenario -eq 'CultureMode'){'tr-TR'}elseif($Scenario -in @('es-MX','tr-TR','ja-JP','ar-SA')){$Scenario}else{'en-US'}) $provenance.sourceLocale 'source culture cannot change stable security semantics'
+        Assert-Equal $(if($Culture){$Culture}elseif($Scenario -eq 'CultureMode'){'tr-TR'}elseif($Scenario -in @('es-MX','tr-TR','ja-JP','ar-SA')){$Scenario}else{'en-US'}) $provenance.sourceLocale 'source culture cannot change stable security semantics'
     }
     if($Scenario -notin @('MalformedRuntime','CultureMode','Unavailable','Unsupported','Denied','ImportDenied')){
         Assert-Equal $(if($Scenario -eq 'Passive'){'Passive Mode'}else{'Normal'}) @($Record.observations|Where-Object fieldId -eq 'field:policy.defender.running-mode')[0].value 'runtime is distinct from preferences'

@@ -1030,8 +1030,8 @@ function Invoke-SoftwareInventoryCollection {
                         -Payload $snapshot.payload -Policy $Policy
                 }
                 else {
-                    $state = if ($snapshot.reasonCode -eq 'PROCESS.TIMED_OUT') {'TimedOut'}
-                        elseif ($snapshot.reasonCode -eq 'PROCESS.CANCELLED') {'Cancelled'}
+                    $state = if ($snapshot.reasonCode -in @('PROCESS.TIMED_OUT','PROCESS.DEADLINE_EXCEEDED')) {'TimedOut'}
+                        elseif ($snapshot.reasonCode -in @('PROCESS.CANCELLED','PROCESS.CANCELLED_COOPERATIVELY','PROCESS.CANCELLED_HARD')) {'Cancelled'}
                         else {'Failed'}
                     $raw = New-SoftwareInventoryGapPayload -Policy $Policy -State $state `
                         -ReasonCode ([string]$snapshot.reasonCode) -Relationship SameUser `

@@ -322,7 +322,7 @@ function Invoke-NetworkTopologyCollection {
             $payload=Copy-NetworkTopologyCollectorPayload -Payload $attempt.payload -Policy $Policy -NetworkBehavior $NetworkBehavior
             return [pscustomobject][ordered]@{state='Completed';reasonCode='NETWORK.COLLECTION_COMPLETED';payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=([DateTimeOffset]$attempt.startedAt).ToString('o');completedAt=([DateTimeOffset]$attempt.completedAt).ToString('o');executionContext='StandardUser';attempts=1};cleanupVerified=$true}
         }
-        $state=if($attempt.reasonCode -match 'TIMEOUT'){'TimedOut'}elseif($attempt.reasonCode -match 'CANCEL'){'Cancelled'}elseif($attempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
+        $state=if($attempt.reasonCode -match 'TIMEOUT' -or $attempt.reasonCode -eq 'PROCESS.DEADLINE_EXCEEDED'){'TimedOut'}elseif($attempt.reasonCode -match 'CANCEL'){'Cancelled'}elseif($attempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
         $payload=New-NetworkTopologyGapPayload -Policy $Policy -State $state -ReasonCode ([string]$attempt.reasonCode) -Relationship SameUser -ObservedContext StandardUser -NetworkBehavior $NetworkBehavior
         return [pscustomobject][ordered]@{state='Completed';reasonCode=[string]$attempt.reasonCode;payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=([DateTimeOffset]$attempt.startedAt).ToString('o');completedAt=([DateTimeOffset]$attempt.completedAt).ToString('o');executionContext='StandardUser';attempts=1};cleanupVerified=$true}
     }

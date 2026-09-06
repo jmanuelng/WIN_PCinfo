@@ -234,7 +234,7 @@ function Test-CertificateTrustPayload {
         foreach($state in @($Payload.scopeStates)){
             if(-not (Test-CertificateTrustObjectShape $state @('scopeId','state','reasonCode')) -or
                 [string]$state.scopeId -notin @($Policy.purposes.scopeId) -or
-                [string]$state.state -notin @('Complete','Partial','NotApplicable','Unavailable','Constrained','Denied','Malformed','TimedOut','Failed') -or
+                [string]$state.state -notin @('Complete','Partial','NotApplicable','Unavailable','Constrained','Denied','Malformed','TimedOut','Cancelled','Failed') -or
                 ($state.state -eq 'Complete' -and $state.reasonCode) -or
                 ($state.state -ne 'Complete' -and (-not (Test-CertificateTrustText $state.reasonCode 96) -or [string]$state.reasonCode -cnotmatch '^[A-Z][A-Z0-9_]*(?:\.[A-Z][A-Z0-9_]*)+$'))){return $false}
         }
@@ -422,7 +422,19 @@ function Invoke-CertificateTrustCollection {
             try{$processSid=[string]$identity.User.Value;$administrator=[Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)}finally{$identity.Dispose()}
             if($processSid -ne $AssessmentUserSid -or $administrator){$payload=New-CertificateTrustGapPayload $Policy Denied 'CERTIFICATE.ASSESSMENT_USER_CONTEXT_REQUIRED' $(if($processSid -ne $AssessmentUserSid){'AlternateAdministrator'}else{'SameUser'}) Administrator}else{
                 $snapshot=Invoke-BoundedCertificateTrustSnapshot -Policy $Policy -AssessmentUserSid $AssessmentUserSid;$started=$snapshot.startedAt;$completed=$snapshot.completedAt
-                if($snapshot.succeeded){$payload=$snapshot.payload}else{$timedOut=$snapshot.reasonCode -eq 'PROCESS.DEADLINE_EXCEEDED';$payload=New-CertificateTrustGapPayload $Policy $(if($timedOut){'TimedOut'}else{'Failed'}) $(if($timedOut){'CERTIFICATE.DEADLINE_EXCEEDED'}else{'CERTIFICATE.SOURCE_FAILED'}) 'SameUser' 'StandardUser'}
+                if($snapshot.succeeded){$payload=$snapshot.payload}else{
+                    $state = switch ($snapshot.reasonCode) {
+                        'PROCESS.DEADLINE_EXCEEDED' { 'TimedOut' }
+                        { $_ -in @('PROCESS.CANCELLED_COOPERATIVELY','PROCESS.CANCELLED_HARD') } { 'Cancelled' }
+                        default { 'Failed' }
+                    }
+                    $reason = switch ($state) {
+                        TimedOut { 'CERTIFICATE.DEADLINE_EXCEEDED' }
+                        Cancelled { 'CERTIFICATE.COLLECTION_CANCELLED' }
+                        default { 'CERTIFICATE.SOURCE_FAILED' }
+                    }
+                    $payload=New-CertificateTrustGapPayload $Policy $state $reason 'SameUser' 'StandardUser'
+                }
             }
         }
     }else{$payload=New-CertificateTrustSyntheticPayload $ValidationScenario $Policy}

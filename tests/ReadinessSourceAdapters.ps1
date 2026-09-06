@@ -130,7 +130,7 @@ function Get-PrivilegedCollectionPlanPolicy {
 }
 
 function Assert-ReadinessSourceReport {
-    param($Record, [string] $Html, [string] $Scenario)
+    param($Record, [string] $Html, [string] $Scenario, [string] $Culture = '')
     Assert-Equal 'profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness' $Record.run.evidenceProfileId 'source audit uses the Comprehensive profile'
     if ($Scenario -eq 'Denied') {
         foreach ($kind in @('ACTIVATION','CHASSIS','BATTERY')) {
@@ -222,7 +222,7 @@ function Assert-ReadinessSourceReport {
             Assert-Equal "source:$($expected[$field][1])" $provenance.sourceId 'source identity is stable and traceable'
             Assert-Equal $true ([bool]$provenance.collectedAt) 'source observation retains collection time'
             if ($provenance.collectorId -eq 'collector:windows.device-context') {
-                Assert-Equal 'fr-FR' $provenance.sourceLocale 'numeric evidence remains locale neutral under a French source culture'
+                Assert-Equal $(if($Culture){$Culture}else{'fr-FR'}) $provenance.sourceLocale 'numeric evidence remains locale neutral under a French source culture'
             }
         }
         foreach ($text in @('Professional','26100','X64','Activated','Charging','72','180','3.7')) {

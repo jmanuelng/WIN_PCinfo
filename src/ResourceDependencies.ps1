@@ -389,7 +389,7 @@ function Invoke-ResourceDependenciesCollection {
             $payload=ConvertTo-ResourceDependencyAttemptPayload -Payload $attempt.payload -Policy $Policy
             return [pscustomobject][ordered]@{state='Completed';reasonCode='RESOURCE.COLLECTION_COMPLETED';payload=$payload;envelope=[pscustomobject][ordered]@{startedAt=([DateTimeOffset]$attempt.startedAt).ToString('o');completedAt=([DateTimeOffset]$attempt.completedAt).ToString('o');executionContext='StandardUser';attempts=1};cleanupVerified=$true}
         }
-        $state=if([string]$attempt.reasonCode -match 'TIMEOUT'){'TimedOut'}
+        $state=if([string]$attempt.reasonCode -match 'TIMEOUT' -or $attempt.reasonCode -eq 'PROCESS.DEADLINE_EXCEEDED'){'TimedOut'}
             elseif([string]$attempt.reasonCode -match 'CANCEL'){'Cancelled'}
             elseif([string]$attempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
         $payload=New-ResourceDependencyGapPayload -Policy $Policy -State $state `

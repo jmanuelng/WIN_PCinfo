@@ -155,7 +155,10 @@ function Join-ProtectedPackageBytes {
         }
         $stream.ToArray()
     }
-    finally { $stream.Dispose() }
+    finally {
+        [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($stream.GetBuffer())
+        $stream.Dispose()
+    }
 }
 
 function Test-ProtectedPackageBytesEqual {
@@ -379,11 +382,15 @@ function New-DeterministicAssessmentPackage {
         finally { $archive.Dispose() }
         [byte[]] $innerBytes = $memory.ToArray()
         if ($innerBytes.Length -gt [int] $policy.innerPackage.maximumArchiveBytes) {
+            [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($innerBytes)
             throw 'The deterministic inner package exceeded its release bound.'
         }
         [pscustomobject][ordered]@{ bytes = $innerBytes; manifest = $manifest }
     }
-    finally { $memory.Dispose() }
+    finally {
+        [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($memory.GetBuffer())
+        $memory.Dispose()
+    }
 }
 
 function Read-ProtectedPackageZipEntry {
@@ -400,9 +407,14 @@ function Read-ProtectedPackageZipEntry {
     try {
         $input.CopyTo($output)
         if ($output.Length -gt $MaximumBytes) { throw 'An inner-package entry expanded beyond its bound.' }
-        $output.ToArray()
+        # Preserve one owned clearable array instead of pipeline-enumerated
+        # boxed bytes, whose later byte[] cast would clear only a copy.
+        ,$output.ToArray()
     }
-    finally { $input.Dispose(); $output.Dispose() }
+    finally {
+        [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($output.GetBuffer())
+        $input.Dispose(); $output.Dispose()
+    }
 }
 
 function Test-AssessmentPackageManifest {
@@ -458,6 +470,9 @@ function Read-DeterministicAssessmentPackage {
     if ($Bytes.Length -gt [int] $policy.innerPackage.maximumArchiveBytes) {
         throw 'The inner package exceeded its release size bound.'
     }
+    $artifacts = [ordered]@{}
+    [byte[]] $manifestBytes = $null
+    $transferred = $false
     $memory = [System.IO.MemoryStream]::new($Bytes, $false)
     try {
         $archive = [System.IO.Compression.ZipArchive]::new(
@@ -486,7 +501,6 @@ function Read-DeterministicAssessmentPackage {
                 $Bytes.Length -gt 1048576){
                 throw 'The historical inner package exceeded its frozen release bound.'
             }
-            $artifacts = [ordered]@{}
             foreach ($definition in @($policy.innerPackage.artifacts)) {
                 $entry = $entries | Where-Object FullName -ceq $definition.relativePath
                 $artifacts[[string] $definition.relativePath] = Read-ProtectedPackageZipEntry `
@@ -497,11 +511,22 @@ function Read-DeterministicAssessmentPackage {
                     -Bytes ([byte[]] $artifacts['assessment-record.json']))) {
                 throw 'The package manifest, digests, schema, or semantics are invalid.'
             }
+            $transferred = $true
             [pscustomobject][ordered]@{ manifest = $manifest; artifacts = $artifacts }
         }
         finally { $archive.Dispose() }
     }
-    finally { $memory.Dispose() }
+    finally {
+        if ($null -ne $manifestBytes) {
+            [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($manifestBytes)
+        }
+        if (-not $transferred) {
+            foreach ($buffer in $artifacts.Values) {
+                [System.Security.Cryptography.CryptographicOperations]::ZeroMemory([byte[]] $buffer)
+            }
+        }
+        $memory.Dispose()
+    }
 }
 
 function Read-ProtectedPackageEnvelopeHeader {
@@ -582,7 +607,7 @@ function Write-ProtectedPackageEnvelope {
         [Parameter(DontShow)]
         [System.DateTimeOffset] $SyntheticAdmissionTime = [System.DateTimeOffset]::UtcNow,
         [Parameter(DontShow)]
-        [ValidateSet('None', 'SetupFailure', 'InterruptedWrite', 'DiskExhaustion')]
+        [ValidateSet('None', 'SetupFailure', 'InterruptedWrite', 'DiskExhaustion', 'ChunkWriteFailure')]
         [string] $SyntheticWriteFailure = 'None'
     )
 
@@ -676,6 +701,9 @@ function Write-ProtectedPackageEnvelope {
                     -ChunkIndex $index -PlaintextLength $length -CiphertextLength $length -Nonce $nonce
                 try {
                     $aes.Encrypt($nonce, $chunk, $ciphertext, $tag, $aad)
+                    if ($SyntheticWriteFailure -eq 'ChunkWriteFailure') {
+                        throw [System.IO.IOException]::new('Synthetic write failure with an active plaintext chunk.')
+                    }
                     $writer.Write([int] $index)
                     $writer.Write([int] $length)
                     $writer.Write([int] $ciphertext.Length)
@@ -859,7 +887,7 @@ function New-ProtectedEvidencePackage {
         [Parameter(DontShow)]
         [System.DateTimeOffset] $SyntheticAdmissionTime = [System.DateTimeOffset]::UtcNow,
         [Parameter(DontShow)]
-        [ValidateSet('None', 'SetupFailure', 'InterruptedWrite', 'DiskExhaustion')]
+        [ValidateSet('None', 'SetupFailure', 'InterruptedWrite', 'DiskExhaustion', 'ChunkWriteFailure')]
         [string] $SyntheticWriteFailure = 'None'
     )
 
