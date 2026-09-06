@@ -303,6 +303,24 @@ function Show-StatusDeskRecipientDialog {
     $result.Value
 }
 
+function Stop-StatusDeskForCleanupFailure {
+    param([Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] [hashtable] $Controls,
+        [Parameter(Mandatory)] $Session)
+    # A different assessment destination cannot make unresolved plaintext safe.
+    # Keep this invocation blocked even if a later deliberate recovery succeeds.
+    $State.ViewingCleanupFailed=$true
+    $Session.ExitCode=60
+    if (-not $Session.Completed) {
+        Request-StatusDeskCancellation $Session
+        Set-StatusDeskDecision -Session $Session -Approve $false -PlanDigest 'cleanup-failed'
+    }
+    foreach ($name in @('Approve','Decline','Cancel','SelectRecipient','SetupRecipient','OpenExisting','OpenReport','SaveHtml')) {
+        $Controls[$name].IsEnabled=$false
+    }
+    $Controls.Status.Text='CleanupIncomplete — new work blocked'
+    $Controls.Details.Text += "`nNew assessment, setup, viewing and export are blocked for this invocation. Retain protected evidence and recovery records. Use deliberate recovery or close; start a fresh invocation only after owned cleanup is verified."
+}
+
 function Invoke-StatusDesk {
     param([Parameter(Mandatory)] [string] $ModuleText, [Parameter(Mandatory)] [hashtable] $LaunchParameters,
         [Parameter()] [scriptblock] $ViewReady)
@@ -325,6 +343,7 @@ function Invoke-StatusDesk {
     # Handlers run synchronously on this STA while ShowDialog keeps this scope
     # alive. A dynamic closure module would lose the generated script's helpers.
     $controls.Approve.Add_Click({
+        if ($state.ViewingCleanupFailed) { return }
         if ($state.Preparation) {
             $summary = $state.Preparation | ConvertFrom-Json
             Set-StatusDeskDecision -Session $session -Approve $true -PlanDigest $summary.planDigest
@@ -342,7 +361,7 @@ function Invoke-StatusDesk {
     $controls.Close.Add_Click({ $window.Close() })
     $controls.Recover.Add_Click({ $state.RecoveryRequested=$true; $window.Close() })
     $controls.SelectRecipient.Add_Click({
-        if ($session.Transport.DecisionReady.IsSet) { return }
+        if ($state.ViewingCleanupFailed -or $session.Transport.DecisionReady.IsSet) { return }
         $selection = Show-StatusDeskRecipientDialog -Owner $window -Purpose Selection
         if ($null -ne $selection) {
             $state.NextSelection=$selection
@@ -350,15 +369,15 @@ function Invoke-StatusDesk {
         }
     })
     $controls.SetupRecipient.Add_Click({
-        if (-not $controls.SetupRecipient.IsEnabled -or $session.Transport.DecisionReady.IsSet) { return }
+        if ($state.ViewingCleanupFailed -or -not $controls.SetupRecipient.IsEnabled -or $session.Transport.DecisionReady.IsSet) { return }
         $setup = Show-StatusDeskRecipientDialog -Owner $window -Purpose Setup
         if($null -ne $setup -and $setup.state -eq 'CleanupIncomplete'){
-            $state.ViewingCleanupFailed=$true
-            $controls.Approve.IsEnabled=$false; $controls.SetupRecipient.IsEnabled=$false; $controls.SelectRecipient.IsEnabled=$false
-            $controls.Status.Text='CleanupIncomplete — recipient setup requires attention'
+            $controls.Details.Text='Recipient setup requires cleanup attention.'
+            Stop-StatusDeskForCleanupFailure -State $state -Controls $controls -Session $session
         }
     })
     $controls.OpenExisting.Add_Click({
+        if ($state.ViewingCleanupFailed) { return }
         $dialog=[Microsoft.Win32.OpenFileDialog]::new()
         $dialog.Title='Choose an existing encrypted Protected Evidence Package'
         $dialog.Filter='Protected Evidence Package|*.winpcinfo|All files|*.*'
@@ -382,10 +401,12 @@ function Invoke-StatusDesk {
         $recovery=Invoke-AssessmentRecoveryGate -Destination $picker.FolderName -Authorized $true
         $controls.Status.Text=$recovery.outcome + ' — ' + $recovery.reasonCode
         $controls.Details.Text=$recovery.guidance
-        if(-not $recovery.cleanup.verified){$state.ViewingCleanupFailed=$true;$session.ExitCode=60}
+        if(-not $recovery.cleanup.verified -or $state.ViewingCleanupFailed){
+            Stop-StatusDeskForCleanupFailure -State $state -Controls $controls -Session $session
+        }
     })
     $controls.SaveHtml.Add_Click({
-        if (-not $state.PackagePath) { return }
+        if ($state.ViewingCleanupFailed -or -not $state.PackagePath) { return }
         $warning=Get-RestrictedReportExportWarning
         if ([System.Windows.MessageBox]::Show($window,$warning.warning + "`n`n" +
             'Choose a private local folder restricted to your Windows user and SYSTEM, outside repositories, public and synced folders. Every copy remains restricted; ordinary deletion is not forensic erasure.',
@@ -399,15 +420,18 @@ function Invoke-StatusDesk {
             -ProtectionRoute $state.ProtectionRoute -WarningAcknowledgment $warning.acknowledgmentRequired
         $controls.Status.Text=$export.state + ' — ' + $export.reasonCode
         $controls.Details.Text += "`nExport remains Restricted Diagnostic Evidence. Transfer privately and delete all copies after use."
-        if ($export.state -eq 'CleanupIncomplete') { $state.ViewingCleanupFailed=$true; $session.ExitCode=60 }
+        if ($export.state -eq 'CleanupIncomplete') {
+            Stop-StatusDeskForCleanupFailure -State $state -Controls $controls -Session $session
+        }
     })
     $controls.OpenReport.Add_Click({
+        if ($state.ViewingCleanupFailed) { return }
         $result = Show-StatusDeskReport -PackagePath $state.PackagePath -Owner $window -ProtectionRoute $state.ProtectionRoute
         if (-not $result.verified) {
             if ($result.state -eq 'CleanupIncomplete') {
                 $controls.Status.Text='CleanupIncomplete — report viewing needs attention'
                 $controls.Details.Text='The viewing operation did not verify safe closure. Retain the protected package and recovery record for cleanup. Ordinary deletion is not forensic erasure.'
-                $state.ViewingCleanupFailed=$true; $session.ExitCode=60
+                Stop-StatusDeskForCleanupFailure -State $state -Controls $controls -Session $session
             }
             elseif ($result.state -eq 'IntegrityFailed') {
                 $controls.Status.Text='IntegrityFailed — protected report could not be verified'
@@ -424,7 +448,7 @@ function Invoke-StatusDesk {
             $eventArgs.Cancel=$true; $state.Closing=$true
             Request-StatusDeskCancellation $session
             Set-StatusDeskDecision -Session $session -Approve $false -PlanDigest 'closing'
-            $controls.Status.Text='Closing — waiting for owned work and cleanup…'
+            if (-not $state.ViewingCleanupFailed) { $controls.Status.Text='Closing — waiting for owned work and cleanup…' }
         }
     })
     $timer.Add_Tick({
@@ -442,10 +466,10 @@ function Invoke-StatusDesk {
             $controls.ScopeFact.Text=$summary.plan.scope.profileName
             $controls.NetworkFact.Text=$summary.plan.network.behavior
             $controls.OutputFact.Text='Encrypted · recipient ' + $summary.plan.output.recipientProfile.mode
-            $controls.Details.Text=Get-StatusDeskPreparationText $summary
+            if (-not $state.ViewingCleanupFailed) { $controls.Details.Text=Get-StatusDeskPreparationText $summary }
             if ($summary.plan.cleanup.staleRunRecovery.requested) { $controls.Approve.Content='_Approve recovery only' }
-            $controls.Status.Text=if($summary.readyForApproval){'Ready for your approval'}else{'Preparation unavailable'}
-            $controls.Approve.IsEnabled=$summary.readyForApproval -and -not $session.Transport.DecisionReady.IsSet
+            if (-not $state.ViewingCleanupFailed) { $controls.Status.Text=if($summary.readyForApproval){'Ready for your approval'}else{'Preparation unavailable'} }
+            $controls.Approve.IsEnabled=$summary.readyForApproval -and -not $session.Transport.DecisionReady.IsSet -and -not $state.ViewingCleanupFailed
         }
         [string]$json=''
         for ($index=0; $index -lt 32 -and $session.Transport.Events.TryTake([ref]$json); $index++) {
@@ -458,8 +482,10 @@ function Invoke-StatusDesk {
         if ((Complete-StatusDeskSession $session) -and -not $state.TerminalShown) {
             $state.TerminalShown=$true; $watch.Stop()
             $terminal=$session.Transport.State.Terminal | ConvertFrom-Json
-            $controls.Status.Text=$terminal.outcome
-            $controls.Details.Text='Outcome: ' + $terminal.outcome + "`nReason: " + $terminal.reasonCode + "`nCleanup verified: " + $terminal.cleanup.verified
+            if (-not $state.ViewingCleanupFailed) {
+                $controls.Status.Text=$terminal.outcome
+                $controls.Details.Text='Outcome: ' + $terminal.outcome + "`nReason: " + $terminal.reasonCode + "`nCleanup verified: " + $terminal.cleanup.verified
+            }
             $controls.Approve.IsEnabled=$false; $controls.Decline.IsEnabled=$false; $controls.Cancel.IsEnabled=$false
             $controls.SelectRecipient.IsEnabled=$false; $controls.SetupRecipient.IsEnabled=$false
             $controls.OpenExisting.IsEnabled=$workflowAllowed -and $terminal.cleanup.verified -and -not $state.ViewingCleanupFailed
@@ -467,7 +493,7 @@ function Invoke-StatusDesk {
             if ($session.Transport.State.Completion) {
                 $summary=$session.Transport.State.Completion | ConvertFrom-Json
                 $controls.Details.Text += "`nProtected package: " + $summary.packageAvailability + "`nLocal access: " + $summary.resultSharingGuidance.localAccess + "`nRecipient access: " + $summary.resultSharingGuidance.recipientAccess + "`nResults are Restricted Diagnostic Evidence. Do not publish them."
-                $controls.OpenReport.IsEnabled=$terminal.outcome -ne 'IntegrityFailed' -and $summary.packageVerified -and $summary.packageAvailability -eq 'Available' -and [bool]$session.Transport.State.PackagePath
+                $controls.OpenReport.IsEnabled=-not $state.ViewingCleanupFailed -and $terminal.outcome -ne 'IntegrityFailed' -and $summary.packageVerified -and $summary.packageAvailability -eq 'Available' -and [bool]$session.Transport.State.PackagePath
                 $state.PackagePath=$session.Transport.State.PackagePath; $state.ProtectionRoute='Local'
                 $controls.SaveHtml.IsEnabled=$controls.OpenReport.IsEnabled
             }
