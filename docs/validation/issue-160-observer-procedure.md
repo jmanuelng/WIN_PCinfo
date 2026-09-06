@@ -7,8 +7,10 @@ Code Review fixed point: `43797b80b9af8be8e5ac15f8f2c66c962b53188b`.
 The existing private signed candidate, separate recipient, keys, trust and
 protected evidence remain unchanged. Completed private signing/setup checks must
 not be repeated. Actual desktop preparation, recipient confirmation, assessment
-consent, observation and the GUI-to-report milestone remain pending. September 6
-is still the incomplete private handoff target; #161 owns complete acceptance.
+consent, observation and the GUI-to-report milestone remain pending. The private
+handoff remains incomplete and due by end of September 6, America/Chicago
+(before September 7 at 00:00 CDT / 05:00 UTC), following the user's EOD
+clarification. #161 owns complete acceptance; this deadline grants no live authority.
 
 ## Preparation blockers and next action
 
