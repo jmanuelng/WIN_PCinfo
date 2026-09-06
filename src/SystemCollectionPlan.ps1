@@ -1688,14 +1688,14 @@ function Get-SystemCollectionWorkerPeer {
         [Parameter(Mandatory)] [ref] $IdentityHandle,
         [int] $ExpectedProcessId = 0)
     $clientId=[WinPCInfo.PrivilegedCollectionPlan.PipePeer]::GetClientProcessId($Server)
-    if (($ExpectedProcessId -gt 0 -and $clientId -ne $ExpectedProcessId) -or
-        -not $OwnedJob.ContainsProcess($clientId)) { throw 'The SYSTEM pipe peer is outside the owned worker Job.' }
+    if ($ExpectedProcessId -gt 0 -and $clientId -ne $ExpectedProcessId) { throw 'The SYSTEM pipe peer is not the expected worker.' }
     $process=[Diagnostics.Process]::GetProcessById($clientId)
     $heldIdentity=$null
     try {
         # Process.Handle requests broad access; a standard coordinator needs
         # only QUERY_LIMITED_INFORMATION to pin the authenticated PID lifetime.
         $heldIdentity=[WinPCInfo.PrivilegedCollectionPlan.PipePeer]::HoldProcessIdentity($clientId)
+        if (-not $OwnedJob.ContainsProcess($clientId)) { throw 'The SYSTEM pipe peer is outside the owned worker Job.' }
         if ([WinPCInfo.PrivilegedCollectionPlan.PipePeer]::GetIdentificationSid($Server) -cne $ExpectedSid) {
             throw 'The SYSTEM pipe token does not match the required authority.'
         }
