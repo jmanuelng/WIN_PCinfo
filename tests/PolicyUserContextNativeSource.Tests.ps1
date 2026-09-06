@@ -29,16 +29,25 @@ Assert-Equal (Get-SystemCollectionWorkerSource) $nested 'launch composition pres
 Assert-Equal $true ((ConvertTo-PrivilegedCollectionInlineCommand -Source $worker).Length -le 32500) 'the unchanged Windows launch bound admits the composed worker template'
 $maximumLength=0
 $policy=Get-PrivilegedCollectionPlanPolicy
+$systemPolicy=Get-SystemCollectionPlanPolicy
+$maximumDeadline=[int]$policy.deadlines.operationMaximumMilliseconds +
+    [int]$systemPolicy.deadlines.operationMaximumMilliseconds +
+    [int]$systemPolicy.deadlines.cleanupMaximumMilliseconds +
+    [int]$systemPolicy.deadlines.cancellationGraceMilliseconds +
+    [int]$systemPolicy.deadlines.terminationVerificationMilliseconds +
+    [int]$policy.deadlines.terminationVerificationMilliseconds
 foreach($sample in 1..8){
-    # All source substitutions are coordinator-owned. Exercise maximum-width
-    # numeric fields, the longest scenario names and independent full digests.
+    # All source substitutions are coordinator-owned. Exercise the frozen full
+    # phase deadline, widest positive process ID, longest admitted scenarios,
+    # and independent full digests.
     $hex=@(1..5|ForEach-Object {[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()})
     $configuration=[ordered]@{
         pipe=$policy.channel.pipeNamePrefix+$hex[0].Substring(0,32);nonce=$hex[0]
-        maximumBytes=16384;deadlineMilliseconds=2147483647;coordinatorProcessId=2147483647
+        maximumBytes=[int]$policy.channel.maximumMessageUtf8Bytes
+        deadlineMilliseconds=$maximumDeadline;coordinatorProcessId=2147483647
         executableSha256=$hex[1];workerPayloadSha256=$hex[2];planDigest=$hex[3]
-        workerFault='HangAfterPlan';firmwareScenario='SecureBootUnsupported'
-        administratorScenario='DomainGroupUnresolved';effectivePolicyScenario='AppLockerChannelIncomplete'
+        workerFault='HangAfterPlan';firmwareScenario='CollectorFailure'
+        administratorScenario='AlternateAdministrator';effectivePolicyScenario='RemoteManagementCombinations'
         jobName=$policy.channel.jobNamePrefix+$hex[0].Substring(0,32)
         systemEnabled=$true;systemPlanDigest=$hex[4];validationFixture=$true
     }

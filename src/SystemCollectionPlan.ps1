@@ -330,6 +330,12 @@ try {
 
         function Get-PolicyQueryFailureClassification {
             param([Exception] $Exception)
+            if ($Exception -is [UnauthorizedAccessException] -or
+                ($Exception.HResult -band 0xffff) -eq 5 -or
+                ($Exception -is [Microsoft.Management.Infrastructure.CimException] -and
+                    $Exception.NativeErrorCode -eq [Microsoft.Management.Infrastructure.NativeErrorCode]::AccessDenied)) {
+                return @{ State = 'Denied'; ReasonCode = 'POLICY.MDM_RESULT_QUERY_DENIED' }
+            }
             if ($Exception -is [Microsoft.Management.Infrastructure.CimException] -and
                 $Exception.NativeErrorCode -in @(
                     [Microsoft.Management.Infrastructure.NativeErrorCode]::InvalidNamespace,
@@ -2083,7 +2089,7 @@ function Invoke-SystemCollectionPlan {
                     'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
                 )
             }
-            elseif ([string]$fieldResult.state -eq 'Denied') { @('POLICY.MDM_PROVIDER_QUERY_DENIED') }
+            elseif ([string]$fieldResult.state -eq 'Denied') { @('POLICY.MDM_PROVIDER_QUERY_DENIED','POLICY.MDM_RESULT_QUERY_DENIED') }
             else { @() }
             if ([string] $fieldResult.scopeId -ne [string] $definition.scopeId -or
                 [string] $fieldResult.state -notin @('Complete', 'Unsupported', 'Unavailable', 'Denied') -or

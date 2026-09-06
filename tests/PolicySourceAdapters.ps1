@@ -10,7 +10,7 @@ function Add-ControlledPolicySources {
     if ($Scenario -eq 'LateIdentityChange') {
         $ModuleText=$ModuleText.Replace('Invoke-ControlledIdentityEnrollmentCollection -Policy $Policy -ValidationScenario StandardUser }', '$result=Invoke-ControlledIdentityEnrollmentCollection -Policy $Policy -ValidationScenario StandardUser; $result.privateAssessmentUserSid=''S-1-5-21-100-200-300-1002''; $result }')
     }
-    $ModuleText=$ModuleText.Replace("if (`$scenario -eq '') { `$scenario = 'InvalidFixture' }", "`$script:StatusDeskTransport.State.PolicySourceFailure+=(`$_.Exception.Message + ' ' + `$_.ScriptStackTrace); if (`$scenario -eq '') { `$scenario = 'InvalidFixture' }")
+    $ModuleText=$ModuleText.Replace("if (`$scenario -eq '') { `$scenario = 'InvalidFixture' }", "`$script:StatusDeskTransport.State.PolicySourceFailure=(`$_.Exception.Message + ' ' + `$_.ScriptStackTrace); if (`$scenario -eq '') { `$scenario = 'InvalidFixture' }")
     $ModuleText=$ModuleText.Replace('$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }', '$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $script:StatusDeskTransport.State.PolicyPrivilegeReason=$result.reasonCode; $result }')
     $ModuleText=$ModuleText.Replace('function Get-PrivilegedCollectionWorkerSource {', 'function Get-ControlledOriginalPolicyWorkerSource {')
     $ModuleText=$ModuleText.Replace('function Get-PrivilegedCollectionPlanPolicy {', 'function Get-ControlledOriginalPolicyWorkerPolicy {')
@@ -150,6 +150,10 @@ function Assert-PolicySourceReport {
     if ($Scenario -like 'Mdm*') {
         $mdmState=switch($Scenario){MdmDenied {'Denied'} MdmAbsent {'Unsupported'} MdmUnsupportedBuild {'Unsupported'} MdmMissingProperty {'Unavailable'} MdmUnavailable {'Unavailable'} default {'Complete'}}
         Assert-Equal $mdmState @($Record.coverage | Where-Object scopeId -eq 'scope:policy.mdm.security-option.machine-inactivity-limit')[0].state 'the actual bounded SYSTEM CSP source preserves field-specific gaps'
+        if ($Scenario -eq 'MdmDenied') {
+            Assert-Equal 'POLICY.MDM_RESULT_QUERY_DENIED' @($Record.coverage | Where-Object scopeId -eq 'scope:policy.mdm.security-option.machine-inactivity-limit')[0].reasonCode 'field denial stays distinct from provider discovery denial'
+            Assert-Equal $true $Html.Contains('POLICY.MDM_RESULT_QUERY_DENIED') 'protected HTML explains the denied field source'
+        }
         $conflict=@($Record.findings | Where-Object ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0]
         if ($Scenario -eq 'MdmConflict') {
             Assert-Equal 30 @($Record.observations | Where-Object fieldId -eq 'field:policy.mdm.security-option.machine-inactivity-limit-seconds')[0].value 'the controlled SYSTEM result reaches the canonical observation unchanged'

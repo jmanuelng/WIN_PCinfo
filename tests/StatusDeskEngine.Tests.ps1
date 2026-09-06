@@ -134,6 +134,10 @@ if ($IdentitySourceScenario) {
     $moduleText = Add-ControlledIdentitySources -ModuleText $moduleText -Scenario $IdentitySourceScenario
 }
 if ($PolicySourceScenario) {
+    $sessionSource=(Get-Command Start-StatusDeskSession).Definition.Replace(
+        '# Never copy an exception (potentially Restricted) into GUI activity.',
+        '$Transport.State.PolicySourceFailure=$_.Exception.Message + '' '' + $_.ScriptStackTrace')
+    . ([scriptblock]::Create('function Start-StatusDeskSession {' + $sessionSource + '}'))
     . (Join-Path $PSScriptRoot 'PolicySourceAdapters.ps1')
     $moduleText = Add-ControlledPolicySources -ModuleText $moduleText -Scenario $PolicySourceScenario
 }
