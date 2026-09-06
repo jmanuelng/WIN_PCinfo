@@ -82,6 +82,23 @@
         "additionalProperties": false,
         "queryKind": { "type": "string", "const": "PolicyCspResultCatalogV1", "maximumUtf8Bytes": 64 }
       },
+      "appLockerCspCatalog": {
+        "scopeId": "scope:policy.applocker.csp-channel",
+        "sourceId": "source:windows.applocker.csp-policy",
+        "requiredExecutionContext": "LocalSystem",
+        "namespace": "Root\\cimv2\\mdm\\dmmap",
+        "properties": ["EnforcementMode"],
+        "maximumInstancesPerClass": 8,
+        "maximumCollections": 5,
+        "classes": [
+          "MDM_AppLocker_ApplicationLaunchRestrictions01_EXE03",
+          "MDM_AppLocker_DLL03",
+          "MDM_AppLocker_MSI03",
+          "MDM_AppLocker_Script03",
+          "MDM_AppLocker_ApplicationLaunchRestrictions01_StoreApps03"
+        ],
+        "limitation": "MetadataOnlyMissingModeIsUnavailableNoPolicyXmlNoCrossGroupingWinnerNoGpInference"
+      },
       "policyResultCatalogs": [
         {
           "catalogId": "catalog:policy-csp-result.windows10/1.0.0",
@@ -260,7 +277,8 @@
         "scope:policy.mdm.security-option.lm-compatibility-level",
         "scope:policy.mdm.update.defer-feature-updates",
         "scope:policy.mdm.update.defer-quality-updates",
-        "scope:policy.mdm.update.disable-dual-scan"
+        "scope:policy.mdm.update.disable-dual-scan",
+        "scope:policy.applocker.csp-channel"
       ],
       "subjectIds": ["subject:device:primary"],
       "result": {
@@ -282,7 +300,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "EncodedReleaseSource",
-    "payloadSha256": "81ca51e027f63154fa40c62b2224dc9820db69f62b5651d317b35f85d21bd99f"
+    "payloadSha256": "4e854dec2f52e8095e3ca76a119638352c189b5ef108f5a18f02092d23eacc81"
   },
   "channel": {
     "pipeNamePrefix": "WINPCInfo-SystemCollection-v1-",

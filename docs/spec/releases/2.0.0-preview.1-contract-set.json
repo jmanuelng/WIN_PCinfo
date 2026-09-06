@@ -2194,7 +2194,7 @@
       "source": {
         "sourceId": "source:windows.bitlocker.volume-status",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "Get-BitLockerVolume VolumeStatus ConversionStatus"
+        "authoritativeIdentity": "Win32_EncryptableVolume GetConversionStatus ConversionStatus"
       },
       "valueType": "String",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -2220,7 +2220,7 @@
       "source": {
         "sourceId": "source:windows.bitlocker.volume-status",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "Get-BitLockerVolume VolumeStatus ProtectionStatus"
+        "authoritativeIdentity": "Win32_EncryptableVolume GetProtectionStatus ProtectionStatus"
       },
       "valueType": "String",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -2246,7 +2246,7 @@
       "source": {
         "sourceId": "source:windows.bitlocker.volume-status",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "Get-BitLockerVolume VolumeStatus EncryptionMethod"
+        "authoritativeIdentity": "Win32_EncryptableVolume GetEncryptionMethod EncryptionMethod"
       },
       "valueType": "String",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -2272,7 +2272,7 @@
       "source": {
         "sourceId": "source:windows.bitlocker.volume-status",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "Get-BitLockerVolume VolumeStatus LockStatus"
+        "authoritativeIdentity": "Win32_EncryptableVolume GetLockStatus LockStatus"
       },
       "valueType": "String",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -2298,7 +2298,7 @@
       "source": {
         "sourceId": "source:windows.bitlocker.volume-status",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "Get-BitLockerVolume KeyProtector KeyProtectorType"
+        "authoritativeIdentity": "Win32_EncryptableVolume GetKeyProtectors fixed KeyProtectorType filter"
       },
       "valueType": "String",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -2324,7 +2324,7 @@
       "source": {
         "sourceId": "source:windows.bitlocker.volume-status",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "Release-owned grouped count of Get-BitLockerVolume KeyProtectorType values"
+        "authoritativeIdentity": "Release-owned count of Win32_EncryptableVolume GetKeyProtectors filtered identifiers; identifiers discarded"
       },
       "valueType": "Integer",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -7680,7 +7680,7 @@
         "field:policy.applocker.csp.enforcement-mode"
       ],
       "collectorIds": [
-        "collector:windows.effective-policy"
+        "collector:windows.mdm-bridge.device-manageability"
       ]
     },
     {

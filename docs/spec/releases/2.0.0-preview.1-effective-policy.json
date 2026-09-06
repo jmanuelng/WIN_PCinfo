@@ -194,7 +194,7 @@
     },
     {
       "sourceId": "source:windows.bitlocker.volume-status",
-      "interface": "Get-BitLockerVolume",
+      "interface": "Win32_EncryptableVolume read-only status methods and type-filtered protector counts",
       "limitation": "OperatingSystemVolumeOnlyNoRecoveryMaterialNoProtectorIdentifiersNoEscrowClaim"
     },
     {
@@ -214,7 +214,7 @@
     },
     {
       "sourceId": "source:windows.applocker.csp-policy",
-      "interface": "Get-CimInstance MDM_AppLocker_*",
+      "interface": "LocalSystem finite AppLocker WMI Bridge EnforcementMode catalog",
       "limitation": "DevicePartitionCspOnlyNoGpInferenceNoRuleXmlPublication"
     }
   ],

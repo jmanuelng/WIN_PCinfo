@@ -60,8 +60,8 @@ Assert-Equal 'MDM_Policy_Result01_LocalPoliciesSecurityOptions02' $operation.sup
     'the security-options result class is an approved privileged source'
 Assert-Equal 'MDM_Policy_Result01_Update02' $operation.supplementalSources[3].className `
     'the Update result class is an approved privileged source'
-Assert-Equal 7 @($operation.privateResultScopeIds).Count `
-    'the operation separately freezes all seven restricted Policy CSP result scopes'
+Assert-Equal 8 @($operation.privateResultScopeIds).Count `
+    'the operation freezes seven restricted Policy CSP result scopes and the separate AppLocker CSP scope'
 Assert-Equal 2 @($operation.policyResultCatalogs).Count `
     'Windows 10 and Windows 11 Policy CSP result catalogs are both frozen'
 Assert-Equal 7 @($operation.policyResultCatalogs[0].resultFields).Count `
