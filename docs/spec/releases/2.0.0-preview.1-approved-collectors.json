@@ -21,7 +21,7 @@
       "payload": {
         "kind": "EncodedReleaseSource",
         "encoding": "PowerShellEncodedCommandUtf16Le",
-        "sha256": "9796611297a4807d6aa90c40b97d78542f79d2f938f6ee81fa4386073808e828"
+        "sha256": "a0ec7bda1e13eb250fcae4eaa5fc112502e38c8e90b6d3d27492a121d266e359"
       },
       "workingBoundary": {
         "kind": "ActivePowerShellHome",
@@ -74,7 +74,7 @@
       "payload": {
         "kind": "EncodedReleaseSource",
         "encoding": "PowerShellEncodedCommandUtf16Le",
-        "sha256": "9796611297a4807d6aa90c40b97d78542f79d2f938f6ee81fa4386073808e828"
+        "sha256": "a0ec7bda1e13eb250fcae4eaa5fc112502e38c8e90b6d3d27492a121d266e359"
       },
       "workingBoundary": { "kind": "ActivePowerShellHome", "writesAllowed": false },
       "environment": {
@@ -124,7 +124,7 @@
       "payload": {
         "kind": "EncodedReleaseSource",
         "encoding": "PowerShellEncodedCommandUtf16Le",
-        "sha256": "9796611297a4807d6aa90c40b97d78542f79d2f938f6ee81fa4386073808e828"
+        "sha256": "a0ec7bda1e13eb250fcae4eaa5fc112502e38c8e90b6d3d27492a121d266e359"
       },
       "workingBoundary": { "kind": "ActivePowerShellHome", "writesAllowed": false },
       "environment": {

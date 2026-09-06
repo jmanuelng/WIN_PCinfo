@@ -19,6 +19,7 @@ foreach ($mutation in @(
     { param($value) $value.collector.source = 'caller supplied' },
     { param($value) $value.collector.dependencies = @('download') },
     { param($value) $value.collector.deadlineMilliseconds = 6000 },
+    { param($value) $value.collector.sourceBounds.batteryRows = 2 },
     { param($value) $value.collector.standardOutputMaximumBytes = 32768 },
     { param($value) $value.collector.standardErrorMaximumBytes = 8192 },
     { param($value) $value.fieldIds = @('field:widened') },

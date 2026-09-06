@@ -240,7 +240,7 @@ function New-DeviceReadinessAssessmentRecord {
         [Parameter(Mandatory)] $Policy,
         [Parameter(Mandatory)] [bool] $ValidationFixture,
         [Parameter()] [ValidateSet('', 'Partial', 'Unavailable', 'Malformed', 'Failed',
-            'Denied', 'ProhibitedMaterialBlocked', 'Cancelled')]
+            'Denied', 'ProhibitedMaterialBlocked', 'Cancelled', 'TimedOut', 'Constrained')]
         [string] $CoverageStateOverride = '',
         [Parameter()] [string] $CoverageReasonCode = ''
     )
@@ -266,7 +266,7 @@ function New-DeviceReadinessAssessmentRecord {
     $observations = [System.Collections.Generic.List[object]]::new()
     $provenance = [System.Collections.Generic.List[object]]::new()
     $collectionExaminedFields = $CoverageStateOverride -notin @(
-        'Unavailable', 'Malformed', 'Failed', 'ProhibitedMaterialBlocked', 'Cancelled'
+        'Unavailable', 'Malformed', 'Failed', 'ProhibitedMaterialBlocked', 'Cancelled', 'TimedOut', 'Constrained'
     )
     if ($collectionExaminedFields) {
         foreach ($field in $fieldSpecs) {
@@ -357,6 +357,9 @@ function New-DeviceReadinessAssessmentRecord {
                 diagnosticId = "diagnostic:device-$($availability.kind)-access:$RunId"
                 scopeId = [string] $Policy.scopeId; phase = 'Collection'
                 reasonCode = if ($isDenied) { "COLLECTION.$upperKind`_ACCESS_DENIED" }
+                    elseif ($availability.state -eq 'Constrained') { "COLLECTION.$upperKind`_OUTPUT_LIMIT_EXCEEDED" }
+                    elseif ($availability.state -eq 'Unsupported') { "COLLECTION.$upperKind`_SOURCE_UNSUPPORTED" }
+                    elseif ($availability.state -eq 'Malformed') { "COLLECTION.$upperKind`_PAYLOAD_MALFORMED" }
                     else { "COLLECTION.$upperKind`_SOURCE_UNAVAILABLE" }
                 operatorMessageId = if ($isDenied) { "device.context.$($availability.kind)-access-denied" }
                     else { "device.context.$($availability.kind)-source-unavailable" }
@@ -535,7 +538,7 @@ function Add-ValidatedDeviceContextDerivations {
         $value = if ($null -ne $manufacturer -and $manufacturer.valueState -eq 'ObservedValue' -and
             $null -ne $model -and $model.valueState -eq 'ObservedValue') {
             [bool]([string]$manufacturer.value -match
-                '(?i)Microsoft Corporation|VMware|Xen|QEMU|VirtualBox' -or
+                '(?i)VMware|Xen|QEMU|VirtualBox' -or
                 [string]$model.value -match '(?i)Virtual Machine|VMware|VirtualBox|KVM|HVM')
         } else { $null }
         [pscustomobject]@{fieldId='field:device.virtualization.detected';value=$value}
@@ -591,7 +594,7 @@ function Complete-ValidatedDeviceReadinessAssessmentRecord {
     }
     $coverage = @($ValidatedRecord.coverage)[0]
     $sourceFailureState = [string]$coverage.state -in @(
-        'Unavailable','Malformed','Failed','Denied','ProhibitedMaterialBlocked','Cancelled'
+        'Unavailable','Malformed','Failed','Denied','ProhibitedMaterialBlocked','Cancelled','TimedOut','Constrained'
     )
     if (-not $sourceFailureState) {
         Add-ValidatedDeviceContextDerivations -Record $ValidatedRecord -Policy $Policy `
@@ -1187,7 +1190,7 @@ function New-DeviceReadinessReportBytes {
     $formFactor = $values['field:device.form-factor']
     $batteryPresence = $values['field:device.battery.presence']
     $accessDiagnostics = @($Record.diagnostics | Where-Object {
-        $_.reasonCode -match '^COLLECTION\.(ACTIVATION|CHASSIS|BATTERY)_(ACCESS_DENIED|SOURCE_UNAVAILABLE)$'
+        $_.reasonCode -match '^COLLECTION\.(ACTIVATION|CHASSIS|BATTERY)_(ACCESS_DENIED|SOURCE_UNAVAILABLE|SOURCE_UNSUPPORTED|OUTPUT_LIMIT_EXCEEDED|PAYLOAD_MALFORMED)$'
     } |
         ForEach-Object { [string]$_.reasonCode } | Sort-Object)
     $accessSummary = if ($accessDiagnostics.Count -eq 0) {
@@ -1199,8 +1202,11 @@ function New-DeviceReadinessReportBytes {
     $virtualLimitation = if ($virtualization -eq 'True') {
         'Windows evidence identifies this as virtual. Guest-visible battery and hardware values cannot support physical battery, firmware, TPM-attestation, OEM, or performance claims.'
     }
-    else {
+    elseif ($virtualization -eq 'False') {
         'No virtual signal was detected by this bounded rule. That does not prove the device is physical or establish firmware, TPM-attestation, OEM, or performance facts.'
+    }
+    else {
+        'Virtualization could not be determined from the available evidence. Physical hardware, firmware, TPM-attestation, OEM, and performance claims remain unproven.'
     }
     $firmwareSection = if ($null -ne $firmwareFinding) {
         $firmwareCoverage = @($Record.coverage | Where-Object {
@@ -2598,6 +2604,20 @@ function Invoke-DeviceReadinessSlice {
                 }
                 $coverageOverride = [string]$disposition.coverageState
                 $coverageReason = [string]$disposition.coverageReasonCode
+                if ($null -ne $identityCollector -and $collector.Supervision.processStarted -and
+                    [string]$collector.Supervision.reasonCode -in @(
+                        'PROCESS.DEADLINE_EXCEEDED','PROCESS.PAYLOAD_MALFORMED','PROCESS.OUTPUT_LIMIT_EXCEEDED')) {
+                    # A failed source attempt does not invalidate already collected,
+                    # normalized evidence. Ownership cleanup was verified above;
+                    # retain that evidence and describe the failed device scope.
+                    $buildCanonicalRecord = $true
+                    $coverageOverride = switch ([string]$collector.Supervision.reasonCode) {
+                        'PROCESS.DEADLINE_EXCEEDED' { 'TimedOut' }
+                        'PROCESS.OUTPUT_LIMIT_EXCEEDED' { 'Constrained' }
+                        default { 'Malformed' }
+                    }
+                    $coverageReason = ([string]$collector.Supervision.reasonCode).Replace('PROCESS.', 'COLLECTION.')
+                }
                 if ((Get-AssessmentCancellationToken).IsCancellationRequested -and $buildCanonicalRecord) {
                     $coverageOverride = 'Cancelled'
                     $coverageReason = 'COLLECTION.CANCELLED'
