@@ -1,5 +1,11 @@
 # Update and remote-configuration checkpoint (#145)
 
+Current continuation: [WinRM source correction checkpoint](issue-145-correction-evidence.md)
+and [static source proof](issue-145-winrm-source-proof.md). The earlier missing-source
+findings below describe the historical checkpoint. The correction implements
+all four required source fields; fresh independent correction reviews remain
+pending before closure. No historical live or full-suite gate is promoted.
+
 Starting/fixed review point: `19b45d6c84b22ff4006d78454b514c2baf0f6714`.
 Source checkpoint: `32be5665e52785dc6aaab0fac32449f871083f16` (DCO signed).
 Dependencies #137/#139 were CLOSED; #144 was incorporated at the exact starting
