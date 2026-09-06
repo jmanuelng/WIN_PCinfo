@@ -41,9 +41,12 @@ function Open-ControlledResourceKey {
         switch($this.Path){
             'CurrentUser\Network' {@('R','S')}
             'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Printers' {@('Printer-東京')}
-            'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Environments' {@('Windows x64')}
-            'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers' {@('Version-3')}
+            'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Environments' {if('__RESOURCE_CASE__' -eq 'DriverRegistrations'){@('Windows x64','Windows ARM64')}else{@('Windows x64')}}
+            'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers' {if('__RESOURCE_CASE__' -eq 'DriverRegistrations'){@('Version-3','Version-4')}else{@('Version-3')}}
             'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3' {@('Driver-東京')}
+            'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-4' {@('Driver-東京')}
+            'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Drivers' {@('Version-3')}
+            'LocalMachine\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Drivers\Version-3' {@('Driver-東京')}
             default {throw 'Unapproved registry enumeration.'}
         }
     }
@@ -51,13 +54,13 @@ function Open-ControlledResourceKey {
         if($Options -ne [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames){throw 'Registry expansion forbidden.'}
         switch($Name){
             RemotePath {if('__RESOURCE_CASE__' -eq 'Oversize'){return ('x'*513)}; return ('\\synthetic-file\'+$this.Path.Split('\')[-1]+'-東京')}
-            ProviderName {return 'Microsoft Windows Network'}
+            ProviderName {if('__RESOURCE_CASE__' -eq 'ProviderUnavailable'){return $null}; return 'Microsoft Windows Network'}
             Port {return 'PORT-東京:'}
             'Printer Driver' {return 'Driver-東京'}
             Attributes {return 64}
             Manufacturer {return 'Vendor-東京'}
-            DriverVersion {return '1.2.3'}
-            InfPath {return 'synthetic.inf'}
+            DriverVersion {if($this.Path -like '*\Version-4\*'){return '4.5.6'}; return '1.2.3'}
+            InfPath {if($this.Path -like '*\Version-4\*'){return 'synthetic-v4.inf'}; return 'synthetic.inf'}
             Device {return 'Printer-東京,winspool,PORT-東京:'}
             default {throw 'Unapproved registry value.'}
         }
@@ -74,7 +77,7 @@ function Read-ControlledResourceCim {
     switch($ClassName){
         Win32_NetworkConnection {
             if('__RESOURCE_CASE__' -eq 'ConnectionDenied'){throw [UnauthorizedAccessException]::new()}
-            [pscustomobject]@{LocalName='R:';RemoteName='\\synthetic-file\R-東京';ConnectionState='Disconnected';ProviderName='Microsoft Windows Network'}
+            [pscustomobject]@{LocalName='R:';RemoteName=$(if('__RESOURCE_CASE__' -eq 'ProviderMismatch'){'\\synthetic-file\Other-東京'}else{'\\synthetic-file\R-東京'})}
             1..2|ForEach-Object {[pscustomobject]@{LocalName='';RemoteName='\\synthetic-file\UNC-東京';ConnectionState='Connected';ProviderName='Microsoft Windows Network'}}
         }
         Win32_Printer { [pscustomobject]@{Name='Printer-東京';PortName='PORT-東京:';DriverName='Driver-東京';Network=$false;Default=$true;WorkOffline=$false} }

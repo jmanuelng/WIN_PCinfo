@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string[]]$Scenario=@('Complete','RegistryDenied','ConnectionDenied','PrinterDenied','DefaultDenied','PrinterMetadataDenied','PeripheralUnavailable','Maximum','Oversize','AlternateAdministrator','LocalSystem'))
+param([string[]]$Scenario=@('Complete','DriverRegistrations','ProviderMismatch','ProviderUnavailable','RegistryDenied','ConnectionDenied','PrinterDenied','DefaultDenied','PrinterMetadataDenied','PeripheralUnavailable','Maximum','Oversize','AlternateAdministrator','LocalSystem'))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')

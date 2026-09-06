@@ -92,7 +92,7 @@ function New-ResourceDependenciesSyntheticPayload {
         driverName='Synthetic Universal Driver';network=$true;default=$false;offline=$false
     }
     $driverItem=[pscustomobject][ordered]@{
-        name='Synthetic Universal Driver';manufacturer='Synthetic Vendor'
+        name='Synthetic Universal Driver';environment='Windows x64';driverModel='Version-3';manufacturer='Synthetic Vendor'
         version='1.0.0.0';infName='synthetic-printer.inf'
     }
     $peripheralItem=[pscustomobject][ordered]@{
@@ -115,7 +115,7 @@ function New-ResourceDependenciesSyntheticPayload {
                 driverName='Synthetic Local Driver';network=$false;default=$true;offline=$false
             })
             $drivers=@($driverItem,[pscustomobject][ordered]@{
-                name='Synthetic Local Driver';manufacturer='Synthetic Vendor'
+                name='Synthetic Local Driver';environment='Windows x64';driverModel='Version-3';manufacturer='Synthetic Vendor'
                 version='1.0.0.1';infName='synthetic-local.inf'
             })
         }
@@ -134,7 +134,7 @@ function New-ResourceDependenciesSyntheticPayload {
             $mapped=@(0..7|ForEach-Object {[pscustomobject][ordered]@{localName="$([char](82+$_)):";remoteEndpoint="\\synthetic-file\bounded-$($_+1)";connectionState='Connected';providerName='Microsoft Windows Network'}})
             $unc=@(0..7|ForEach-Object {[pscustomobject][ordered]@{remoteEndpoint="\\synthetic-file\unc-$($_+1)";connectionState='Connected';providerName='Microsoft Windows Network'}})
             $printers=@(0..7|ForEach-Object {[pscustomobject][ordered]@{name="Synthetic Printer $($_+1)";portName="SYNTHETIC-$($_+1):";driverName="Synthetic Driver $($_+1)";network=$true;default=$false;offline=$false}})
-            $drivers=@(0..7|ForEach-Object {[pscustomobject][ordered]@{name="Synthetic Driver $($_+1)";manufacturer='Synthetic Vendor';version="1.0.0.$_";infName="synthetic-$_.inf"}})
+            $drivers=@(0..7|ForEach-Object {[pscustomobject][ordered]@{name="Synthetic Driver $($_+1)";environment='Windows x64';driverModel='Version-3';manufacturer='Synthetic Vendor';version="1.0.0.$_";infName="synthetic-$_.inf"}})
             $peripherals=@(0..7|ForEach-Object {[pscustomobject][ordered]@{class='USB';name="Synthetic Peripheral $($_+1)";manufacturer='Synthetic Vendor';driverProvider='Synthetic Provider';driverVersion="2.0.0.$_";driverInfName="synthetic-device-$_.inf";driverSigned=$true}})
         }
         'Duplicates'{
@@ -147,7 +147,7 @@ function New-ResourceDependenciesSyntheticPayload {
         'LongUnicode'{
             $mapped=@([pscustomobject][ordered]@{localName='Ü:';remoteEndpoint='\\synthetic-file\迁移-Δοκιμή-équipe';connectionState='Connected';providerName='Réseau Windows'})
             $printers=@([pscustomobject][ordered]@{name='Imprimante-東京-Δοκιμή';portName='PORT-É:';driverName='Pilote-统一';network=$true;default=$false;offline=$false})
-            $drivers=@([pscustomobject][ordered]@{name='Pilote-统一';manufacturer='Fabricant-É';version='3.0.0.0';infName='pilote-unicode.inf'})
+            $drivers=@([pscustomobject][ordered]@{name='Pilote-统一';environment='Windows x64';driverModel='Version-3';manufacturer='Fabricant-É';version='3.0.0.0';infName='pilote-unicode.inf'})
             $peripherals=@([pscustomobject][ordered]@{class='USB';name='Périphérique-東京';manufacturer='Fabricant-É';driverProvider='Fournisseur-Δ';driverVersion='3.0.0.1';driverInfName='unicode-device.inf';driverSigned=$true})
         }
         'AlternateAdministrator'{$relationship='AlternateAdministrator';$observedContext='Administrator';$state='Denied';$reason='RESOURCE.ASSESSMENT_USER_CONTEXT_REQUIRED'}
@@ -155,7 +155,7 @@ function New-ResourceDependenciesSyntheticPayload {
         'NonEnglish'{
             $sourceLocale='fr-FR';$mapped=@([pscustomobject][ordered]@{localName='T:';remoteEndpoint='\\synthetic-file\équipe';connectionState='Connected';providerName='Réseau Windows'})
             $printers=@([pscustomobject][ordered]@{name='Imprimante Étage';portName='PORT-É:';driverName='Pilote Français';network=$true;default=$true;offline=$false})
-            $drivers=@([pscustomobject][ordered]@{name='Pilote Français';manufacturer='Fabricant';version='4.0.0.0';infName='francais.inf'})
+            $drivers=@([pscustomobject][ordered]@{name='Pilote Français';environment='Windows x64';driverModel='Version-3';manufacturer='Fabricant';version='4.0.0.0';infName='francais.inf'})
             $peripherals=@([pscustomobject][ordered]@{class='Mouse';name='Souris ergonomique';manufacturer='Fabricant';driverProvider='Fournisseur';driverVersion='4.0.0.1';driverInfName='souris.inf';driverSigned=$true})
         }
         default{throw 'The Resource Dependencies scenario is not release-owned.'}
@@ -235,8 +235,11 @@ function Test-ResourceDependenciesCollectorPayload {
                 ($null -ne $item.offline -and $item.offline -isnot [bool])){return $false}
         }
         foreach($item in @($Payload.printerDrivers)){
-            if(-not (Test-ResourceDependencyObjectShape $item @('name','manufacturer','version','infName')) -or
+            if(-not (Test-ResourceDependencyObjectShape $item @('name','environment','driverModel','manufacturer','version','infName')) -or
                 -not (Test-ResourceDependencyString $item.name 512) -or
+                -not (Test-ResourceDependencyString $item.environment 128) -or
+                -not (Test-ResourceDependencyString $item.driverModel 32) -or
+                [string]$item.driverModel -notmatch '^Version-[0-9]+$' -or
                 -not (Test-ResourceDependencyString $item.manufacturer 512 -AllowNull) -or
                 -not (Test-ResourceDependencyString $item.version 128 -AllowNull) -or
                 -not (Test-ResourceDependencyString $item.infName 260 -AllowNull)){return $false}
@@ -282,7 +285,7 @@ function Copy-ResourceDependenciesCollectorPayload {
         mappedDrives=@($Payload.mappedDrives|Sort-Object localName -Unique|ForEach-Object {[pscustomobject][ordered]@{localName=[string]$_.localName;remoteEndpoint=[string]$_.remoteEndpoint;connectionState=[string]$_.connectionState;providerName=if($null -eq $_.providerName){$null}else{[string]$_.providerName}}})
         uncConnections=@($Payload.uncConnections|Sort-Object remoteEndpoint -Unique|ForEach-Object {[pscustomobject][ordered]@{remoteEndpoint=[string]$_.remoteEndpoint;connectionState=[string]$_.connectionState;providerName=if($null -eq $_.providerName){$null}else{[string]$_.providerName}}})
         printers=@($Payload.printers|Sort-Object name -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;portName=if($null -eq $_.portName){$null}else{[string]$_.portName};driverName=if($null -eq $_.driverName){$null}else{[string]$_.driverName};network=[bool]$_.network;default=if($null -eq $_.default){$null}else{[bool]$_.default};offline=if($null -eq $_.offline){$null}else{[bool]$_.offline}}})
-        printerDrivers=@($Payload.printerDrivers|Sort-Object name -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};version=if($null -eq $_.version){$null}else{[string]$_.version};infName=if($null -eq $_.infName){$null}else{[string]$_.infName}}})
+        printerDrivers=@($Payload.printerDrivers|Sort-Object name,environment,driverModel -Unique|ForEach-Object {[pscustomobject][ordered]@{name=[string]$_.name;environment=[string]$_.environment;driverModel=[string]$_.driverModel;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};version=if($null -eq $_.version){$null}else{[string]$_.version};infName=if($null -eq $_.infName){$null}else{[string]$_.infName}}})
         peripherals=@($Payload.peripherals|Sort-Object class,name,driverVersion -Unique|ForEach-Object {[pscustomobject][ordered]@{class=[string]$_.class;name=[string]$_.name;manufacturer=if($null -eq $_.manufacturer){$null}else{[string]$_.manufacturer};driverProvider=if($null -eq $_.driverProvider){$null}else{[string]$_.driverProvider};driverVersion=if($null -eq $_.driverVersion){$null}else{[string]$_.driverVersion};driverInfName=if($null -eq $_.driverInfName){$null}else{[string]$_.driverInfName};driverSigned=[bool]$_.driverSigned}})
         scopeStates=@($Payload.scopeStates|ForEach-Object {[pscustomobject][ordered]@{scopeId=[string]$_.scopeId;state=[string]$_.state;reasonCode=[string]$_.reasonCode}})
         executionContext=[string]$Payload.executionContext
@@ -628,9 +631,17 @@ namespace WinPCInfo.ResourceDependencies {
         if($null -ne $local){
             # The local session table supersedes a remembered target, but does
             # not establish server reachability or current connection health.
+            # Retain the already-read provider only for the exact same drive
+            # and endpoint. A stale remembered target cannot describe this row.
+            $provider=$null
+            if($mappedSet.ContainsKey($local) -and [string]::Equals(
+                [string]$mappedSet[$local].remoteEndpoint,[string]$row.RemoteName,
+                [StringComparison]::Ordinal)){
+                $provider=$mappedSet[$local].providerName
+            }
             Add-BoundedUnique $mappedSet $local ([pscustomobject][ordered]@{
                 localName=$local;remoteEndpoint=[string]$row.RemoteName;connectionState=$state
-                providerName=$null
+                providerName=$provider
             }) $maximumMapped $scopes 'scope:resource.mapped-drives' $true
         }else{
             Add-BoundedUnique $uncSet ([string]$row.RemoteName) ([pscustomobject][ordered]@{
@@ -759,8 +770,8 @@ try{
                                 $inf=$driverKey.GetValue('InfPath',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                                 # An INF path is metadata only: retain the basename and never open it.
                                 if($inf -is [string]){$inf=$inf.Split([char[]]'\/')[-1]}
-                                Add-BoundedUnique $driverSet ($name+'|'+$environment+'|'+$versionName) ([pscustomobject][ordered]@{
-                                    name=[string]$name;manufacturer=$manufacturer
+                                Add-BoundedUnique $driverSet (($name,$environment,$versionName|ConvertTo-Json -Compress)) ([pscustomobject][ordered]@{
+                                    name=[string]$name;environment=[string]$environment;driverModel=[string]$versionName;manufacturer=$manufacturer
                                     version=if($null -eq $version){$null}else{[Convert]::ToString($version,[Globalization.CultureInfo]::InvariantCulture)}
                                     infName=$inf
                                 }) $maximumDrivers $scopes 'scope:resource.printer-drivers' $false
@@ -772,7 +783,7 @@ try{
         }}
     }finally{if($null -ne $environments){$environments.Dispose()}}
 }catch{$state=Get-FailureState $_.Exception;Set-Scope $scopes 'scope:resource.printer-drivers' $state (Get-FailureReason $state)}
-$drivers=@($driverSet.Values|Sort-Object name)
+$drivers=@($driverSet.Values|Sort-Object name,environment,driverModel)
 
 $peripheralSet=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 try{
@@ -950,7 +961,9 @@ function Add-ResourceDependenciesEvidenceRecord {
     foreach($item in @($payload.printerDrivers|Where-Object {$scopeStateById['scope:resource.printer-drivers'] -in @('Complete','Partial')})){
         $subjectId="subject:printer-driver:$index";$subjects.Add([pscustomobject][ordered]@{subjectId=$subjectId;kind='Application'})
         foreach($definition in @(
-            @('name','field:resource.printer-driver.name'),@('manufacturer','field:resource.printer-driver.manufacturer'),
+            @('name','field:resource.printer-driver.name'),
+            @('environment','field:resource.printer-driver.environment'),@('driverModel','field:resource.printer-driver.driver-model'),
+            @('manufacturer','field:resource.printer-driver.manufacturer'),
             @('version','field:resource.printer-driver.version'),@('infName','field:resource.printer-driver.inf-name')
         )){Add-ResourceValue 'scope:resource.printer-drivers' "printer-driver-$index-$($definition[0])" $definition[1] $subjectId $item.($definition[0])}
         $index++

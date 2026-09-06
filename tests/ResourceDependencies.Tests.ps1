@@ -23,6 +23,7 @@ Assert-Equal 2 @($duplicateInput.printers).Count 'the duplicate seam starts with
 $deduplicated=Copy-ResourceDependenciesCollectorPayload -Payload $duplicateInput -Policy $policy
 Assert-Equal 1 @($deduplicated.mappedDrives).Count 'mapped rows normalize by their stable local designator'
 Assert-Equal 1 @($deduplicated.printers).Count 'printer rows normalize by their stable local name'
+Assert-Equal 1 @($deduplicated.printerDrivers).Count 'repeated rows for the same driver registration remain one subject'
 
 $malformed=New-ResourceDependenciesSyntheticPayload -Scenario MappedDrive -Policy $policy
 $malformed.mappedDrives[0].remoteEndpoint='\\synthetic-file\' + ('x' * 600)

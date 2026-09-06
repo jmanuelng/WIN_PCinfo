@@ -27,6 +27,36 @@ function Assert-ResourceSourceReport {
     Assert-Equal $(if($Scenario -eq 'ConnectionDenied'){'Denied'}else{'Complete'}) (Coverage 'unc-connections').state 'local connection source denial is distinct from absence'
     Assert-Equal $(if($Scenario -eq 'PrinterDenied'){'Denied'}else{'Partial'}) (Coverage 'printers').state 'cached remote printer details are explicitly incomplete'
     Assert-Equal 'Complete' (Coverage 'printer-drivers').state 'independent local driver metadata survives unrelated gaps'
+    if($Scenario -in @('Complete','ProviderMismatch','ProviderUnavailable')){
+        $mapped=@(Values 'mapped-drive.local-name'|Where-Object value -eq 'R:')[0]
+        $provider=@(Values 'mapped-drive.provider-name'|Where-Object subjectId -eq $mapped.subjectId)[0]
+        if($Scenario -eq 'Complete'){
+            Assert-Equal 'ObservedValue' $provider.valueState 'an exact drive and endpoint match preserves already-read provider metadata'
+            Assert-Equal 'Microsoft Windows Network' $provider.value 'correlated provider survives protected reopening'
+        }else{
+            Assert-Equal 'SourceReportedUnknown' $provider.valueState 'a differing endpoint or unavailable registry provider cannot inherit metadata'
+        }
+        $endpoint=@(Values 'mapped-drive.remote-endpoint'|Where-Object subjectId -eq $mapped.subjectId)[0]
+        Assert-Equal $(if($Scenario -eq 'ProviderMismatch'){'\\synthetic-file\Other-東京'}else{'\\synthetic-file\R-東京'}) $endpoint.value 'the local session table retains its actual target'
+        Assert-Equal $true $Html.Contains('id="'+$provider.observationId+'"') 'the provider observation remains traceable in HTML'
+    }
+    if($Scenario -eq 'DriverRegistrations'){
+        $drivers=@(Values 'printer-driver.name'|Where-Object value -eq 'Driver-東京')
+        Assert-Equal 3 $drivers.Count 'same-name registrations retain distinct subjects through normalization and protected reopening'
+        Assert-Equal 3 @($drivers.subjectId|Sort-Object -Unique).Count 'registration identity is not the display name'
+        $registrations=foreach($driver in $drivers){
+            $environment=@(Values 'printer-driver.environment'|Where-Object subjectId -eq $driver.subjectId)[0]
+            $model=@(Values 'printer-driver.driver-model'|Where-Object subjectId -eq $driver.subjectId)[0]
+            $version=@(Values 'printer-driver.version'|Where-Object subjectId -eq $driver.subjectId)[0]
+            $inf=@(Values 'printer-driver.inf-name'|Where-Object subjectId -eq $driver.subjectId)[0]
+            foreach($observation in @($driver,$environment,$model,$version,$inf)){
+                Assert-Equal $true $Html.Contains('id="'+$observation.observationId+'"') 'each registration field is traceable in HTML'
+                Assert-Equal $true $Html.Contains([Net.WebUtility]::HtmlEncode([string]$observation.value)) 'each exact registration value reaches HTML'
+            }
+            '{0}|{1}|{2}|{3}' -f $environment.value,$model.value,$version.value,$inf.value
+        }
+        Assert-Equal 'Windows ARM64|Version-3|1.2.3|synthetic.inf;Windows x64|Version-3|1.2.3|synthetic.inf;Windows x64|Version-4|4.5.6|synthetic-v4.inf' (@($registrations|Sort-Object)-join ';') 'environment, model, version and INF stay attached to their actual registration'
+    }
     Assert-Equal $(switch($Scenario){PeripheralUnavailable{'Failed'};Maximum{'Partial'};default{'Complete'}}) (Coverage 'common-peripherals').state 'peripheral source failures and limits remain explicit'
     if($Scenario -ne 'PrinterDenied'){
         $remote=@(Values 'printer.name'|Where-Object value -eq '\\synthetic-print\Queue-東京')[0]

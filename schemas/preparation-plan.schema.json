@@ -2892,7 +2892,9 @@
               "field:resource.printer-driver.name",
               "field:resource.printer-driver.manufacturer",
               "field:resource.printer-driver.version",
-              "field:resource.printer-driver.inf-name"
+              "field:resource.printer-driver.inf-name",
+              "field:resource.printer-driver.environment",
+              "field:resource.printer-driver.driver-model"
             ]
           },
           {

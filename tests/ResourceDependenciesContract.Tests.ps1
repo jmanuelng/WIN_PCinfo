@@ -69,7 +69,7 @@ $empty=Add-ResourceDependenciesEvidenceRecord -Record $empty -CollectorResult $e
 $empty=Complete-ValidatedResourceDependenciesAssessmentRecord -Record $empty -Policy $resourcePolicy -ContractValidation (Test-CanonicalRecord $empty)
 Assert-Equal 'Informational' @($empty.findings|Where-Object ruleId -eq 'rule:resource.user-migration-dependencies/1.0.0')[0].outcome 'complete empty resource scopes establish bounded absence without a compatibility promise'
 $absent=@($empty.observations|Where-Object {$_.fieldId -like 'field:resource.*' -and $_.valueState -eq 'ObservedAbsent'})
-Assert-Equal 24 $absent.Count 'complete empty scopes explicitly close every defined field as absent'
+Assert-Equal 26 $absent.Count 'complete empty scopes explicitly close every defined field as absent'
 
 $denied=New-PolicyReadyRecord
 $deniedCollector=Invoke-ResourceDependenciesCollection -Policy $resourcePolicy -ValidationScenario AlternateAdministrator

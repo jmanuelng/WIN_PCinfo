@@ -3200,6 +3200,58 @@
       }
     },
     {
+      "fieldId": "field:resource.printer-driver.environment",
+      "capabilityIds": [
+        "CAP-0010"
+      ],
+      "purpose": "Identify the local registry environment of this printer-driver registration.",
+      "source": {
+        "sourceId": "source:windows.local.print-cache",
+        "kind": "StructuredWindowsSource",
+        "authoritativeIdentity": "LocalPrintDriverRegistry.EnvironmentKeyName"
+      },
+      "valueType": "String",
+      "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": {
+        "maximumUtf8Bytes": 128,
+        "maximumOccurrencesPerSubject": 1
+      },
+      "redaction": {
+        "behavior": "OmitProhibitedMaterial",
+        "publicProjection": "DefinitionOnly"
+      },
+      "publicEligibility": {
+        "definition": true,
+        "values": false
+      }
+    },
+    {
+      "fieldId": "field:resource.printer-driver.driver-model",
+      "capabilityIds": [
+        "CAP-0010"
+      ],
+      "purpose": "Identify the local registry driver model of this printer-driver registration.",
+      "source": {
+        "sourceId": "source:windows.local.print-cache",
+        "kind": "StructuredWindowsSource",
+        "authoritativeIdentity": "LocalPrintDriverRegistry.DriverModelKeyName"
+      },
+      "valueType": "String",
+      "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": {
+        "maximumUtf8Bytes": 32,
+        "maximumOccurrencesPerSubject": 1
+      },
+      "redaction": {
+        "behavior": "OmitProhibitedMaterial",
+        "publicProjection": "DefinitionOnly"
+      },
+      "publicEligibility": {
+        "definition": true,
+        "values": false
+      }
+    },
+    {
       "fieldId": "field:resource.printer-driver.manufacturer",
       "capabilityIds": [
         "CAP-0010"
@@ -7991,7 +8043,9 @@
         "field:resource.printer-driver.name",
         "field:resource.printer-driver.manufacturer",
         "field:resource.printer-driver.version",
-        "field:resource.printer-driver.inf-name"
+        "field:resource.printer-driver.inf-name",
+        "field:resource.printer-driver.environment",
+        "field:resource.printer-driver.driver-model"
       ],
       "collectorIds": [
         "collector:windows.resource-dependencies"

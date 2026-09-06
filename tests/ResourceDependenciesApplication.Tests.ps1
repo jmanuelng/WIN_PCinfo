@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([string[]]$Scenario=@())
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -25,6 +25,10 @@ $cases=@(
     @{scenario='LocalSystem';exit=10;outcome='CompletedWithGaps';user='Denied';peripheral='Denied';mapped=0;unc=0;printers=0;drivers=0;devices=0;userFinding='Indeterminate';peripheralFinding='Indeterminate'},
     @{scenario='NonEnglish';exit=0;outcome='Completed';user='Complete';peripheral='Complete';mapped=1;unc=0;printers=1;drivers=1;devices=1;userFinding='NeedsAttention';peripheralFinding='NeedsAttention'}
 )
+if($Scenario.Count -gt 0){
+    if(@($Scenario|Where-Object {$_ -notin @($cases.scenario)}).Count -gt 0){throw 'Unknown resource test scenario.'}
+    $cases=@($cases|Where-Object scenario -in $Scenario)
+}
 foreach($case in $cases){
     $fixture=Join-Path $PSScriptRoot "fixtures/resource-$($case.scenario.ToLowerInvariant()).json"
     $result=Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
