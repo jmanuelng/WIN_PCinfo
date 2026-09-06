@@ -282,7 +282,7 @@
     "executableFileName": "pwsh.exe",
     "signerCommonName": "Microsoft Corporation",
     "payloadKind": "EncodedReleaseSource",
-    "payloadSha256": "8412a03ba0b61529a80ed89eac0bd1decb8d997ce718756700793ff71fb77f80"
+    "payloadSha256": "40de746b34655c73cf8ad9bf44f359f201429b0164b4631f037b364f21d97103"
   },
   "channel": {
     "pipeNamePrefix": "WINPCInfo-SystemCollection-v1-",
@@ -290,7 +290,7 @@
     "maximumServerInstances": 1,
     "maximumMessageUtf8Bytes": 8192,
     "nonceBytes": 32,
-    "acl": "InitiatingAdministratorAndLocalSystem",
+    "acl": "InitiatingUserAndLocalSystem",
     "requirePeerProcessId": true,
     "requireLocalSystemSid": true,
     "requireArtifactDigest": true,

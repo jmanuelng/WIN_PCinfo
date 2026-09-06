@@ -2343,6 +2343,129 @@ function Invoke-DeviceReadinessSlice {
         $certificateRequested=[bool]$sliceSelection.certificateRequested
         $connectivityRequested=[bool]$sliceSelection.connectivityRequested
         $firmwareRequested = -not $isFixture -or $firmwareScenario -ne 'None'
+        $sliceStage='PRIVILEGE'
+        if (($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) -and (Enter-AssessmentCollectionStageIfActive -Stage Privilege)) {
+            $systemPlanResult=if ($identityRequested) {
+                New-SystemCollectionPlan -PreparationPlan $PreparationPlan -PreparationPlanDigest $PlanDigest
+            } else { $null }
+            # Resolve only the coordination identity before collection. An
+            # elevated or SYSTEM coordinator cannot invent a standard user.
+            $initiatingIdentity=[Security.Principal.WindowsIdentity]::GetCurrent()
+            try {
+                $initiatingPrincipal=[Security.Principal.WindowsPrincipal]::new($initiatingIdentity)
+                $assessmentSid=if ($initiatingIdentity.User.Value -ne 'S-1-5-18' -and
+                    -not $initiatingPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+                    [string]$initiatingIdentity.User.Value
+                } else { '' }
+            } finally { $initiatingIdentity.Dispose() }
+            $privilegeResult = Invoke-PrivilegedCollectionPlan `
+                -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
+                -AssessmentUserContext 'subject:assessment-user:primary' `
+                -AssessmentUserSid $assessmentSid `
+                -LocalPackageProtector 'protector:initiating-windows-user' `
+                -ValidationScenario $privilegeScenario -FirmwareScenario $firmwareScenario -CancellationToken (Get-AssessmentCancellationToken) `
+                -AdministratorScenario $(if($administratorRequested){$administratorScenario}else{'None'}) `
+                -EffectivePolicyScenario $(if($effectivePolicyRequested){$effectivePolicyScenario}else{'None'}) `
+                -SystemPlanResult $systemPlanResult -SystemValidationScenario $(
+                    if($isEffectivePolicyFixture -and $effectivePolicyScenario -eq 'DeniedSystem'){'Denied'}
+                    elseif([bool]$sliceSelection.usesSyntheticPrerequisites){'SyntheticSuccess'}else{''})
+            $privilegeState = [string]$privilegeResult.state
+            $privilegeUacInteractionCount = [int]$privilegeResult.elevation.uacInteractionCount
+            $collectionStarted = $collectionStarted -or @($privilegeResult.operations).Count -gt 0
+            if ($privilegeResult.state -in @('TimedOut','Cancelled')) {
+                # These states are produced only after the bounded worker path
+                # begins. Preserve that lifecycle fact even though a failed
+                # worker cannot return its four operation envelopes.
+                $collectionStarted = $true
+            }
+            if (-not [bool]$privilegeResult.cleanup.verified) {
+                $exception = [InvalidOperationException]::new(
+                    'The privileged worker cleanup was not verified.'
+                )
+                $exception.Data['ReasonCode'] = 'FIRMWARE.PRIVILEGE_CLEANUP_INCOMPLETE'
+                throw $exception
+            }
+            if($firmwareRequested){
+                if ($privilegeResult.PSObject.Properties['PrivateFirmwareCollectorResult']) {
+                    $firmwareCollector = $privilegeResult.PrivateFirmwareCollectorResult
+                }
+                elseif ($privilegeResult.state -in @('Unavailable','Cancelled')) {
+                    $firmwareCollector = New-FirmwareReadinessPrivilegeGapResult `
+                        -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
+                }
+                else {
+                    $exception = [InvalidOperationException]::new(
+                        'The privileged firmware phase did not return a usable collector result.'
+                    )
+                    $exception.Data['ReasonCode'] = switch ([string]$privilegeResult.state) {
+                        'TimedOut' { 'FIRMWARE.PRIVILEGE_TIMED_OUT' }
+                        'Cancelled' { 'FIRMWARE.PRIVILEGE_CANCELLED' }
+                        default { 'FIRMWARE.PRIVILEGE_INTEGRITY_FAILED' }
+                    }
+                    throw $exception
+                }
+            }
+            if($administratorRequested){
+                if($privilegeResult.PSObject.Properties['PrivateAdministratorCollectorResult']){
+                    $administratorCollector=$privilegeResult.PrivateAdministratorCollectorResult
+                }elseif($privilegeResult.state -in @('Unavailable','Cancelled')){
+                    $administratorCollector=New-AdministratorExposurePrivilegeGapResult `
+                        -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
+                }else{
+                    $exception=[InvalidOperationException]::new(
+                        'The privileged administrator phase did not return a usable collector result.'
+                    )
+                    $exception.Data['ReasonCode']='ADMINISTRATOR_EXPOSURE.PRIVILEGE_FAILED'
+                    throw $exception
+                }
+                $administratorProcessRelationship=[string]$administratorCollector.processRelationship
+            }
+            if($effectivePolicyRequested){
+                if($privilegeResult.PSObject.Properties['PrivateEffectivePolicyCollectorResult']){
+                    $effectivePolicyCollector=$privilegeResult.PrivateEffectivePolicyCollectorResult
+                }elseif($privilegeResult.state -in @('Unavailable','Cancelled')){
+                    $effectivePolicyCollector=New-EffectivePolicyPrivilegeGapResult `
+                        -PrivilegeResult $privilegeResult -Policy $effectivePolicy `
+                        -ValidationFixture $isFixture
+                }else{
+                    $exception=[InvalidOperationException]::new(
+                        'The privileged Effective Policy phase did not return a usable collector result.'
+                    )
+                    $exception.Data['ReasonCode']='EFFECTIVE_POLICY.PRIVILEGE_FAILED';throw $exception
+                }
+            }
+        }
+        if($identityRequested -and $null -ne $privilegeResult){
+            $sliceStage='SYSTEM_IDENTITY'
+            if ($privilegeResult.PSObject.Properties['PrivateSystemResult']) {
+                $systemResult=$privilegeResult.PrivateSystemResult
+            } else {
+                $systemResult=New-SystemCollectionStoppedResult `
+                    -State $(if($privilegeResult.state -eq 'Cancelled'){'Cancelled'}else{'Unavailable'}) `
+                    -ReasonCode $(if($privilegeResult.state -eq 'Cancelled'){'SYSTEM.CANCELLED_BEFORE_ACTIVATION'}else{'SYSTEM.ACTIVATION_DENIED'}) `
+                    -CoverageState $(if($privilegeResult.state -eq 'Cancelled'){'Cancelled'}else{'Denied'}) -Context @{
+                        Policy=(Get-SystemCollectionPlanPolicy); Plan=$systemPlanResult.Plan
+                        PlanDigest=$systemPlanResult.Digest; ObservedExecutionContext='NotStarted'
+                    }
+            }
+            if($isEffectivePolicyFixture -and $null -ne $systemResult -and
+                $systemResult.state -in @('Completed','CompletedWithGaps')){
+                $systemResult.PrivatePolicyCspResults =
+                    New-EffectivePolicySyntheticPolicyCspResults -Scenario $effectivePolicyScenario
+            }
+            if(-not [bool]$systemResult.cleanup.verified){
+                $exception=[InvalidOperationException]::new(
+                    'The predefined SYSTEM enrollment source cleanup was not verified.'
+                )
+                $exception.Data['ReasonCode']='IDENTITY.SYSTEM_CLEANUP_INCOMPLETE';throw $exception
+            }
+            if([bool]$systemResult.runIntegrityCompromised){
+                $exception=[InvalidOperationException]::new(
+                    'The predefined SYSTEM enrollment source lost run integrity.'
+                )
+                $exception.Data['ReasonCode']='IDENTITY.SYSTEM_INTEGRITY_FAILED';throw $exception
+            }
+        }
         if($identityRequested -and (Enter-AssessmentCollectionStageIfActive -Stage identity)){
             $sliceStage='IDENTITY'
             $identityCollector=if([bool]$sliceSelection.usesSyntheticPrerequisites){
@@ -2421,113 +2544,6 @@ function Invoke-DeviceReadinessSlice {
             if(-not [bool]$connectivityCollector.cleanupVerified){
                 $exception=[InvalidOperationException]::new('The Microsoft Connectivity cleanup was not verified.')
                 $exception.Data['ReasonCode']='CONNECTIVITY.COLLECTOR_CLEANUP_INCOMPLETE';throw $exception
-            }
-        }
-        $sliceStage='PRIVILEGE'
-        if (($firmwareRequested -or $administratorRequested -or $effectivePolicyRequested) -and (Enter-AssessmentCollectionStageIfActive -Stage Privilege)) {
-            $privilegeResult = Invoke-PrivilegedCollectionPlan `
-                -PreparationPlan $PreparationPlan -PlanDigest $PlanDigest `
-                -AssessmentUserContext 'subject:assessment-user:primary' `
-                -AssessmentUserSid $(if($null -ne $identityCollector){
-                    [string]$identityCollector.privateAssessmentUserSid
-                }else{''}) `
-                -LocalPackageProtector 'protector:initiating-windows-user' `
-                -ValidationScenario $privilegeScenario -FirmwareScenario $firmwareScenario -CancellationToken (Get-AssessmentCancellationToken) `
-                -AdministratorScenario $(if($administratorRequested){$administratorScenario}else{'None'}) `
-                -EffectivePolicyScenario $(if($effectivePolicyRequested){$effectivePolicyScenario}else{'None'})
-            $privilegeState = [string]$privilegeResult.state
-            $privilegeUacInteractionCount = [int]$privilegeResult.elevation.uacInteractionCount
-            $collectionStarted = $collectionStarted -or @($privilegeResult.operations).Count -gt 0
-            if ($privilegeResult.state -in @('TimedOut','Cancelled')) {
-                # These states are produced only after the bounded worker path
-                # begins. Preserve that lifecycle fact even though a failed
-                # worker cannot return its four operation envelopes.
-                $collectionStarted = $true
-            }
-            if (-not [bool]$privilegeResult.cleanup.verified) {
-                $exception = [InvalidOperationException]::new(
-                    'The privileged worker cleanup was not verified.'
-                )
-                $exception.Data['ReasonCode'] = 'FIRMWARE.PRIVILEGE_CLEANUP_INCOMPLETE'
-                throw $exception
-            }
-            if($firmwareRequested){
-                if ($privilegeResult.PSObject.Properties['PrivateFirmwareCollectorResult']) {
-                    $firmwareCollector = $privilegeResult.PrivateFirmwareCollectorResult
-                }
-                elseif ($privilegeResult.state -in @('Unavailable','Cancelled')) {
-                    $firmwareCollector = New-FirmwareReadinessPrivilegeGapResult `
-                        -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
-                }
-                else {
-                    $exception = [InvalidOperationException]::new(
-                        'The privileged firmware phase did not return a usable collector result.'
-                    )
-                    $exception.Data['ReasonCode'] = switch ([string]$privilegeResult.state) {
-                        'TimedOut' { 'FIRMWARE.PRIVILEGE_TIMED_OUT' }
-                        'Cancelled' { 'FIRMWARE.PRIVILEGE_CANCELLED' }
-                        default { 'FIRMWARE.PRIVILEGE_INTEGRITY_FAILED' }
-                    }
-                    throw $exception
-                }
-            }
-            if($administratorRequested){
-                if($privilegeResult.PSObject.Properties['PrivateAdministratorCollectorResult']){
-                    $administratorCollector=$privilegeResult.PrivateAdministratorCollectorResult
-                }elseif($privilegeResult.state -in @('Unavailable','Cancelled')){
-                    $administratorCollector=New-AdministratorExposurePrivilegeGapResult `
-                        -PrivilegeResult $privilegeResult -ValidationFixture $isFixture
-                }else{
-                    $exception=[InvalidOperationException]::new(
-                        'The privileged administrator phase did not return a usable collector result.'
-                    )
-                    $exception.Data['ReasonCode']='ADMINISTRATOR_EXPOSURE.PRIVILEGE_FAILED'
-                    throw $exception
-                }
-                $administratorProcessRelationship=[string]$administratorCollector.processRelationship
-            }
-            if($effectivePolicyRequested){
-                if($privilegeResult.PSObject.Properties['PrivateEffectivePolicyCollectorResult']){
-                    $effectivePolicyCollector=$privilegeResult.PrivateEffectivePolicyCollectorResult
-                }elseif($privilegeResult.state -in @('Unavailable','Cancelled')){
-                    $effectivePolicyCollector=New-EffectivePolicyPrivilegeGapResult `
-                        -PrivilegeResult $privilegeResult -Policy $effectivePolicy `
-                        -ValidationFixture $isFixture
-                }else{
-                    $exception=[InvalidOperationException]::new(
-                        'The privileged Effective Policy phase did not return a usable collector result.'
-                    )
-                    $exception.Data['ReasonCode']='EFFECTIVE_POLICY.PRIVILEGE_FAILED';throw $exception
-                }
-            }
-        }
-        if($identityRequested -and (Enter-AssessmentCollectionStageIfActive -Stage identity)){
-            $sliceStage='SYSTEM_IDENTITY'
-            $systemPlanResult=New-SystemCollectionPlan -PreparationPlan $PreparationPlan `
-                -PreparationPlanDigest $PlanDigest
-            $systemResult=Invoke-SystemCollectionPlan -Plan $systemPlanResult.Plan `
-                -PlanDigest $systemPlanResult.Digest -CancellationToken (Get-AssessmentCancellationToken) `
-                -ValidationScenario $(if($isEffectivePolicyFixture -and $effectivePolicyScenario -eq 'DeniedSystem'){
-                    'Denied'
-                }elseif([bool]$sliceSelection.usesSyntheticPrerequisites){
-                    'SyntheticSuccess'
-                }else{''})
-            if($isEffectivePolicyFixture -and $null -ne $systemResult -and
-                $systemResult.state -in @('Completed','CompletedWithGaps')){
-                $systemResult.PrivatePolicyCspResults =
-                    New-EffectivePolicySyntheticPolicyCspResults -Scenario $effectivePolicyScenario
-            }
-            if(-not [bool]$systemResult.cleanup.verified){
-                $exception=[InvalidOperationException]::new(
-                    'The predefined SYSTEM enrollment source cleanup was not verified.'
-                )
-                $exception.Data['ReasonCode']='IDENTITY.SYSTEM_CLEANUP_INCOMPLETE';throw $exception
-            }
-            if([bool]$systemResult.runIntegrityCompromised){
-                $exception=[InvalidOperationException]::new(
-                    'The predefined SYSTEM enrollment source lost run integrity.'
-                )
-                $exception.Data['ReasonCode']='IDENTITY.SYSTEM_INTEGRITY_FAILED';throw $exception
             }
         }
         if ((Get-AssessmentCancellationToken).IsCancellationRequested -and $null -ne $identityCollector) {
