@@ -168,7 +168,7 @@ function Show-StatusDeskChoicesDialog {
     if($null -ne $Owner){$dialog.Owner=$Owner}
     $network=$dialog.FindName('NetworkChoice');$output=$dialog.FindName('OutputPath')
     $network.SelectedIndex=if($Request.networkBehavior -eq 'MicrosoftConnectivityEnabled'){1}else{0}
-    $output.Text=$Request.outputDestination
+    $output.Text=[IO.Path]::GetFullPath($Request.outputDestination)
     $result=@{Value=$null}
     $dialog.FindName('BrowseOutput').Add_Click({
         $picker=[Microsoft.Win32.OpenFolderDialog]::new()
@@ -663,6 +663,7 @@ function Invoke-StatusDesk {
         $nextLaunch.Request.automationChoices.allowStaleRecovery=$false
         if($null -ne $state.NextChoices){
             $nextLaunch.Request.networkBehavior=$state.NextChoices.networkBehavior
+            $nextLaunch.Request.automationChoices.allowAssessmentNetwork=$state.NextChoices.networkBehavior -eq 'MicrosoftConnectivityEnabled'
             $nextLaunch.Request.outputDestination=$state.NextChoices.outputDestination
         }
         return Invoke-StatusDesk -ModuleText $ModuleText -LaunchParameters $nextLaunch -ViewReady $ViewReady

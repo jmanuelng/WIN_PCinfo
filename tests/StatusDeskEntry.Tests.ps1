@@ -26,7 +26,6 @@ $dialogDriver.Add_Tick({
         if($Choices -and $window -is [System.Windows.Window]){
             if($window.Title -eq 'WIN-PCInfo — Assessment choices'){
                 $window.FindName('NetworkChoice').SelectedIndex=1
-                $window.FindName('OutputPath').Text=$repositoryRoot
                 $window.FindName('ConfirmChoices').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
                 continue
             }
@@ -55,7 +54,10 @@ $driver.Add_Tick({
                 $window.FindName('ChangeChoices').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
                 return
             }
-            if($Choices){$entryTest.NewPlan=$window.FindName('Details').Text.Contains('Network: MicrosoftConnectivityEnabled')}
+            if($Choices){
+                $entryTest.NewPlan=$window.FindName('Details').Text.Contains('Network: MicrosoftConnectivityEnabled')
+                Assert-Equal $true ([IO.Path]::IsPathFullyQualified($window.FindName('Details').Text.Split("`n").Where({$_ -like 'Output destination:*'})[0].Substring(20))) 'replacement retains a resolved output destination'
+            }
             $entryTest.SawPreparation=$window.FindName('Details').Text.Contains('Review this complete frozen plan')
             $entryTest.Declined=$true
             $window.FindName('Decline').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))

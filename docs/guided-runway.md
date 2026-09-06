@@ -68,7 +68,7 @@ One endpoint cannot prove tenant intent, Intune assignment, Defender for Endpoin
 
 For a delivered Personal Evaluation Build, use the exact private candidate and
 instructions supplied for your authorized session. Extract the complete portable
-bundle into a private local folder and double-click `launch.cmd`. Keep its
+bundle into a private local folder and double-click `Start-WIN-PCInfo.cmd`. Keep its
 governing resources together. The launcher selects an eligible installed runtime
 and opens the WPF Status desk; it does not install a runtime. A source build alone
 is unsigned and cannot perform an ordinary assessment.

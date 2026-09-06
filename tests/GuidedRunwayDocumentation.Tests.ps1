@@ -61,7 +61,7 @@ foreach ($topic in @($policy.requiredTopics)) {
 
 $runwayText = [string] $documentTexts.guidedRunway
 foreach($instruction in @('Change network / output','New preparation / retry','Close viewing',
-    'Recover viewing residue','Personal Evaluation Build','private key','launch.cmd')){
+    'Recover viewing residue','Personal Evaluation Build','private key','Start-WIN-PCInfo.cmd')){
     Assert-Equal $true ($runwayText.Contains($instruction)) "the beginner runway explains $instruction"
 }
 foreach ($stage in @($policy.runway)) {
