@@ -118,3 +118,7 @@ known retained-slot constraint; no prior-ticket review is reused.
   preparation. #160 retains its own first real assessment and trust-session gates.
 - Root owns the requirement ledger, both reviews, corrections/reviews as needed,
   and GitHub delivery. Do not close #153 before both required axes qualify.
+
+## Final review disposition
+
+Original fresh Standards0blocking/1nonblocking duplication and Spec1P2 required a bounded recovery correction. See issue-153-recovery-correction.md for the observed failures, new source650be94, seven affected passing checks, exact candidate96e303bb... and both fresh affected review results: Standards0hard/0newsmells; Spec0,originalP2resolved. #153 automated implementation qualifies for delivery; #158 and #160/#161 gates above remain pending. Earlier Pending entries describe the historical worker checkpoint, not the final review state.
