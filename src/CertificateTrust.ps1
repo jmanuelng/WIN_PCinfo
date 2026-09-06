@@ -1,3 +1,4 @@
+Set-StrictMode -Version Latest
 $script:CertificateTrustPolicyBase64='__CERTIFICATE_TRUST_POLICY_BASE64__'
 $script:CertificateTrustPolicyDigest='__CERTIFICATE_TRUST_POLICY_SHA256__'
 
@@ -228,6 +229,8 @@ function Test-CertificateTrustPayload {
             $Payload.privateMaterialAccessed -isnot [bool] -or [bool]$Payload.privateMaterialAccessed -or
             $Payload.storeChanged -isnot [bool] -or [bool]$Payload.storeChanged){return $false}
         if(@($Payload.scopeStates).Count -ne 6 -or @($Payload.scopeStates.scopeId|Sort-Object -Unique).Count -ne 6){return $false}
+        if(($Payload.processRelationship -ne 'SameUser' -or $Payload.observedExecutionContext -ne 'StandardUser') -and
+            (@($Payload.candidates).Count -gt 0 -or @($Payload.scopeStates|Where-Object state -in @('Complete','Partial','Constrained')).Count -gt 0)){return $false}
         foreach($state in @($Payload.scopeStates)){
             if(-not (Test-CertificateTrustObjectShape $state @('scopeId','state','reasonCode')) -or
                 [string]$state.scopeId -notin @($Policy.purposes.scopeId) -or
@@ -239,9 +242,11 @@ function Test-CertificateTrustPayload {
             $parsedNotBefore=[DateTimeOffset]::MinValue
             $parsedNotAfter=[DateTimeOffset]::MinValue
             $purpose=@($Policy.purposes|Where-Object purposeId -eq $candidate.purposeId)[0]
+            $scope=@($Payload.scopeStates|Where-Object scopeId -eq $candidate.scopeId)[0]
             if(-not (Test-CertificateTrustObjectShape $candidate @('purposeId','scopeId','certificateId','fingerprint','storeLocation','storeName','notBefore','notAfter','validityState','chainState','trustState','keyProtectionState')) -or
                 [string]$candidate.purposeId -notin @($Policy.purposes.purposeId) -or
                 [string]$candidate.scopeId -ne [string]$purpose.scopeId -or
+                $scope.state -notin @('Complete','Partial','Constrained') -or
                 -not (Test-CertificateTrustText $candidate.certificateId 128) -or
                 [string]$candidate.fingerprint -cnotmatch '^[0-9A-Fa-f]{64}$' -or
                 [string]$candidate.storeLocation -notin @('CurrentUser','LocalMachine') -or
@@ -249,9 +254,11 @@ function Test-CertificateTrustPayload {
                 "$($candidate.storeLocation)/$($candidate.storeName)" -notin @($purpose.stores) -or
                 -not [DateTimeOffset]::TryParse([string]$candidate.notBefore,[ref]$parsedNotBefore) -or
                 -not [DateTimeOffset]::TryParse([string]$candidate.notAfter,[ref]$parsedNotAfter) -or
+                $parsedNotAfter -lt $parsedNotBefore -or
                 [string]$candidate.validityState -notin @('Valid','Expired','NotYetValid','Unknown') -or
                 [string]$candidate.chainState -notin @('Complete','Incomplete','NotEvaluated') -or
                 [string]$candidate.trustState -notin @('Trusted','Untrusted','Indeterminate') -or
+                ($candidate.chainState -ne 'Complete' -and $candidate.trustState -ne 'Indeterminate') -or
                 [string]$candidate.keyProtectionState -notin @('NoPrivateKey','NonExportable','PresentProtectionNotInspected','UnknownNotInspected')){return $false}
         }
         foreach($purpose in $Policy.purposes){if(@($Payload.candidates|Where-Object purposeId -eq $purpose.purposeId).Count -gt [int]$Policy.collector.maximumCertificatesPerPurpose){return $false}}
@@ -288,7 +295,15 @@ function Get-CertificateTrustLiveSource {
     $purposeBase64=[Convert]::ToBase64String([Text.UTF8Encoding]::new($false).GetBytes($purposeJson))
     $source=@'
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';$InformationPreference='SilentlyContinue'
+Set-StrictMode -Version Latest
 function Scope([string]$id,[string]$state,[string]$reason=''){[pscustomobject][ordered]@{scopeId=$id;state=$state;reasonCode=$reason}}
+function Store-Denied([Exception]$exception){
+  for($depth=0;$null -ne $exception -and $depth -lt 8;$depth++){
+    if($exception -is [UnauthorizedAccessException] -or $exception -is [Security.SecurityException] -or $exception.HResult -eq -2147024891){return $true}
+    $exception=$exception.InnerException
+  }
+  $false
+}
 function Resolve-Chain($chain,[bool]$built){
   $no=[Security.Cryptography.X509Certificates.X509ChainStatusFlags]::NoError
   $time=[Security.Cryptography.X509Certificates.X509ChainStatusFlags]::NotTimeValid
@@ -305,8 +320,9 @@ function Resolve-Chain($chain,[bool]$built){
   [pscustomobject]@{chainState='Complete';trustState='Untrusted'}
 }
 function Eku($certificate){
-  $extension=@($certificate.Extensions|Where-Object {$_.Oid.Value -eq '2.5.29.37'})[0]
-  if($null -eq $extension){return @()}
+  $extensions=@($certificate.Extensions|Where-Object {$_.Oid.Value -eq '2.5.29.37'})
+  if($extensions.Count -eq 0){return @()}
+  $extension=$extensions[0]
   $typed=if($extension -is [Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]){$extension}else{[Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new($extension,$extension.Critical)}
   @($typed.EnhancedKeyUsages|ForEach-Object Value)
 }
@@ -321,16 +337,22 @@ $purposes=@([Text.UTF8Encoding]::new($false,$true).GetString($purposeBytes)|Conv
 $states=[Collections.Generic.List[object]]::new();$candidates=[Collections.Generic.List[object]]::new()
 foreach($purpose in $purposes){
   if($purpose.stores.Count -eq 0){$reason=if($purpose.purposeId -eq 'ServiceConnectivity'){'CERTIFICATE.SERVICE_TARGET_ABSENT'}else{'CERTIFICATE.PURPOSE_ATTRIBUTION_UNAVAILABLE'};$states.Add((Scope $purpose.scopeId NotApplicable $reason));continue}
-  $selected=[Collections.Generic.List[object]]::new();$state='Complete';$reason='';$successfulStores=0;$failedStoreState='';$failedStoreReason=''
+  $selected=[Collections.Generic.List[object]]::new();$matched=0;$state='Complete';$reason='';$successfulStores=0;$failedStoreState='';$failedStoreReason=''
   foreach($target in $purpose.stores){
     try{
       $parts=$target -split '/';$location=[Security.Cryptography.X509Certificates.StoreLocation]([Enum]::Parse([Security.Cryptography.X509Certificates.StoreLocation],$parts[0],$false));$name=[Security.Cryptography.X509Certificates.StoreName]([Enum]::Parse([Security.Cryptography.X509Certificates.StoreName],$parts[1],$false))
       $store=[Security.Cryptography.X509Certificates.X509Store]::new($name,$location)
+      $certificates=@()
       try{
         $store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly -bor [Security.Cryptography.X509Certificates.OpenFlags]::OpenExistingOnly)
-        foreach($certificate in @($store.Certificates)){
+        $certificates=@($store.Certificates)
+        foreach($certificate in $certificates){
           try{
             $eku=@(Eku $certificate);if(@($purpose.ekuOids|Where-Object {$_ -in $eku}).Count -eq 0){continue}
+            # Detect overflow before another chain build or metadata projection.
+            # The native store snapshot stays worker-local and is always disposed.
+            if($matched -ge $maximum){$state='Constrained';$reason='CERTIFICATE.CANDIDATE_LIMIT_EXCEEDED';break}
+            $matched++
             $now=[DateTimeOffset]::UtcNow;$notBefore=[DateTimeOffset]$certificate.NotBefore;$notAfter=[DateTimeOffset]$certificate.NotAfter
             $validity=if($now -lt $notBefore){'NotYetValid'}elseif($now -gt $notAfter){'Expired'}else{'Valid'}
             $chain=[Security.Cryptography.X509Certificates.X509Chain]::new()
@@ -339,12 +361,13 @@ foreach($purpose in $purposes){
             $selected.Add([pscustomobject][ordered]@{purposeId=$purpose.purposeId;scopeId=$purpose.scopeId;certificateId="sha256:$fingerprint";fingerprint=$fingerprint;storeLocation=[string]$location;storeName=[string]$name;notBefore=$notBefore.ToUniversalTime().ToString('o');notAfter=$notAfter.ToUniversalTime().ToString('o');validityState=$validity;chainState=$chainResult.chainState;trustState=$chainResult.trustState;keyProtectionState=if($certificate.HasPrivateKey){'PresentProtectionNotInspected'}else{'NoPrivateKey'}})
           }catch{$state='Partial';$reason='CERTIFICATE.SOURCE_ENTRY_MALFORMED'}
         }
-      }finally{$store.Close();$store.Dispose()}
+      }finally{foreach($certificate in $certificates){$certificate.Dispose()};$store.Close();$store.Dispose()}
       $successfulStores++
-    }catch [Security.SecurityException]{$failedStoreState='Denied';$failedStoreReason='CERTIFICATE.STORE_ACCESS_DENIED'}catch [UnauthorizedAccessException]{$failedStoreState='Denied';$failedStoreReason='CERTIFICATE.STORE_ACCESS_DENIED'}catch{if($failedStoreState -ne 'Denied'){$failedStoreState='Unavailable';$failedStoreReason='CERTIFICATE.STORE_UNAVAILABLE'}}
+    }catch{if(Store-Denied $_.Exception){$failedStoreState='Denied';$failedStoreReason='CERTIFICATE.STORE_ACCESS_DENIED'}elseif($failedStoreState -ne 'Denied'){$failedStoreState='Unavailable';$failedStoreReason='CERTIFICATE.STORE_UNAVAILABLE'}}
+    if($state -eq 'Constrained'){break}
   }
-  if($failedStoreReason){if($successfulStores -gt 0){$state='Partial';$reason='CERTIFICATE.STORE_ACCESS_PARTIAL'}else{$state=$failedStoreState;$reason=$failedStoreReason}}
-  $ordered=@($selected|Sort-Object certificateId);if($ordered.Count -gt $maximum){$ordered=@($ordered|Select-Object -First $maximum);$state='Constrained';$reason='CERTIFICATE.CANDIDATE_LIMIT_EXCEEDED'}
+  if($failedStoreReason -and $state -ne 'Constrained'){if($successfulStores -gt 0){$state='Partial';$reason='CERTIFICATE.STORE_ACCESS_PARTIAL'}else{$state=$failedStoreState;$reason=$failedStoreReason}}
+  $ordered=@($selected|Sort-Object certificateId)
   foreach($candidate in $ordered){$candidates.Add($candidate)};$states.Add((Scope $purpose.scopeId $state $reason))
 }
 $payload=[pscustomobject][ordered]@{sourceLocale='und';processRelationship='SameUser';observedExecutionContext='StandardUser';deviceContext='Unknown';scopeStates=@($states);candidates=@($candidates);privateMaterialAccessed=$false;storeChanged=$false}
