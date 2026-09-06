@@ -500,7 +500,7 @@ function New-CrossDomainGuidanceHtml {
         $references = @($_.authoritativeReferences | ForEach-Object {
             [Net.WebUtility]::HtmlEncode([string] $_)
         }) -join '; '
-        '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.priority) + ':</strong> ' +
+        '<li id="'+[Net.WebUtility]::HtmlEncode([string]$_.recommendationId)+'"><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.priority) + ':</strong> ' +
         [Net.WebUtility]::HtmlEncode([string] $_.title) +
         '<br><strong>Current finding:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.findingOutcome) +
         $(if ($_.severity) {

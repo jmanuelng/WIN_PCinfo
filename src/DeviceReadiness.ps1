@@ -1495,23 +1495,61 @@ $identityGuidance
         $softwareSubjects=@($Record.subjects|Where-Object subjectId -like 'subject:software:*')
         $hasRecognition=$null -ne $Record.PSObject.Properties['softwareRecognition']
         $recognitionItems=if($hasRecognition){@($Record.softwareRecognition)}else{@()}
-        $rows=@($softwareSubjects|ForEach-Object {
-            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+        $registrations=@($softwareSubjects|ForEach-Object {
+            $subjectId=[string]$_.subjectId
+            $items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $source=([string]$items[0].fieldId).Split('.')[1]
+            # Group only finite source/context/type metadata. Never coalesce
+            # identities, names, publishers or arbitrary provider versions.
+            $metadata=@($items|Where-Object { $_.fieldId.Split('.')[-1] -in @('registration-context','registry-view','installer-state','package-type','architecture') })
+            $groupValues=@($source)+@($metadata|ForEach-Object { [string]$_.fieldId;[string]$_.valueState;[string]$_.value })
+            $groupKey=($groupValues|ForEach-Object {$_.Length.ToString()+':'+$_}) -join ''
+            [pscustomobject]@{subjectId=$subjectId;items=$items;source=$source;metadata=$metadata;groupKey=$groupKey}
+        })
+        $tables=@($registrations|Group-Object groupKey -CaseSensitive|ForEach-Object {
+            $group=$_
+            $source=[string]$group.Group[0].source
+            $metadata=@($group.Group[0].metadata)
+            $metadataRows=@($metadata|ForEach-Object {
+                $value=if($_.valueState -eq 'ObservedValue'){[string]$_.value}else{[string]$_.valueState}
+                '<dt>'+[Net.WebUtility]::HtmlEncode($_.fieldId.Split('.')[-1])+'<dd>'+[Net.WebUtility]::HtmlEncode($value)
+            })
+            $annotations=@($recognitionItems|Where-Object subjectId -in @($group.Group.subjectId))
+            $sharedRecognition=$hasRecognition -and $annotations.Count -eq $group.Count -and
+                @($annotations|Where-Object outcome -ne Unrecognized).Count -eq 0 -and
+                @($annotations.catalogRevision|Select-Object -Unique).Count -eq 1 -and
+                @($annotations.catalogRelease|Select-Object -Unique).Count -eq 1
+            $fieldIds=@($group.Group.items.fieldId|Where-Object {
+                $_ -ne 'field:software.msix.package-full-name' -and $_ -notin @($metadata.fieldId)
+            }|Select-Object -Unique)
+            $headers=@($fieldIds|ForEach-Object {
+                '<th scope="col">'+[Net.WebUtility]::HtmlEncode($_.Split('.')[-1])+'</th>'
+            })
+            $rows=@($group.Group|ForEach-Object {
+            $subjectId=[string]$_.subjectId;$items=@($_.items)
             # PackageFullName remains in the canonical protected record. The
             # report uses the stable family identity instead, preserving room
             # for a bounded recognition explanation at the 128-entry ceiling.
-            $lines=@($items|Where-Object {
-                $_.valueState -eq 'ObservedValue' -and
-                $_.fieldId -ne 'field:software.msix.package-full-name'
-            }|ForEach-Object {[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+': '+[Net.WebUtility]::HtmlEncode([string]$_.value)})
-            if(-not $hasRecognition){return '<li>'+($lines -join '<br>')+'</li>'}
+            $cells=@($fieldIds|ForEach-Object {
+                $fieldId=$_;$observation=@($items|Where-Object fieldId -eq $fieldId)
+                $value=if($observation.Count -eq 0){'Not observed'}
+                    elseif($observation[0].valueState -eq 'ObservedValue'){[string]$observation[0].value}
+                    else{[string]$observation[0].valueState}
+                # HTML ends each cell at the next td or closing tr. Omitting
+                # this optional end tag saves markup, never evidence bytes.
+                # This is text content, not an attribute: quotes and Unicode
+                # need no entity expansion. Escape every markup delimiter.
+                '<td>'+$value.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;')
+            })
+            $row='<tr>'+($cells -join '')
+            if(-not $hasRecognition -or $sharedRecognition){return $row+'</tr>'}
             $annotation=$recognitionItems|Where-Object subjectId -eq $subjectId|Select-Object -First 1
             if($null -eq $annotation){$annotation=[pscustomobject]@{outcome='NotEvaluated';familyLabel=$null;roles=@();matchStrengthExplanation='';catalogRevision=0;catalogRelease='2.0.0-preview.1';matcherTypes=@();provenance=@()}}
             if([string]$annotation.outcome -eq 'Unrecognized'){
-                return '<li>'+($lines -join '<br>')+'<br><strong>Recognition</strong>: Unrecognized (catalog revision '+[Net.WebUtility]::HtmlEncode([string]$annotation.catalogRevision)+').</li>'
+                return $row+'<td>Unrecognized; revision '+[Net.WebUtility]::HtmlEncode([string]$annotation.catalogRevision)+'</tr>'
             }
             if([string]$annotation.outcome -eq 'NotEvaluated'){
-                return '<li>'+($lines -join '<br>')+'<br><strong>Recognition</strong>: Not evaluated; inventory remains authoritative.</li>'
+                return $row+'<td>Not evaluated; inventory remains authoritative.</td></tr>'
             }
             $recognitionText=switch([string]$annotation.outcome){
                 'RecognizedExact' { 'Recognized family: '+[Net.WebUtility]::HtmlEncode([string]$annotation.familyLabel)+'. Roles: '+[Net.WebUtility]::HtmlEncode((@($annotation.roles)-join ', '))+'. '+[Net.WebUtility]::HtmlEncode([string]$annotation.matchStrengthExplanation)+'.' }
@@ -1532,15 +1570,24 @@ $identityGuidance
                 [Net.WebUtility]::HtmlEncode([string]$annotation.catalogRelease)+'. Matcher types: '+
                 [Net.WebUtility]::HtmlEncode((@($annotation.matcherTypes)-join ', '))+'.</p><ul>'+($sourceRows -join '')+'</ul></details>'
             }else{''}
-            '<li><strong>Observed application</strong><br>'+($lines -join '<br>')+
-            '<br><strong>Recognition</strong>: '+$recognitionText+$technicalDetail+'</li>'
+            $row+'<td>'+$recognitionText+$technicalDetail+'</td></tr>'
+            })
+            '<div class="evidence-table" tabindex="0" role="region" aria-label="'+
+                [Net.WebUtility]::HtmlEncode($source)+' registrations"><table><caption>'+
+                [Net.WebUtility]::HtmlEncode($source)+' registrations. Field prefix: field:software.'+[Net.WebUtility]::HtmlEncode($source)+
+                '. The following metadata applies to every row.<dl>'+($metadataRows -join '')+'</dl>'+
+                $(if($sharedRecognition){'Each row: Unrecognized; catalog revision '+[Net.WebUtility]::HtmlEncode([string]$annotations[0].catalogRevision)+
+                    ', release '+[Net.WebUtility]::HtmlEncode([string]$annotations[0].catalogRelease)+'.'})+
+                '</caption><thead><tr>'+($headers -join '')+
+                $(if($hasRecognition -and -not $sharedRecognition){'<th scope="col">Recognition</th>'})+
+                '</tr></thead><tbody>'+($rows -join '')+'</tbody></table></div>'
         })
 @"
 <h2>Installed software and application migration inventory</h2>
 <p>Machine finding: $([Net.WebUtility]::HtmlEncode([string]$softwareFinding.outcome)). Assessment User finding: $([Net.WebUtility]::HtmlEncode([string]$userFinding.outcome)). Covered source contexts: $($softwareCoverage.Count). Distinct registrations: $($softwareSubjects.Count).</p>
 <p>WIN-PCInfo reads explicit 32-bit and 64-bit uninstall registration views, inventory-only Windows Installer APIs, and Windows package identities. It never invokes Win32_Product, a consistency check, repair, install, uninstall, package-content inspection, binary hashing, profile loading, or network lookup.</p>
 <p>Software recognition is an annotation, not an Assessment Finding. It adds a conservative family and migration-role label without claiming compatibility, health, licensing, safety, support, Intune readiness, Defender readiness, or deployment success. Unrecognized is not a warning or suspicion; NotEvaluated leaves ordinary inventory authoritative. Catalog revision and provenance appear with identity matches. Live WinGet package availability is not evaluated in Preview.1.</p>
-<details><summary>Restricted installed-software evidence</summary><ul>$($rows -join '')</ul></details>
+<details><summary>Restricted installed-software evidence</summary>$($tables -join '')</details>
 <p>Display name and publisher are metadata, not identity. Versions are preserved as provider text without semantic-version assumptions. An observed registration does not prove compatibility, support, licensing, safety, health, approval, or migration success; confirm retained dependencies against the target design.</p>
 "@
     }else{''}
@@ -1684,8 +1731,16 @@ $identityGuidance
     }
     $assessmentRecommendationRows = if (@($assessmentRecommendations).Count -gt 0) {
         @($assessmentRecommendations | ForEach-Object {
+            if($null -ne $crossDomainModel -and $_.recommendationId -in @($crossDomainModel.pathRecommendations.recommendationId)){
+                return '<li><a href="#'+[Net.WebUtility]::HtmlEncode([string]$_.recommendationId)+'">'+
+                    [Net.WebUtility]::HtmlEncode([string]$_.title)+'</a> — '+
+                    [Net.WebUtility]::HtmlEncode([string]$_.priority)+
+                    '. See the migration path for purpose, prerequisites, owner, verification and cautions.</li>'
+            }
             '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
-                '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose) +
+                $(if(-not [string]::Equals([string]$_.title,[string]$_.purpose,[StringComparison]::Ordinal)){
+                    '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose)
+                }) +
                 $(if ($_.priority) {
                         '<br><strong>Priority:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.priority)
                     }
@@ -1712,7 +1767,9 @@ $identityGuidance
     $tenantTaskRows = if (@($tenantTasks).Count -gt 0) {
         @($tenantTasks | ForEach-Object {
             '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
-                '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose) +
+                $(if(-not [string]::Equals([string]$_.title,[string]$_.purpose,[StringComparison]::Ordinal)){
+                    '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose)
+                }) +
                 $(if ($_.role) {
                         '<br><strong>Owner:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.role)
                     }
@@ -1752,6 +1809,11 @@ summary { cursor: pointer; font-weight: 600; }
   nav { border: 1px solid #555555; background: #ffffff; }
   details { break-inside: avoid; border-color: #777777; }
 }
+.evidence-table { overflow-x: auto; margin-block: 1rem; }
+.evidence-table table { border-collapse: collapse; width: 100%; }
+.evidence-table th, .evidence-table td { border: 1px solid #777; padding: .35rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; min-width: 7rem; white-space: pre-wrap; }
+.evidence-table caption { text-align: left; font-weight: bold; }
+@media print { .evidence-table { overflow: visible; } .evidence-table th, .evidence-table td { min-width: 0; } }
 </style>
 </head>
 <body>
@@ -1840,6 +1902,18 @@ $crossDomainSection
 </body>
 </html>
 "@
+    # Omit only HTML end tags whose following token implicitly closes them.
+    # Encoded observation text cannot match these markup-only patterns.
+    foreach($pattern in @(
+        '</(?:td|th)>(?=\s*(?:<t[dh]\b|</tr>))',
+        '</tr>(?=\s*(?:<tr\b|</(?:tbody|thead|tfoot|table)>))',
+        '</thead>(?=\s*<(?:tbody|tfoot)\b)',
+        '</tbody>(?=\s*(?:<(?:tbody|tfoot)\b|</table>))',
+        '</li>(?=\s*(?:<li\b|</(?:ul|ol)>))',
+        '</dt>(?=\s*<d[td]\b)',
+        '</dd>(?=\s*(?:<d[td]\b|</dl>))',
+        '</p>(?=\s*(?:<(?:p|h[1-6]|ul|ol|dl|div|details|section|aside|nav|table)\b|</(?:body|div|section|header|main)>))'
+    )){$html=[regex]::Replace($html,$pattern,'')}
     [System.Text.UTF8Encoding]::new($false).GetBytes($html.Replace("`r`n", "`n"))
 }
 
