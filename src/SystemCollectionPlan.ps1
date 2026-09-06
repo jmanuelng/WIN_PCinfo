@@ -2345,6 +2345,13 @@ function Invoke-SystemCollectionPlan {
         $runIntegrityCompromised = $true
         $providerAvailable = $null
     }
+    if (-not $assessmentEvidenceCrossed) {
+        # No admitted worker frame means every field in this attempt shares
+        # its actual failure, cancellation or timeout, rather than the initial
+        # placeholder used while waiting for the authenticated result.
+        $privatePolicyCspResults = New-SystemPrivatePolicyCspResults `
+            -Policy $policy -State $coverageState -ReasonCode $reasonCode
+    }
     New-SystemCollectorResult -Policy $policy -Plan $Plan -PlanDigest $PlanDigest `
         -State $state -ReasonCode $reasonCode -CoverageState $coverageState `
         -ObservedExecutionContext $resultContext.ObservedExecutionContext `

@@ -15,6 +15,7 @@ $root = Join-Path $repositoryRoot ('.test-output/package-buffer-' + [guid]::NewG
 $null = [IO.Directory]::CreateDirectory($root)
 $script:ObservedPackageBuffers = [Collections.Generic.List[object]]::new()
 $recipient = $null
+$record=$report=$inner=$invalid=$hostileInner=$null
 try {
     $record = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'fixtures/contract-positive.json'))
     $report = [Text.Encoding]::UTF8.GetBytes('<html>synthetic buffer safety</html>')
@@ -73,6 +74,10 @@ try {
     Write-Output 'PASS: authenticated record refusal clears all observed owned key, chunk, archive and decoded artifact buffers.'
 }
 finally {
+    foreach($buffer in @($record,$report,$invalid,$hostileInner)) {
+        if($null -ne $buffer){[Security.Cryptography.CryptographicOperations]::ZeroMemory($buffer)}
+    }
+    if($null -ne $inner){[Security.Cryptography.CryptographicOperations]::ZeroMemory($inner.bytes)}
     if ($null -ne $recipient) { $recipient.certificate.Dispose() }
     . ([scriptblock]::Create($packageSource))
     foreach ($allocation in $script:ObservedPackageBuffers) {

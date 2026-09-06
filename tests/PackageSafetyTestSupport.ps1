@@ -24,7 +24,11 @@ function New-AuthenticatedTestArchive {
         finally { $zip.Dispose() }
         ,$memory.ToArray()
     }
-    finally { [Security.Cryptography.CryptographicOperations]::ZeroMemory($memory.GetBuffer()); $memory.Dispose() }
+    finally {
+        [Security.Cryptography.CryptographicOperations]::ZeroMemory($entries['package-manifest.json'])
+        [Security.Cryptography.CryptographicOperations]::ZeroMemory($memory.GetBuffer())
+        $memory.Dispose()
+    }
 }
 
 function Add-PackageBufferObservation {

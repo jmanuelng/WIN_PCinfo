@@ -73,7 +73,7 @@ function Test-IdentityEnrollmentCollectorPayload {
         (@($names | Sort-Object) -join '|') -ne (@($allowedNames | Sort-Object) -join '|')) {
         return $false
     }
-    $states = @('Complete','Unavailable','Denied','Malformed','Failed')
+    $states = @('Complete','Unavailable','Denied','Malformed','Failed','TimedOut','Cancelled','NotAttempted')
     if ([string]$Payload.registrationState -notin $states -or
         [string]$Payload.userContextState -notin $states -or
         [string]$Payload.workSchoolState -notin $states -or
@@ -650,6 +650,19 @@ try {
     } finally { if($null -ne $event){$event.Dispose()} }
 }
 
+function Get-IdentityAttemptFailureState {
+    param([Parameter(Mandatory)] $Attempt)
+    if ($Attempt.succeeded) { return '' }
+    switch -Wildcard ([string]$Attempt.reasonCode) {
+        'PROCESS.DEADLINE_EXCEEDED' { 'TimedOut' }
+        'PROCESS.CANCELLED_*' { 'Cancelled' }
+        'RUN.CANCELLED_BEFORE_SCHEDULING' { 'NotAttempted' }
+        'COLLECTION.IDENTITY_USER_CONTEXT_UNAVAILABLE' { 'Unavailable' }
+        '*DENIED*' { 'Denied' }
+        default { 'Failed' }
+    }
+}
+
 function Get-LiveIdentityEnrollmentPayload {
     param([Parameter(Mandatory)] $Policy)
     $startedAt=[DateTimeOffset]::UtcNow
@@ -682,7 +695,11 @@ function Get-LiveIdentityEnrollmentPayload {
         [int]$registrationSnapshot.UserError -eq 0 -and
         [string]$registrationSnapshot.UserSid -eq [string]$identity.User.Value -and
         [int]$registrationSnapshot.UserSessionId -eq $processSessionId
-    $workSchoolAttempt=if ($sameUserContext) {
+    $workSchoolAttempt=if ((Get-AssessmentCancellationToken).IsCancellationRequested) {
+        [pscustomobject]@{succeeded=$false;snapshot=$null;native=$null
+            reasonCode='RUN.CANCELLED_BEFORE_SCHEDULING'
+            startedAt=[DateTimeOffset]::UtcNow;completedAt=[DateTimeOffset]::UtcNow}
+    } elseif ($sameUserContext) {
         Invoke-BoundedIdentityNativeSnapshot -Policy $Policy -CollectorIndex 1 -Mode 'WorkSchool'
     } else {
         [pscustomobject]@{succeeded=$false;snapshot=$null;native=$null
@@ -691,11 +708,8 @@ function Get-LiveIdentityEnrollmentPayload {
     }
     Assert-IdentityCollectorCleanupVerified -Attempt $workSchoolAttempt
     $workSchoolSnapshot=$workSchoolAttempt.snapshot
-    $registrationFailureState=if([bool]$registrationAttempt.succeeded){''}
-        elseif($registrationAttempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
-    $workSchoolFailureState=if([bool]$workSchoolAttempt.succeeded){''}
-        elseif($workSchoolAttempt.reasonCode -eq 'COLLECTION.IDENTITY_USER_CONTEXT_UNAVAILABLE'){'Unavailable'}
-        elseif($workSchoolAttempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
+    $registrationFailureState=Get-IdentityAttemptFailureState -Attempt $registrationAttempt
+    $workSchoolFailureState=Get-IdentityAttemptFailureState -Attempt $workSchoolAttempt
     $domainState = if(-not $registrationFailureState -and
         $registrationSnapshot.DomainError -eq 0) {
         switch ([int]$registrationSnapshot.DomainJoinStatus) {
@@ -928,6 +942,7 @@ function Invoke-IdentityEnrollmentCollection {
         $collector = $Policy.collectors[$collectorIndex]
         $attempt=$sourceResult.collectorAttempts[$collectorIndex]
         $collectorScopes = @($specs | Where-Object collector -eq $collectorIndex)
+        if (@($collectorScopes | Where-Object state -ne 'NotAttempted').Count -eq 0) { continue }
         $scopeIds = @($collectorScopes.scope)
         $coverageIds = @($coverage | Where-Object scopeId -in $scopeIds | ForEach-Object coverageId)
         $observationIds = @($observations | Where-Object {

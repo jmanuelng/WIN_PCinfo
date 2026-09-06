@@ -7,6 +7,7 @@ $root = Join-Path $repositoryRoot ('.test-output/assessment-safety-' + [guid]::N
 try {
     & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Safety -ResultDirectory $root
     & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Workers -ResultDirectory $root
+    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Sources -ResultDirectory $root
     & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Cultures -ResultDirectory $root
 }
 finally {

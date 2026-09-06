@@ -16,6 +16,15 @@ function Add-ControlledResourceSources {
 
 function Assert-ResourceSourceReport {
     param($Record,[string]$Html,[string]$Scenario)
+    function Assert-ResourceObservationDestination($Observation) {
+        # The released report contract uses canonical-order oN destinations for
+        # finding references and retains full IDs for other resource details.
+        $references=@($Record.findings | ForEach-Object { $_.evidenceReferences } | ForEach-Object observationId)
+        $destination=if($Observation.observationId -in $references){'o'+[array]::IndexOf($Record.observations,$Observation)}else{$Observation.observationId}
+        $display=if($Observation.valueState -eq 'ObservedValue'){[string]$Observation.value}else{[string]$Observation.valueState}
+        $detail='id="'+$destination+'"><strong>'+[Net.WebUtility]::HtmlEncode($Observation.fieldId)+':</strong> '+[Net.WebUtility]::HtmlEncode($display)
+        Assert-Equal $true $Html.Contains($detail) 'the exact resource field/value remains attached to its released observation destination'
+    }
     function Coverage($Name){@($Record.coverage|Where-Object scopeId -eq "scope:resource.$Name")[0]}
     function Values($Name){@($Record.observations|Where-Object fieldId -eq "field:resource.$Name")}
     if($Scenario -in @('AlternateAdministrator','LocalSystem')){
@@ -38,7 +47,7 @@ function Assert-ResourceSourceReport {
         }
         $endpoint=@(Values 'mapped-drive.remote-endpoint'|Where-Object subjectId -eq $mapped.subjectId)[0]
         Assert-Equal $(if($Scenario -eq 'ProviderMismatch'){'\\synthetic-file\Other-東京'}else{'\\synthetic-file\R-東京'}) $endpoint.value 'the local session table retains its actual target'
-        Assert-Equal $true $Html.Contains('id="'+$provider.observationId+'"') 'the provider observation remains traceable in HTML'
+        Assert-ResourceObservationDestination $provider
     }
     if($Scenario -eq 'DriverRegistrations'){
         $drivers=@(Values 'printer-driver.name'|Where-Object value -eq 'Driver-東京')
@@ -50,7 +59,7 @@ function Assert-ResourceSourceReport {
             $version=@(Values 'printer-driver.version'|Where-Object subjectId -eq $driver.subjectId)[0]
             $inf=@(Values 'printer-driver.inf-name'|Where-Object subjectId -eq $driver.subjectId)[0]
             foreach($observation in @($driver,$environment,$model,$version,$inf)){
-                Assert-Equal $true $Html.Contains('id="'+$observation.observationId+'"') 'each registration field is traceable in HTML'
+                Assert-ResourceObservationDestination $observation
                 Assert-Equal $true $Html.Contains([Net.WebUtility]::HtmlEncode([string]$observation.value)) 'each exact registration value reaches HTML'
             }
             '{0}|{1}|{2}|{3}' -f $environment.value,$model.value,$version.value,$inf.value

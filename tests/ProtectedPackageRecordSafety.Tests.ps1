@@ -12,6 +12,7 @@ $regions = [regex]::Matches([IO.File]::ReadAllText($candidate),
 foreach ($region in $regions) { . ([scriptblock]::Create($region.Groups[2].Value)) }
 $root = Join-Path $repositoryRoot ('.test-output/package-record-' + [guid]::NewGuid().ToString('N'))
 $null = [IO.Directory]::CreateDirectory($root)
+$record=$report=$inner=$bytes=$hostile=$null
 try {
     $originalText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/contract-positive.json'))
     $record = [Text.Encoding]::UTF8.GetBytes($originalText)
@@ -74,6 +75,10 @@ try {
     }
 }
 finally {
+    foreach($buffer in @($record,$report,$bytes,$hostile)) {
+        if($null -ne $buffer){[Security.Cryptography.CryptographicOperations]::ZeroMemory($buffer)}
+    }
+    if($null -ne $inner){[Security.Cryptography.CryptographicOperations]::ZeroMemory($inner.bytes)}
     $resolved = [IO.Path]::GetFullPath($root)
     if ([IO.Path]::GetDirectoryName($resolved) -ne [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))) { throw 'Record test cleanup escaped its parent.' }
     if ([IO.Directory]::Exists($resolved)) { [IO.Directory]::Delete($resolved, $true) }

@@ -3,10 +3,12 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity')]
     [string] $QualificationCancelAfter = '',
     [string] $QualificationPath = '',
+    [string] $QualificationSourceCase = '',
+    [ValidateSet('','PrivilegeTimeout','PrivilegeLoss','SystemCancel','SystemTimeout','SystemLoss')] [string] $QualificationPlanFault = '',
     [ValidateSet('','en-US','es-MX','tr-TR','ja-JP','ar-SA')] [string] $QualificationCulture = '',
-    [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity','Firmware','Administrator','Policy')]
+    [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity','Firmware','Administrator','Policy','System')]
     [string] $QualificationProhibited = '',
-    [ValidateSet('','Software','Resource','Network','Certificate')] [string] $QualificationWorkerFamily = '',
+    [ValidateSet('','Software','Resource','Network','Certificate','IdentityRegistration','IdentityWorkSchool')] [string] $QualificationWorkerFamily = '',
     [ValidateSet('Cancel','Timeout','Loss')] [string] $QualificationWorkerFault = 'Cancel',
     [switch] $DeclinePreparation,
     [switch] $Wpf, [switch] $HoldRunLock, [switch] $ReportContract,
@@ -114,6 +116,20 @@ if ($CancelDuringPrivilege) {
     $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
         '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
 }
+if ($QualificationPlanFault) {
+    if ($QualificationPlanFault.StartsWith('Privilege')) {
+        $scenario=if($QualificationPlanFault -eq 'PrivilegeTimeout'){'Timeout'}else{'LostWorker'}
+        $moduleText=$moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
+            '-LocalPackageProtector $LocalPackageProtector -ValidationScenario '+$scenario)
+    }
+    else {
+        $scenario=@{SystemCancel='Cancellation';SystemTimeout='Timeout';SystemLoss='WorkerLost'}[$QualificationPlanFault]
+        $before='Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess -CancellationToken $CancellationToken -PrivilegeChannel $PrivilegeChannel }'
+        $after=if($QualificationPlanFault -eq 'SystemCancel'){'$script:StatusDeskTransport.Cancellation.CancelAfter(1500); '}else{''}
+        $after+='$result=Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario '+$scenario+' -CancellationToken $CancellationToken -PrivilegeChannel $PrivilegeChannel; $script:StatusDeskTransport.State.QualificationSystemState=$result.state; $script:StatusDeskTransport.State.QualificationSystemCoverage=@($result.collectorResult.Coverage | Select-Object scopeId,state,reasonCode)+@($result.PrivatePolicyCspResults.fields | Select-Object scopeId,state,reasonCode)+@([pscustomobject]@{scopeId="scope:policy.applocker.csp-channel";state=$result.PrivatePolicyCspResults.appLockerCsp.state;reasonCode=$result.PrivatePolicyCspResults.appLockerCsp.reasonCode}); $result }'
+        $moduleText=$moduleText.Replace($before,$after)
+    }
+}
 if ($ActiveAction -ne 'None') {
     $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy',
         '[Threading.Thread]::Sleep(11500); Invoke-ControlledResourceDependenciesCollection -Policy')
@@ -219,10 +235,18 @@ function Invoke-__COLLECTION__Collection {
 }
 '@.Replace('__COLLECTION__', $collectionName)
 }
-if ($QualificationPath -or $QualificationCulture -or $QualificationProhibited -or $QualificationWorkerFamily) { . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1') }
+if ($QualificationPath -or $QualificationCulture -or $QualificationProhibited -or $QualificationWorkerFamily -or $QualificationSourceCase) { . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1') }
 if ($QualificationProhibited) { $moduleText = Add-QualificationProhibitedPayload -ModuleText $moduleText -Boundary $QualificationProhibited }
 if ($QualificationWorkerFamily) { $moduleText = Add-QualificationWorkerFault -ModuleText $moduleText -Family $QualificationWorkerFamily -Fault $QualificationWorkerFault }
 if ($QualificationCulture) { $moduleText = Add-QualificationCulture -ModuleText $moduleText -Culture $QualificationCulture }
+if ($QualificationSourceCase) {
+    . (Join-Path $PSScriptRoot 'AdditionalScopeSourceAdapters.ps1')
+    $sourceCases=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'fixtures/assessment-additional-sources.json') -Raw | ConvertFrom-Json
+    $sourceCase=@($sourceCases | Where-Object id -eq $QualificationSourceCase)
+    if ($sourceCase.Count -ne 1) { throw 'Additional source qualification case is not uniquely selected.' }
+    $sourceCase=$sourceCase[0]
+    $moduleText=Add-AdditionalScopeSource -ModuleText $moduleText -Case $sourceCase
+}
 if ($QualificationPath -or $QualificationProhibited -or $QualificationCulture) {
     $moduleText = $moduleText.Replace('switch ([string] $Record.recordType) {',
         'if (-not $Transport.State.ContainsKey("QualificationOutput")) { $Transport.State.QualificationOutput = [Collections.Generic.List[string]]::new() }; $Transport.State.QualificationOutput.Add($json); switch ([string] $Record.recordType) {')
@@ -368,6 +392,7 @@ try {
             candidateSha256 = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
             outcome = $terminal.outcome; exitCode = $session.ExitCode
             cleanupVerified = $terminal.cleanup.verified; coverage = @(); culture = $QualificationCulture
+            attemptCoverage = if($session.Transport.State.ContainsKey('QualificationSystemCoverage')){$session.Transport.State.QualificationSystemCoverage}else{@()}
         }
         [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     }
@@ -377,6 +402,11 @@ try {
         Assert-QualificationMarkerAbsent -Text $publicText
     }
     if ($QualificationProhibited) {
+        if ($QualificationProhibited -eq 'System') {
+            Assert-Equal $true $session.Transport.State.SystemInvoked 'the prohibited SYSTEM frame comes from an invoked controlled worker'
+            Assert-Equal 'IDENTITY.SYSTEM_INTEGRITY_FAILED' $terminal.reasonCode 'the closed SYSTEM wire rejects the prohibited property before record creation'
+            $session.Transport.State.ProhibitedBoundaryReached=$true
+        }
         Assert-Equal $true $session.Transport.State.ProhibitedBoundaryReached 'the controlled prohibited input actually reached the collector-result boundary'
         Assert-Equal 'IntegrityFailed' $terminal.outcome 'prohibited collector payload cannot produce a successful report'
         Assert-Equal '' $session.Transport.State.PackagePath 'rejected input cannot reach package naming or viewing'
@@ -388,6 +418,30 @@ try {
         }
         Assert-Equal 0 @(Get-ChildItem -LiteralPath $testRoot -Recurse -File).Count 'rejected collector input leaves no retained file, package, report or diagnostic dump'
         Write-Output "PASS: prohibited $QualificationProhibited payload and declared transforms are absent from public output and retained artifacts."
+        return
+    }
+    if ($QualificationSourceCase -and $sourceCase.PSObject.Properties['terminal']) {
+        Assert-Equal $sourceCase.terminal $terminal.outcome 'the source failure reaches its required terminal'
+        Assert-Equal $sourceCase.terminalReason $terminal.reasonCode 'the actual failed collector supplies the terminal reason'
+        Assert-Equal 50 $session.ExitCode 'an untrusted device result preserves the integrity-failure code'
+        Assert-Equal '' $session.Transport.State.PackagePath 'untrusted source output cannot reach final package naming'
+        Assert-Equal $true $terminal.cleanup.verified 'the failed source leaves verified owned cleanup'
+        return
+    }
+    if ($QualificationPlanFault.StartsWith('System')) {
+        $expected=@{SystemCancel='Cancelled';SystemTimeout='TimedOut';SystemLoss='Failed'}[$QualificationPlanFault]
+        Assert-Equal $expected $session.Transport.State.QualificationSystemState 'the real SYSTEM worker reaches its requested interruption'
+        $attemptCoverage=$session.Transport.State.QualificationSystemCoverage
+        Assert-Equal 9 @($attemptCoverage).Count 'the interrupted SYSTEM attempt covers all nine owned selected scopes'
+        foreach($scope in $attemptCoverage){Assert-Equal $expected $scope.state 'every SYSTEM field retains the actual interrupted attempt state'}
+    }
+    if ($QualificationPlanFault.StartsWith('Privilege')) {
+        $expected=if($QualificationPlanFault -eq 'PrivilegeTimeout'){'TimedOut'}else{'IntegrityFailed'}
+        Assert-Equal $expected $terminal.outcome 'lost or timed-out privileged protocol cannot produce a completed assessment'
+        Assert-Equal $(if($expected -eq 'TimedOut'){40}else{50}) $session.ExitCode 'privileged interruption retains its truthful terminal code'
+        Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'a failed privileged worker cannot schedule SYSTEM'
+        Assert-Equal '' $session.Transport.State.PackagePath 'no authenticated operation payload means no final package'
+        Assert-Equal $true $terminal.cleanup.verified 'privileged worker failure verifies owned cleanup'
         return
     }
     if ($SoftwareReportScenario -eq 'EscapedOverflow') {
@@ -434,7 +488,7 @@ try {
         Assert-Equal $false $terminal.collectionStarted 'lock contention starts no collector'
         return
     }
-    Assert-Equal $(if(($QualificationWorkerFamily -and $QualificationWorkerFault -eq 'Cancel') -or $QualificationCancelAfter -or $CancelAfterIdentity -or $CancelAfterResource -or $CancelDuringPrivilege -or $ActiveAction -ne 'None' -or $ReadinessSourceScenario -eq 'Cancelled'){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
+    Assert-Equal $(if(($QualificationWorkerFamily -and $QualificationWorkerFault -eq 'Cancel') -or $QualificationCancelAfter -or $CancelAfterIdentity -or $CancelAfterResource -or $CancelDuringPrivilege -or $QualificationPlanFault -eq 'SystemCancel' -or $ActiveAction -ne 'None' -or $ReadinessSourceScenario -eq 'Cancelled'){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
     Assert-Equal $true $terminal.collectionStarted 'ordinary collection actually executed'
     if ($RequireRecoveryJournal) {
         Assert-Equal $true $session.Transport.State.JournalObserved 'ordinary assessment registers durable ownership before the first source executes'
@@ -442,11 +496,11 @@ try {
     }
     Assert-Equal $preparation.planDigest $terminal.planDigest 'approval and terminal bind the same frozen plan'
     $summary = $session.Transport.State.Completion | ConvertFrom-Json
-    if (($CancelDuringPrivilege -or ($ActiveAction -ne 'None' -and $ActiveWorker -in @('Privilege','System'))) -and
+    if (($CancelDuringPrivilege -or $QualificationPlanFault -eq 'SystemCancel' -or ($ActiveAction -ne 'None' -and $ActiveWorker -in @('Privilege','System'))) -and
         $summary.packageAvailability -eq 'VerifiedAbsent') {
         Assert-Equal '' $session.Transport.State.PackagePath 'cancellation before useful evidence does not invent a report'
         Assert-Equal $true $terminal.cleanup.verified 'early cancellation verifies both privilege and SYSTEM cleanup'
-        if ($CancelDuringPrivilege -or $ActiveWorker -eq 'Privilege') {
+        if ($CancelDuringPrivilege -or ($ActiveAction -ne 'None' -and $ActiveWorker -eq 'Privilege')) {
             Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'cancelled administrator work cannot launch SYSTEM'
         }
         return
@@ -456,6 +510,22 @@ try {
     $opened = Read-ProtectedEvidencePackage -LiteralPath $session.Transport.State.PackagePath
     Assert-Equal $true $opened.verified 'actual encryption boundary reopens the generated result'
     $record = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-record.json']) | ConvertFrom-Json
+    if($QualificationCulture) {
+        if($IdentitySourceScenario) {
+            $observedCultures=@($session.Transport.State.ObservedIdentityCultures)
+            Assert-Equal 2 $observedCultures.Count 'both bounded identity children report their executing cultures'
+            foreach($observedCulture in $observedCultures) {
+                Assert-Equal $QualificationCulture $observedCulture.culture 'identity native child uses requested culture'
+                Assert-Equal $QualificationCulture $observedCulture.uiCulture 'identity native child uses requested UI culture'
+            }
+        }
+        $sourcePrefix=if($SoftwareSourceScenario){'field:software.*'}elseif($ResourceSourceScenario){'field:resource.*'}elseif($NetworkSourceScenario){'field:network.*'}elseif($CertificateSourceScenario){'field:certificate.*'}else{''}
+        if($sourcePrefix) {
+            $sourceProvenance=@($record.provenance | Where-Object fieldId -Like $sourcePrefix)
+            Assert-Equal $true ($sourceProvenance.Count -gt 0) 'the executing source emits locale-bearing evidence'
+            foreach($entry in $sourceProvenance) { Assert-Equal $QualificationCulture $entry.sourceLocale 'child/source culture survives canonical packaging' }
+        }
+    }
     if ($QualificationPath) {
         $definition = (Get-EmbeddedAssessmentContractSet -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)).Definition
         $fullProfile = 'profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness'
@@ -476,8 +546,10 @@ try {
             candidateSha256 = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
             profileId = $record.run.evidenceProfileId; outcome = $terminal.outcome
             culture = $QualificationCulture
+            observedIdentityCultures = if($session.Transport.State.ContainsKey('ObservedIdentityCultures')){@($session.Transport.State.ObservedIdentityCultures)}else{@()}
             exitCode = $session.ExitCode; cleanupVerified = $terminal.cleanup.verified
             coverage = @($record.coverage | Select-Object scopeId,state,reasonCode)
+            attemptCoverage = if($session.Transport.State.ContainsKey('QualificationSystemCoverage')){$session.Transport.State.QualificationSystemCoverage}else{@()}
         }
         [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     }
@@ -497,16 +569,44 @@ try {
         Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
     }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
+    if ($QualificationPath) {
+        foreach ($artifactBytes in $opened.artifacts.Values) {
+            Assert-QualificationMarkerAbsent -Text ([Text.Encoding]::UTF8.GetString($artifactBytes))
+        }
+    }
+    if ($QualificationPlanFault.StartsWith('System')) {
+        $expected=@{SystemCancel='Cancelled';SystemTimeout='TimedOut';SystemLoss='Failed'}[$QualificationPlanFault]
+        Assert-Equal $expected $session.Transport.State.QualificationSystemState 'the controlled SYSTEM worker reaches its real interruption disposition'
+        $scopes=@($record.coverage | Where-Object { $_.scopeId -eq 'scope:device.mdm-policy.system' -or $_.scopeId -like 'scope:policy.mdm.*' -or $_.scopeId -eq 'scope:policy.applocker.csp-channel' })
+        Assert-Equal 9 $scopes.Count 'all nine selected SYSTEM scopes remain represented'
+        foreach ($scope in $scopes) {
+            Assert-Equal $expected $scope.state 'SYSTEM interruption propagates to every owned selected scope'
+            Assert-Equal 0 @($scope.observationIds).Count 'the interrupted SYSTEM worker cannot establish an absent policy'
+        }
+    }
     if ($QualificationWorkerFamily) {
         $expected = @{ Cancel='Cancelled'; Timeout='TimedOut'; Loss='Failed' }[$QualificationWorkerFault]
         $expectedReason = @{ Cancel='PROCESS.CANCELLED_HARD'; Timeout='PROCESS.DEADLINE_EXCEEDED'; Loss="$($QualificationWorkerFamily.ToUpperInvariant()).SOURCE_FAILED" }[$QualificationWorkerFault]
+        if($QualificationWorkerFamily -like 'Identity*') {
+            $expectedReason=if($QualificationWorkerFault -eq 'Loss'){'COLLECTION.IDENTITY_SOURCE_FAILED'}else{$expectedReason}
+        }
         Assert-Equal $expectedReason $session.Transport.State.QualificationWorkerReason 'the real owned process reaches its requested interruption boundary'
         $prefix = "scope:$($QualificationWorkerFamily.ToLowerInvariant())."
-        foreach ($scope in @($record.coverage | Where-Object { $_.scopeId.StartsWith($prefix) })) {
+        $ownedScopes=if($QualificationWorkerFamily -eq 'IdentityRegistration'){@('scope:identity.assessment-user-context','scope:device.registration-context')}
+            elseif($QualificationWorkerFamily -eq 'IdentityWorkSchool'){@('scope:device.work-school-registration-context')}else{@()}
+
+        foreach ($scope in @($record.coverage | Where-Object { $_.scopeId.StartsWith($prefix) -or $_.scopeId -in $ownedScopes })) {
             Assert-Equal $expected $scope.state 'native interruption propagates to every scope owned by this collector'
             Assert-Equal 0 @($scope.observationIds).Count 'a stopped worker cannot invent an empty successful observation'
         }
-        if ($QualificationWorkerFault -eq 'Cancel') { Assert-QualificationScopeScheduling -Record $record -CancelledAfter $QualificationWorkerFamily }
+        if($QualificationWorkerFamily -like 'Identity*') {
+            $expectedModes=if($QualificationWorkerFamily -eq 'IdentityRegistration'){'RegistrationUser'}else{'RegistrationUser|WorkSchool'}
+            Assert-Equal $expectedModes ($session.Transport.State.QualificationIdentityModes -join '|') 'identity native calls follow the verified prerequisite and cancellation state'
+        }
+        if($QualificationWorkerFamily -eq 'IdentityRegistration' -and $QualificationWorkerFault -eq 'Cancel') {
+            Assert-Equal 'NotAttempted' @($record.coverage | Where-Object scopeId -eq 'scope:device.work-school-registration-context')[0].state 'registration cancellation never schedules the dependent work-account read'
+        }
+        if ($QualificationWorkerFault -eq 'Cancel') { Assert-QualificationScopeScheduling -Record $record -CancelledAfter $(if($QualificationWorkerFamily -like 'Identity*'){'Identity'}else{$QualificationWorkerFamily}) }
     }
     if ($ReportContract) {
         . (Join-Path $PSScriptRoot 'ReportContractAssertions.ps1')
@@ -535,35 +635,36 @@ try {
         finally { if(-not (Remove-EvidenceWorkspaceValidationBoundary $exportBoundary)){throw 'Software export test cleanup failed.'} }
         Write-Output "Software report $SoftwareReportScenario bytes: $($opened.artifacts['assessment-report.html'].Length)"
     }
-    if ($SoftwareSourceScenario -and -not $QualificationWorkerFamily) { Assert-SoftwareSourceReport -Record $record -Html $html -Scenario $SoftwareSourceScenario }
-    if ($ResourceSourceScenario -and -not $QualificationWorkerFamily) { Assert-ResourceSourceReport -Record $record -Html $html -Scenario $ResourceSourceScenario }
+    if ($SoftwareSourceScenario -and -not ($QualificationWorkerFamily -or $QualificationSourceCase)) { Assert-SoftwareSourceReport -Record $record -Html $html -Scenario $SoftwareSourceScenario }
+    if ($ResourceSourceScenario -and -not ($QualificationWorkerFamily -or $QualificationSourceCase)) { Assert-ResourceSourceReport -Record $record -Html $html -Scenario $ResourceSourceScenario }
     if ($ConnectivitySourceScenario) {
         Assert-ConnectivitySourceReport -Record $record -Html $html -Scenario $ConnectivitySourceScenario -State $session.Transport.State
     }
-    if ($CertificateSourceScenario -and -not $QualificationWorkerFamily) {
+    if ($CertificateSourceScenario -and -not ($QualificationWorkerFamily -or $QualificationSourceCase)) {
         Assert-Equal ($CertificateSourceScenario -ne 'AlternateAdministrator') $session.Transport.State.ContainsKey('CertificateSourceExecuted') 'certificate stores require the Assessment User context'
         Assert-CertificateSourceReport -Record $record -Html $html -Scenario $CertificateSourceScenario
     }
-    if ($NetworkSourceScenario -and -not $QualificationWorkerFamily) {
+    if ($NetworkSourceScenario -and -not ($QualificationWorkerFamily -or $QualificationSourceCase)) {
         Assert-Equal $true $session.Transport.State.NetworkSourceExecuted 'actual generated local reducer executed'
         Assert-Equal $false $session.Transport.State.ContainsKey('NetworkRequestAttempted') 'Local Only never enters the nested network request adapter'
         Assert-NetworkSourceReport -Record $record -Html $html -Scenario $NetworkSourceScenario
     }
-    if ($ReadinessSourceScenario) {
+    if ($ReadinessSourceScenario -and -not $QualificationSourceCase) {
         Assert-ReadinessSourceReport -Record $record -Html $html -Scenario $ReadinessSourceScenario -Culture $QualificationCulture
     }
-    if ($IdentitySourceScenario) {
+    if ($IdentitySourceScenario -and -not ($QualificationSourceCase -or $QualificationWorkerFamily)) {
         Assert-IdentitySourceReport -Record $record -Html $html -Scenario $IdentitySourceScenario
     }
-    if ($PolicySourceScenario) {
+    if ($PolicySourceScenario -and -not $QualificationSourceCase) {
         Assert-PolicySourceReport -Record $record -Html $html -Scenario $PolicySourceScenario
     }
-    if ($SecuritySourceScenario) {
+    if ($SecuritySourceScenario -and -not $QualificationSourceCase) {
         Assert-SecuritySourceReport -Record $record -Html $html -Scenario $SecuritySourceScenario -Culture $QualificationCulture
     }
-    if ($PlatformSourceScenario) { Assert-PlatformSourceReport -Record $record -Html $html -Scenario $PlatformSourceScenario }
-    if ($RemoteSourceScenario) { Assert-RemoteSourceReport -Record $record -Html $html -Scenario $RemoteSourceScenario }
-    if (-not ($CancelAfterIdentity -or $CancelAfterResource -or $QualificationCancelAfter -in @('Identity','Resource'))) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
+    if ($PlatformSourceScenario -and -not $QualificationSourceCase) { Assert-PlatformSourceReport -Record $record -Html $html -Scenario $PlatformSourceScenario }
+    if ($RemoteSourceScenario -and -not $QualificationSourceCase) { Assert-RemoteSourceReport -Record $record -Html $html -Scenario $RemoteSourceScenario }
+    if ($QualificationSourceCase) { Assert-AdditionalScopeSource -Record $record -Html $html -Case $sourceCase -State $session.Transport.State }
+    if (-not ($CancelAfterIdentity -or $CancelAfterResource -or $QualificationCancelAfter -in @('Identity','Resource') -or ($QualificationWorkerFamily -like 'Identity*' -and $QualificationWorkerFault -eq 'Cancel'))) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `
         -RequestedArtifact assessment-report.html -ViewingBasePath $testRoot
     Assert-Equal 'Opened' $viewing.state 'Open report uses a registered protected viewing boundary'

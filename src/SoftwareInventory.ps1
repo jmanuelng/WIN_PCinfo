@@ -572,7 +572,7 @@ function ConvertTo-SoftwareInventoryAttemptPayload {
 }
 
 function Test-SoftwareInventorySid {
-    param([Parameter(Mandatory)] [string] $Value)
+    param([Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Value)
     try {
         if ([Text.Encoding]::UTF8.GetByteCount($Value) -gt 184) { return $false }
         $sid = [Security.Principal.SecurityIdentifier]::new($Value)

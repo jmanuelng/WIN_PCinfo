@@ -14,6 +14,7 @@ $root = Join-Path $repositoryRoot ('.test-output/device-prohibited-' + [guid]::N
 $null = [IO.Directory]::CreateDirectory($root)
 $supervisorSource = ($regions | Where-Object { $_.Groups[1].Value -eq 'ProcessSupervisor.ps1' }).Groups[2].Value
 $script:ProhibitedNativeBuffers = [Collections.Generic.List[object]]::new()
+$recordBytes=$reportBytes=$opened=$null
 try {
     # Observe owned native transport arrays without substituting the supervisor.
     $tokens=$null; $errors=$null
@@ -68,6 +69,12 @@ try {
     Assert-Equal 1 @(Get-ChildItem -LiteralPath $root -Recurse -File).Count 'only the protected package persists, with no plaintext transport, report or archive'
 }
 finally {
+    foreach($buffer in @($recordBytes,$reportBytes)) {
+        if($null -ne $buffer){[Security.Cryptography.CryptographicOperations]::ZeroMemory($buffer)}
+    }
+    if($null -ne $opened -and $opened.verified) {
+        foreach($buffer in $opened.artifacts.Values){[Security.Cryptography.CryptographicOperations]::ZeroMemory($buffer)}
+    }
     . ([scriptblock]::Create($supervisorSource))
     $resolved=[IO.Path]::GetFullPath($root)
     if([IO.Path]::GetDirectoryName($resolved) -ne [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))){throw 'Prohibited-material cleanup escaped its parent.'}
