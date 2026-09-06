@@ -40,6 +40,15 @@
         "contractVersion": "1.0.0",
         "release": "2.0.0-preview.1",
         "catalogVersion": "2026-08-14",
+        "preparationContext": {
+          "source": "ActiveInterfaceDnsAddressesAndCurrentUserStaticProxy",
+          "maximumInterfaces": 64,
+          "maximumResolversPerInterface": 8,
+          "networkRequestsAllowed": false,
+          "automaticProxyDiscoveryAllowed": false,
+          "retainRawContextInPublicOutput": false,
+          "changeBehavior": "StopNewRequests"
+        },
         "evidenceProfileId": "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness",
         "collector": {
           "collectorId": "collector:windows.microsoft-connectivity",
@@ -3536,11 +3545,17 @@
     "network": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {"if": {"properties": {"behavior": {"const": "LocalOnly"}}},
+         "then": {"properties": {"context": {"type": "null"}, "plannedRequests": {"maxItems": 0}}},
+         "else": {"properties": {"context": {"type": "object"}, "plannedRequests": {"minItems": 2}}}}
+      ],
       "required": [
         "behavior",
         "automaticTelemetry",
         "authenticatedCloudCollection",
-        "plannedRequests"
+        "plannedRequests",
+        "context"
       ],
       "properties": {
         "behavior": {
@@ -3578,6 +3593,19 @@
               }
             }
           }
+        },
+        "context": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "object", "additionalProperties": false,
+             "required": ["resolver", "proxy", "snapshotDigest", "changeBehavior"],
+             "properties": {
+               "resolver": {"const": "ActiveWindowsResolver"},
+               "proxy": {"const": "FrozenCurrentUserStaticProxyOrDirect"},
+               "snapshotDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+               "changeBehavior": {"const": "StopNewRequests"}
+             }}
+          ]
         }
       }
     },

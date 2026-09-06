@@ -1604,6 +1604,8 @@ $identityGuidance
 <h2>Microsoft service connectivity and enrollment discovery</h2>
 <p>Catalog version $([Net.WebUtility]::HtmlEncode([string]$MicrosoftConnectivityPolicy.catalogVersion)). Connectivity finding: $([Net.WebUtility]::HtmlEncode([string]$connectivityFinding.outcome)). TLS inspection finding: $([Net.WebUtility]::HtmlEncode([string]$inspectionFinding.outcome)). Covered protocol scopes: $($connectivityCoverage.Count).</p>
 <p>DNS, TCP, TLS negotiation, offline certificate-chain evaluation, Windows proxy behavior, bounded HTTP metadata, and enrollment-discovery evidence are separate observations. A failure in one layer is not relabeled as a failure in another.</p>
+<p>The separate DNS/TCP/TLS and chain fields describe the direct path. HTTP state describes the selected direct or static-proxy HEAD path: CertificateChainInvalid preserves that path's certificate rejection; TlsAuthenticationFailed preserves other TLS authentication failures. These do not overwrite direct-path evidence or imply a tenant authorization result.</p>
+<p>Approval binds the active Windows resolver choice and a private snapshot of visible active-interface DNS servers and current-user static proxy routes. Each new protocol operation checks that snapshot again. Changed or unavailable context stops new requests. Automatic PAC/WPAD, WinHTTP/service proxy context and tenant-specific resolver policy are not inferred. Windows owns name resolution; the count describes logical protocol attempts, not packets or all delegated resolver traffic.</p>
 <h3>Exact generic targets approved before collection</h3><ul>$($endpointRows -join '')</ul>
 <details><summary>Restricted per-endpoint connectivity evidence</summary><ul>$($resultRows -join '')</ul></details>
 <p>TLS inspection is Confirmed only with independent proxy-policy and certificate-path corroboration; Suspected, NotObservedWithinCompletedTests, and Indeterminate remain distinct. A certificate difference alone is not confirmation.</p>
@@ -2090,6 +2092,7 @@ function Invoke-DeviceReadinessSlice {
         [Parameter()] [string] $SoftwareInventoryLiteralPath,
         [Parameter()] [string] $CertificateTrustLiteralPath,
         [Parameter()] [string] $MicrosoftConnectivityLiteralPath,
+        [Parameter()] $ConnectivityContext,
         [Parameter(Mandatory)] $PreparationPlan,
         [Parameter(Mandatory)] [string] $ApprovedOutputDestination,
         [Parameter()] $ApprovedRecipient,
@@ -2554,6 +2557,8 @@ function Invoke-DeviceReadinessSlice {
                     -NetworkBehavior ([string]$PreparationPlan.network.behavior)
             }else{
                 Invoke-MicrosoftConnectivityCollection -Policy $connectivityPolicy -Live `
+                    -ConnectivityContext $ConnectivityContext `
+                    -ContextDigest $(if($null -ne $PreparationPlan.network.context){[string]$PreparationPlan.network.context.snapshotDigest}else{''}) `
                     -NetworkBehavior ([string]$PreparationPlan.network.behavior)
             }
             $collectionStarted=$collectionStarted -or

@@ -1,9 +1,73 @@
+Set-StrictMode -Version Latest
 $script:MicrosoftConnectivityPolicyBase64 = '__MICROSOFT_CONNECTIVITY_POLICY_BASE64__'
 $script:MicrosoftConnectivityPolicyDigest = '__MICROSOFT_CONNECTIVITY_POLICY_SHA256__'
 
 function Get-MicrosoftConnectivitySha256 {
     param([Parameter(Mandatory)] [byte[]] $Bytes)
     [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($Bytes)).ToLowerInvariant()
+}
+
+function Get-MicrosoftConnectivityContextDigest {
+    param([Parameter(Mandatory)] $Context)
+    $json=Microsoft.PowerShell.Utility\ConvertTo-Json -InputObject $Context -Depth 12 -Compress
+    Get-MicrosoftConnectivitySha256 -Bytes ([Text.Encoding]::UTF8.GetBytes($json))
+}
+
+function Get-MicrosoftConnectivityExecutionContext {
+    param([Parameter(Mandatory)] $Policy, [switch] $Synthetic)
+    # Preparation reads only local routing prerequisites. No name resolution,
+    # PAC/WPAD evaluation, transport, provider activation or endpoint is opened.
+    # Raw resolver/proxy identifiers stay in the worker, never public progress.
+    $resolvers=[Collections.Generic.List[string]]::new()
+    $resolverState='Unavailable'
+    if (-not $Synthetic) {
+        try {
+            $interfaces=[Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()
+            if ($interfaces.Count -gt [int]$Policy.preparationContext.maximumInterfaces) { throw 'Resolver interface bound exceeded.' }
+            foreach ($interface in $interfaces) {
+                if ($interface.OperationalStatus -ne [Net.NetworkInformation.OperationalStatus]::Up) { continue }
+                $properties=$interface.GetIPProperties()
+                if ($properties.DnsAddresses.Count -gt [int]$Policy.preparationContext.maximumResolversPerInterface) { throw 'Resolver address bound exceeded.' }
+                $resolverOrdinal=0
+                foreach ($address in $properties.DnsAddresses) {
+                    $resolvers.Add($interface.Id + ':' + $resolverOrdinal + ':' + $address.ToString())
+                    $resolverOrdinal++
+                }
+            }
+            $resolverState=if($resolvers.Count -gt 0){'Available'}else{'Unavailable'}
+        } catch { $resolvers.Clear() }
+    }
+    $routes=foreach($endpoint in $Policy.endpoints) {
+        $selection=if($Synthetic){
+            [pscustomobject]@{supported=$false;transportMode='Indeterminate';proxyState='Unavailable';proxy=$null}
+        }else{Get-MicrosoftConnectivityProxySelection -EndpointUri ([Uri]$endpoint.uri)}
+        [pscustomobject][ordered]@{
+            endpointId=[string]$endpoint.endpointId
+            supported=[bool]$selection.supported
+            transportMode=[string]$selection.transportMode
+            proxyState=[string]$selection.proxyState
+            proxyUri=if($null -ne $selection.proxy){$selection.proxy.Address.AbsoluteUri}else{$null}
+        }
+    }
+    [pscustomobject][ordered]@{resolverState=$resolverState;resolvers=@($resolvers|Sort-Object);routes=@($routes)}
+}
+
+function Test-MicrosoftConnectivityApprovedContext {
+    param($Policy,$ConnectivityContext,[string]$ContextDigest)
+    if ($null -eq $ConnectivityContext -or $ContextDigest -cnotmatch '^[a-f0-9]{64}$' -or
+        (Get-MicrosoftConnectivityContextDigest -Context $ConnectivityContext) -cne $ContextDigest -or
+        $ConnectivityContext.resolverState -ne 'Available') { return $false }
+    # Revalidate the embedded allowlist and local resolver/static proxy snapshot
+    # at every logical hop. Changed or unavailable context suppresses new work;
+    # it cannot silently renegotiate the consent or trigger a retry prompt.
+    $releasePolicy=Get-MicrosoftConnectivityPolicy -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
+    if ((Get-MicrosoftConnectivityContextDigest $Policy) -cne
+        (Get-MicrosoftConnectivityContextDigest $releasePolicy)) { return $false }
+    $current=Get-MicrosoftConnectivityExecutionContext -Policy $Policy
+    if($ConnectivityContext.PSObject.Properties['consentNonce']){
+        $current|Add-Member NoteProperty consentNonce $ConnectivityContext.consentNonce
+    }
+    (Get-MicrosoftConnectivityContextDigest $current) -ceq $ContextDigest
 }
 
 function Get-MicrosoftConnectivityPolicy {
@@ -347,7 +411,7 @@ function Test-MicrosoftConnectivityPayload {
             if ([string] $item.dnsState -notin $states -or [string] $item.tcpState -notin $states -or
                 [string] $item.tlsState -notin $states -or
                 [string] $item.proxyState -notin @($states + @('Used', 'Bypassed')) -or
-                [string] $item.httpState -notin @($states + @('RedirectRejected')) -or
+                [string] $item.httpState -notin @($states + @('RedirectRejected','CertificateChainInvalid','TlsAuthenticationFailed')) -or
                 [string] $item.enrollmentDnsState -notin @($states + @('NotApplicable')) -or
                 [string] $item.certificateChainState -notin @(
                     'Trusted', 'Invalid', 'Failed', 'TimedOut', 'Unavailable', 'NotAttempted'
@@ -416,7 +480,9 @@ function Invoke-MicrosoftConnectivityCollection {
         [Parameter(Mandatory)]
         [ValidateSet('LocalOnly', 'MicrosoftConnectivityEnabled')]
         [string] $NetworkBehavior,
-        [Parameter()] [switch] $Live
+        [Parameter()] [switch] $Live,
+        [Parameter()] $ConnectivityContext,
+        [Parameter()] [string] $ContextDigest
     )
     $started = [DateTimeOffset]::UtcNow
     if ($Live) {
@@ -427,7 +493,7 @@ function Invoke-MicrosoftConnectivityCollection {
             $value
         }
         else {
-            Invoke-MicrosoftConnectivityLiveProbe -Policy $Policy
+            Invoke-MicrosoftConnectivityLiveProbe -Policy $Policy -ConnectivityContext $ConnectivityContext -ContextDigest $ContextDigest
         }
     }
     else {
@@ -537,15 +603,18 @@ function Read-MicrosoftConnectivityFixture {
 
 function Get-MicrosoftConnectivityFailureState {
     param([Parameter(Mandatory)] [Exception] $Exception)
-    if ($Exception -is [OperationCanceledException] -or
-        $Exception -is [TimeoutException]) { return 'TimedOut' }
-    if ($Exception -is [Net.Sockets.SocketException] -and
-        $Exception.SocketErrorCode -in @(
-            [Net.Sockets.SocketError]::AccessDenied,
-            [Net.Sockets.SocketError]::ConnectionRefused,
-            [Net.Sockets.SocketError]::HostUnreachable,
-            [Net.Sockets.SocketError]::NetworkUnreachable
-        )) { return 'Blocked' }
+    for($depth=0;$depth -lt 8 -and $null -ne $Exception;$depth++){
+        if ($Exception -is [OperationCanceledException] -or
+            $Exception -is [TimeoutException]) { return 'TimedOut' }
+        if ($Exception -is [Net.Sockets.SocketException] -and
+            $Exception.SocketErrorCode -in @(
+                [Net.Sockets.SocketError]::AccessDenied,
+                [Net.Sockets.SocketError]::ConnectionRefused,
+                [Net.Sockets.SocketError]::HostUnreachable,
+                [Net.Sockets.SocketError]::NetworkUnreachable
+            )) { return 'Blocked' }
+        $Exception=$Exception.InnerException
+    }
     'Failed'
 }
 
@@ -828,20 +897,32 @@ function Get-MicrosoftConnectivityProxySelection {
             'Software\Microsoft\Windows\CurrentVersion\Internet Settings\Connections', $false
         )
         if ($null -eq $settings) { throw 'Current-user proxy settings are unavailable.' }
-        $autoUrl = [string] $settings.GetValue('AutoConfigURL', $null)
+        $proxyEnabled=$settings.GetValue('ProxyEnable',0)
+        $proxyServer=$settings.GetValue('ProxyServer',$null)
+        $proxyOverride=$settings.GetValue('ProxyOverride',$null)
+        $autoUrl=$settings.GetValue('AutoConfigURL',$null)
+        if($proxyEnabled -isnot [int] -or $proxyEnabled -notin @(0,1)){
+            throw 'Malformed Windows proxy enable value.'
+        }
+        foreach($value in @($proxyServer,$proxyOverride,$autoUrl)){
+            if($null -ne $value -and $value -isnot [string]){throw 'Malformed Windows proxy text.'}
+        }
         $blob = if ($null -eq $connections) { $null } else {
-            $connections.GetValue('DefaultConnectionSettings', $null)
+            ,$connections.GetValue('DefaultConnectionSettings', $null)
         }
         $automatic = -not [string]::IsNullOrWhiteSpace($autoUrl)
+        if($null -ne $blob -and ($blob -isnot [byte[]] -or $blob.Length -le 8 -or $blob.Length -gt 16384)){
+            throw 'Malformed Windows connection settings.'
+        }
         if ($blob -is [byte[]] -and $blob.Length -gt 8) {
             # INTERNET_PER_CONN_OPTION flags are stored at byte offset eight;
             # bits 0x04 and 0x08 request PAC URL or automatic discovery.
             $automatic = $automatic -or (($blob[8] -band 0x0c) -ne 0)
         }
         Resolve-MicrosoftConnectivityProxySelection -EndpointUri $EndpointUri `
-            -ProxyEnabled ([int] $settings.GetValue('ProxyEnable', 0) -eq 1) `
-            -ProxyServer ([string] $settings.GetValue('ProxyServer', $null)) `
-            -ProxyOverride ([string] $settings.GetValue('ProxyOverride', $null)) `
+            -ProxyEnabled ($proxyEnabled -eq 1) `
+            -ProxyServer $proxyServer `
+            -ProxyOverride $proxyOverride `
             -AutomaticConfigurationPresent $automatic
     }
     catch {
@@ -917,7 +998,9 @@ function Invoke-MicrosoftConnectivityHttpPhase {
             )
         }
         [pscustomobject][ordered]@{
-            state = if ($redirected) { 'RedirectRejected' } else { 'Succeeded' }
+            state = if ($redirected) { 'RedirectRejected' }
+                elseif($status -in @(401,403,407,429)){'Blocked'}
+                elseif($status -ge 200 -and $status -lt 300){'Succeeded'}else{'Failed'}
             statusCode = $status
             redirectState = if ($redirected) { 'Rejected' } else { 'NotObserved' }
             headerCount = $headerCount
@@ -940,6 +1023,7 @@ function Invoke-MicrosoftConnectivityHttpPhase {
             catch { $leaf = $null }
         }
         New-MicrosoftConnectivityHttpFailureResult -Exception $_.Exception `
+            -ChainState ([string]$capture.ChainState) `
             -TransportMode $transportMode -ProxyState $proxyState -LeafSha256 $leaf
     }
     finally {
@@ -956,15 +1040,27 @@ function New-MicrosoftConnectivityHttpFailureResult {
         [Parameter(Mandatory)] [Exception] $Exception,
         [Parameter(Mandatory)] [string] $TransportMode,
         [Parameter(Mandatory)] [string] $ProxyState,
-        [Parameter()] [AllowNull()] [string] $LeafSha256
+        [Parameter()] [AllowNull()] [string] $LeafSha256,
+        [Parameter()] [string] $ChainState = 'Unavailable'
     )
     # The selected transport policy is evidence in its own right. Preserve it
     # when the send fails so a proxy refusal or send timeout cannot be reported
     # as a direct-transport failure merely because no response arrived.
+    $failureState=Get-MicrosoftConnectivityFailureState $Exception
+    if($ChainState -eq 'Invalid'){$failureState='CertificateChainInvalid'}
+    elseif($failureState -eq 'Failed'){
+        for($depth=0;$depth -lt 8 -and $null -ne $Exception;$depth++){
+            if($Exception -is [Security.Authentication.AuthenticationException]){
+                $failureState='TlsAuthenticationFailed';break
+            }
+            $Exception=$Exception.InnerException
+        }
+    }
     [pscustomobject][ordered]@{
-        state = Get-MicrosoftConnectivityFailureState $Exception
+        state = $failureState
         statusCode = $null; redirectState = 'NotObserved'; headerCount = 0
-        transportMode = $TransportMode; proxyState = $ProxyState; leafSha256 = $LeafSha256
+        transportMode = $TransportMode; proxyState = $ProxyState
+        leafSha256 = if([string]::IsNullOrEmpty($LeafSha256)){$null}else{$LeafSha256}
     }
 }
 
@@ -981,7 +1077,7 @@ function Get-MicrosoftConnectivityScopeDisposition {
     $reason = if('RedirectRejected' -in $States){'CONNECTIVITY.REDIRECT_REJECTED'}
         elseif('Blocked' -in $States){'CONNECTIVITY.TRANSPORT_BLOCKED'}
         elseif('TimedOut' -in $States){'CONNECTIVITY.DEADLINE_EXCEEDED'}
-        elseif('Failed' -in $States){'CONNECTIVITY.OPERATION_FAILED'}
+        elseif('Failed' -in $States -or 'CertificateChainInvalid' -in $States -or 'TlsAuthenticationFailed' -in $States){'CONNECTIVITY.OPERATION_FAILED'}
         elseif('Unavailable' -in $States){'CONNECTIVITY.OPERATION_UNAVAILABLE'}
         elseif('NotAttempted' -in $States){'CONNECTIVITY.PREREQUISITE_NOT_COMPLETED'}
         else{'CONNECTIVITY.PARTIAL_REACHABILITY'}
@@ -989,12 +1085,17 @@ function Get-MicrosoftConnectivityScopeDisposition {
 }
 
 function Invoke-MicrosoftConnectivityLiveProbe {
-    param([Parameter(Mandatory)] $Policy)
+    param([Parameter(Mandatory)] $Policy,$ConnectivityContext,[string]$ContextDigest)
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $results = [Collections.Generic.List[object]]::new()
     $requestCount = 0
     foreach ($endpoint in @($Policy.endpoints)) {
         $item = New-MicrosoftConnectivityEndpointResult -Endpoint $endpoint -TransportMode Direct
+        if (-not (Test-MicrosoftConnectivityApprovedContext -Policy $Policy -ConnectivityContext $ConnectivityContext -ContextDigest $ContextDigest)) {
+            $item.dnsState='Unavailable'
+            if($item.enrollmentDnsState -ne 'NotApplicable'){$item.enrollmentDnsState='Unavailable'}
+            $results.Add($item); continue
+        }
         $remaining = [int] $Policy.collector.deadlineMilliseconds - [int] $watch.ElapsedMilliseconds
         if ($remaining -le 0) { $results.Add($item); continue }
         $deadline = [Math]::Min(5000, $remaining)
@@ -1009,7 +1110,10 @@ function Invoke-MicrosoftConnectivityLiveProbe {
         }
 
         $remaining = [int] $Policy.collector.deadlineMilliseconds - [int] $watch.ElapsedMilliseconds
-        if ($remaining -gt 0) {
+        if ($remaining -gt 0 -and $item.dnsState -eq 'Succeeded' -and
+            (Test-MicrosoftConnectivityApprovedContext -Policy $Policy -ConnectivityContext $ConnectivityContext -ContextDigest $ContextDigest)) {
+            $remaining=[int]$Policy.collector.deadlineMilliseconds - [int]$watch.ElapsedMilliseconds
+            if($remaining -le 0){$results.Add($item);continue}
             $requestCount++
             $tcp = Invoke-MicrosoftConnectivityTcpPhase -DnsName ([string] $endpoint.dnsName) `
                 -Port ([int] $endpoint.port) -DeadlineMilliseconds ([Math]::Min(5000, $remaining))
@@ -1017,7 +1121,10 @@ function Invoke-MicrosoftConnectivityLiveProbe {
         }
 
         $remaining = [int] $Policy.collector.deadlineMilliseconds - [int] $watch.ElapsedMilliseconds
-        if ($remaining -gt 0) {
+        if ($remaining -gt 0 -and $item.tcpState -eq 'Succeeded' -and
+            (Test-MicrosoftConnectivityApprovedContext -Policy $Policy -ConnectivityContext $ConnectivityContext -ContextDigest $ContextDigest)) {
+            $remaining=[int]$Policy.collector.deadlineMilliseconds - [int]$watch.ElapsedMilliseconds
+            if($remaining -le 0){$results.Add($item);continue}
             $requestCount++
             $tls = Invoke-MicrosoftConnectivityTlsPhase -Endpoint $endpoint `
                 -DeadlineMilliseconds ([Math]::Min(5000, $remaining)) -Policy $Policy
@@ -1031,12 +1138,22 @@ function Invoke-MicrosoftConnectivityLiveProbe {
         }
 
         $remaining = [int] $Policy.collector.deadlineMilliseconds - [int] $watch.ElapsedMilliseconds
-        if ($remaining -gt 0) {
-            $uri = [Uri]::new([string] $endpoint.uri)
-            $selection = Get-MicrosoftConnectivityProxySelection -EndpointUri $uri
+        if ($remaining -gt 0 -and
+            (Test-MicrosoftConnectivityApprovedContext -Policy $Policy -ConnectivityContext $ConnectivityContext -ContextDigest $ContextDigest)) {
+            $remaining=[int]$Policy.collector.deadlineMilliseconds - [int]$watch.ElapsedMilliseconds
+            if($remaining -le 0){$results.Add($item);continue}
+            $route=@($ConnectivityContext.routes | Where-Object endpointId -CEQ $endpoint.endpointId)[0]
+            $selection=[pscustomobject]@{
+                supported=[bool]$route.supported;transportMode=[string]$route.transportMode
+                proxyState=[string]$route.proxyState
+                proxy=if($null -ne $route.proxyUri){[Net.WebProxy]::new([Uri]$route.proxyUri,$false)}else{$null}
+            }
             $item.transportMode = [string] $selection.transportMode
             $item.proxyState = [string] $selection.proxyState
-            if ([bool] $selection.supported) {
+            # A static proxy may reach the service when direct DNS/TCP/TLS is
+            # blocked. Direct HTTP requires the completed direct prerequisites.
+            if ([bool] $selection.supported -and
+                ($selection.transportMode -eq 'WindowsProxy' -or $item.tlsState -eq 'Succeeded')) {
                 $requestCount++
                 $http = Invoke-MicrosoftConnectivityHttpPhase -Endpoint $endpoint `
                     -DeadlineMilliseconds ([Math]::Min(5000, $remaining)) `

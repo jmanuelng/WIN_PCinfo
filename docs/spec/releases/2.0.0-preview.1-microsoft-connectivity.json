@@ -3,6 +3,15 @@
   "contractVersion": "1.0.0",
   "release": "2.0.0-preview.1",
   "catalogVersion": "2026-08-14",
+  "preparationContext": {
+    "source": "ActiveInterfaceDnsAddressesAndCurrentUserStaticProxy",
+    "maximumInterfaces": 64,
+    "maximumResolversPerInterface": 8,
+    "networkRequestsAllowed": false,
+    "automaticProxyDiscoveryAllowed": false,
+    "retainRawContextInPublicOutput": false,
+    "changeBehavior": "StopNewRequests"
+  },
   "evidenceProfileId": "profile:device-firmware-identity-administrator-policy-software-resource-network-certificate-and-microsoft-connectivity-readiness",
   "collector": {
     "collectorId": "collector:windows.microsoft-connectivity",
