@@ -1,5 +1,9 @@
 # WinRM source correction checkpoint (#145)
 
+This is the earlier source checkpoint. The subsequent Standards enumeration
+finding and current candidate are recorded in the
+[bounded enumeration correction](issue-145-enumeration-bound.md).
+
 Starting commit and Code Review fixed point:
 `77fdb5fc7753213447862c5d3ab4efb7bd3ca73a`.
 Source commits, both DCO signed:
