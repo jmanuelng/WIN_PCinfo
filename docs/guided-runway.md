@@ -183,8 +183,12 @@ In the GUI, phase/state activity and elapsed time describe work without inventin
 a percentage. A waiting heartbeat means the controller is responsive, not that a
 source returned evidence. **Cancel assessment** and closing an active window both
 wait for owned workers and safe finalization. Keep the application open while it
-reports cleanup attention. **New preparation / retry** becomes available only
-after verified cleanup and starts a new request, never resumed collection.
+reports cleanup attention. After verified cleanup, a failed preparation retains
+its unresolved prerequisites. Use **Change network / output** or **Select recipient**
+to correct the request; either action starts a fresh preparation for your approval.
+You can deliberately choose no recipient if that is the intended sharing route.
+**New preparation / retry** repeats the current choices after verified cleanup;
+it never resumes collection.
 
 After approval on a trusted artifact, the run continues without further prompts. You should see structured progress records, then packaging, then one terminal record.
 

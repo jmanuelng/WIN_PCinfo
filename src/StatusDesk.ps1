@@ -202,7 +202,7 @@ Verify the exact candidate and its approved trust route. Personal Evaluation Bui
 Prepare: read the entire summary, then Approve and start or Decline. Changing choices invalidates the old approval. Preparation repeats safety checks.
 Run: Cancel assessment or close the window to stop owned work and wait for cleanup. Activity describes phase/state; elapsed time is not percent complete. A waiting heartbeat is not source progress.
 Interpret: Open report is the primary result action. Missing, denied or unavailable evidence is a gap, not a healthy result. Findings are advisory; tenant questions need authorized discovery. Close viewing removes owned temporary HTML.
-Troubleshoot: New preparation / retry starts a new request after verified cleanup; it never resumes collection. CleanupIncomplete blocks new work: retain protected evidence and recovery records, use deliberate owned-residue recovery, then close and reopen after cleanup is verified. Runtime or trust changes require a fresh launch. No integrity override exists.
+Troubleshoot: After verified cleanup, use Change network / output or Select recipient to correct a failed request; each change starts a fresh preparation for approval. New preparation / retry repeats the current choices; it never resumes collection. CleanupIncomplete blocks new work: retain protected evidence and recovery records, use deliberate owned-residue recovery, then close and reopen after cleanup is verified. Runtime or trust changes require a fresh launch. No integrity override exists.
 Share: Reopen encrypted results chooses local user/device access or the approved recipient's Current User private key. There is no silent fallback. Save HTML for consultant requires an explicit warning and private destination; exported HTML is unencrypted Restricted Diagnostic Evidence. Never post packages, profiles, fingerprints, HTML or screenshots publicly. No upload is performed.
 Keep each recipient private key while any retained package needs it; deleting a key can permanently lose access. Confirm independent recipient access before deliberate removal. The dedicated same-device test key is not off-device recovery. Ordinary deletion is not forensic erasure.
 
@@ -227,7 +227,7 @@ function Get-StatusDeskOutcomeGuidance {
         'TimedOut' {'The assessment reached its time bound. Review any partial report and its missing evidence. Retry requires a new preparation after verified cleanup.'}
         'IntegrityFailed' {'Verification failed. No integrity override is available. Preserve protected evidence; use an approved exact candidate and a fresh launch for runtime or trust changes.'}
         'CleanupIncomplete' {'Owned cleanup could not be verified. Retain protected packages and recovery records. Use deliberate recovery; do not delete unknown paths or start more work.'}
-        default {'No assessment completed. Read the reason and unresolved prerequisites above. Correct the disclosed destination or recipient issue, then use New preparation / retry. For runtime, policy or trust failures, close and launch an approved candidate again.'}
+        default {'No assessment completed. Read the reason and any unresolved prerequisites above. After verified cleanup, use Change network / output or Select recipient to correct the request and review a fresh preparation. New preparation / retry repeats the current choices. For runtime, policy or trust failures, close and launch an approved candidate again.'}
     }
 }
 
@@ -464,7 +464,7 @@ function Invoke-StatusDesk {
     # Handlers run synchronously on this STA while ShowDialog keeps this scope
     # alive. A dynamic closure module would lose the generated script's helpers.
     $controls.Approve.Add_Click({
-        if ($state.ViewingCleanupFailed) { return }
+        if ($state.ViewingCleanupFailed -or -not $controls.Approve.IsEnabled) { return }
         if ($state.Preparation) {
             $summary = $state.Preparation | ConvertFrom-Json
             Set-StatusDeskDecision -Session $session -Approve $true -PlanDigest $summary.planDigest
@@ -485,7 +485,7 @@ function Invoke-StatusDesk {
     $controls.Help.Add_Click({Show-StatusDeskHelp -Owner $window -Surface Help})
     $controls.About.Add_Click({Show-StatusDeskHelp -Owner $window -Surface About})
     $controls.ChangeChoices.Add_Click({
-        if($state.ViewingCleanupFailed -or -not $controls.ChangeChoices.IsEnabled -or $session.Transport.DecisionReady.IsSet){return}
+        if($state.ViewingCleanupFailed -or -not $controls.ChangeChoices.IsEnabled -or (-not $session.Completed -and $session.Transport.DecisionReady.IsSet)){return}
         $selection=Show-StatusDeskChoicesDialog -Owner $window -Request $LaunchParameters.Request
         if($null -ne $selection){$state.NextChoices=$selection;$window.Close()}
     })
@@ -495,7 +495,7 @@ function Invoke-StatusDesk {
     })
     $controls.Recover.Add_Click({ $state.RecoveryRequested=$true; $window.Close() })
     $controls.SelectRecipient.Add_Click({
-        if ($state.ViewingCleanupFailed -or $session.Transport.DecisionReady.IsSet) { return }
+        if ($state.ViewingCleanupFailed -or -not $controls.SelectRecipient.IsEnabled -or (-not $session.Completed -and $session.Transport.DecisionReady.IsSet)) { return }
         $selection = Show-StatusDeskRecipientDialog -Owner $window -Purpose Selection
         if ($null -ne $selection) {
             $state.NextSelection=$selection
@@ -503,7 +503,7 @@ function Invoke-StatusDesk {
         }
     })
     $controls.SetupRecipient.Add_Click({
-        if ($state.ViewingCleanupFailed -or -not $controls.SetupRecipient.IsEnabled -or $session.Transport.DecisionReady.IsSet) { return }
+        if ($state.ViewingCleanupFailed -or -not $controls.SetupRecipient.IsEnabled -or (-not $session.Completed -and $session.Transport.DecisionReady.IsSet)) { return }
         $setup = Show-StatusDeskRecipientDialog -Owner $window -Purpose Setup
         if($null -ne $setup -and $setup.state -eq 'CleanupIncomplete'){
             $controls.Details.Text='Recipient setup requires cleanup attention.'
@@ -619,11 +619,18 @@ function Invoke-StatusDesk {
             if (-not $state.ViewingCleanupFailed) {
                 $controls.Status.Text=$terminal.outcome
                 $controls.Details.Text='Outcome: ' + $terminal.outcome + "`nReason: " + $terminal.reasonCode + "`nCleanup verified: " + $terminal.cleanup.verified
+                if($state.Preparation){
+                    $preparationSummary=$state.Preparation | ConvertFrom-Json
+                    if(-not $preparationSummary.readyForApproval){
+                        $controls.Details.Text += "`n" + (Get-StatusDeskPreparationText $preparationSummary)
+                    }
+                }
             }
             $controls.Approve.IsEnabled=$false; $controls.Decline.IsEnabled=$false; $controls.Cancel.IsEnabled=$false
-            $controls.SelectRecipient.IsEnabled=$false; $controls.SetupRecipient.IsEnabled=$false
-            $controls.ChangeChoices.IsEnabled=$false
             $controls.Retry.IsEnabled=$terminal.cleanup.verified -and -not $state.ViewingCleanupFailed
+            $controls.SelectRecipient.IsEnabled=$controls.Retry.IsEnabled
+            $controls.SetupRecipient.IsEnabled=$workflowAllowed -and $controls.Retry.IsEnabled
+            $controls.ChangeChoices.IsEnabled=$controls.Retry.IsEnabled
             $controls.OpenExisting.IsEnabled=$workflowAllowed -and $terminal.cleanup.verified -and -not $state.ViewingCleanupFailed
             $controls.RecoverViews.IsEnabled=$workflowAllowed
             if ($session.Transport.State.Completion) {
@@ -657,7 +664,7 @@ function Invoke-StatusDesk {
         }
     }
     if ($state.ViewingCleanupFailed) { return 60 }
-    if ($null -ne $state.NextChoices -or $state.RetryRequested) {
+    if ($null -ne $state.NextChoices -or $null -ne $state.NextSelection -or $state.RetryRequested) {
         $nextLaunch=$LaunchParameters.Clone()
         $nextLaunch.Request=$LaunchParameters.Request | ConvertTo-Json -Depth 40 | ConvertFrom-Json -Depth 40
         $nextLaunch.Request.automationChoices.allowStaleRecovery=$false
@@ -666,12 +673,7 @@ function Invoke-StatusDesk {
             $nextLaunch.Request.automationChoices.allowAssessmentNetwork=$state.NextChoices.networkBehavior -eq 'MicrosoftConnectivityEnabled'
             $nextLaunch.Request.outputDestination=$state.NextChoices.outputDestination
         }
-        return Invoke-StatusDesk -ModuleText $ModuleText -LaunchParameters $nextLaunch -ViewReady $ViewReady
-    }
-    if ($null -ne $state.NextSelection) {
-        $nextLaunch=$LaunchParameters.Clone()
-        $nextLaunch.Request=$LaunchParameters.Request | ConvertTo-Json -Depth 40 | ConvertFrom-Json -Depth 40
-        $nextLaunch.Request.recipientSelection=$state.NextSelection
+        if($null -ne $state.NextSelection){$nextLaunch.Request.recipientSelection=$state.NextSelection}
         return Invoke-StatusDesk -ModuleText $ModuleText -LaunchParameters $nextLaunch -ViewReady $ViewReady
     }
     if ($state.RecoveryRequested) {
