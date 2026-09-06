@@ -517,6 +517,10 @@ public static class WinPCInfoEffectivePolicyNativeSource
     [DllImport("Advapi32.dll", EntryPoint = "RegGetValueW", CharSet = CharSet.Unicode, ExactSpelling = true)]
     public static extern int RegGetValue(IntPtr key, string subKey, string name,
         uint flags, out uint type, out int data, ref uint size);
+    [DllImport("Advapi32.dll", EntryPoint = "RegEnumKeyExW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int RegEnumKeyEx(Microsoft.Win32.SafeHandles.SafeRegistryHandle key,
+        uint index, [Out] char[] name, ref uint nameLength, IntPtr reserved,
+        IntPtr keyClass, IntPtr classLength, IntPtr lastWriteTime);
     [DllImport("Wscapi.dll")]
     private static extern int WscGetSecurityProviderHealth(
         uint providers, out WSC_SECURITY_PROVIDER_HEALTH health);
@@ -2054,8 +2058,9 @@ function Get-LiveEffectivePolicyResult {
     $authStates=@($winrmAuthStates|Select-Object -Unique)
     $authState=if($authStates.Count -eq 1){[string]$authStates[0]}else{'Partial'}
     Set-EffectivePolicyScopeState $result @(36) $authState $(if($authState -eq 'Complete'){''}else{"POLICY.WINRM_AUTH_CONFIG_$($authState.ToUpperInvariant())"})
-    # A bounded snapshot of explicit local listener records, not the effective
+    # Bounded reads of explicit local listener records, not the effective
     # listener set (policy/compatibility/default expansion and runtime are unknown).
+    # Concurrent changes can reorder records; this is never a consistent snapshot.
     # Selector addresses are transient key names only and never enter evidence.
     $base=$null;$key=$null;$state='Unavailable';$reason='POLICY.WINRM_LISTENER_CONFIG_UNAVAILABLE'
     try {
@@ -2064,8 +2069,23 @@ function Get-LiveEffectivePolicyResult {
         if($null -ne $key){
             if($key.SubKeyCount -gt 32){$state='Constrained';$reason='POLICY.WINRM_LISTENER_CONFIG_BOUND'}
             else {
-                $names=@($key.GetSubKeyNames())
-                if($names.Count -gt 32){$state='Constrained';$reason='POLICY.WINRM_LISTENER_CONFIG_BOUND'}
+                $names=[Collections.Generic.List[string]]::new(32)
+                $nameBuffer=[char[]]::new(256);$overflow=$false
+                # Never bulk-enumerate after the count check: the key may grow.
+                # One fixed buffer, 32 retained names and one overflow probe.
+                for([uint32]$index=0;$index -le 32;$index++){
+                    [uint32]$nameLength=$nameBuffer.Length
+                    $status=[WinPCInfoEffectivePolicyNativeSource]::RegEnumKeyEx($key.Handle,$index,$nameBuffer,[ref]$nameLength,[IntPtr]::Zero,[IntPtr]::Zero,[IntPtr]::Zero,[IntPtr]::Zero)
+                    if($status -eq 259){break}
+                    if($status -eq 5){throw [UnauthorizedAccessException]::new()}
+                    if($status -eq 2){throw [IO.EndOfStreamException]::new()}
+                    if($status -eq 234){throw [IO.InvalidDataException]::new()}
+                    if($status -ne 0){throw [ComponentModel.Win32Exception]::new($status)}
+                    if($index -eq 32){$overflow=$true;break}
+                    if($nameLength -eq 0 -or $nameLength -ge $nameBuffer.Length){throw [IO.InvalidDataException]::new()}
+                    $names.Add([string]::new($nameBuffer,0,[int]$nameLength))
+                }
+                if($overflow){$state='Constrained';$reason='POLICY.WINRM_LISTENER_CONFIG_BOUND'}
                 elseif($names.Count -gt 0){
                     $ports=[Collections.Generic.List[int]]::new()
                     $transports=[Collections.Generic.List[string]]::new()

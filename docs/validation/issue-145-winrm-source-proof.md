@@ -68,8 +68,14 @@ avoids fetching a wrongly typed blob before checking its kind, including a
 type/read race. The C# declaration compiles with the existing worker; controlled
 tests replace only this native-call expression and verify its actual arguments.
 
-Listener collection checks SubKeyCount before enumeration and rechecks the
-returned count, refusing more than 32 direct records. Only selector suffixes
+Listener collection checks SubKeyCount before enumeration, then uses
+[RegEnumKeyExW](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumkeyexw)
+with one fixed 256-character buffer. It retains at most 32 names and performs
+one additional indexed overflow probe, with no buffer growth or retries. A
+concurrently growing key cannot make it enumerate an unbounded list. A known
+count above 32 or a successful overflow probe yields Constrained; an oversized
+name yields Malformed. Concurrent changes may reorder or remove keys: these
+reads never establish a consistent live snapshot. Only selector suffixes
 `+HTTP`/`+HTTPS` and explicit DWORD `Port` (1–65535) and `enabled` are interpreted.
 Selector addresses are transient registry lookup names and never enter evidence.
 An unrecognized selector, missing key/value, denial or malformed DWORD yields a

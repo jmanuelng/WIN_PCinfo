@@ -38,19 +38,29 @@ function Get-PrivilegedCollectionWorkerSource {
     $baseline=New-EffectivePolicySyntheticPayload -Policy (Get-EffectivePolicyPolicy -ConvertFromJsonCommand (Get-Command ConvertFrom-Json)) -Scenario Workgroup
     $json=($baseline|ConvertTo-Json -Depth 12 -Compress).Replace("'","''")
     $adapted='function Get-LiveEffectivePolicyResult { param($AssessmentUserSid) $result=ConvertFrom-Json -AsHashtable -InputObject '''+$json+''';' + "`n" +
-        '$result.scopeStates=@(foreach($id in Get-EffectivePolicyScopeIds){$result.scopeStates|Where-Object scopeId -eq $id}); $empty=New-EffectivePolicyBaseResult Failed; foreach($name in @(''windowsUpdateSignals'',''legacyAuthenticationSignals'',''rdpState'',''winrmState'',''smbState'')){$result[$name]=$empty[$name]}; Set-EffectivePolicyScopeState $result @(15,16,17,18,19,30,31,32,33,34,35,36,37,38,39,40) Failed ''POLICY.SOURCE_NOT_EXECUTED'';' + "`n" + $blocks + "`n" + 'if($script:ControlledUnsafeRead){throw ''Unbounded DWORD read.''}; Complete-EffectivePolicyLayerStates $result }'
+        '$result.scopeStates=@(foreach($id in Get-EffectivePolicyScopeIds){$result.scopeStates|Where-Object scopeId -eq $id}); $empty=New-EffectivePolicyBaseResult Failed; foreach($name in @(''windowsUpdateSignals'',''legacyAuthenticationSignals'',''rdpState'',''winrmState'',''smbState'')){$result[$name]=$empty[$name]}; Set-EffectivePolicyScopeState $result @(15,16,17,18,19,30,31,32,33,34,35,36,37,38,39,40) Failed ''POLICY.SOURCE_NOT_EXECUTED'';' + "`n" + $blocks + "`n" + 'if($script:ControlledUnsafeRead){throw ''Unbounded DWORD read.''}; if($script:ControlledUnsafeEnumeration){throw ''Unbounded listener enumeration during concurrent growth.''}; Complete-EffectivePolicyLayerStates $result }'
     $source=$source.Replace($live.Extent.Text,$adapted)
+    $source=$source.Replace('Complete-EffectivePolicyLayerStates $result }',
+        'if(''__CASE__'' -in @(''ListenerGrowth'',''ListenerLimit'') -and $script:ControlledEnumerationCalls -ne 33){throw ''The exact listener limit must execute one overflow probe.''}; Complete-EffectivePolicyLayerStates $result }')
     $source=$source.Replace('[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,[Microsoft.Win32.RegistryView]::Registry64)', '(Open-ControlledRemoteBaseKey)')
     $nativeCalls=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Member.Value -eq 'RegGetValue' -and $node.Expression.Extent.Text -eq '[WinPCInfoEffectivePolicyNativeSource]'},$true))
     if($nativeCalls.Count -ne 1){throw 'Typed registry boundary changed; refuse live fallback.'}
     $nativeCall=$nativeCalls[0]
     $arguments=@($nativeCall.Arguments|ForEach-Object {'('+$_.Extent.Text+')'}) -join ' '
     $source=$source.Replace($nativeCall.Extent.Text,'(Read-ControlledWinrmValue '+$arguments+')')
+    $enumCalls=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Member.Value -eq 'RegEnumKeyEx' -and $node.Expression.Extent.Text -eq '[WinPCInfoEffectivePolicyNativeSource]'},$true))
+    if($enumCalls.Count -ne 1){throw 'Bounded enumeration boundary changed; refuse live fallback.'}
+    $enumCall=$enumCalls[0]
+    $arguments=@($enumCall.Arguments|ForEach-Object {'('+$_.Extent.Text+')'}) -join ' '
+    $source=$source.Replace($enumCall.Extent.Text,'(Read-ControlledListenerName '+$arguments+')')
     $source=$source.Replace('New-SyntheticEffectivePolicyResult -Scenario ([string]$configuration.effectivePolicyScenario)','Get-LiveEffectivePolicyResult -AssessmentUserSid $assessmentUserSid')
     $source=$source.Replace('Microsoft.PowerShell.Core\Import-Module -Name $path','Import-ControlledRemoteModule -Name $path')
     $prefix=@"
 `$script:ControlledUnsafeRead=`$false
 `$script:ControlledBoundedRead=`$false
+`$script:ControlledUnsafeEnumeration=`$false
+`$script:ControlledEnumerationCalls=0
+`$script:ControlledEnumerationBuffer=`$null
 [Threading.Thread]::CurrentThread.CurrentCulture=[Globalization.CultureInfo]::GetCultureInfo(`$(if('__CASE__' -eq 'tr-TR'){'tr-TR'}else{'en-US'}))
 function Assert-ControlledRemoteAvailability {
     if('__CASE__' -eq 'Denied'){throw [UnauthorizedAccessException]::new()}
@@ -124,10 +134,11 @@ function Open-ControlledRemoteBaseKey {
 function New-ControlledListenerKey {
     if('__CASE__' -eq 'RegistryDenied'){throw [UnauthorizedAccessException]::new()}
     if('__CASE__' -eq 'Absent'){return `$null}
-    `$key=[pscustomobject]@{SubKeyCount=`$(if('__CASE__' -eq 'ListenerBound'){33}else{1})}
+    `$key=[pscustomobject]@{SubKeyCount=`$(if('__CASE__' -eq 'ListenerBound'){33}else{1});Handle=[IntPtr]::new(145)}
     `$key|Add-Member ScriptMethod Dispose {}
     `$key|Add-Member ScriptMethod GetSubKeyNames {
         switch('__CASE__'){
+            ListenerGrowth {`$script:ControlledUnsafeEnumeration=`$true;throw 'The source grew after the count check; bulk enumeration has no bound.'}
             ListenerBound {throw 'Enumeration must not run above bound.'}
             ListenerEmpty {return}
             ListenerUnknown {return '*+UNKNOWN'}
@@ -137,7 +148,7 @@ function New-ControlledListenerKey {
         }
     }
     `$key|Add-Member ScriptMethod OpenSubKey {param(`$Name,`$Writable)
-        if(`$Writable -or `$Name -notin @('*+HTTP','*+HTTPS')){throw 'Unapproved listener selector.'}
+        if(`$Writable -or (`$Name -notin @('*+HTTP','*+HTTPS') -and `$Name -notmatch '^synthetic-([0-9]|[12][0-9]|3[01])\+HTTP$')){throw 'Unapproved listener selector.'}
         `$child=[pscustomobject]@{Selector=`$Name}
         `$child|Add-Member ScriptMethod Dispose {}
         `$child|Add-Member ScriptMethod GetValueKind {param(`$Name) if(`$Name -notin @('Port','enabled')){throw 'Unapproved listener kind.'};[Microsoft.Win32.RegistryValueKind]::DWord}
@@ -155,6 +166,37 @@ function New-ControlledListenerKey {
     }
     `$key
 }
+function Read-ControlledListenerName {
+    param(`$Handle,`$Index,`$Buffer,`$Length,`$Reserved,`$Class,`$ClassLength,`$LastWriteTime)
+    # Keep the actual caller's buffer and arguments. A growth source can supply
+    # arbitrarily many records, but may never induce bulk allocation or a retry.
+    if(`$Handle.ToInt64() -ne 145 -or `$Index -ne `$script:ControlledEnumerationCalls -or
+        `$Index -gt 32 -or `$Buffer -isnot [char[]] -or `$Buffer.Length -ne 256 -or `$Length.Value -ne 256 -or
+        `$Reserved -ne [IntPtr]::Zero -or `$Class -ne [IntPtr]::Zero -or `$ClassLength -ne [IntPtr]::Zero -or `$LastWriteTime -ne [IntPtr]::Zero -or
+        (`$null -ne `$script:ControlledEnumerationBuffer -and -not [object]::ReferenceEquals(`$Buffer,`$script:ControlledEnumerationBuffer))){
+        `$script:ControlledUnsafeEnumeration=`$true;throw 'Enumeration exceeded its native safety boundary.'
+    }
+    `$script:ControlledEnumerationBuffer=`$Buffer
+    `$script:ControlledEnumerationCalls++
+    if('__CASE__' -eq 'ListenerBound'){`$script:ControlledUnsafeEnumeration=`$true;throw 'Enumeration ran despite known overflow.'}
+    switch('__CASE__'){
+        ListenerEnumDenied {return 5}
+        ListenerEnumAbsent {return 2}
+        ListenerNameOversize {`$Length.Value=[uint32]1048576;return 234}
+        ListenerNameBadLength {`$Length.Value=[uint32]256;return 0}
+    }
+    if('__CASE__' -in @('ListenerGrowth','ListenerLimit')){
+        # Initial SubKeyCount is 1; growth never ends. No large fixture array.
+        if('__CASE__' -eq 'ListenerLimit' -and `$Index -eq 32){return 259}
+        `$name='synthetic-'+`$Index+'+HTTP'
+    }else{
+        `$names=@((New-ControlledListenerKey).GetSubKeyNames())
+        if(`$Index -ge `$names.Count){return 259}
+        `$name=`$names[`$Index]
+    }
+    `$name.CopyTo(0,`$Buffer,0,`$name.Length);`$Length.Value=[uint32]`$name.Length
+    return 0
+}
 function Read-ControlledWinrmValue {
     param(`$Hive,`$Path,`$Name,`$Flags,`$Type,`$Data,`$Size)
     if(`$Hive.ToInt64() -ne -2147483646 -or `$Flags -ne 0x20010010 -or `$Size.Value -ne 4){throw 'Unbounded or incorrectly typed registry call.'}
@@ -164,7 +206,7 @@ function Read-ControlledWinrmValue {
     try {
         if(`$Path -eq 'SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Service' -and `$Name -eq 'auth_certificate'){
             `$key=Open-ControlledRemoteKey `$Path `$false
-        }elseif(`$Path -match '^SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WSMAN\\Listener\\(\*\+HTTPS?)$' -and `$Name -in @('Port','enabled')){
+        }elseif(`$Path -match '^SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WSMAN\\Listener\\((?:\*|synthetic-(?:[0-9]|[12][0-9]|3[01]))\+HTTPS?)$' -and `$Name -in @('Port','enabled')){
             `$root=New-ControlledListenerKey
             if(`$null -eq `$root){return 2}
             `$key=`$root.OpenSubKey(`$Matches[1],`$false)
@@ -248,11 +290,11 @@ function Assert-RemoteSourceReport {
         if($scope -eq 'winrm.authentication' -and $Scenario -in @('CertificateAbsent','CertificateDenied','CertificateKind','BooleanRange','DwordOversize')){$expected='Partial'}
         if($scope -eq 'winrm.listener'){
             $expected=switch($Scenario){
-                {$_ -in @('Absent','ListenerEmpty','ListenerMissing','Unavailable')} {'Unavailable'}
-                {$_ -in @('Denied','RegistryDenied')} {'Denied'}
+                {$_ -in @('Absent','ListenerEmpty','ListenerMissing','ListenerEnumAbsent','Unavailable')} {'Unavailable'}
+                {$_ -in @('Denied','RegistryDenied','ListenerEnumDenied')} {'Denied'}
                 Unsupported {'Unsupported'}
-                {$_ -in @('Malformed','ListenerUnknown','ListenerBadPort','BooleanRange','DwordOversize')} {'Malformed'}
-                ListenerBound {'Constrained'}
+                {$_ -in @('Malformed','ListenerUnknown','ListenerBadPort','ListenerNameOversize','ListenerNameBadLength','BooleanRange','DwordOversize')} {'Malformed'}
+                {$_ -in @('ListenerBound','ListenerGrowth')} {'Constrained'}
                 default {'Partial'}
             }
         }
@@ -265,7 +307,7 @@ function Assert-RemoteSourceReport {
             Assert-Equal 0 @($observations|Where-Object valueState -ne ObservedAbsent).Count 'absent configuration cannot become disabled or zero'
         }
     }
-    if($Scenario -in @('Configured','tr-TR')){
+    if($Scenario -in @('Configured','tr-TR','ListenerLimit')){
         Assert-Equal $true @($Record.observations|Where-Object fieldId -eq 'field:policy.smb.client-require-signing')[0].value 'SMB configuration survives protected reopening'
         Assert-Equal 14 @($Record.observations|Where-Object fieldId -eq 'field:policy.windows-update.defer-feature-updates-days')[0].value 'WUfB configured period survives protected reopening'
         Assert-Equal 537395232 @($Record.observations|Where-Object fieldId -eq 'field:policy.legacy-auth.ntlm-min-client-sec')[0].value 'NTLM masks retain exact configuration values'
@@ -306,7 +348,7 @@ function Assert-RemoteSourceReport {
         Assert-Equal 'ConfiguredMixed' @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.listener-state')[0].value 'mixed enabled settings remain explicit'
         Assert-Equal 1 @($Record.observations|Where-Object fieldId -like 'field:policy.winrm.listener-*').Count 'differing transports and ports cannot become a fabricated single endpoint'
     }
-    if($Scenario -in @('ListenerEmpty','ListenerMissing','ListenerUnknown','ListenerBadPort','ListenerBound','Absent','Denied','RegistryDenied','Malformed','BooleanRange','DwordOversize')){Assert-Equal 0 @($Record.observations|Where-Object fieldId -like 'field:policy.winrm.listener-*').Count 'unusable listener snapshot cannot donate successful observations'}
+    if($Scenario -in @('ListenerEmpty','ListenerMissing','ListenerUnknown','ListenerBadPort','ListenerBound','ListenerGrowth','ListenerEnumAbsent','ListenerEnumDenied','ListenerNameOversize','ListenerNameBadLength','Absent','Denied','RegistryDenied','Malformed','BooleanRange','DwordOversize')){Assert-Equal 0 @($Record.observations|Where-Object fieldId -like 'field:policy.winrm.listener-*').Count 'unusable listener collection cannot donate successful observations'}
     Assert-Equal $true $Html.Contains('policy-created, compatibility and default listeners') 'report explains the explicit source completeness limit'
     if($Scenario -eq 'Stopped'){
         Assert-Equal 'Stopped' @($Record.observations|Where-Object fieldId -eq 'field:policy.rdp.service-state')[0].value 'configured RDP can coexist with an observed stopped service'
