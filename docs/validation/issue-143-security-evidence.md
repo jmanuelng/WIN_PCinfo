@@ -54,7 +54,7 @@ pwsh -NoLogo -NoProfile -File tests/PrivilegedCollectionPlanPolicy.Tests.ps1
 pwsh -NoLogo -NoProfile -File tests/PolicyUserContextNativeSource.Tests.ps1
 ```
 
-The source matrix includes Active, Passive, Unsupported inbox modules, Denied,
+The source matrix includes Active, Passive, Unsupported inbox modules, ImportDenied, Denied,
 Unavailable, NullRuntime, MalformedRuntime, FirewallPartial, AsrEmpty, AsrBound,
 AsrMismatch, NetworkMissing, SmartScreenMissing, SmartScreenMalformed, and
 en-US/es-MX/tr-TR/ja-JP/ar-SA structured-source cultures. Every case uses actual
@@ -77,8 +77,7 @@ future shared-source changes must repeat the configured tests. Device source
 and nested SYSTEM bytes remain independently bounded and preserved.
 
 Final focused results, exact candidate hashes and independent reviews are recorded
-in the completion addendum after execution. Until then this document is not a
-claim that the final focused gate has passed.
+in the completion addendum below.
 
 The full suite remains unrun here under the user's per-ticket cadence override;
 #158/final owns integrated regression. Historical #138 working-set excess remains
@@ -103,3 +102,73 @@ modify that ledger or close a live gate.
 Per-family read-only steps are in [the #161 comparison handoff](issue-143-readonly-comparison.md).
 September 6 delivery still means before September 7 00:00 CDT / 05:00 UTC;
 deadline clarification changes no acceptance requirement.
+
+## Completion addendum
+
+Implementation commits are `6f98109` (source execution and HTML), `14c97d5`
+(SmartScreen negative coverage), and
+`09d99d4820e81e4ae54b1567c8249d9960afd307` (module discovery denial and exact-scope
+regressions). The subsequent evidence-only commit does not change candidate bytes.
+
+The eighteen-case source matrix passed at `14c97d5`, with each case taking
+21.0–23.2 seconds. Its unsigned generated script was 3,180,094 bytes with SHA-256
+`f72e0a2d309f23b477b5fcff38c4a9eb0726c26841688ad71f5a0bc6e56156e8`.
+This includes active/passive behavior, unsupported/denied/unavailable sources,
+partial/malformed runtime and firewall data, ASR empty/mismatched/bounded arrays,
+missing network protection, missing/malformed SmartScreen and all five cultures.
+The negative SmartScreen cases also exposed `Select-Object -ExpandProperty`
+against dictionary entries; reading their explicit state values repairs that
+worker failure without changing source meaning.
+
+Independent Spec review then identified import denial being collapsed to
+Unsupported. The added ImportDenied case failed with that exact mismatch and
+passed after preserving the original discovery error for per-family classification.
+The final implementation passed ImportDenied plus affected Active, Unsupported,
+Denied and Unavailable source cases (20.9–21.6 seconds per case). The unaffected
+matrix is retained by revision, not misrepresented as rerun after the small
+discovery correction. The default source test now contains nineteen cases.
+
+Final unsigned candidate: 3,180,391 bytes, SHA-256
+`3fc0bc6ba42765211c9dea08942aa85cb9b32f0ffe95010b2653cef21943aa7a`.
+Embedded privileged worker SHA-256:
+`22a4bd71441f471d3a685e54d627fd6de55a41efe0aa8330b462687710e817c6`.
+The final configured launch test passed eight high-entropy samples with maximum
+32465 of 32500 characters; template parsing, local context native compilation
+and exact nested SYSTEM-source preservation passed without live source calls.
+The remaining margin is narrow and is not authority to increase the bound.
+
+| Focused check | Result |
+| --- | --- |
+| `SecuritySourceApplication.Tests.ps1` | Pass: 18-case matrix at `14c97d5`; new import-denied red/green and four affected discovery retests at final source |
+| `EffectivePolicy.Tests.ps1` | Pass: fixture layers, bounds and privacy |
+| `EffectivePolicyContract.Tests.ps1` | Pass: canonical evidence, closed coverage and bounded rules |
+| `EffectivePolicyPrivilegedCollector.Tests.ps1` | Pass at final source: all declared scenarios except separately owned DeniedSystem, closed payload negatives, reordered scopes and duplicate-scope rejection |
+| `PrivilegedCollectionPlanPolicy.Tests.ps1` | Pass: elevation, frozen plan, channel and identity contract |
+| `PolicyUserContextNativeSource.Tests.ps1` | Pass at final source: no-live native compilation, parser, nested bytes and configured bound |
+| `BuildDeterminism.Tests.ps1` | Pass: identical bytes across output directories, exact provenance, embedded-resource relocation and three generated application seams |
+| `git diff --check` | Pass before completion evidence commit |
+
+### Standards
+
+Independent fresh review found **0 documented-standard violations**, with one
+low-priority possible Duplicated Code judgment: the two source handlers repeat
+classification of empty/malformed query results. It is nonblocking and deferred;
+the handlers retain identical behavior without adding another source helper to
+the tightly bounded worker. Correction review `14c97d5..09d99d4` found 0 new
+violations and 0 new actionable smells. Reviewers performed no tests or live work.
+
+### Spec
+
+Independent fresh review found **1 P2**, denied module discovery mislabeled
+Unsupported. The reviewer confirmed it **closed by `09d99d4`**, with no new
+findings or scope creep in the correction. The new regression verifies coverage
+and absence of invented Defender observations through the generated report seam.
+Final open actionable review findings: **0**.
+
+All generated assessment cases verified encrypted reopening and owned viewing
+cleanup. Debugging scripts are removed from the owned ignored test directory;
+unsigned build artifacts remain ignored for the orchestrator's exact-candidate
+handoff. No real records, keys, certificates or operational identifiers were
+written to public evidence. Automated implementation acceptance does not pass
+#161's live source comparisons, real non-English/device/context/observer gates,
+#158's full regression/resource gates, or any public release qualification.
