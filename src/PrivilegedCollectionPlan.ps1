@@ -514,6 +514,13 @@ public static class WinPCInfoEffectivePolicyNativeSource
     private static extern int LsaFreeMemory(IntPtr buffer);
     [DllImport("Advapi32.dll")]
     private static extern int LsaClose(IntPtr handle);
+    [DllImport("Advapi32.dll", EntryPoint = "RegGetValueW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int RegGetValue(IntPtr key, string subKey, string name,
+        uint flags, out uint type, out int data, ref uint size);
+    [DllImport("Advapi32.dll", EntryPoint = "RegEnumKeyExW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int RegEnumKeyEx(Microsoft.Win32.SafeHandles.SafeRegistryHandle key,
+        uint index, [Out] char[] name, ref uint nameLength, IntPtr reserved,
+        IntPtr keyClass, IntPtr classLength, IntPtr lastWriteTime);
     [DllImport("Wscapi.dll")]
     private static extern int WscGetSecurityProviderHealth(
         uint providers, out WSC_SECURITY_PROVIDER_HEALTH health);
@@ -1004,7 +1011,7 @@ function Complete-EffectivePolicyLayerStates {
             'scope:policy.applied.computer.link','scope:policy.applied.computer.precedence'
         )
         ConfiguredPolicySignals=Get-LayerState @(
-            'scope:policy.rdp.connections','scope:policy.rdp.authentication','scope:policy.rdp.listener','scope:policy.winrm.configuration','scope:policy.winrm.authentication','scope:policy.smb.client','scope:policy.smb.server',
+            'scope:policy.rdp.connections','scope:policy.rdp.authentication','scope:policy.rdp.listener','scope:policy.winrm.configuration','scope:policy.winrm.authentication','scope:policy.winrm.listener','scope:policy.smb.client','scope:policy.smb.server',
             'scope:policy.security-option.machine-inactivity-limit',
             'scope:policy.security-option.disable-cad',
             'scope:policy.security-option.lm-compatibility-level',
@@ -1029,7 +1036,6 @@ function Complete-EffectivePolicyLayerStates {
             'scope:policy.rdp.service',
 
             'scope:policy.winrm.service',
-            'scope:policy.winrm.listener',
 
             'scope:policy.smb.smb1-feature',
             'scope:policy.bitlocker.operating-system-volume',
@@ -1353,6 +1359,20 @@ function Get-PlatformFailureState {
         $exception=$exception.InnerException
     }
     Get-WorkerAccessState $Failure
+}
+
+function Read-WinrmConfigurationDword {
+    param([string]$Path,[string]$Name)
+    # Fixed four-byte buffer, REG_DWORD only, Registry64, zero on failure.
+    # Type filtering and bounded copying are one OS operation, not a type/read race.
+    [uint32]$type=0;[int]$value=0;[uint32]$size=4
+    $status=[WinPCInfoEffectivePolicyNativeSource]::RegGetValue([IntPtr]::new(-2147483646),$Path,$Name,0x20010010,[ref]$type,[ref]$value,[ref]$size)
+    if($status -eq 2){return $null}
+    if($status -eq 5){throw [UnauthorizedAccessException]::new()}
+    if($status -in @(234,1630)){throw [IO.InvalidDataException]::new()}
+    if($status -ne 0){throw [ComponentModel.Win32Exception]::new($status)}
+    if($type -ne 4 -or $size -ne 4){throw [IO.InvalidDataException]::new()}
+    $value
 }
 
 function Read-CiToolJson {
@@ -2003,8 +2023,7 @@ function Get-LiveEffectivePolicyResult {
     }
     # WSMan provider reads create requests even against localhost. Read only the
     # finite ADMX Service policy mappings. They are configured signals; missing
-    # values prove neither defaults nor effective authentication. No approved
-    # request-free listener/certificate-auth source is established in this release.
+    # values prove neither defaults nor effective authentication.
     $winrmAuthStates=[Collections.Generic.List[string]]::new()
     foreach($definition in @(
         @{valueName='AllowUnencryptedTraffic';target='allowUnencrypted';scopeIndex=35},
@@ -2026,10 +2045,74 @@ function Get-LiveEffectivePolicyResult {
             Set-EffectivePolicyScopeState $result @(35) $state $(if($state -eq 'Complete'){''}else{"POLICY.WINRM_POLICY_$($state.ToUpperInvariant())"})
         }else{$winrmAuthStates.Add($state)}
     }
+    # Installed service code maps ConfigSetting 0x7DD to this Registry64 DWORD.
+    # Read the explicit normal service configuration, never client auth or mappings.
+    $state='Complete'
+    try {
+        $raw=Read-WinrmConfigurationDword 'SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Service' 'auth_certificate'
+        if($null -eq $raw){$state='Unavailable'}
+        elseif($raw -notin @(0,1)){$state='Malformed'}
+        else{$result.winrmState.certificateAuthentication=($raw -ne 0)}
+    } catch {$state=Get-PlatformFailureState $_}
+    $winrmAuthStates.Add($state)
     $authStates=@($winrmAuthStates|Select-Object -Unique)
-    $authState=if($authStates.Count -eq 1 -and $authStates[0] -ne 'Complete'){[string]$authStates[0]}else{'Partial'}
-    Set-EffectivePolicyScopeState $result @(36) $authState $(if($authStates.Count -eq 1 -and $authStates[0] -eq 'Complete'){'POLICY.WINRM_CERTIFICATE_AUTH_SOURCE_NOT_IMPLEMENTED'}elseif($authState -eq 'Partial'){'POLICY.WINRM_AUTH_POLICY_PARTIAL_AND_CERTIFICATE_SOURCE_NOT_IMPLEMENTED'}else{"POLICY.WINRM_AUTH_POLICY_$($authState.ToUpperInvariant())"})
-    Set-EffectivePolicyScopeState $result @(37) Constrained 'POLICY.WINRM_REQUEST_FREE_LISTENER_SOURCE_NOT_IMPLEMENTED'
+    $authState=if($authStates.Count -eq 1){[string]$authStates[0]}else{'Partial'}
+    Set-EffectivePolicyScopeState $result @(36) $authState $(if($authState -eq 'Complete'){''}else{"POLICY.WINRM_AUTH_CONFIG_$($authState.ToUpperInvariant())"})
+    # Bounded reads of explicit local listener records, not the effective
+    # listener set (policy/compatibility/default expansion and runtime are unknown).
+    # Concurrent changes can reorder records; this is never a consistent snapshot.
+    # Selector addresses are transient key names only and never enter evidence.
+    $base=$null;$key=$null;$state='Unavailable';$reason='POLICY.WINRM_LISTENER_CONFIG_UNAVAILABLE'
+    try {
+        $base=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,[Microsoft.Win32.RegistryView]::Registry64)
+        $key=$base.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Listener',$false)
+        if($null -ne $key){
+            if($key.SubKeyCount -gt 32){$state='Constrained';$reason='POLICY.WINRM_LISTENER_CONFIG_BOUND'}
+            else {
+                $names=[Collections.Generic.List[string]]::new(32)
+                $nameBuffer=[char[]]::new(256);$overflow=$false
+                # Never bulk-enumerate after the count check: the key may grow.
+                # One fixed buffer, 32 retained names and one overflow probe.
+                for([uint32]$index=0;$index -le 32;$index++){
+                    [uint32]$nameLength=$nameBuffer.Length
+                    $status=[WinPCInfoEffectivePolicyNativeSource]::RegEnumKeyEx($key.Handle,$index,$nameBuffer,[ref]$nameLength,[IntPtr]::Zero,[IntPtr]::Zero,[IntPtr]::Zero,[IntPtr]::Zero)
+                    if($status -eq 259){break}
+                    if($status -eq 5){throw [UnauthorizedAccessException]::new()}
+                    if($status -eq 2){throw [IO.EndOfStreamException]::new()}
+                    if($status -eq 234){throw [IO.InvalidDataException]::new()}
+                    if($status -ne 0){throw [ComponentModel.Win32Exception]::new($status)}
+                    if($index -eq 32){$overflow=$true;break}
+                    if($nameLength -eq 0 -or $nameLength -ge $nameBuffer.Length){throw [IO.InvalidDataException]::new()}
+                    $names.Add([string]::new($nameBuffer,0,[int]$nameLength))
+                }
+                if($overflow){$state='Constrained';$reason='POLICY.WINRM_LISTENER_CONFIG_BOUND'}
+                elseif($names.Count -gt 0){
+                    $ports=[Collections.Generic.List[int]]::new()
+                    $transports=[Collections.Generic.List[string]]::new()
+                    $enabledStates=[Collections.Generic.List[bool]]::new()
+                    foreach($name in $names){
+                        $selector=[regex]::Match($name,'\A[^\\/\x00-\x1f+]{1,240}\+(HTTP|HTTPS)\z',[Text.RegularExpressions.RegexOptions]::CultureInvariant)
+                        if(-not $selector.Success){throw [IO.InvalidDataException]::new()}
+                        $path='SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Listener\'+$name
+                        $port=Read-WinrmConfigurationDword $path 'Port'
+                        $enabled=Read-WinrmConfigurationDword $path 'enabled'
+                        if($null -eq $port -or $null -eq $enabled){throw [IO.EndOfStreamException]::new()}
+                        if($port -lt 1 -or $port -gt 65535 -or $enabled -notin @(0,1)){throw [IO.InvalidDataException]::new()}
+                        $ports.Add($port);$enabledStates.Add(($enabled -ne 0));$transports.Add($selector.Groups[1].Value)
+                    }
+                    $distinctPorts=@($ports|Select-Object -Unique);$distinctTransports=@($transports|Select-Object -Unique)
+                    $distinctEnabled=@($enabledStates|Select-Object -Unique)
+                    $result.winrmState.listenerState=if($distinctEnabled.Count -ne 1){'ConfiguredMixed'}elseif($distinctEnabled[0]){'ConfiguredEnabled'}else{'ConfiguredDisabled'}
+                    # Scalar contract: retain only values shared by every record.
+                    if($distinctPorts.Count -eq 1){$result.winrmState.listenerPort=$distinctPorts[0]}
+                    if($distinctTransports.Count -eq 1){$result.winrmState.listenerTransport=$distinctTransports[0]}
+                    $state='Partial';$reason=if($names.Count -gt 1){'POLICY.WINRM_MULTIPLE_LOCAL_LISTENER_CONFIGS'}else{'POLICY.WINRM_LOCAL_LISTENER_CONFIG_ONLY'}
+                }
+            }
+        }
+    } catch {$state=Get-PlatformFailureState $_;$reason="POLICY.WINRM_LISTENER_CONFIG_$($state.ToUpperInvariant())"}
+    finally {if($null -ne $key){$key.Dispose()};if($null -ne $base){$base.Dispose()}}
+    Set-EffectivePolicyScopeState $result @(37) $state $reason
     $smbClientCommand=Get-SecurityCommand Get-SmbClientConfiguration
     if($null -eq $smbClientCommand){
         Set-EffectivePolicyScopeState $result @(38) Unsupported 'POLICY.SMB_CLIENT_MODULE_UNAVAILABLE'
