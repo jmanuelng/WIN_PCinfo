@@ -239,6 +239,8 @@ function Test-CertificateTrustPayload {
                 ($state.state -ne 'Complete' -and (-not (Test-CertificateTrustText $state.reasonCode 96) -or [string]$state.reasonCode -cnotmatch '^[A-Z][A-Z0-9_]*(?:\.[A-Z][A-Z0-9_]*)+$'))){return $false}
         }
         foreach($candidate in @($Payload.candidates)){
+            # PowerShell string casts of JSON-recognized dates use invariant
+            # text; a caller's calendar must not reject or reinterpret it.
             $parsedNotBefore=[DateTimeOffset]::MinValue
             $parsedNotAfter=[DateTimeOffset]::MinValue
             $purpose=@($Policy.purposes|Where-Object purposeId -eq $candidate.purposeId)[0]
@@ -252,8 +254,8 @@ function Test-CertificateTrustPayload {
                 [string]$candidate.storeLocation -notin @('CurrentUser','LocalMachine') -or
                 [string]$candidate.storeName -notin @('My','TrustedPublisher') -or
                 "$($candidate.storeLocation)/$($candidate.storeName)" -notin @($purpose.stores) -or
-                -not [DateTimeOffset]::TryParse([string]$candidate.notBefore,[ref]$parsedNotBefore) -or
-                -not [DateTimeOffset]::TryParse([string]$candidate.notAfter,[ref]$parsedNotAfter) -or
+                -not [DateTimeOffset]::TryParse([string]$candidate.notBefore,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$parsedNotBefore) -or
+                -not [DateTimeOffset]::TryParse([string]$candidate.notAfter,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$parsedNotAfter) -or
                 $parsedNotAfter -lt $parsedNotBefore -or
                 [string]$candidate.validityState -notin @('Valid','Expired','NotYetValid','Unknown') -or
                 [string]$candidate.chainState -notin @('Complete','Incomplete','NotEvaluated') -or
@@ -493,7 +495,7 @@ function Add-CertificateTrustEvidenceRecord {
             # canonical evidence field a String on every supported PowerShell
             # runtime while retaining an unambiguous point in time.
             $value=if($mapping[0] -in @('notBefore','notAfter')){
-                'UTC '+([DateTimeOffset]::Parse([string]$candidate.($mapping[0]))).UtcDateTime.ToString('yyyy-MM-dd HH:mm:ss')
+                'UTC '+([DateTimeOffset]::Parse([string]$candidate.($mapping[0]),[Globalization.CultureInfo]::InvariantCulture)).UtcDateTime.ToString('yyyy-MM-dd HH:mm:ss',[Globalization.CultureInfo]::InvariantCulture)
             }else{$candidate.($mapping[0])}
             Add-CertificateObservation $candidate.scopeId "$index-$($mapping[1])" "field:certificate.$($mapping[1])" $subjectId $value
         }
