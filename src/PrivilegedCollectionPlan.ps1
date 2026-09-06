@@ -1,6 +1,36 @@
 $script:PrivilegedCollectionPlanPolicyBase64 = '__PRIVILEGED_COLLECTION_PLAN_POLICY_BASE64__'
 $script:PrivilegedCollectionPlanPolicyDigest = '__PRIVILEGED_COLLECTION_PLAN_POLICY_SHA256__'
 $script:SystemActivationBrokerSourceBase64 = '__SYSTEM_ACTIVATION_BROKER_SOURCE_BASE64__'
+$script:PolicyUserContextSourceBase64 = '__POLICY_USER_CONTEXT_SOURCE_BASE64__'
+
+function Get-PolicyUserContextSource {
+    if ($script:PolicyUserContextSourceBase64 -ne ('__POLICY_USER_CONTEXT_' + 'SOURCE_BASE64__')) {
+        return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($script:PolicyUserContextSourceBase64))
+    }
+    # Reuse the local WTS/LSA implementation in the authorized policy worker.
+    # Build embeds these exact reviewed bytes; the delivered app reads no file.
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'IdentityEnrollment.ps1'),[ref]$tokens,[ref]$errors)
+    $nodes=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Initialize-IdentityEnrollmentNativeSource'},$false))
+    if ($errors.Count -or $nodes.Count -ne 1) { throw 'The policy user-context source is invalid.' }
+    $source=$nodes[0].Extent.Text.Replace("`r`n","`n").Replace("`r","`n")
+    # Keep only the shared local session implementation in this worker. The
+    # identity collector retains its join APIs; policy cannot call them, and
+    # repeating their compiled source would exceed Windows' launch bound.
+    foreach($region in @(
+        @(('        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]' + "`n" + '        private struct DSREG_JOIN_INFO'),
+          ('        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]' + "`n" + '        private struct WTS_SESSION_INFO'),''),
+        @('        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]','        [DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]',''),
+        @('            bool registrationUser =','            if (registrationUser || workSchool || userContext)',
+          '            var result = new NativeSnapshot { UserSessionId = -1 };' + "`n")
+    )){
+        $start=$source.IndexOf($region[0],[StringComparison]::Ordinal)
+        $end=$source.IndexOf($region[1],[StringComparison]::Ordinal)
+        if($start -lt 0 -or $end -le $start){throw 'The bounded policy context source cannot be composed.'}
+        $source=$source.Remove($start,$end-$start).Insert($start,$region[2])
+    }
+    $source.Replace('if (registrationUser || workSchool || userContext)','if (mode == "UserContext")')
+}
 
 function Get-SystemActivationBrokerSource {
     if ($script:SystemActivationBrokerSourceBase64 -ne ('__SYSTEM_ACTIVATION_BROKER_' + 'SOURCE_BASE64__')) {
@@ -18,15 +48,10 @@ function Get-SystemActivationBrokerSource {
     $parts = foreach ($name in $names) {
         $matches=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name}.GetNewClosure(),$false))
         if ($matches.Count -ne 1) { throw 'The release SYSTEM activation source is ambiguous.' }
-        if ($name -ceq 'Get-SystemCollectionWorkerSource') {
-            $workerText=& ([scriptblock]::Create($matches[0].Extent.Text + "`nGet-SystemCollectionWorkerSource"))
-            $memory=[IO.MemoryStream]::new()
-            $compressor=[IO.Compression.BrotliStream]::new($memory,[IO.Compression.CompressionLevel]::SmallestSize,$true)
-            try { $bytes=[Text.Encoding]::UTF8.GetBytes($workerText.Replace("`r`n","`n").Replace("`r","`n")); $compressor.Write($bytes,0,$bytes.Length) }
-            finally { $compressor.Dispose() }
-            $encoded=[Convert]::ToBase64String($memory.ToArray()); $memory.Dispose()
-            "function Get-SystemCollectionWorkerSource { `$m=[IO.MemoryStream]::new([Convert]::FromBase64String('$encoded')); `$b=[IO.Compression.BrotliStream]::new(`$m,[IO.Compression.CompressionMode]::Decompress); `$r=[IO.StreamReader]::new(`$b,[Text.Encoding]::UTF8); try { `$r.ReadToEnd() } finally { `$r.Dispose(); `$b.Dispose(); `$m.Dispose() } }"
-        } else { $matches[0].Extent.Text.Replace("`r`n","`n").Replace("`r","`n") }
+        # The nested worker already returns canonically minimized source.
+        # Compress source once with its caller; the launch preservation test
+        # proves the outer minimizer cannot change the returned worker bytes.
+        $matches[0].Extent.Text.Replace("`r`n","`n").Replace("`r","`n")
     }
     $encoderAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'PrivilegedCollectionPlan.ps1'),[ref]$tokens,[ref]$errors)
     $encoder=$encoderAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'ConvertTo-PrivilegedCollectionEncodedCommand'},$false)
@@ -191,6 +216,7 @@ finally { $configurationDocument.Dispose() }
 $configuration = $configurationJson | ConvertFrom-Json -Depth 5
 
 __SYSTEM_ACTIVATION_BROKER_SOURCE__
+__POLICY_USER_CONTEXT_SOURCE__
 
 function Test-PrivilegedCollectionSid {
     param($Value)
@@ -1277,6 +1303,38 @@ function Get-EffectivePolicyWsmanNodeValues {
     $values
 }
 
+function Get-EffectivePolicyReferenceId {
+    param($Reference, [ValidateSet('RSOP_GPO','RSOP_SOM')][string]$ClassName)
+    # CIM reference properties are instances; textual WMI paths are parsed
+    # only as exact class/key references. A substring never establishes identity.
+    if($Reference -is [Microsoft.Management.Infrastructure.CimInstance]){
+        if($Reference.CimClass.CimClassName -ine $ClassName){return $null}
+        $key=$Reference.CimInstanceProperties['id']
+        if($null -eq $key -or $key.Value -isnot [string]){return $null}
+        return [string]$key.Value
+    }
+    if($Reference -isnot [string]){return $null}
+    $pattern='^(?:\\\\[^\\]+\\[^:]+:)?'+$ClassName+'\.id="((?:\\[\\"]|[^"\\])*)"$'
+    $match=[regex]::Match($Reference,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if(-not $match.Success){return $null}
+    [regex]::Replace($match.Groups[1].Value,'\\([\\"])','$1')
+}
+
+function Get-EffectivePolicyUserContextState {
+    param([string]$AssessmentUserSid)
+    if([string]::IsNullOrWhiteSpace($AssessmentUserSid)){return 'Unavailable'}
+    try {
+        Initialize-IdentityEnrollmentNativeSource
+        $userContext=[WinPCInfo.IdentityEnrollment.NativeSources]::Read('UserContext')
+        $sessionId=[Diagnostics.Process]::GetProcessById([int]$configuration.coordinatorProcessId).SessionId
+        if($userContext.UserError -in @(5,-2147024891)){return 'Denied'}
+        if($userContext.UserError -eq 0 -and $userContext.UserContextAvailable -and
+            [string]$userContext.UserSid -ceq $AssessmentUserSid -and
+            [int]$userContext.UserSessionId -eq $sessionId){return 'Complete'}
+        'Unavailable'
+    } catch {Get-WorkerAccessState $_}
+}
+
 function Get-LiveEffectivePolicyResult {
     param([Parameter(Mandatory)][AllowEmptyString()][string]$AssessmentUserSid)
     # Threat: human-facing policy reports are localized and can merge intended,
@@ -1299,10 +1357,11 @@ function Get-LiveEffectivePolicyResult {
     # source never becomes affirmative compliance evidence.
     $result=New-EffectivePolicyBaseResult Failed
     $rsopSources=[Collections.Generic.List[object]]::new()
-    if([string]::IsNullOrWhiteSpace($AssessmentUserSid)){
-        Set-EffectivePolicyScopeState $result (0..3) Unavailable 'POLICY.ASSESSMENT_USER_CONTEXT_UNAVAILABLE'
+    $contextState=Get-EffectivePolicyUserContextState -AssessmentUserSid $AssessmentUserSid
+    if($contextState -ne 'Complete'){
+        Set-EffectivePolicyScopeState $result (0..3) $contextState "POLICY.ASSESSMENT_USER_CONTEXT_$($contextState.ToUpperInvariant())"
     }else{
-        $rsopSources.Add([ordered]@{target='User';namespace="root/RSOP/User/$AssessmentUserSid";offset=0})
+        $rsopSources.Add([ordered]@{target='User';namespace="root/RSOP/User/$($AssessmentUserSid.Replace('-','_'))";offset=0})
     }
     $rsopSources.Add([ordered]@{target='Computer';namespace='root/RSOP/Computer';offset=4})
     foreach($source in $rsopSources){
@@ -1318,6 +1377,9 @@ function Get-LiveEffectivePolicyResult {
         $links=@();$linkState='Complete';$linkReason=''
         try {
             $links=@(Get-CimInstance -Namespace $namespace -ClassName RSOP_GPLink -Property @('GPO','SOM','appliedOrder','enabled') -ErrorAction Stop)
+            if(@($links|Where-Object {$null -eq (Get-EffectivePolicyReferenceId -Reference $_.GPO -ClassName RSOP_GPO)}).Count -gt 0){
+                $linkState='Malformed';$linkReason='POLICY.RSOP_LINK_MALFORMED'
+            }
         } catch {
             $linkState=Get-WorkerAccessState $_;$linkReason="POLICY.RSOP_LINK_$($linkState.ToUpperInvariant())"
         }
@@ -1339,10 +1401,8 @@ function Get-LiveEffectivePolicyResult {
                 if($linkState -eq 'Complete'){
                     $rsopId=[string]$gpo.id
                     $link=@($links|Where-Object {
-                        $reference=[string]$_.GPO
-                        $reference -eq $rsopId -or $reference -eq $id -or
-                            $reference -match [regex]::Escape($rsopId) -or
-                            $reference -match [regex]::Escape($id)
+                        $reference=Get-EffectivePolicyReferenceId -Reference $_.GPO -ClassName RSOP_GPO
+                        $null -ne $reference -and $reference -eq $rsopId
                     })
                     if(@($link|Where-Object {$_.enabled -isnot [bool]}).Count -gt 0){
                         $linkState='Malformed';$linkReason='POLICY.RSOP_LINK_MALFORMED'
@@ -1351,12 +1411,13 @@ function Get-LiveEffectivePolicyResult {
                     if($enabledLinks.Count -gt 1){
                         $linkState='Partial';$linkReason='POLICY.RSOP_LINK_AMBIGUOUS'
                     }elseif($enabledLinks.Count -eq 1 -and $linkState -eq 'Complete'){
-                        if([string]::IsNullOrWhiteSpace([string]$enabledLinks[0].SOM) -or
+                        $scopeReference=Get-EffectivePolicyReferenceId -Reference $enabledLinks[0].SOM -ClassName RSOP_SOM
+                        if([string]::IsNullOrWhiteSpace($scopeReference) -or
                             $null -eq $enabledLinks[0].appliedOrder -or [int]$enabledLinks[0].appliedOrder -lt 0 -or
                             [int]$enabledLinks[0].appliedOrder -gt 64){
                             $linkState='Malformed';$linkReason='POLICY.RSOP_LINK_MALFORMED'
                         }else{
-                            $linkId=[string]$enabledLinks[0].SOM;$order=[int]$enabledLinks[0].appliedOrder
+                            $linkId=$scopeReference;$order=[int]$enabledLinks[0].appliedOrder
                             $applicable=([bool]$gpo.enabled -and -not [bool]$gpo.accessDenied -and [bool]$gpo.filterAllowed)
                         }
                     }elseif($enabledLinks.Count -eq 0 -and $linkState -eq 'Complete'){
@@ -1373,7 +1434,7 @@ function Get-LiveEffectivePolicyResult {
                 }
                 $gpoReference=[string]$setting.GPOID
                 $matchingRsopIds=@($objectIdByRsopId.Keys|Where-Object {
-                    $gpoReference -eq $_ -or $gpoReference -match [regex]::Escape([string]$_)
+                    $gpoReference -eq $_
                 })
                 if($matchingRsopIds.Count -ne 1){
                     if($gpoOverflow){$settingOverflow=$true;continue}
@@ -1399,6 +1460,14 @@ function Get-LiveEffectivePolicyResult {
             Set-EffectivePolicyScopeState $result @($offset+3) $finalSettingState $finalSettingReason
         } catch {
             $state=Get-WorkerAccessState $_;Set-EffectivePolicyScopeState $result ($offset..($offset+3)) $state "POLICY.RSOP_$($state.ToUpperInvariant())"
+        }
+        if($target -eq 'User'){
+            $contextState=Get-EffectivePolicyUserContextState -AssessmentUserSid $AssessmentUserSid
+            if($contextState -ne 'Complete'){
+                $result.appliedPolicies=@($result.appliedPolicies|Where-Object target -ne 'User')
+                $result.policySettings=@($result.policySettings|Where-Object target -ne 'User')
+                Set-EffectivePolicyScopeState $result (0..3) $contextState "POLICY.ASSESSMENT_USER_CONTEXT_$($contextState.ToUpperInvariant())"
+            }
         }
     }
     try {
@@ -2158,7 +2227,8 @@ finally {
     $tokenSource.Dispose()
 }
 '@
-    $source.Replace('__SYSTEM_ACTIVATION_BROKER_SOURCE__', (Get-SystemActivationBrokerSource))
+    $source.Replace('__SYSTEM_ACTIVATION_BROKER_SOURCE__', (Get-SystemActivationBrokerSource)).Replace(
+        '__POLICY_USER_CONTEXT_SOURCE__', (Get-PolicyUserContextSource))
 }
 
 function Initialize-PrivilegedCollectionPlanNativeType {

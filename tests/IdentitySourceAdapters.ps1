@@ -136,9 +136,34 @@ function Add-ControlledSystemEnrollmentSources {
 function Get-SystemCollectionWorkerSource {
     $source=Get-ControlledOriginalIdentitySystemSource
     $source=$source.Replace('$providerAvailable = if ([bool] $configuration.validationFixture)', '$providerAvailable = if ($false)')
+    if ('__CASE__' -like 'Mdm*') {
+        $source=[regex]::Replace($source,'(?m)^[ \t]*if \(\[bool\] \$configuration.validationFixture\) \{','if ($false) {')
+        if ('__CASE__' -eq 'MdmUnsupportedBuild') { $source=$source.Replace("'19045'", "'100000'") }
+        if ('__CASE__' -eq 'MdmWindows11') { $source=$source.Replace("'19045'", "'22631'") }
+    }
     $prefix=@"
 function Get-CimInstance {
-    param(`$Namespace, `$ClassName, `$ErrorAction)
+    param(`$Namespace, `$ClassName, `$ErrorAction, `$Filter, `$Property)
+    if ('__CASE__' -like 'Mdm*') {
+        if (`$Namespace -ne 'Root\cimv2\mdm\dmmap') { throw 'Unexpected SYSTEM namespace.' }
+        if (`$ClassName -eq 'MDM_DeviceManageability_Provider01_01') {
+            if ('__CASE__' -eq 'MdmAbsent') { return @() }
+            return [pscustomobject]@{InstanceID='synthetic-provider'}
+        }
+        if ('__CASE__' -eq 'MdmDenied') { throw [UnauthorizedAccessException]::new('Synthetic denied CSP source') }
+        if ('__CASE__' -eq 'MdmUnavailable') { throw [InvalidOperationException]::new('Synthetic unavailable CSP class') }
+        if (`$Filter -notlike "ParentID='./Vendor/MSFT/Policy/Result' AND InstanceID=*") { throw 'Unexpected CSP node filter.' }
+        switch (`$ClassName) {
+            MDM_Policy_Result01_ControlPolicyConflict02 { return [pscustomobject]@{InstanceID='ControlPolicyConflict';ParentID='./Vendor/MSFT/Policy/Result';MDMWinsOverGP=0} }
+            MDM_Policy_Result01_LocalPoliciesSecurityOptions02 {
+                `$item=[pscustomobject]@{InstanceID='LocalPoliciesSecurityOptions';ParentID='./Vendor/MSFT/Policy/Result';InteractiveLogon_MachineInactivityLimit=`$(if ('__CASE__' -eq 'MdmConflict') {30}else{900});Interactivelogon_DoNotRequireCTRLALTDEL=0;NetworkSecurity_LANManagerAuthenticationLevel=5}
+                if ('__CASE__' -eq 'MdmMissingProperty') { `$item.PSObject.Properties.Remove('InteractiveLogon_MachineInactivityLimit') }
+                return `$item
+            }
+            MDM_Policy_Result01_Update02 { return [pscustomobject]@{InstanceID='Update';ParentID='./Vendor/MSFT/Policy/Result';DeferFeatureUpdatesPeriodInDays=14;DeferQualityUpdatesPeriodInDays=3;DisableDualScan=0} }
+            default { throw 'Unexpected SYSTEM source projection.' }
+        }
+    }
     if (`$Namespace -ne 'Root\cimv2\mdm\dmmap' -or `$ClassName -ne 'MDM_DeviceManageability_Provider01_01') { throw 'Unexpected SYSTEM source projection.' }
     if ('__CASE__' -eq 'SystemDenied') { throw [UnauthorizedAccessException]::new('Synthetic denied provider') }
     if ('__CASE__' -eq 'SystemUnavailable') { throw [InvalidOperationException]::new('Synthetic unavailable provider') }
@@ -158,12 +183,8 @@ function Get-SystemActivationBrokerSource {
     $tokens=$null; $errors=$null
     $ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
     $node=$ast.Find({param($item) $item -is [Management.Automation.Language.FunctionDefinitionAst] -and $item.Name -eq 'Get-SystemCollectionWorkerSource'}, $false)
-    $memory=[IO.MemoryStream]::new()
-    $compressor=[IO.Compression.BrotliStream]::new($memory,[IO.Compression.CompressionLevel]::SmallestSize,$true)
-    try { $bytes=[Text.Encoding]::UTF8.GetBytes((Get-SystemCollectionWorkerSource).Replace("`r`n","`n").Replace("`r","`n")); $compressor.Write($bytes,0,$bytes.Length) }
-    finally { $compressor.Dispose() }
-    $encoded=[Convert]::ToBase64String($memory.ToArray()); $memory.Dispose()
-    $replacement="function Get-SystemCollectionWorkerSource { `$m=[IO.MemoryStream]::new([Convert]::FromBase64String('$encoded')); `$b=[IO.Compression.BrotliStream]::new(`$m,[IO.Compression.CompressionMode]::Decompress); `$r=[IO.StreamReader]::new(`$b,[Text.Encoding]::UTF8); try { `$r.ReadToEnd() } finally { `$r.Dispose(); `$b.Dispose(); `$m.Dispose() } }"
+    $literal=(Get-SystemCollectionWorkerSource).Replace("`r`n","`n").Replace("`r","`n").Replace('`','``').Replace('$','`$').Replace('"','`"').Replace("`n",'`n')
+    $replacement='function Get-SystemCollectionWorkerSource { "' + $literal + '" }'
     $source.Replace($node.Extent.Text,$replacement)
 }
 function Get-PrivilegedCollectionPlanPolicy {

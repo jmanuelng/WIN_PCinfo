@@ -396,7 +396,8 @@ namespace WinPCInfo.IdentityEnrollment
         {
             bool registrationUser = String.Equals(mode, "RegistrationUser", StringComparison.Ordinal);
             bool workSchool = String.Equals(mode, "WorkSchool", StringComparison.Ordinal);
-            if (!registrationUser && !workSchool) throw new ArgumentException("Unknown native source mode.");
+            bool userContext = String.Equals(mode, "UserContext", StringComparison.Ordinal);
+            if (!registrationUser && !workSchool && !userContext) throw new ArgumentException("Unknown native source mode.");
             var result = new NativeSnapshot { UserSessionId = -1 };
             if (registrationUser)
             {
@@ -412,7 +413,7 @@ namespace WinPCInfo.IdentityEnrollment
             }
 
             IntPtr aad = IntPtr.Zero;
-            result.AadError = NetGetAadJoinInformation(null, out aad);
+            if (!userContext) result.AadError = NetGetAadJoinInformation(null, out aad);
             try
             {
                 if (result.AadError == 0 && aad != IntPtr.Zero)
@@ -427,7 +428,7 @@ namespace WinPCInfo.IdentityEnrollment
             }
             finally { if (aad != IntPtr.Zero) NetFreeAadJoinInformation(aad); }
 
-            if (registrationUser || workSchool)
+            if (registrationUser || workSchool || userContext)
             {
                 IntPtr sessions = IntPtr.Zero;
                 if (WTSEnumerateSessions(IntPtr.Zero, 0, 1, out sessions, out int count))

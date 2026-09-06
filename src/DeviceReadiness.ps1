@@ -2481,6 +2481,11 @@ function Invoke-DeviceReadinessSlice {
             }else{Invoke-IdentityEnrollmentCollection -Policy $identityPolicy -Live}
             $processRelationship=[string]$identityCollector.processRelationship
             $collectionStarted=$true
+            if($null -ne $effectivePolicyCollector -and -not [bool]$sliceSelection.usesSyntheticPrerequisites){
+                Confirm-EffectivePolicyAssessmentUser -CollectorResult $effectivePolicyCollector `
+                    -IdentityCollector $identityCollector -Policy $effectivePolicy -RequestedSid $assessmentSid `
+                    -SessionId ([Diagnostics.Process]::GetCurrentProcess().SessionId)
+            }
         }
         if($resourceRequested -and (Enter-AssessmentCollectionStageIfActive -Stage resource)){
             $sliceStage='RESOURCE_DEPENDENCIES'
