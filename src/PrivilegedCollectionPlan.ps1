@@ -1199,6 +1199,18 @@ function Convert-EffectivePolicyRegistryBooleanValue {
     [bool]$normalized
 }
 
+function Get-SecurityCommand {
+    param([ValidateSet('Get-MpPreference','Get-MpComputerStatus','Get-NetFirewallProfile')][string]$Name)
+    # Windows ships these operations as CDXML functions. Import only the fixed
+    # inbox manifest; ambient functions and PSModulePath cannot donate a command.
+    $moduleName=if($Name -eq 'Get-NetFirewallProfile'){'NetSecurity'}else{'Defender'}
+    $path=[IO.Path]::Combine([Environment]::SystemDirectory,'WindowsPowerShell','v1.0','Modules',$moduleName,($moduleName+'.psd1'))
+    try {
+        return (Microsoft.PowerShell.Core\Import-Module -Name $path -PassThru -Scope Local -ErrorAction Stop).ExportedCommands[$Name]
+    } catch { }
+    $null
+}
+
 function Convert-EffectivePolicyDefenderActionValue {
     param($Value)
     switch -Regex ([string]$Value) {
@@ -1318,6 +1330,14 @@ function Get-EffectivePolicyReferenceId {
     $match=[regex]::Match($Reference,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)
     if(-not $match.Success){return $null}
     [regex]::Replace($match.Groups[1].Value,'\\([\\"])','$1')
+}
+
+function Read-SecurityResult {
+    param($Command)
+    $items=@(& $Command -ErrorAction Stop)
+    if($items.Count -eq 0){throw [IO.EndOfStreamException]::new()}
+    if($items.Count -ne 1){throw [IO.InvalidDataException]::new()}
+    $items[0]
 }
 
 function Get-EffectivePolicyUserContextState {
@@ -1572,7 +1592,7 @@ function Get-LiveEffectivePolicyResult {
         [string]$result.legacyAuthenticationSignals[0].state -eq 'Complete'){
         Set-EffectivePolicyScopeState $result @(18) Complete ''
     }
-    $preferenceCommand=Get-Command Get-MpPreference -CommandType Cmdlet -ErrorAction SilentlyContinue
+    $preferenceCommand=Get-SecurityCommand Get-MpPreference
     if($null -eq $preferenceCommand){
         Set-EffectivePolicyScopeState $result @(20,21) Unsupported 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
         $result.defenderNetworkProtection.state='Unsupported'
@@ -1584,19 +1604,23 @@ function Get-LiveEffectivePolicyResult {
         # cross the privilege boundary. If the module or one property is missing,
         # coverage degrades explicitly instead of inventing a default.
         try {
-            $preferences=& $preferenceCommand -ErrorAction Stop
+            $preferences=Read-SecurityResult $preferenceCommand
             $idsProperty=$preferences.PSObject.Properties['AttackSurfaceReductionRules_Ids']
             $actionsProperty=$preferences.PSObject.Properties['AttackSurfaceReductionRules_Actions']
             if($null -eq $idsProperty -or $null -eq $actionsProperty){
                 Set-EffectivePolicyScopeState $result @(20) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
             } else {
-                $pairCount=[Math]::Min(@($idsProperty.Value).Count,@($actionsProperty.Value).Count)
+                # CDXML represents an empty nullable array as null. An absent
+                # property is a gap; two present null arrays are an empty result.
+                $ids=@(if($null -ne $idsProperty.Value){$idsProperty.Value})
+                $actions=@(if($null -ne $actionsProperty.Value){$actionsProperty.Value})
+                $pairCount=[Math]::Min(@($ids).Count,@($actions).Count)
                 $boundedPairCount=[Math]::Min($pairCount,16)
                 $asrRules=@()
                 $asrMalformed=$false
                 for($index=0;$index -lt $boundedPairCount;$index++){
-                    $ruleId=([string]@($idsProperty.Value)[$index]).Trim().ToLowerInvariant()
-                    $action=Convert-EffectivePolicyDefenderActionValue @($actionsProperty.Value)[$index]
+                    $ruleId=([string]@($ids)[$index]).Trim().ToLowerInvariant()
+                    $action=Convert-EffectivePolicyDefenderActionValue @($actions)[$index]
                     if($ruleId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' -or
                         [string]::IsNullOrWhiteSpace([string]$action)){
                         $asrMalformed=$true
@@ -1608,7 +1632,7 @@ function Get-LiveEffectivePolicyResult {
                 if($asrMalformed){
                     Set-EffectivePolicyScopeState $result @(20) Malformed 'POLICY.DEFENDER_ASR_MALFORMED'
                     $result.defenderAsrRules=@()
-                } elseif(@($idsProperty.Value).Count -ne @($actionsProperty.Value).Count){
+                } elseif(@($ids).Count -ne @($actions).Count){
                     Set-EffectivePolicyScopeState $result @(20) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
                 } elseif($pairCount -gt 16){
                     Set-EffectivePolicyScopeState $result @(20) Partial 'POLICY.DEFENDER_ASR_EVIDENCE_BOUND_EXCEEDED'
@@ -1632,9 +1656,10 @@ function Get-LiveEffectivePolicyResult {
                 }
             }
         } catch {
-            $state=Get-WorkerAccessState $_
+            $state=if($_.Exception -is [IO.EndOfStreamException]){'Unavailable'}elseif($_.Exception -is [IO.InvalidDataException]){'Malformed'}else{Get-WorkerAccessState $_}
             Set-EffectivePolicyScopeState $result @(20,21) $state "POLICY.DEFENDER_$($state.ToUpperInvariant())"
             $result.defenderNetworkProtection.state=$state
+            $result.defenderNetworkProtection.value=$null
             $result.defenderAsrRules=@()
         }
     }
@@ -1682,16 +1707,9 @@ function Get-LiveEffectivePolicyResult {
             Set-EffectivePolicyScopeState $result @($scopeIndex) Partial 'POLICY.SMARTSCREEN_INCOMPLETE'
         }
     }
-    # Windows Security Center is the supported provider-registration seam.
-    # Names alone are not trusted because an installed product can remain
-    # registered after removal or coexist with Defender in passive mode. The
-    # worker therefore reads product names from the WSC registration list and
-    # category health from WscGetSecurityProviderHealth(). Windows exposes
-    # those as separate seams: one says which providers are registered, the
-    # other says how the category is doing overall. The worker keeps them
-    # separate and repeats only the category health onto each bounded provider
-    # subject so the protected record can compare names and category state
-    # without inventing a per-product winner from ambiguous registrations.
+    # WSC registration names and category health have different authority.
+    # Bounded names never prove a product is active; repeated category health
+    # never selects a winner among stale or coexisting registrations.
     foreach($providerDefinition in @(
         [ordered]@{providerValue=4;scopeIndex=24;reasonPrefix='POLICY.SECURITY_CENTER_ANTIVIRUS';property='antivirusProviders'},
         [ordered]@{providerValue=1;scopeIndex=25;reasonPrefix='POLICY.SECURITY_CENTER_FIREWALL';property='firewallProviders'}
@@ -1705,7 +1723,7 @@ function Get-LiveEffectivePolicyResult {
                 $product=$productList.Item($index)
                 $name=[string]$product.ProductName
                 if([string]::IsNullOrWhiteSpace($name)){
-                    throw 'A Security Center provider property was missing or malformed.'
+                    throw 'Malformed result.'
                 }
                 $providers+=,[ordered]@{name=$name;health=[string]$health}
             }
@@ -1723,7 +1741,7 @@ function Get-LiveEffectivePolicyResult {
             Set-EffectivePolicyScopeState $result @($providerDefinition.scopeIndex) $state "$($providerDefinition.reasonPrefix)_$($state.ToUpperInvariant())"
         }
     }
-    $computerStatusCommand=Get-Command Get-MpComputerStatus -CommandType Cmdlet -ErrorAction SilentlyContinue
+    $computerStatusCommand=Get-SecurityCommand Get-MpComputerStatus
     if($null -eq $computerStatusCommand){
         Set-EffectivePolicyScopeState $result @(26) Unsupported 'POLICY.DEFENDER_MODULE_UNAVAILABLE'
     } else {
@@ -1734,11 +1752,15 @@ function Get-LiveEffectivePolicyResult {
         # silently rewritten into intended policy. Missing runtime properties
         # degrade coverage to Partial instead of guessing a safe-looking default.
         try {
-            $status=& $computerStatusCommand -ErrorAction Stop
+            $status=Read-SecurityResult $computerStatusCommand
             $runtimeMissingProperty=$false
             $runningMode=$status.PSObject.Properties['AMRunningMode']
             if($null -eq $runningMode -or [string]::IsNullOrWhiteSpace([string]$runningMode.Value)){
                 $runtimeMissingProperty=$true
+            } elseif($runningMode.Value -isnot [string] -or
+                [Text.Encoding]::UTF8.GetByteCount($runningMode.Value) -gt 64 -or
+                $runningMode.Value -notmatch '^[A-Za-z ]+$'){
+                throw [IO.InvalidDataException]::new()
             } else {
                 $result.defenderRuntime.runningMode=[string]$runningMode.Value
             }
@@ -1748,13 +1770,13 @@ function Get-LiveEffectivePolicyResult {
                 [ordered]@{propertyName='IsTamperProtected';target='tamperProtected'}
             )){
                 $property=$status.PSObject.Properties[[string]$mapping.propertyName]
-                if($null -eq $property){
+                if($null -eq $property -or $null -eq $property.Value){
                     $runtimeMissingProperty=$true
                     continue
                 }
                 $value=$property.Value
                 if($null -ne $value -and $value -isnot [bool]){
-                    throw 'A Defender runtime property was malformed.'
+                    throw [IO.InvalidDataException]::new()
                 }
                 $result.defenderRuntime.([string]$mapping.target)=$value
             }
@@ -1764,11 +1786,14 @@ function Get-LiveEffectivePolicyResult {
                 Set-EffectivePolicyScopeState $result @(26) Complete ''
             }
         } catch {
-            $state=Get-WorkerAccessState $_
+            $state=if($_.Exception -is [IO.EndOfStreamException]){'Unavailable'}elseif($_.Exception -is [IO.InvalidDataException]){'Malformed'}else{Get-WorkerAccessState $_}
+            foreach($name in @('runningMode','antivirusEnabled','realTimeProtectionEnabled','tamperProtected')){
+                $result.defenderRuntime[$name]=$null
+            }
             Set-EffectivePolicyScopeState $result @(26) $state "POLICY.DEFENDER_RUNTIME_$($state.ToUpperInvariant())"
         }
     }
-    $firewallCommand=Get-Command Get-NetFirewallProfile -CommandType Cmdlet -ErrorAction SilentlyContinue
+    $firewallCommand=Get-SecurityCommand Get-NetFirewallProfile
     if($null -eq $firewallCommand){
         Set-EffectivePolicyScopeState $result @(27,28,29) Unsupported 'POLICY.FIREWALL_MODULE_UNAVAILABLE'
     } else {
@@ -1796,6 +1821,13 @@ function Get-LiveEffectivePolicyResult {
                     continue
                 }
                 $profile=$matching[0]
+                if(@('Enabled','DefaultInboundAction','DefaultOutboundAction'|Where-Object {
+                    $null -eq $profile.PSObject.Properties[$_] -or $null -eq $profile.PSObject.Properties[$_].Value
+                }).Count -gt 0){
+                    $result.firewallProfiles.([string]$mapping.property).state='Unavailable'
+                    Set-EffectivePolicyScopeState $result @($mapping.scopeIndex) Unavailable 'POLICY.FIREWALL_PROPERTY_UNAVAILABLE'
+                    continue
+                }
                 $enabled=Convert-EffectivePolicyFirewallEnabled $profile.Enabled
                 $inbound=Convert-EffectivePolicyFirewallAction $profile.DefaultInboundAction
                 $outbound=Convert-EffectivePolicyFirewallAction $profile.DefaultOutboundAction

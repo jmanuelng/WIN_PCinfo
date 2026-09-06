@@ -66,7 +66,7 @@ foreach($fragment in @(
     'WscGetSecurityProviderHealth(','ReadSecurityProviderHealth([uint32]$providerDefinition.providerValue)',
     '[DllImport("Wscapi.dll")]','New-Object -ComObject ''WSCProductList''',
     'Get-MpComputerStatus','Get-MpPreference',
-    'Get-Command Get-NetFirewallProfile','-PolicyStore ActiveStore',
+    'Get-SecurityCommand Get-NetFirewallProfile','-PolicyStore ActiveStore',
     'AttackSurfaceReductionRules_Ids','AttackSurfaceReductionRules_Actions',
     'EnableNetworkProtection','IsTamperProtected',
     'MDM_Policy_Result01_Update02','DeferFeatureUpdatesPeriodInDays',

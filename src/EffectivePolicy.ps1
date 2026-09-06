@@ -6,6 +6,55 @@ function Get-EffectivePolicySha256 {
     [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($Bytes)).ToLowerInvariant()
 }
 
+function New-EffectivePolicySecurityReportSection {
+    param([Parameter(Mandatory)]$Record)
+    # The caller has validated this record. Coverage binds each observation to
+    # its scope; display labels never select evidence or change rule outcomes.
+    $titles=[ordered]@{
+        'defender.runtime'='Defender Antivirus and tamper protection'
+        'defender.asr'='Attack surface reduction'
+        'defender.network-protection'='Network protection'
+        'smartscreen.shell'='SmartScreen shell signals'
+        'smartscreen.app-install-control'='SmartScreen application-install signal'
+        'firewall.domain-profile'='Firewall: Domain profile'
+        'firewall.private-profile'='Firewall: Private profile'
+        'firewall.public-profile'='Firewall: Public profile'
+        'security-center.antivirus-providers'='Registered antivirus providers'
+        'security-center.firewall-providers'='Registered firewall providers'
+    }
+    $observations=@{};foreach($item in $Record.observations){$observations[[string]$item.observationId]=$item}
+    $provenance=@{};foreach($item in $Record.provenance){$provenance[[string]$item.provenanceId]=$item}
+    $sections=foreach($key in $titles.Keys){
+        $scope=@($Record.coverage|Where-Object scopeId -eq "scope:policy.$key")[0]
+        $layer=if($key -like 'smartscreen.*' -or $key -in @('defender.asr','defender.network-protection')){'Configured Policy Signals'}else{'Current Control State'}
+        $reason=if($scope.PSObject.Properties['reasonCode']){' ('+[Net.WebUtility]::HtmlEncode([string]$scope.reasonCode)+')'}else{''}
+        $rows=foreach($id in $scope.observationIds){
+            $observation=$observations[[string]$id];$origin=$provenance[[string]$observation.provenanceId]
+            $value=switch([string]$observation.valueState){
+                ObservedValue {[Convert]::ToString($observation.value,[Globalization.CultureInfo]::InvariantCulture)}
+                ObservedAbsent {'Observed absent in this source scope'}
+                SourceReportedUnknown {'Source reported unknown'}
+            }
+            $label=([string]$observation.fieldId).Split('.')[-1].Replace('-',' ')
+            '<li id="security-'+[Net.WebUtility]::HtmlEncode([string]$id)+'"><strong>'+[Net.WebUtility]::HtmlEncode($label)+':</strong> '+
+                [Net.WebUtility]::HtmlEncode($value)+'<details><summary>Source and evidence reference</summary><p>Observation: '+
+                [Net.WebUtility]::HtmlEncode([string]$id)+'<br>Field: '+[Net.WebUtility]::HtmlEncode([string]$observation.fieldId)+
+                '<br>Subject: '+[Net.WebUtility]::HtmlEncode([string]$observation.subjectId)+
+                '<br>Source: '+[Net.WebUtility]::HtmlEncode([string]$origin.sourceId)+
+                '<br>Context: '+[Net.WebUtility]::HtmlEncode([string]$origin.executionContext)+
+                '<br>Collected: '+[Net.WebUtility]::HtmlEncode([string]$origin.collectedAt)+
+                '<br>Source locale: '+[Net.WebUtility]::HtmlEncode([string]$origin.sourceLocale)+'</p></details></li>'
+        }
+        $evidence=if(@($rows).Count){'<ul>'+($rows -join '')+'</ul>'}else{'<p>No usable observation was returned for this scope. Review its coverage reason; do not infer enabled or disabled protection.</p>'}
+        '<h3>'+[Net.WebUtility]::HtmlEncode([string]$titles[$key])+'</h3><p>'+ $layer+
+            '. Coverage: '+[Net.WebUtility]::HtmlEncode([string]$scope.state)+$reason+'</p>'+$evidence
+    }
+    '<section aria-label="Security control evidence"><h2>Defender and attack-surface protection</h2>'+
+        '<p>These are local, source-backed observations. Defender preferences and SmartScreen registry signals do not prove applied organizational policy or current enforcement. Firewall ActiveStore describes each profile, not reachability. Registration names and category health do not identify a winning antivirus product.</p>'+
+        ($sections -join '')+
+        '<p>Use the versioned advisory findings and next steps in this report to plan follow-up with the device and security-policy owners. Confirm current state, intended policy, applicable Windows and Defender versions, and tenant-side assignments before considering a change. Passive mode and tamper protection are constraints to investigate, not collection failures or compliance verdicts. Missing or bounded evidence remains a gap. WIN-PCInfo does not change these controls.</p></section>'
+}
+
 function Get-EffectivePolicyPolicy {
     param([Parameter(Mandatory)] $ConvertFromJsonCommand)
 
@@ -726,7 +775,10 @@ function Test-EffectivePolicyCollectorPayload {
             @($Payload.appLockerCspCollections).Count -gt 8 -or
             @($Payload.smartScreenSignals).Count -ne 3){return $false}
         $expectedScopeIds=@((Get-EffectivePolicyCollectorScopes -Policy $Policy).scopeId)
-        if((@($Payload.scopeStates.scopeId)-join '|') -ne ($expectedScopeIds-join '|')){return $false}
+        # Source order is not evidence identity. Require the exact scope set
+        # (including multiplicity), then copy it in release-catalog order.
+        if((@($Payload.scopeStates.scopeId|Sort-Object)-join '|') -ne
+            (@($expectedScopeIds|Sort-Object)-join '|')){return $false}
         if(-not (Test-ExactProperties $Payload.layerStates @('AppliedPolicyEvidence','ConfiguredPolicySignals','CurrentControlState'))){return $false}
         foreach($scope in $Payload.scopeStates){
             if(-not (Test-ExactProperties $scope @('scopeId','state','reasonCode'))){return $false}
@@ -1043,7 +1095,10 @@ function Copy-EffectivePolicyCollectorPayload {
             ConfiguredPolicySignals=[string]$Payload.layerStates.ConfiguredPolicySignals
             CurrentControlState=[string]$Payload.layerStates.CurrentControlState
         }
-        scopeStates=@($Payload.scopeStates|ForEach-Object {[pscustomobject][ordered]@{scopeId=[string]$_.scopeId;state=[string]$_.state;reasonCode=[string]$_.reasonCode}})
+        scopeStates=@(foreach($scope in Get-EffectivePolicyCollectorScopes -Policy $Policy){
+            $entry=@($Payload.scopeStates|Where-Object scopeId -eq $scope.scopeId)[0]
+            [pscustomobject][ordered]@{scopeId=[string]$entry.scopeId;state=[string]$entry.state;reasonCode=[string]$entry.reasonCode}
+        })
         appliedPolicies=@($Payload.appliedPolicies|ForEach-Object {[pscustomobject][ordered]@{target=[string]$_.target;origin=[string]$_.origin;objectId=[string]$_.objectId;applicable=$_.applicable;linkId=$_.linkId;appliedOrder=$_.appliedOrder}})
         policySettings=@($Payload.policySettings|ForEach-Object {[pscustomobject][ordered]@{target=[string]$_.target;settingId=[string]$_.settingId;objectId=[string]$_.objectId;precedence=[int]$_.precedence}})
         localSam=[pscustomobject][ordered]@{
@@ -2067,7 +2122,7 @@ function Complete-ValidatedEffectivePolicyAssessmentRecord {
             foreach($observation in @($Record.observations)){
                 if($observation.fieldId -eq 'field:policy.defender.running-mode' -and
                     $observation.valueState -eq 'ObservedValue' -and
-                    [string]$observation.value -eq 'Passive'){
+                    [string]$observation.value -in @('Passive','Passive Mode','SxS Passive Mode')){
                     $passive=$true
                 }
                 elseif($observation.fieldId -eq 'field:policy.defender.tamper-protected' -and
