@@ -426,6 +426,15 @@ try {
         Assert-Equal 50 $session.ExitCode 'an untrusted device result preserves the integrity-failure code'
         Assert-Equal '' $session.Transport.State.PackagePath 'untrusted source output cannot reach final package naming'
         Assert-Equal $true $terminal.cleanup.verified 'the failed source leaves verified owned cleanup'
+        if($QualificationSourceCase -eq 'Device-ProhibitedSignal') {
+            Assert-Equal 'PROCESS.PROHIBITED_MATERIAL_BLOCKED' $session.Transport.State.DeviceProhibitedReason 'the actual native collector identifies prohibited input'
+            Assert-Equal $false $session.Transport.State.DeviceProhibitedPayloadReturned 'prohibited input has no admitted private payload'
+            foreach($file in @(Get-ChildItem -LiteralPath $testRoot -Recurse -File)) {
+                $bytes=[IO.File]::ReadAllBytes($file.FullName)
+                Assert-QualificationMarkerAbsent -Text ([Text.Encoding]::UTF8.GetString($bytes))
+                Assert-QualificationMarkerAbsent -Text ([Text.Encoding]::Unicode.GetString($bytes))
+            }
+        }
         return
     }
     if ($QualificationPlanFault.StartsWith('System')) {

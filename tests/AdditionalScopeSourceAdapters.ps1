@@ -59,8 +59,8 @@ function __PROVIDER__ {
 
 function Assert-AdditionalScopeSource {
     param($Record, [string] $Html, $Case, $State)
-    if($Case.id -like '*-ContextUnavailable') {
-        Assert-Equal $false $State.ContainsKey('AdditionalSourceBuilt') 'missing Assessment User context stops before entering the OS source'
+    if($Case.id -like '*-ContextUnavailable' -or $Case.id -eq 'Network-ContextDenied') {
+        Assert-Equal $false $State.ContainsKey('AdditionalSourceBuilt') 'an unavailable or prohibited Assessment User context stops before entering the OS source'
     }
     foreach ($expectation in $Case.expected) {
         $scopes=@($Record.coverage | Where-Object scopeId -Like $expectation.pattern)

@@ -1544,5 +1544,136 @@
         "count": 1
       }
     ]
+  },
+  {
+    "id": "Platform-WdacEmpty",
+    "family": "Platform",
+    "scenario": "Running",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Read-CiToolJson",
+        "code": "return '{\"Policies\":[]}'"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.wdac.inventory",
+        "state": "Complete",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Platform-GpBound",
+    "family": "Platform",
+    "scenario": "Running",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledAppLockerPolicy",
+        "code": "return [pscustomobject]@{RuleCollections=@('Exe','Dll','Msi','Script','Appx','Exe' | ForEach-Object {[pscustomobject]@{CollectionType=$_;EnforcementMode='Enabled'}})}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.applocker.gp-channel",
+        "state": "Partial",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Remote-SmbServerPartial",
+    "family": "Remote",
+    "scenario": "Configured",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledSmbServerConfiguration",
+        "code": "return [pscustomobject]@{RequireSecuritySignature=$true;EnableSecuritySignature=$true;RejectUnencryptedAccess=$true;EnableSMB1Protocol=$false}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.smb.server",
+        "state": "Partial",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Remote-SmbServerMalformed",
+    "family": "Remote",
+    "scenario": "Configured",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledSmbServerConfiguration",
+        "code": "return [pscustomobject]@{RequireSecuritySignature=$true;EnableSecuritySignature=$true;EncryptData='true';RejectUnencryptedAccess=$true;EnableSMB1Protocol=$false}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.smb.server",
+        "state": "Malformed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Device-ProhibitedSignal",
+    "family": "Readiness",
+    "scenario": "Complete",
+    "provider": "Get-SyntheticCollectorScriptBytes",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "[Console]::Out.Write('{\"password\":\"Synthetic-154-秘密-İ-🔒\"}'); exit 0"
+      }
+    ],
+    "replacements": [],
+    "expected": [],
+    "terminal": "IntegrityFailed",
+    "terminalReason": "DEVICE_READINESS.COLLECTOR_FAILED",
+    "moduleReplacements": [
+      {
+        "before": "Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -CancellationToken $CancellationToken }",
+        "after": "$result=Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.DeviceProhibitedReason=$result.Supervision.reasonCode; $script:StatusDeskTransport.State.DeviceProhibitedPayloadReturned=[bool]$result.PSObject.Properties['PrivatePayload']; $result }"
+      }
+    ]
+  },
+  {
+    "id": "Network-ContextDenied",
+    "family": "Network",
+    "scenario": "Complete",
+    "provider": "Get-NetworkTopologyLiveSource",
+    "functionFaults": [],
+    "replacements": [],
+    "moduleReplacements": [
+      {
+        "after": "",
+        "before": "function Get-NetworkTopologyProcessDisposition { param($ProcessSid,$AssessmentUserSid,$IsAdministrator) }"
+      },
+      {
+        "after": "function Get-NetworkTopologyProcessDisposition {",
+        "before": "function Get-UnusedNetworkTopologyProcessDisposition {"
+      },
+      {
+        "after": "Invoke-ControlledNetworkTopologyCollection -Policy $Policy -Live -AssessmentUserSid $AssessmentUserSid -NetworkBehavior $NetworkBehavior -ProcessContextOverride Administrator",
+        "before": "Invoke-ControlledNetworkTopologyCollection -Policy $Policy -Live -AssessmentUserSid $AssessmentUserSid -NetworkBehavior $NetworkBehavior"
+      }
+    ],
+    "expected": [
+      {
+        "count": 9,
+        "pattern": "scope:network.*",
+        "state": "Denied"
+      }
+    ]
   }
 ]
