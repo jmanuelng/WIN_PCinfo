@@ -868,6 +868,7 @@ function Export-RestrictedAssessmentReport {
         [Parameter(Mandatory)] [string] $WarningAcknowledgment,
         [Parameter()]
         [System.Security.Cryptography.X509Certificates.X509Certificate2] $RecipientCertificate,
+        [Parameter()] [ValidateSet('Local', 'Recipient')] [string] $ProtectionRoute = 'Local',
         [Parameter(DontShow)]
         [ValidateSet('None', 'AfterWrite')]
         [string] $SyntheticInterruption = 'None'
@@ -894,8 +895,17 @@ function Export-RestrictedAssessmentReport {
     $operationError = $null
     $cleanupError = $null
     try {
-        $opened = Read-ProtectedEvidencePackage -LiteralPath $PackagePath `
-            -RecipientCertificate $RecipientCertificate
+        $fullPath = [System.IO.Path]::GetFullPath($OutputPath)
+        $parent = [System.IO.Path]::GetDirectoryName($fullPath)
+        if (-not (Test-RestrictedReportDestination -DirectoryPath $parent)) {
+            $baseResult.state = 'NotStarted'
+            $baseResult.reasonCode = 'EXPORT.DESTINATION_NOT_PRIVATE'
+            return [pscustomobject] $baseResult
+        }
+        $opened = if ($ProtectionRoute -eq 'Recipient') {
+            Open-ProtectedEvidencePackageForRecipient -PackagePath $PackagePath -SyntheticCertificate $RecipientCertificate
+        }
+        else { Read-ProtectedEvidencePackage -LiteralPath $PackagePath -RecipientCertificate $RecipientCertificate }
         if (-not $opened.verified -or
             -not $opened.artifacts.Contains([string] $policy.restrictedReportExport.artifact)) {
             return [pscustomobject] $baseResult
@@ -986,6 +996,30 @@ function Export-RestrictedAssessmentReport {
             [System.IO.File]::Delete($partialPath)
         }
     }
+}
+
+function Test-RestrictedReportDestination {
+    param([Parameter(Mandatory)] [string] $DirectoryPath)
+    # Plaintext must inherit a private ACL. A local-looking path is insufficient:
+    # reject redirected, synced, public and repository locations before any write.
+    try {
+        $decision = Test-EvidenceWorkspaceDestination -RequestedBasePath $DirectoryPath -RunId ([guid]::NewGuid())
+        if (-not $decision.eligible) { return $false }
+        $path = [IO.Path]::GetFullPath($DirectoryPath)
+        foreach ($root in @($env:PUBLIC, $env:OneDrive, $env:OneDriveCommercial, $env:OneDriveConsumer)) {
+            if (-not [string]::IsNullOrWhiteSpace($root) -and
+                ($path.TrimEnd('\') -eq $root.TrimEnd('\') -or
+                 $path.StartsWith($root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase))) { return $false }
+        }
+        $cursor = [IO.DirectoryInfo]::new($path)
+        while ($null -ne $cursor) {
+            if ([IO.File]::Exists((Join-Path $cursor.FullName '.git')) -or
+                [IO.Directory]::Exists((Join-Path $cursor.FullName '.git'))) { return $false }
+            $cursor = $cursor.Parent
+        }
+        Test-EvidenceAccessBoundary -LiteralPath $path -ExpectedOwnerSid ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
+    }
+    catch { $false }
 }
 
 function New-CompletionSummary {
@@ -1182,7 +1216,7 @@ function Invoke-RecipientSharingFixture {
     $providerContractVerified = $false
     try {
         $boundary = New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (
-            Join-Path (Split-Path -Parent $PSCommandPath) '.recipient-sharing-validation'
+            Join-Path ([IO.Path]::GetTempPath()) 'WIN-PCInfo-recipient-sharing-validation'
         )
         if ($scenario -in @(
                 'TpmBackedSetup', 'SoftwareFallbackSetup', 'ProfileValidation',

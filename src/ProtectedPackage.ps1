@@ -995,14 +995,22 @@ function Open-EvidenceViewingSession {
         [Parameter(Mandatory)] [string] $PackagePath,
         [Parameter(Mandatory)] [ValidateSet('assessment-record.json', 'assessment-report.html')]
         [string] $RequestedArtifact,
-        [Parameter(Mandatory)] [string] $ViewingBasePath
+        [Parameter(Mandatory)] [string] $ViewingBasePath,
+        [Parameter()] [ValidateSet('Local', 'Recipient')] [string] $ProtectionRoute = 'Local',
+        [Parameter(DontShow)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2] $RecipientCertificate
     )
 
     $failure = [pscustomobject][ordered]@{
         state = 'IntegrityFailed'; verified = $false; artifactPath = $null
         recoveryRegistered = $false; journalPath = $null
     }
-    $opened = Read-ProtectedEvidencePackage -LiteralPath $PackagePath
+    # Selecting Recipient never falls back to local DPAPI. Both routes return
+    # plaintext only after the same complete authenticated package admission.
+    $opened = if ($ProtectionRoute -eq 'Recipient') {
+        Open-ProtectedEvidencePackageForRecipient -PackagePath $PackagePath -SyntheticCertificate $RecipientCertificate
+    }
+    else { Read-ProtectedEvidencePackage -LiteralPath $PackagePath }
     if (-not $opened.verified -or -not $opened.artifacts.Contains($RequestedArtifact)) {
         return $failure
     }
