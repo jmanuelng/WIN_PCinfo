@@ -1,6 +1,7 @@
 # Approved Microsoft connectivity implementation (#150)
 
-Starting revision: `6ba3a8f88ddb9d9038024bf0bb68d8d69146b56e`. All native
+Starting revision: `6ba3a8f88ddb9d9038024bf0bb68d8d69146b56e`. Final application
+revision: `77f3f35841f17ae155588fc59b024e44c67c68c3`. All native
 blockers are merged and closed; #149 merged during this slice through PR #175,
 merge `548696d3122b47293ba628a628dc4aad8ab02485`. This slice uses controlled
 protocol and local-context adapters only. No live assessment, endpoint probe,
@@ -17,7 +18,7 @@ private. Local Only captures no connectivity context and invokes no protocol.
 
 Every new logical protocol hop compares the policy against the embedded allowlist
 and rechecks visible active-interface DNS configuration and current-user static
-proxy routes. Changed/unavailable context suppresses new work. PAC/WPAD is not
+proxy routes, including resolver order. Changed/unavailable context suppresses new work. PAC/WPAD is not
 evaluated, and malformed proxy flag/types/connection blobs fail closed. The
 Windows connection-settings byte array is preserved so its automatic-discovery
 flags can actually be checked. HTTP uses the frozen explicit static proxy or
@@ -29,6 +30,10 @@ when the direct path is blocked; that preserves useful proxy evidence while TLS
 inspection remains Indeterminate. HTTP 401/403/407/429 is Blocked, other non-2xx
 non-redirect responses are Failed, and redirects are rejected without another
 request. Bounded exception unwrapping retains timeout and socket-denial states.
+HTTP-path CertificateChainInvalid and TlsAuthenticationFailed preserve distinct
+certificate-chain and other TLS authentication failures without overwriting the
+direct-path fields. An uncaptured HTTP certificate remains null, preventing a
+transport failure from becoming a whole-payload invalid empty fingerprint.
 No failure is expanded into an unrelated local-scope failure.
 
 The unchanged limits allow at most 12 logical protocol attempts, 5 seconds per
@@ -61,6 +66,9 @@ executes the actual current-user proxy parser with controlled registry objects.
 Red cases observed: enabled preparation lacked bound resolver/proxy context;
 HTTP 407 was reported Succeeded; wrapped timeout became Failed; malformed proxy
 flags authorized direct traffic. The corresponding behavioral regressions pass.
+Spec review added red cases for resolver-priority changes retaining the same
+digest and proxy-path certificate rejection losing its cause; both now pass.
+The generated proxy case exposed the null-fingerprint bug, also fixed test-first.
 A test-only byte-array adapter and an implementation rename temporarily failed;
 both were corrected before acceptance. A build during a policy/schema edit
 correctly rejected the intermediate incomplete schema; the closed schema was
@@ -68,18 +76,60 @@ updated before subsequent generated cases. These are not live evidence.
 
 | Gate | Status |
 | --- | --- |
-| ConnectivitySourceApplication | Pass: Direct, WindowsProxy, ProxyOnly, Suspected, Blocked, Partial, DnsFailure, Timeout, InvalidChain, Redirect, ProxyBlocked, AutomaticProxy, ContextChanged, LocalOnly; approximately 21–23 seconds per case |
-| ConnectivityHttpBoundary | Pass: 407, 204, 302, 307, 503, timeout, oversized headers; one send only; no credentials/cookies/body/redirect/downloads; transport/response disposal |
-| ConnectivityContextBoundary | Pass: malformed flag/type/blob, PAC URL, WPAD bit and static proxy; all owned registry objects disposed |
+| ConnectivitySourceApplication | Pass: all 16 scenarios across initial/correction runs: Direct, WindowsProxy, ProxyOnly, Suspected, Blocked, Partial, DnsFailure, Timeout, InvalidChain, Redirect, ProxyBlocked, AutomaticProxy, ContextChanged, LocalOnly, ProxyInvalidChain, ProxyTlsFailure; 21.3–23.0 seconds per case. Final proxy failures and ContextChanged passed after corrections |
+| ConnectivityHttpBoundary | Pass: nine actual-phase cases: 407, invalid chain, other TLS authentication rejection, 204, 302, 307, 503, timeout, oversized headers; one send only; no credentials/cookies/body/redirect/downloads; null fingerprint and transport/response disposal |
+| ConnectivityContextBoundary | Pass: malformed flag/type/blob, PAC URL, WPAD bit and static proxy; all owned registry objects disposed; actual resolver reducer detects reversed server order |
 | SchemaContracts / PreparationSummary | Pass: both network modes, closed preparation plan and accepted/declined request parity |
 | StatusDeskEngine enabled decline | Pass: no protocol entry or package before/after declined consent |
 | MicrosoftConnectivity / MicrosoftConnectivityPolicy / LocalOnlyRequestBoundary | Pass: existing fixture semantics and instrumented LocalOnly no-request branch |
-| Existing generated fixture matrix / final build evidence / independent reviews | Pending final execution and review below |
+| MicrosoftConnectivityApplication | Pass: all 14 existing fixtures plus LocalOnly collapse; canonical record, report, encrypted package reopening and cleanup. Confirmed is controlled fixture evidence only |
+| MicrosoftConnectivityContract | Pass: canonical typed source evidence, coverage, traceable interpretation and earlier resource/network/software dependency contracts |
+| BuildDeterminism | Pass on final application revision: two output directories, LF/CRLF source mirrors, exact provenance, relocated device/software/certificate application execution |
+| Changed executable syntax / diff whitespace | Pass before and after review corrections |
 | Whole repository regression / live acceptance | Pending #158/#161/#162 under the user's focused per-ticket test cadence |
 
 No shared privileged/SYSTEM composition or existing inline limits were edited.
 Synthetic packages and plaintext viewing use verified owned cleanup. Ignored
 unsigned build outputs are retained locally; no private real records are published.
+
+An initial BuildDeterminism relocated-device assertion failed while another
+generated assessment test was active. The same source passed a serialized rerun;
+the final corrected source also passed serialized. The initial terminal details
+were not retained, so shared run-lock contention is a likely cause, not a proven
+diagnosis. Generated assessments must be serialized; deterministic construction
+does not waive the single-active-run boundary.
+
+Exact unsigned candidates from `77f3f35`:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| WIN-PCInfo.ps1 | 3,173,342 | `07f4d669f08556d23149897e3f86b4c9912198fd68b3ef9ec98820c34ab1527c` |
+| WIN-PCInfo-2.0.0-preview.1-portable.zip | 4,696,499 | `93934dc2098a62446f4a1e6340cf91307621ae16c45965f91ec1bc8f097d667b` |
+
+Both match both independent deterministic-build copies in length and digest.
+Validation documents are excluded from the portable content tree; this final
+evidence-only edit does not change the recorded application/package bytes.
+
+## Standards review
+
+Independent fixed-point review `6ba3a8f...9114d42`: zero hard documented-standard
+violations; one nonblocking possible Duplicated Code judgment for repeated
+per-protocol context/deadline guards. It is retained as an explicit judgment;
+the separate direct/proxy prerequisites remain visible. Correction review
+`9114d42...77f3f35`: zero hard violations or new actionable smell findings.
+Both controlled context/HTTP boundary tests passed independently. No review
+performed a live operation or modified source.
+
+## Spec review
+
+Fresh independent review found two actionable issues: DNS priority was hidden by
+sorting, and proxy-path TLS/chain failure lost attribution. Both were corrected
+and independently re-reviewed at `77f3f35`, with zero residual actionable
+findings or scope creep. Both permitted boundary tests passed independently.
+A retained-agent capacity limit prevented parallel reviewer creation, so the
+axes and correction reviews ran serially. No prior-ticket review context was
+reused and neither axis was omitted. Whole-repository and live gates remain
+pending as listed above.
 
 ## Requirement register contribution and next owners
 
