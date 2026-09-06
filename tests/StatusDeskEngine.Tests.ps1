@@ -10,6 +10,9 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $PolicySourceScenario = '',
     [string] $SecuritySourceScenario = '',
     [string] $PlatformSourceScenario = '',
+    [string] $RemoteSourceScenario = '',
+    [string] $SoftwareSourceScenario = '',
+    [ValidateSet('','Maximum','Distinct','EscapedOverflow')] [string] $SoftwareReportScenario = '',
     [string] $NetworkSourceScenario = '',
     [string] $CertificateSourceScenario = '',
     [string] $ConnectivitySourceScenario = '',
@@ -72,6 +75,17 @@ function Invoke-ApprovedCollectorProcess { param($OperationId, $DeviceReadinessS
 '@
 if ($PrivilegeOutcome -ne 'AcceptedElevation') {
     $moduleText=$moduleText.Replace('-ValidationScenario AcceptedElevation', '-ValidationScenario ' + $PrivilegeOutcome)
+}
+if ($SoftwareReportScenario) {
+    . (Join-Path $PSScriptRoot 'SoftwareReportAssertions.ps1')
+    $moduleText += [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'SoftwareReportAssertions.ps1'))
+    $moduleText += "`n" + @'
+function Invoke-SoftwareInventoryCollection { param($Policy, [switch]$Live, $AssessmentUserSid)
+    $result=Invoke-ControlledSoftwareInventoryCollection -Policy $Policy -ValidationScenario AggregateMaximum
+    Set-SoftwareReportTestValues -Entries $result.payload.entries -Scenario '__REPORT_CASE__'
+    $result
+}
+'@.Replace('__REPORT_CASE__',$SoftwareReportScenario)
 }
 if ($RequireFrontLoadedPrivilege) {
     $moduleText=$moduleText.Replace('Invoke-ControlledIdentityEnrollmentCollection -Policy',
@@ -154,6 +168,14 @@ if ($SecuritySourceScenario) {
 if ($PlatformSourceScenario) {
     . (Join-Path $PSScriptRoot 'PlatformSourceAdapters.ps1')
     $moduleText=Add-ControlledPlatformSources -ModuleText $moduleText -Scenario $PlatformSourceScenario
+}
+if ($RemoteSourceScenario) {
+    . (Join-Path $PSScriptRoot 'RemoteSourceAdapters.ps1')
+    $moduleText=Add-ControlledRemoteSources -ModuleText $moduleText -Scenario $RemoteSourceScenario
+}
+if ($SoftwareSourceScenario) {
+    . (Join-Path $PSScriptRoot 'SoftwareSourceAdapters.ps1')
+    $moduleText=Add-ControlledSoftwareSources -ModuleText $moduleText -Scenario $SoftwareSourceScenario
 }
 if ($NetworkSourceScenario) {
     . (Join-Path $PSScriptRoot 'NetworkSourceAdapters.ps1')
@@ -300,8 +322,18 @@ try {
     if ($IdentitySourceScenario -and $session.Transport.State.ContainsKey('IdentitySourceFailure')) { throw ($session.Transport.State.IdentitySourceFailure + ' ' + $session.Transport.State.IdentityPrivilegeReason) }
     if ($SecuritySourceScenario -and $session.Transport.State.ContainsKey('SecuritySourceFailure')) { throw $session.Transport.State.SecuritySourceFailure }
     if ($PlatformSourceScenario -and $session.Transport.State.ContainsKey('PlatformSourceFailure')) { throw $session.Transport.State.PlatformSourceFailure }
+    if ($RemoteSourceScenario -and $session.Transport.State.ContainsKey('RemoteSourceFailure')) { throw $session.Transport.State.RemoteSourceFailure }
     if ($PolicySourceScenario -and $session.Transport.State.ContainsKey('PolicySourceFailure')) { throw ($session.Transport.State.PolicySourceFailure + ' ' + $session.Transport.State.PolicyPrivilegeReason) }
     $terminal = $session.Transport.State.Terminal | ConvertFrom-Json
+    if ($SoftwareReportScenario -eq 'EscapedOverflow') {
+        Assert-Equal 'IntegrityFailed' $terminal.outcome 'escaped report overflow refuses without false success'
+        Assert-Equal 50 $session.ExitCode 'escaped report overflow retains the integrity-failure exit code'
+        Assert-Equal $true $terminal.collectionStarted 'escaped overflow reaches the real assessment flow'
+        Assert-Equal 'DEVICE_READINESS.REPORT_FAILED' $terminal.reasonCode 'rendered output bound remains enforced'
+        Assert-Equal $true $terminal.cleanup.verified 'overflow verifies owned cleanup'
+        Assert-Equal '' $session.Transport.State.PackagePath 'overflow exposes no unverified package'
+        return
+    }
     if ($DeclinePreparation) {
         Assert-Equal 'NotStarted' $terminal.outcome 'declined preparation starts no assessment'
         Assert-Equal $false $terminal.collectionStarted 'declined preparation executes no local collector'
@@ -375,6 +407,16 @@ try {
         Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
     }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
+    if ($SoftwareReportScenario) {
+        Assert-SoftwareReportEvidence -Record $record -Html $html
+        $exportPath=Join-Path $testRoot 'software-report.html'
+        $export=Export-RestrictedAssessmentReport -PackagePath $session.Transport.State.PackagePath `
+            -OutputPath $exportPath -WarningAcknowledgment 'I UNDERSTAND THIS IS RESTRICTED DIAGNOSTIC EVIDENCE'
+        Assert-Equal 'Exported' $export.state 'maximum software report deliberately exports after verified reopening'
+        Assert-SoftwareReportEvidence -Record $record -Html ([IO.File]::ReadAllText($exportPath))
+        Write-Output "Software report $SoftwareReportScenario bytes: $($opened.artifacts['assessment-report.html'].Length)"
+    }
+    if ($SoftwareSourceScenario) { Assert-SoftwareSourceReport -Record $record -Html $html -Scenario $SoftwareSourceScenario }
     if ($ConnectivitySourceScenario) {
         Assert-ConnectivitySourceReport -Record $record -Html $html -Scenario $ConnectivitySourceScenario -State $session.Transport.State
     }
@@ -400,6 +442,7 @@ try {
         Assert-SecuritySourceReport -Record $record -Html $html -Scenario $SecuritySourceScenario
     }
     if ($PlatformSourceScenario) { Assert-PlatformSourceReport -Record $record -Html $html -Scenario $PlatformSourceScenario }
+    if ($RemoteSourceScenario) { Assert-RemoteSourceReport -Record $record -Html $html -Scenario $RemoteSourceScenario }
     if (-not ($CancelAfterIdentity -or $CancelAfterResource)) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `
         -RequestedArtifact assessment-report.html -ViewingBasePath $testRoot

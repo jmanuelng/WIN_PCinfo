@@ -1,3 +1,5 @@
+Set-StrictMode -Version Latest
+
 $script:SoftwareInventoryPolicyBase64 = '__SOFTWARE_INVENTORY_POLICY_BASE64__'
 $script:SoftwareInventoryPolicyDigest = '__SOFTWARE_INVENTORY_POLICY_SHA256__'
 
@@ -639,7 +641,9 @@ function Get-SoftwareInventoryLiveSource {
     # becomes a negative observation. The coordinator treats the child output as
     # untrusted until the exact-property and primitive validator re-projects it.
 @'
+Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $ProgressPreference='SilentlyContinue'
 $InformationPreference='SilentlyContinue'
 function New-Scope([string]$id){[pscustomobject][ordered]@{scopeId=$id;state='Complete';reasonCode=''}}
@@ -651,8 +655,9 @@ function Set-Scope($scopes,[string]$id,[string]$state,[string]$reason){
 }
 function Failure-State([Exception]$exception){
     $current=$exception
-    while($null -ne $current){
-        if($current -is [UnauthorizedAccessException] -or $current.HResult -eq -2147024891){return 'Denied'}
+    for($depth=0;$depth -lt 8 -and $null -ne $current;$depth++){
+        if($current -is [UnauthorizedAccessException] -or $current.HResult -eq -2147024891 -or
+            ($current -is [ComponentModel.Win32Exception] -and $current.NativeErrorCode -eq 5)){return 'Denied'}
         $current=$current.InnerException
     }
     'Failed'
@@ -738,6 +743,8 @@ foreach($context in @('Machine','AssessmentUser')){
     }
 }
 
+$installerFailure=$null
+try{
 if(-not ('WinPCInfo.SoftwareInventory.InstallerReader' -as [type])){
       $null=Add-Type -Language CSharp -TypeDefinition @"
 using System;
@@ -760,7 +767,9 @@ namespace WinPCInfo.SoftwareInventory {
     // machine context and user queries use the caller represented by the returned
     // product context. The caller separately verifies each returned non-empty SID
     // against the approved Assessment User before admitting the row.
-    static string Get(string code,int context,string property){int length=0;int result=MsiGetProductInfoExW(code,null,context,property,null,ref length);if(result==UnknownProperty)return null;if(result==0&&length==0)return "";if(result!=MoreData)throw new Win32Exception(result);length++;var value=new StringBuilder(length);result=MsiGetProductInfoExW(code,null,context,property,value,ref length);if(result==UnknownProperty)return null;if(result!=0)throw new Win32Exception(result);return value.ToString();}
+    // A null-buffer size probe returns SUCCESS with the required character count,
+    // not necessarily MORE_DATA. The second call reserves the terminating null.
+    static string Get(string code,int context,string property){int length=0;int result=MsiGetProductInfoExW(code,null,context,property,null,ref length);if(result==UnknownProperty)return null;if(result==0&&length==0)return "";if(result!=0&&result!=MoreData)throw new Win32Exception(result);length++;var value=new StringBuilder(length);result=MsiGetProductInfoExW(code,null,context,property,value,ref length);if(result==UnknownProperty)return null;if(result!=0)throw new Win32Exception(result);return value.ToString();}
     static InstallerResult ReadContext(string expectedSid,int contexts,bool expectMachine,int maximum){
       var result=new InstallerResult();var values=new List<InstallerValue>();
       for(int index=0;;index++){var code=new StringBuilder(39);var sid=new StringBuilder(185);int sidLength=184,context;int call=MsiEnumProductsExW(null,null,contexts,index,code,out context,sid,ref sidLength);if(call==NoMoreItems)break;if(call!=0)throw new Win32Exception(call);bool machine=context==Machine;bool user=context==UserManaged||context==UserUnmanaged;if((expectMachine&&!machine)||(!expectMachine&&!user)){result.malformed=true;continue;}string returnedSid=sid.ToString();if(user&&returnedSid.Length>0&&!String.Equals(returnedSid,expectedSid,StringComparison.OrdinalIgnoreCase)){result.malformed=true;continue;}if(values.Count>=maximum){result.exceeded=true;continue;}try{string state=Get(code.ToString(),context,"State");if(state!="1"&&state!="5"){result.malformed=true;continue;}values.Add(new InstallerValue{productCode=code.ToString(),context=context,state=state,name=Get(code.ToString(),context,"ProductName"),version=Get(code.ToString(),context,"VersionString"),publisher=Get(code.ToString(),context,"Publisher")});}catch(Win32Exception){result.unavailable=true;}}
@@ -772,8 +781,12 @@ namespace WinPCInfo.SoftwareInventory {
 }
 "@
 }
+}catch{$installerFailure=Failure-State $_.Exception}
 foreach($msiContext in @('Machine','AssessmentUser')){
       $scopeId=if($msiContext -eq 'Machine'){'scope:software.msi.machine'}else{'scope:software.msi.assessment-user'}
+      if($null -ne $installerFailure){
+          Set-Scope $scopes $scopeId $installerFailure 'SOFTWARE.INSTALLER_SOURCE_FAILED';continue
+      }
       try{
         $result=if($msiContext -eq 'Machine'){
           [WinPCInfo.SoftwareInventory.InstallerReader]::ReadMachine($maximum)

@@ -125,15 +125,7 @@ Assert-Equal 0 @($gap.payload.entries).Count `
 Assert-Equal $true $gap.cleanupVerified `
     'a pre-source context denial owns no worker cleanup'
 
-$live = Invoke-SoftwareInventoryCollection -Policy $policy -Live `
-    -AssessmentUserSid ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
-Assert-Equal $true (Test-SoftwareInventoryCollectorPayload `
-    -Payload $live.payload -Policy $policy) `
-    'live Windows sources cross the same closed coordinator boundary'
-Assert-Equal $true $live.cleanupVerified `
-    'the supervised live attempt proves its worker and compiler boundary absent'
-Assert-Equal 0 @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) `
-    -Directory -Filter 'WINPCInfo-SoftwareInventory-*').Count `
-    'the transient compiler boundary leaves no process artifact'
-
-Write-Output 'PASS: the live Software Inventory source is bounded, context-bound, and read-only.'
+# Real collection requires the separate #161 human session. The automated source
+# worker/record/package/report path is exercised by SoftwareSourceApplication with
+# controlled Windows boundaries, including its exact owned cleanup checks.
+Write-Output 'PASS: Software Inventory source contracts and pre-source denials; real collection remains pending #161.'

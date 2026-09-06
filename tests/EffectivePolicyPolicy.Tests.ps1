@@ -69,8 +69,8 @@ Assert-Equal 'Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly' $policy.
     'Windows Update registry mappings stay on the fixed read-only registry seam'
 Assert-Equal 'Get-CimInstance Win32_Service,Get-CimInstance Win32_TSGeneralSetting,Microsoft.Win32.Registry.LocalMachine.OpenSubKeyReadOnly' $policy.sourceCatalog[11].interface `
     'RDP state uses structured service, terminal-services, and registry sources only'
-Assert-Equal 'Get-ChildItem WSMan:\\localhost\\Service,Get-ChildItem WSMan:\\localhost\\Service\\Auth,Get-ChildItem WSMan:\\localhost\\Listener,Get-CimInstance Win32_Service' $policy.sourceCatalog[12].interface `
-    'WinRM state uses the structured WSMan provider and service source only'
+Assert-Equal 'Win32_Service; HKLM Service policy registry: AllowUnencryptedTraffic,AllowBasic,AllowKerberos,AllowNegotiate,AllowCredSSP' $policy.sourceCatalog[12].interface `
+    'WinRM uses finite request-free policy and service sources only'
 Assert-Equal 'Get-SmbClientConfiguration,Get-SmbServerConfiguration,Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol' $policy.sourceCatalog[13].interface `
     'SMB posture uses approved structured client, server, and feature-state objects only'
 Assert-Equal 'Win32_EncryptableVolume read-only status methods and type-filtered protector counts' $policy.sourceCatalog[15].interface `
