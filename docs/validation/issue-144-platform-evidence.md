@@ -112,15 +112,16 @@ private #160 candidate and its authority are separate from these evolving bytes;
 live #160 remains Blocked. September 6 handoff means before September 7 00:00 CDT
 / 05:00 UTC and changes no outstanding acceptance requirement.
 
-## Reviewed implementation checkpoint (Spec review pending)
+## Implementation checkpoint before independent Spec review
 
 Source checkpoint: `427e415130bbcbf93cdfb54aafc1aeb034837a48`.
 Commits are `4790bd18c573361d9d4af90a3bdddbe993fe3710` (source wiring,
 closed SYSTEM contract, transport and tests) and `427e415` (exact composed worker
 identity refresh). The subsequent evidence-only commit does not change candidate
-bytes. **This checkpoint is not ticket completion: independent Spec review is
-pending.** The orchestration agent will run that fresh axis after this worker
-returns, because the retained-agent slot limit prevented its creation here.
+bytes. At this checkpoint, independent Spec review was pending and ticket
+completion was not claimed. The implementation worker ended its active turn
+because retained-agent slots prevented creation of that axis. The orchestrator
+then dispatched a fresh independent Spec reviewer; its result is recorded below.
 
 Focused checks passed, with commands relative to the integration checkout:
 
@@ -174,7 +175,22 @@ pattern whose names could be mapped in a future cohesive catalog change. The
 review checked the closed SYSTEM result and fixed Unicode alphabet/bound, ran
 no tests or live operations, and acknowledged the user's focused-gate override.
 
-**Spec axis:** pending fresh independent review; no pass is inferred from the
-Standards result. Review the complete fixed-point diff and issue #144, including
-the finite SYSTEM catalog, no-recovery BitLocker source choice, source semantics,
-transport representation, controlled process limits and truthful #161 handoff.
+**Spec axis:** the fresh independent reviewer inspected the complete fixed-point
+diff through `426844db24888119cb0ceea7ab149268cd5397bb` against issue #144 and
+found **zero actionable findings**. No missing implementation requirement,
+unrequested behavior or incorrect implementation was identified. Inspection
+covered all four source families, recovery-method exclusion, bounded projection,
+GP/CSP separation and SYSTEM provenance, WDAC gating and unknown-channel handling,
+malformed/denied cases, Unicode transport and report integration. The reviewer
+verified the exact HEAD and clean tree and performed no tests, live operations,
+edits or additional delegation. This was the required independent Spec axis,
+not a duplicate review. Both axes used fresh contexts; only their scheduling
+changed because of retained agent slots.
+
+The orchestrator records this completed review as delivery evidence. This
+documentation-only update changes no tested application bytes. Controlled
+implementation gates pass; all previously listed #158/#161 and live/release
+obligations remain pending.
+
+Review totals: Standards 0 hard violations and 1 nonblocking positional-scope
+judgment; Spec 0 actionable findings.
