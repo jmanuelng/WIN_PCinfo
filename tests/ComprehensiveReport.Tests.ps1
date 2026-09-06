@@ -37,6 +37,20 @@ $validation = Test-AssessmentContract -Utf8Bytes $recordBytes `
 $baseRecord = Complete-ValidatedDeviceReadinessAssessmentRecord `
     -ValidatedRecord $record -Policy $policy -ContractValidation $validation
 
+$originalBytes = New-DeviceReadinessReportBytes -Record $baseRecord
+$originalHash = Get-ProtectedPackageSha256 -Bytes $originalBytes
+$originalRecord = $baseRecord | ConvertTo-Json -Depth 30 -Compress
+$derivedBytes = New-DeviceReadinessReportBytes -Record $baseRecord -DerivationKind ReEvaluated -SourceReportSha256 $originalHash
+$derivedText = [Text.Encoding]::UTF8.GetString($derivedBytes)
+Assert-Equal $true $derivedText.Contains('ReEvaluated') 'explicit re-evaluation remains distinguishable from the original report'
+Assert-Equal $true $derivedText.Contains($originalHash) 'derived HTML identifies the original report by digest'
+Assert-Equal $originalRecord ($baseRecord | ConvertTo-Json -Depth 30 -Compress) 'rendering preserves the original canonical record'
+foreach ($invalidInputs in @(@{ DerivationKind = 'ReRendered' }, @{ SourceReportSha256 = $originalHash })) {
+    $refused = $false
+    try { $null = New-DeviceReadinessReportBytes -Record $baseRecord @invalidInputs } catch { $refused = $true }
+    Assert-Equal $true $refused 'ambiguous original/derived provenance is refused'
+}
+
 function Copy-TestRecord {
     param([Parameter(Mandatory)] $Record)
 
@@ -82,6 +96,15 @@ foreach ($case in $cases) {
     [byte[]] $firstBytes = New-DeviceReadinessReportBytes -Record $variant
     [byte[]] $secondBytes = New-DeviceReadinessReportBytes -Record $variant
     $firstText = [System.Text.UTF8Encoding]::new($false, $true).GetString($firstBytes)
+    foreach ($scope in $variant.coverage) {
+        Assert-Equal $true $firstText.Contains([Net.WebUtility]::HtmlEncode([string]$scope.scopeId)) 'every admitted scope has an explicit report coverage entry'
+    }
+    foreach ($link in [regex]::Matches($firstText, 'href="#([^"]+)"')) {
+        Assert-Equal $true $firstText.Contains('id="' + $link.Groups[1].Value + '"') `
+            'every offline navigation link resolves without scripting'
+    }
+    Assert-Equal $true $firstText.Contains([Net.WebUtility]::HtmlEncode([string]$variant.run.evidenceProfileId)) `
+        'the overview identifies the actual selected evidence profile'
     $contract = Test-AssessmentReportContract -ReportBytes $firstBytes -Record $variant `
         -ExpectUnicode $false
 
@@ -137,6 +160,12 @@ foreach ($case in $localeCases) {
 }
 
 $maximumRecord = Copy-TestRecord -Record $baseRecord
+$unknownRecord = Copy-TestRecord -Record $baseRecord
+$unknownObservation = @($unknownRecord.observations | Where-Object fieldId -eq 'field:device.processor.name')[0]
+$unknownObservation.valueState = 'SourceReportedUnknown'
+$unknownObservation.PSObject.Properties.Remove('value')
+$unknownText = [Text.Encoding]::UTF8.GetString((New-DeviceReadinessReportBytes -Record $unknownRecord))
+Assert-Equal $true $unknownText.Contains('SourceReportedUnknown') 'source-reported unknown remains distinct from uncollected or absent evidence'
 [byte[]] $maximumBytes = $null
 for ($length = 220000; $length -ge 120000; $length -= 10000) {
     $maximumRecord = Copy-TestRecord -Record $baseRecord

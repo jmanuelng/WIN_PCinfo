@@ -333,7 +333,13 @@ function Assert-RemoteSourceReport {
         }
         Assert-Equal $expected $origin.sourceId 'each field keeps its declared structured source'
         Assert-Equal $true ([bool]$origin.collectedAt) 'collection time survives protected reopening'
-        Assert-Equal $true $Html.Contains($observation.observationId) 'report retains resolvable source evidence references'
+        $parts = [regex]::Match($Html, 'Prefix: <code>([^<]*)</code>; suffix: <code>([^<]*)</code>')
+        $references = @([regex]::Matches($Html, '<tr><td>[^<]*<td(?: id="o\d+")?>[^<]*<td>([^<]*)<td><a href="#ss\d+">') | ForEach-Object {
+            $cell = [Net.WebUtility]::HtmlDecode($_.Groups[1].Value)
+            if ($cell.StartsWith('Full: ', [StringComparison]::Ordinal)) { $cell.Substring(6) }
+            else { [Net.WebUtility]::HtmlDecode($parts.Groups[1].Value) + $cell + [Net.WebUtility]::HtmlDecode($parts.Groups[2].Value) }
+        })
+        Assert-Equal $true ($observation.observationId -cin $references) 'report retains resolvable source evidence references'
     }
     Assert-Equal 'Indeterminate' @($Record.findings|Where-Object ruleId -eq 'rule:policy.security-control-coverage/1.0.0')[0].outcome 'local configuration cannot establish complete effective listener coverage'
     if($Scenario -eq 'Configured'){Assert-Equal $true @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.auth-certificate')[0].value 'explicit service certificate authentication survives actual-source collection and protected reopening'}
