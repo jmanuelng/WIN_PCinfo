@@ -14,7 +14,9 @@ $root = Join-Path $repositoryRoot ('.test-output/device-prohibited-' + [guid]::N
 $null = [IO.Directory]::CreateDirectory($root)
 $supervisorSource = ($regions | Where-Object { $_.Groups[1].Value -eq 'ProcessSupervisor.ps1' }).Groups[2].Value
 $script:ProhibitedNativeBuffers = [Collections.Generic.List[object]]::new()
-$recordBytes=$reportBytes=$opened=$null
+[byte[]]$recordBytes=$null
+[byte[]]$reportBytes=$null
+$opened=$null
 try {
     # Observe owned native transport arrays without substituting the supervisor.
     $tokens=$null; $errors=$null
