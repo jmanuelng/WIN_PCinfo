@@ -16,12 +16,14 @@ foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
 $root=Join-Path ([IO.Path]::GetTempPath()) ('winpcinfo-view-ui-'+[guid]::NewGuid().ToString('N'))
 $null=[IO.Directory]::CreateDirectory($root)
 Add-Type -AssemblyName PresentationFramework
-$state=@{ExplicitClose=$false;SawView=$false}
+$state=@{ExplicitClose=$false;SawView=$false;TimedOut=$false}
+$watch=[Diagnostics.Stopwatch]::StartNew()
 $driver=[System.Windows.Threading.DispatcherTimer]::new()
 $driver.Interval=[TimeSpan]::FromMilliseconds(100)
 $driver.Add_Tick({
     foreach($source in @([System.Windows.PresentationSource]::CurrentSources)) {
         $window=$source.RootVisual
+        if($watch.Elapsed.TotalSeconds -gt 20 -and $window -is [System.Windows.Window]){$state.TimedOut=$true;$window.Close();continue}
         if($window -isnot [System.Windows.Window] -or $window.Title -ne 'WIN-PCInfo — Restricted offline report'){continue}
         $state.SawView=$true
         $button=$window.FindName('CloseViewing')
@@ -36,6 +38,7 @@ try {
     }) -AssessmentContractSetVersion 1.0.0 -Completeness RecoverablePartial
     $driver.Start()
     $result=Show-StatusDeskReport -PackagePath $package.packagePath
+    Assert-Equal $false $state.TimedOut 'the controlled view finishes within its test deadline'
     Assert-Equal $true $state.SawView 'a historical package opens in the production WPF view'
     Assert-Equal $true $state.ExplicitClose 'the report has an explicit Close viewing action'
     Assert-Equal $true $result.verified 'the GUI closes and verifies owned plaintext removal'

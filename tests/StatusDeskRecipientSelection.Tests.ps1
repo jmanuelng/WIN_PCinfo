@@ -17,12 +17,14 @@ $null=[IO.Directory]::CreateDirectory($root)
 Add-Type -AssemblyName PresentationFramework
 $driver=[System.Windows.Threading.DispatcherTimer]::new()
 $driver.Interval=[TimeSpan]::FromMilliseconds(100)
-$state=@{Rejected=$false;Selected=$false}
+$state=@{Rejected=$false;Selected=$false;TimedOut=$false}
+$watch=[Diagnostics.Stopwatch]::StartNew()
 try {
     $setup=New-RecipientProfileSetup -Label 'Synthetic selection' -OutputPath (Join-Path $root 'recipient.json') -ConfirmSetup -SyntheticProtectionLevel WindowsUserBound
     $driver.Add_Tick({
         foreach($source in @([System.Windows.PresentationSource]::CurrentSources)) {
             $window=$source.RootVisual
+            if($watch.Elapsed.TotalSeconds -gt 20 -and $window -is [System.Windows.Window]){$state.TimedOut=$true;$window.Close();continue}
             if($window -isnot [System.Windows.Window] -or $window.Title -ne 'WIN-PCInfo — Recipient selection'){continue}
             $window.FindName('ProfilePath').Text=$setup.profilePath
             $window.FindName('Fingerprint').Text=if($state.Rejected){$setup.fingerprint}else{'0'*64}
@@ -33,6 +35,7 @@ try {
     }.GetNewClosure())
     $driver.Start()
     $selection=Show-StatusDeskRecipientDialog -Purpose Selection
+    Assert-Equal $false $state.TimedOut 'the controlled recipient dialog finishes within its test deadline'
     Assert-Equal $true $state.Rejected 'incorrect fingerprint keeps the selection dialog open'
     Assert-Equal $true $state.Selected 'operator confirms the fingerprint before selection'
     Assert-Equal 'Profile' $selection.mode 'GUI selects exactly one admitted profile'
