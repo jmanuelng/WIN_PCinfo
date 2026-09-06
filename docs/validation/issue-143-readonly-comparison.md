@@ -13,6 +13,11 @@ the release catalog's named values, close to collection time. Do not change
 Defender, Firewall, policy, services or enrollment to manufacture a scenario.
 Do not dump complete preferences (including exclusions), broad registry trees,
 firewall rules, security event logs, credentials or other secret-adjacent data.
+Within the existing approved observer plan, verify the fixed inbox Defender and
+NetSecurity commands remain in the admitted PowerShell Core host, without an
+implicit Windows PowerShell compatibility process/session. Record the actual
+Windows/module versions privately; missing or denied modules must match their
+reported gaps. This check grants no additional observer or process operation.
 
 | Family / read-only source | Expected private comparison and limit |
 | --- | --- |

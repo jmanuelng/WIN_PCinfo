@@ -19,6 +19,13 @@ or fixture command is added to the delivered application.
   operations as CDXML functions. Compiled-cmdlet-only discovery skipped them.
   Discovery now imports only the fixed inbox manifest beneath Windows System32
   and selects the declared exported operation, without ambient module search.
+  Static manifest inspection also found Defender lacks a Core edition marker.
+  The import explicitly uses `-SkipEditionCheck` to stay in the admitted Core
+  host; default import can otherwise start a Windows PowerShell 5.1 compatibility
+  process, as documented in [Windows PowerShell compatibility](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_windows_powershell_compatibility?view=powershell-7.6).
+  This is native module routing, not an execution/signature policy change;
+  [Import-Module documents the edition-check parameter](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/import-module?view=powershell-7.6#-skipeditioncheck).
+  No real inbox security module was imported during this validation.
 - The worker and release catalog ordered the same scopes differently. Admission
   now requires the exact set and multiplicity, and copying restores catalog order.
   Scope identity, bounds and field validation remain mandatory.
@@ -52,10 +59,11 @@ pwsh -NoLogo -NoProfile -File tests/EffectivePolicyContract.Tests.ps1
 pwsh -NoLogo -NoProfile -File tests/EffectivePolicyPrivilegedCollector.Tests.ps1
 pwsh -NoLogo -NoProfile -File tests/PrivilegedCollectionPlanPolicy.Tests.ps1
 pwsh -NoLogo -NoProfile -File tests/PolicyUserContextNativeSource.Tests.ps1
+pwsh -NoLogo -NoProfile -File tests/BuildDeterminism.Tests.ps1
 ```
 
-The source matrix includes Active, Passive, Unsupported inbox modules, ImportDenied, Denied,
-Unavailable, NullRuntime, MalformedRuntime, FirewallPartial, AsrEmpty, AsrBound,
+The source matrix includes Active, CoreImport, Passive, Unsupported inbox modules, ImportDenied, Denied,
+Unavailable, NullRuntime, MalformedRuntime, CultureMode, FirewallPartial, AsrEmpty, AsrBound,
 AsrMismatch, NetworkMissing, SmartScreenMissing, SmartScreenMalformed, and
 en-US/es-MX/tr-TR/ja-JP/ar-SA structured-source cultures. Every case uses actual
 normalization, record validation, advisory rules, package verification, HTML,
@@ -108,7 +116,10 @@ deadline clarification changes no acceptance requirement.
 Implementation commits are `6f98109` (source execution and HTML), `14c97d5`
 (SmartScreen negative coverage), and
 `09d99d4820e81e4ae54b1567c8249d9960afd307` (module discovery denial and exact-scope
-regressions). The subsequent evidence-only commit does not change candidate bytes.
+regressions), followed by `592695acd34cb621b4e3be8ed79ce79cdfedbf31` (native
+Core module routing) and final source
+`3d175fac5a87857af72022cd0dd67c780c86be9e` (culture-stable mode admission).
+The subsequent completion evidence-only commit does not change candidate bytes.
 
 The eighteen-case source matrix passed at `14c97d5`, with each case taking
 21.0–23.2 seconds. Its unsigned generated script was 3,180,094 bytes with SHA-256
@@ -123,29 +134,41 @@ worker failure without changing source meaning.
 Independent Spec review then identified import denial being collapsed to
 Unsupported. The added ImportDenied case failed with that exact mismatch and
 passed after preserving the original discovery error for per-family classification.
-The final implementation passed ImportDenied plus affected Active, Unsupported,
+The `09d99d4` implementation passed ImportDenied plus affected Active, Unsupported,
 Denied and Unavailable source cases (20.9–21.6 seconds per case). The unaffected
 matrix is retained by revision, not misrepresented as rerun after the small
-discovery correction. The default source test now contains nineteen cases.
+discovery correction.
 
-Final unsigned candidate: 3,180,391 bytes, SHA-256
-`3fc0bc6ba42765211c9dea08942aa85cb9b32f0ffe95010b2653cef21943aa7a`.
+The CoreImport regression then failed when the controlled module would route to
+an unapproved compatibility process and passed after explicit native loading.
+At `592695a`, nine affected cases passed (20.9–22.0 seconds): CoreImport, Active,
+Unsupported, ImportDenied, NullRuntime, MalformedRuntime, AsrEmpty, AsrBound and
+AsrMismatch. The final review reproduced a Turkish Unicode case-folding gap in
+the ASCII mode check: forty U+0130 characters occupied eighty UTF-8 bytes but
+passed the insensitive regex. CultureMode failed at the generated closed-contract
+seam, then passed in 21.8 seconds after `-cnotmatch` restricted admission to the
+explicit ASCII class. Independent ASR/network/Firewall/SmartScreen observations
+survive this malformed runtime value. The default source test now has twenty-one
+cases; earlier unchanged cases retain their recorded revision.
+
+Final unsigned candidate: 3,180,494 bytes, SHA-256
+`9cf86618e47c72319e173df64d518c17ed234d50db81a1c8c832b4f56c539ddf`.
 Embedded privileged worker SHA-256:
-`22a4bd71441f471d3a685e54d627fd6de55a41efe0aa8330b462687710e817c6`.
+`39f783cda7f85ee87364c92b56f30206f98c525bc0c56b5b5c072cb2fb339824`.
 The final configured launch test passed eight high-entropy samples with maximum
-32465 of 32500 characters; template parsing, local context native compilation
+32457 of 32500 characters; template parsing, local context native compilation
 and exact nested SYSTEM-source preservation passed without live source calls.
 The remaining margin is narrow and is not authority to increase the bound.
 
 | Focused check | Result |
 | --- | --- |
-| `SecuritySourceApplication.Tests.ps1` | Pass: 18-case matrix at `14c97d5`; new import-denied red/green and four affected discovery retests at final source |
+| `SecuritySourceApplication.Tests.ps1` | Pass: 18-case matrix at `14c97d5`; import-denied red/green plus four discovery retests at `09d99d4`; nine affected native/normalization cases at `592695a`; culture-mode red/green at final source |
 | `EffectivePolicy.Tests.ps1` | Pass: fixture layers, bounds and privacy |
 | `EffectivePolicyContract.Tests.ps1` | Pass: canonical evidence, closed coverage and bounded rules |
-| `EffectivePolicyPrivilegedCollector.Tests.ps1` | Pass at final source: all declared scenarios except separately owned DeniedSystem, closed payload negatives, reordered scopes and duplicate-scope rejection |
+| `EffectivePolicyPrivilegedCollector.Tests.ps1` | Pass at `09d99d4`: all declared scenarios except separately owned DeniedSystem, closed payload negatives, reordered scopes and duplicate-scope rejection |
 | `PrivilegedCollectionPlanPolicy.Tests.ps1` | Pass: elevation, frozen plan, channel and identity contract |
 | `PolicyUserContextNativeSource.Tests.ps1` | Pass at final source: no-live native compilation, parser, nested bytes and configured bound |
-| `BuildDeterminism.Tests.ps1` | Pass: identical bytes across output directories, exact provenance, embedded-resource relocation and three generated application seams |
+| `BuildDeterminism.Tests.ps1` | Pass at final source: identical bytes across output directories, exact provenance, embedded-resource relocation and three generated application seams |
 | `git diff --check` | Pass before completion evidence commit |
 
 ### Standards
@@ -156,6 +179,9 @@ classification of empty/malformed query results. It is nonblocking and deferred;
 the handlers retain identical behavior without adding another source helper to
 the tightly bounded worker. Correction review `14c97d5..09d99d4` found 0 new
 violations and 0 new actionable smells. Reviewers performed no tests or live work.
+Final affected review `59dd5b3..3d175fa` likewise found **0 new documented-standard
+violations and 0 new actionable smells**; the earlier nonblocking duplication
+judgment remains deferred.
 
 ### Spec
 
@@ -163,6 +189,9 @@ Independent fresh review found **1 P2**, denied module discovery mislabeled
 Unsupported. The reviewer confirmed it **closed by `09d99d4`**, with no new
 findings or scope creep in the correction. The new regression verifies coverage
 and absence of invented Defender observations through the generated report seam.
+The affected native-routing review found the culture-bound gap described above;
+the reviewer confirmed it **closed by `3d175fa`**, with no remaining findings or
+new scope creep. Both correction reviews were read-only, with no test/live runs.
 Final open actionable review findings: **0**.
 
 All generated assessment cases verified encrypted reopening and owned viewing
