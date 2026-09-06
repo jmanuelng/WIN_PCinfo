@@ -92,3 +92,28 @@ Apply the Code Review skill's full smell baseline separately from the assigned
 aggregation, the shared requirement register and GitHub delivery. #161 should
 verify this failure gate and deliberate recovery on the final admitted candidate
 alongside the existing #152 live handoff. No acceptance requirement is waived.
+
+## Independent review and implementation closure
+
+Root dispatched fresh independent affected reviews against the exact fixed point
+`adae67b22afd3b8de65445b1ae49958bf27e187a` and reviewed committed HEAD
+`32028ed6eb0cb7fc96b754836deecff19b489942` (two commits, three files).
+
+Standards: zero documented-standard violations and zero new smell judgments.
+The shared cleanup-failure transition and distinct entry-point guards satisfy the
+repository rules. Original #152's nonblocking Label naming judgment remains
+historical and outside this correction.
+
+Spec: zero findings; the original P1 is resolved. Cleanup failure prevents new
+scheduling through handlers, routed approval and later preparation/terminal
+updates. Recovery and close remain available; successful recovery cannot restart
+assessment in the blocked invocation. Protected evidence and truthful exit60
+are preserved. No scope creep was identified.
+
+Both reviewers independently inspected the correction and retained regression;
+neither reran unchanged tests. This documentation-only record does not change the
+tested candidate. #152's automated implementation qualifies for delivery. The
+shared requirement register records implementation validated with full integrated
+regression owned by #158 and the stated real recipient/view/export/cleanup cases
+owned by #161, all still pending. No live acceptance or parent-spec completion is
+claimed.
