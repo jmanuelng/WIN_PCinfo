@@ -1,6 +1,6 @@
 [CmdletBinding()]
-param([ValidateSet('Direct','WindowsProxy','ProxyOnly','Suspected','Blocked','Partial','DnsFailure','Timeout','InvalidChain','Redirect','ProxyBlocked','AutomaticProxy','ContextChanged','LocalOnly')]
-    [string[]]$Scenario=@('Direct','WindowsProxy','ProxyOnly','Suspected','Blocked','Partial','DnsFailure','Timeout','InvalidChain','Redirect','ProxyBlocked','AutomaticProxy','ContextChanged','LocalOnly'))
+param([ValidateSet('Direct','WindowsProxy','ProxyOnly','ProxyInvalidChain','ProxyTlsFailure','Suspected','Blocked','Partial','DnsFailure','Timeout','InvalidChain','Redirect','ProxyBlocked','AutomaticProxy','ContextChanged','LocalOnly')]
+    [string[]]$Scenario=@('Direct','WindowsProxy','ProxyOnly','ProxyInvalidChain','ProxyTlsFailure','Suspected','Blocked','Partial','DnsFailure','Timeout','InvalidChain','Redirect','ProxyBlocked','AutomaticProxy','ContextChanged','LocalOnly'))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')

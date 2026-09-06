@@ -36,4 +36,21 @@ foreach($case in @('InvalidFlag','InvalidType','MalformedBlob','Automatic','Wpad
     Assert-Equal ($case -eq 'Static') $result.supported "malformed and automatic Windows proxy settings cannot authorize direct or proxy traffic: $case $script:contextFailure"
     Assert-Equal 2 $script:disposed 'both registry snapshots dispose on every context outcome'
 }
+$contextSource=${function:Get-MicrosoftConnectivityExecutionContext}.ToString()
+if(-not $contextSource.Contains('[Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()')){throw 'The resolver context boundary changed.'}
+$contextSource=$contextSource.Replace('[Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()','(Get-ControlledResolverInterfaces)')
+. ([scriptblock]::Create('function Get-ControlledExecutionContext {'+$contextSource+'}'))
+function Get-ControlledResolverInterfaces {
+    $interface=[pscustomobject]@{Id='synthetic-interface';OperationalStatus=[Net.NetworkInformation.OperationalStatus]::Up}
+    $interface|Add-Member ScriptMethod GetIPProperties {
+        [pscustomobject]@{DnsAddresses=$(if($script:reverseResolvers){@([Net.IPAddress]::Parse('192.0.2.54'),[Net.IPAddress]::Parse('192.0.2.53'))}else{@([Net.IPAddress]::Parse('192.0.2.53'),[Net.IPAddress]::Parse('192.0.2.54'))})}
+    }
+    ,@($interface)
+}
+$script:reverseResolvers=$false
+$initial=Get-ControlledExecutionContext -Policy $policy
+$script:reverseResolvers=$true
+$changed=Get-ControlledExecutionContext -Policy $policy
+Assert-Equal 'Available' $initial.resolverState 'actual local context reducer retains controlled resolver configuration'
+Assert-Equal $false ((Get-MicrosoftConnectivityContextDigest $initial) -ceq (Get-MicrosoftConnectivityContextDigest $changed)) 'a changed resolver priority changes the frozen context identity'
 Write-Output 'PASS: actual Windows proxy context parsing fails closed for malformed flags, types, connection blobs and automatic discovery.'

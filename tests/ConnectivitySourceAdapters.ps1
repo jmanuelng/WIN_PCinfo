@@ -16,7 +16,7 @@ function Add-ControlledConnectivitySources {
 $script:ConnectivityCase='__CASE__'
 function Get-MicrosoftConnectivityExecutionContext {
     param($Policy,[switch]$Synthetic)
-    $proxy=$script:ConnectivityCase -in @('WindowsProxy','ProxyBlocked','ProxyOnly','Suspected')
+    $proxy=$script:ConnectivityCase -in @('WindowsProxy','ProxyBlocked','ProxyOnly','ProxyInvalidChain','ProxyTlsFailure','Suspected')
     $address=if($script:ConnectivityCase -eq 'ContextChanged' -and $script:StatusDeskTransport.State.ContainsKey('ConnectivityRequests')){'192.0.2.54'}else{'192.0.2.53'}
     [pscustomobject]@{ resolverState='Available'; resolvers=@($address); routes=@($Policy.endpoints | ForEach-Object {
         [pscustomobject]@{endpointId=$_.endpointId;supported=($script:ConnectivityCase -ne 'AutomaticProxy');transportMode=$(if($proxy){'WindowsProxy'}elseif($script:ConnectivityCase -eq 'AutomaticProxy'){'Indeterminate'}else{'Direct'});proxyState=$(if($proxy){'Used'}elseif($script:ConnectivityCase -eq 'AutomaticProxy'){'Unavailable'}else{'Bypassed'});proxyUri=$(if($proxy){'http://192.0.2.80:8080/'}else{$null})}
@@ -37,7 +37,7 @@ function Invoke-MicrosoftConnectivityDnsPhase {
 function Invoke-MicrosoftConnectivityTcpPhase {
     param($DnsName,$Port,$DeadlineMilliseconds)
     Register-ControlledConnectivityRequest TCP
-    [pscustomobject]@{state=$(if($script:ConnectivityCase -in @('Blocked','ProxyOnly') -or ($script:ConnectivityCase -eq 'Partial' -and $DnsName -eq 'enterpriseregistration.windows.net')){'Blocked'}else{'Succeeded'})}
+    [pscustomobject]@{state=$(if($script:ConnectivityCase -in @('Blocked','ProxyOnly','ProxyInvalidChain','ProxyTlsFailure') -or ($script:ConnectivityCase -eq 'Partial' -and $DnsName -eq 'enterpriseregistration.windows.net')){'Blocked'}else{'Succeeded'})}
 }
 function Invoke-MicrosoftConnectivityTlsPhase {
     param($Endpoint,$DeadlineMilliseconds,$Policy)
@@ -49,6 +49,9 @@ function Invoke-MicrosoftConnectivityTlsPhase {
 function Invoke-MicrosoftConnectivityHttpPhase {
     param($Endpoint,$DeadlineMilliseconds,$Policy,$ProxySelection)
     Register-ControlledConnectivityRequest HTTP
+    if($script:ConnectivityCase -in @('ProxyInvalidChain','ProxyTlsFailure')){
+        return New-MicrosoftConnectivityHttpFailureResult -Exception ([Security.Authentication.AuthenticationException]::new('Synthetic proxy TLS rejection')) -TransportMode $ProxySelection.transportMode -ProxyState $ProxySelection.proxyState -ChainState $(if($script:ConnectivityCase -eq 'ProxyInvalidChain'){'Invalid'}else{'Unavailable'})
+    }
     [pscustomobject]@{state=$(if($script:ConnectivityCase -eq 'Redirect'){'RedirectRejected'}elseif($script:ConnectivityCase -eq 'ProxyBlocked'){'Blocked'}else{'Succeeded'});statusCode=$(if($script:ConnectivityCase -eq 'Redirect'){302}elseif($script:ConnectivityCase -eq 'ProxyBlocked'){407}else{204});redirectState=$(if($script:ConnectivityCase -eq 'Redirect'){'Rejected'}else{'NotObserved'});headerCount=3;transportMode=$ProxySelection.transportMode;proxyState=$ProxySelection.proxyState;leafSha256=$(if($script:ConnectivityCase -eq 'Suspected'){'b'*64}else{'a'*64})}
 }
 '@.Replace('__CASE__',$Scenario)
@@ -61,6 +64,8 @@ function Assert-ConnectivitySourceReport {
         Direct {@(12,3,'NotObservedWithinCompletedTests')}
         WindowsProxy {@(12,3,'NotObservedWithinCompletedTests')}
         ProxyOnly {@(9,3,'Indeterminate')}
+        ProxyInvalidChain {@(9,0,'Indeterminate')}
+        ProxyTlsFailure {@(9,0,'Indeterminate')}
         Suspected {@(12,3,'Suspected')}
         Blocked {@(6,0,'Indeterminate')}
         Partial {@(10,2,'Indeterminate')}
@@ -79,6 +84,12 @@ function Assert-ConnectivitySourceReport {
     $requests=if($State.ContainsKey('ConnectivityRequests')){$State.ConnectivityRequests}else{0}
     Assert-Equal $expected[0] $requests 'instrumented adapters account for the bounded protocol work'
     Assert-Equal $expected[1] @($items | Where-Object value -eq 'Succeeded').Count 'endpoint failures preserve truthful related observations'
+    if($Scenario -in @('ProxyInvalidChain','ProxyTlsFailure')){
+        $expectedFailure=if($Scenario -eq 'ProxyInvalidChain'){'CertificateChainInvalid'}else{'TlsAuthenticationFailed'}
+        Assert-Equal 3 @($items|Where-Object value -eq $expectedFailure).Count 'selected proxy HTTP path retains its specific TLS failure'
+        Assert-Equal 3 @($Record.observations|Where-Object { $_.fieldId -eq 'field:connectivity.tls.state' -and $_.value -eq 'NotAttempted' }).Count 'proxy evidence cannot overwrite the unattempted direct TLS path'
+        Assert-Equal $true $Html.Contains($expectedFailure) 'reopened HTML explains the path-specific failure'
+    }
     $inspection=@($Record.observations|Where-Object fieldId -eq 'field:connectivity.tls-inspection.outcome'|ForEach-Object value)
     $aggregate=if('Suspected' -in $inspection){'Suspected'}elseif('Indeterminate' -in $inspection -or $inspection.Count -eq 0){'Indeterminate'}else{'NotObservedWithinCompletedTests'}
     Assert-Equal $expected[2] $aggregate 'actual reducer preserves conservative inspection conclusions'

@@ -28,8 +28,10 @@ function Get-MicrosoftConnectivityExecutionContext {
                 if ($interface.OperationalStatus -ne [Net.NetworkInformation.OperationalStatus]::Up) { continue }
                 $properties=$interface.GetIPProperties()
                 if ($properties.DnsAddresses.Count -gt [int]$Policy.preparationContext.maximumResolversPerInterface) { throw 'Resolver address bound exceeded.' }
+                $resolverOrdinal=0
                 foreach ($address in $properties.DnsAddresses) {
-                    $resolvers.Add($interface.Id + ':' + $address.ToString())
+                    $resolvers.Add($interface.Id + ':' + $resolverOrdinal + ':' + $address.ToString())
+                    $resolverOrdinal++
                 }
             }
             $resolverState=if($resolvers.Count -gt 0){'Available'}else{'Unavailable'}
@@ -409,7 +411,7 @@ function Test-MicrosoftConnectivityPayload {
             if ([string] $item.dnsState -notin $states -or [string] $item.tcpState -notin $states -or
                 [string] $item.tlsState -notin $states -or
                 [string] $item.proxyState -notin @($states + @('Used', 'Bypassed')) -or
-                [string] $item.httpState -notin @($states + @('RedirectRejected')) -or
+                [string] $item.httpState -notin @($states + @('RedirectRejected','CertificateChainInvalid','TlsAuthenticationFailed')) -or
                 [string] $item.enrollmentDnsState -notin @($states + @('NotApplicable')) -or
                 [string] $item.certificateChainState -notin @(
                     'Trusted', 'Invalid', 'Failed', 'TimedOut', 'Unavailable', 'NotAttempted'
@@ -1021,6 +1023,7 @@ function Invoke-MicrosoftConnectivityHttpPhase {
             catch { $leaf = $null }
         }
         New-MicrosoftConnectivityHttpFailureResult -Exception $_.Exception `
+            -ChainState ([string]$capture.ChainState) `
             -TransportMode $transportMode -ProxyState $proxyState -LeafSha256 $leaf
     }
     finally {
@@ -1037,15 +1040,27 @@ function New-MicrosoftConnectivityHttpFailureResult {
         [Parameter(Mandatory)] [Exception] $Exception,
         [Parameter(Mandatory)] [string] $TransportMode,
         [Parameter(Mandatory)] [string] $ProxyState,
-        [Parameter()] [AllowNull()] [string] $LeafSha256
+        [Parameter()] [AllowNull()] [string] $LeafSha256,
+        [Parameter()] [string] $ChainState = 'Unavailable'
     )
     # The selected transport policy is evidence in its own right. Preserve it
     # when the send fails so a proxy refusal or send timeout cannot be reported
     # as a direct-transport failure merely because no response arrived.
+    $failureState=Get-MicrosoftConnectivityFailureState $Exception
+    if($ChainState -eq 'Invalid'){$failureState='CertificateChainInvalid'}
+    elseif($failureState -eq 'Failed'){
+        for($depth=0;$depth -lt 8 -and $null -ne $Exception;$depth++){
+            if($Exception -is [Security.Authentication.AuthenticationException]){
+                $failureState='TlsAuthenticationFailed';break
+            }
+            $Exception=$Exception.InnerException
+        }
+    }
     [pscustomobject][ordered]@{
-        state = Get-MicrosoftConnectivityFailureState $Exception
+        state = $failureState
         statusCode = $null; redirectState = 'NotObserved'; headerCount = 0
-        transportMode = $TransportMode; proxyState = $ProxyState; leafSha256 = $LeafSha256
+        transportMode = $TransportMode; proxyState = $ProxyState
+        leafSha256 = if([string]::IsNullOrEmpty($LeafSha256)){$null}else{$LeafSha256}
     }
 }
 
@@ -1062,7 +1077,7 @@ function Get-MicrosoftConnectivityScopeDisposition {
     $reason = if('RedirectRejected' -in $States){'CONNECTIVITY.REDIRECT_REJECTED'}
         elseif('Blocked' -in $States){'CONNECTIVITY.TRANSPORT_BLOCKED'}
         elseif('TimedOut' -in $States){'CONNECTIVITY.DEADLINE_EXCEEDED'}
-        elseif('Failed' -in $States){'CONNECTIVITY.OPERATION_FAILED'}
+        elseif('Failed' -in $States -or 'CertificateChainInvalid' -in $States -or 'TlsAuthenticationFailed' -in $States){'CONNECTIVITY.OPERATION_FAILED'}
         elseif('Unavailable' -in $States){'CONNECTIVITY.OPERATION_UNAVAILABLE'}
         elseif('NotAttempted' -in $States){'CONNECTIVITY.PREREQUISITE_NOT_COMPLETED'}
         else{'CONNECTIVITY.PARTIAL_REACHABILITY'}
