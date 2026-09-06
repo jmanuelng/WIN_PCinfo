@@ -62,11 +62,68 @@ Observed red cases before repairs:
   ended the assessment instead of preserving a scoped gap and useful report.
 - HTML denied source constraints and described missing VM evidence as no signal.
 
-Final focused commands, results, timing, source commits and candidate digests are
-recorded below after the final-input checks. Integrated full regression is
-deliberately reserved for #158 under the latest testing-cadence instruction.
+Implementation commit: `75049203ef3b0b1a89a564caeab5ea15375e3bb8` (DCO).
+All final focused checks below passed against these source bytes. Subsequent
+changes to this evidence document do not change the generated candidate;
+validation documents are excluded from the portable build. Integrated full
+regression is deliberately reserved for #158 under the latest testing-cadence instruction.
+Final evidence recorded September 6, 2026 at 01:45 UTC.
 Historical #137 full-suite evidence predates these changed bytes; #138/#139
 evidence remains historical for the same reason.
+
+Invoke each named test with `pwsh -NoLogo -NoProfile -File tests/<name>.Tests.ps1`
+using the explicit selected installed Core 7.6.5 X64 host. No live collection,
+UAC, certificate/trust change, signing or external operation was performed.
+
+| Final gate | Result | Observed time / scope |
+| --- | --- | --- |
+| ReadinessSourceApplication | Pass, 15 generated Comprehensive cases | 322.5 seconds summed case-process duration; 20.6–24.7 seconds each. Includes Complete, Denied, NullLicense, MixedUnknownLicense, Bounded, Absent, Unsupported, Malformed, Virtual, MicrosoftPhysical, FirmwareBounded, TimedOut, MalformedOutput, OversizeOutput, Cancelled. |
+| DeviceReadinessContract | Pass | 5.4 seconds; typed admission, source gaps and lifecycle protections. |
+| FirmwareReadinessContract | Pass | 3.3 seconds; composed observations, coverage, provenance and findings. |
+| DeviceReadinessApplication | Pass | 11.2 seconds; unmodified generated device fixture application and encrypted/report boundary. |
+| DeviceReadinessScenarios | Pass, 17 scenarios | 89.5 seconds; existing device states, Unicode, access limits, secret omission and cleanup. |
+| FirmwareReadinessApplication | Pass, 10 scenarios | 75.3 seconds; existing generated firmware/Secure Boot/TPM states, including legacy BIOS and source timeout. |
+| DeviceReadinessPolicy, FirmwareReadinessPolicy, ApprovedCollectorCatalog | Pass | Closed source/authority/bounds, no settings changes or prohibited licensing/TPM projection; approximately 2 seconds combined. Source policy rejects widening its battery bound. |
+| BuildDeterminism | Pass | 50.1 seconds; deterministic source provenance, output-directory and checkout-text consistency. |
+| PowerShell parser | Pass | All six changed executable/test files and the final generated candidate; runtime record contracts check typed evidence in the application tests. |
+
+These durations include test/build/control overhead and are not live assessment
+performance or memory acceptance evidence. All 15 Comprehensive cases reopened
+the authenticated encrypted package, inspected record/report consistency and
+closed protected viewing; the harness removed its exact owned per-run test
+workspace. Existing narrow fixture applications also verified their own cleanup.
+Only ignored synthetic logs and generated build outputs remain for local audit;
+the one temporary source-inspection script was removed by exact path. No live
+device assessment or certificate/trust mutation was performed.
+
+Exact unsigned candidate from the reviewed source (not approved for live launch):
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| WIN-PCInfo.ps1 | 3,088,817 | `e48060da6d5325f3667bd4ff836fff67e9b978c3d2bec3826f1a8cbc641b1d81` |
+| WIN-PCInfo-2.0.0-preview.1-portable.zip | 4,601,379 | `0752651fce3d15bfc38a83c6fa889c5f299bef23d2c0e495648a7478af013c31` |
+
+The final artifacts match the independent deterministic-build copies byte for
+byte by SHA-256. The compact collector is 11,254 bytes within its unchanged
+11,264-byte design bound; all three catalog payload identities were refreshed.
+These digests supersede earlier ticket candidates for changed source; they do
+not renew any signing, personal trust, live or release evidence.
+
+## Standards review
+
+Independent Standards review of `5e7c5fe...7504920`: **zero findings**. No
+documented-standard breach or actionable design smell was identified; the
+source preserves coverage distinctions, stable codes, bounds and cleanup checks.
+No corrective code was required.
+
+## Spec review
+
+Independent Spec review of `5e7c5fe...7504920`: **zero code findings**. No missing
+automated-slice requirement, scope creep or incorrect implementation was found.
+The review explicitly required completing this final-results/digest record
+before delivery and retaining #161 live gates; this evidence-only update records
+the completed checks. The orchestrator still owns the shared-register and issue
+delivery operations.
 
 ## Requirement allocation and acceptance handoff
 
