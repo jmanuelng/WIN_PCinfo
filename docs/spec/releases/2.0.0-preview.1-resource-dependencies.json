@@ -20,12 +20,12 @@
     "collectorId": "collector:windows.resource-dependencies",
     "collectorVersion": "1.0.0",
     "operationId": "observe-user-dependencies",
-    "source": "Release-owned projection of CurrentUser mapped-resource definitions and exact CIM resource, printer, driver, and peripheral properties",
+    "source": "Release-owned local user definitions, level-zero session connections, level-four printer cache, local print registry and exact peripheral CIM metadata",
     "executionContext": "StandardUser",
     "privilege": "NoElevation",
     "networkBehavior": "OfflineOnly",
     "executable": "ActiveMicrosoftSignedPowerShellHost",
-    "dependencies": ["Microsoft.Win32.Registry", "Windows CIM provider"],
+    "dependencies": ["Microsoft.Win32.Registry", "Windows CIM provider", "NetUseEnumLevel0LocalServer", "EnumPrintersLevel4LocalCache"],
     "mayPrompt": false,
     "mayInstall": false,
     "mayDownload": false,
@@ -49,22 +49,22 @@
       "limitation": "DefinitionsOnlyNoConnectionNoCredentialOrContentAccess"
     },
     {
-      "sourceId": "source:windows.cim.network-connections",
-      "interface": "Win32_NetworkConnection",
-      "approvedProperties": ["LocalName", "RemoteName", "ConnectionState", "ProviderName"],
-      "limitation": "ConnectionMetadataOnlyNoRemoteEnumeration"
+      "sourceId": "source:windows.local.connection-table",
+      "interface": "NetUseEnumLocalServerLevel0",
+      "approvedProperties": ["LocalName", "RemoteName"],
+      "limitation": "CurrentLogonSessionNamesOnlyNoHealthOrProviderOrRemoteEnumeration"
     },
     {
       "sourceId": "source:windows.local.mapped-resource-correlation",
-      "interface": "ReleaseOwnedCurrentUserNetworkAndWin32NetworkConnectionCorrelation",
+      "interface": "ReleaseOwnedCurrentUserNetworkAndNetUseEnumLevel0Correlation",
       "approvedProperties": ["LocalName", "RemotePath", "RemoteName", "ConnectionState", "ProviderName"],
       "limitation": "ExactLocalNameCorrelationOnlyNoRemoteEnumerationOrCredentialAccess"
     },
     {
-      "sourceId": "source:windows.cim.printers-and-drivers",
-      "interface": "Win32_PrinterAndWin32_PrinterDriver",
-      "approvedProperties": ["Name", "PortName", "DriverName", "Network", "Local", "Default", "WorkOffline", "Manufacturer", "DriverVersion", "InfName"],
-      "limitation": "ConfigurationMetadataOnlyNoPrintJobsOrPrinting"
+      "sourceId": "source:windows.local.print-cache",
+      "interface": "EnumPrintersLevel4AndFixedLocalPrintRegistry",
+      "approvedProperties": ["Name", "Attributes", "Device", "Port", "Printer Driver", "Manufacturer", "DriverVersion", "InfPath"],
+      "limitation": "LocalCacheAndConfigurationOnlyRemoteUncachedDetailsUnknownNoPrintJobsOrPrinting"
     },
     {
       "sourceId": "source:windows.cim.common-peripheral-drivers",

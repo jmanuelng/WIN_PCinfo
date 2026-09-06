@@ -26,10 +26,10 @@ $system=Get-ResourceDependencyProcessDisposition -ProcessSid 'S-1-5-18' `
 Assert-Equal 'ProhibitedSystemContext' $system.relationship 'SYSTEM is always prohibited'
 
 $source=Get-ResourceDependenciesLiveSource
-foreach($required in @('[Microsoft.Win32.Registry]::CurrentUser','Win32_NetworkConnection','Win32_Printer','Win32_PrinterDriver','Win32_PnPSignedDriver','Add-BoundedUnique')){
+foreach($required in @('[Microsoft.Win32.Registry]::CurrentUser','NetUseEnum(null,0','EnumPrinters(6,null,4','Win32_PnPSignedDriver','Add-BoundedUnique')){
     if($source -notmatch [regex]::Escape($required)){throw "The live source omitted $required."}
 }
-foreach($prohibited in @('Get-PrintJob','Get-Credential','cmdkey','WlanGetProfile','PNPDeviceID','SerialNumber','Win32_PrintJob','Get-ChildItem')){
+foreach($prohibited in @('Get-PrintJob','Get-Credential','cmdkey','WlanGetProfile','PNPDeviceID','SerialNumber','Win32_PrintJob','Get-ChildItem','ClassName Win32_Printer','ClassName Win32_NetworkConnection','WNetOpenEnum','OpenPrinter','Get-Printer','Test-Path','Directory.GetFiles')){
     if($source -match [regex]::Escape($prohibited)){throw "The live source admits prohibited access: $prohibited"}
 }
 if($source -match '\$rows\s*='){throw 'The live source must stream CIM rows through bounded dictionaries rather than materialize provider inventories.'}

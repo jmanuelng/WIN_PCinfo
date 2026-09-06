@@ -12,6 +12,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $PlatformSourceScenario = '',
     [string] $RemoteSourceScenario = '',
     [string] $SoftwareSourceScenario = '',
+    [string] $ResourceSourceScenario = '',
     [ValidateSet('','Maximum','Distinct','EscapedOverflow')] [string] $SoftwareReportScenario = '',
     [string] $NetworkSourceScenario = '',
     [string] $CertificateSourceScenario = '',
@@ -176,6 +177,10 @@ if ($RemoteSourceScenario) {
 if ($SoftwareSourceScenario) {
     . (Join-Path $PSScriptRoot 'SoftwareSourceAdapters.ps1')
     $moduleText=Add-ControlledSoftwareSources -ModuleText $moduleText -Scenario $SoftwareSourceScenario
+}
+if ($ResourceSourceScenario) {
+    . (Join-Path $PSScriptRoot 'ResourceSourceAdapters.ps1')
+    $moduleText=Add-ControlledResourceSources -ModuleText $moduleText -Scenario $ResourceSourceScenario
 }
 if ($NetworkSourceScenario) {
     . (Join-Path $PSScriptRoot 'NetworkSourceAdapters.ps1')
@@ -417,6 +422,7 @@ try {
         Write-Output "Software report $SoftwareReportScenario bytes: $($opened.artifacts['assessment-report.html'].Length)"
     }
     if ($SoftwareSourceScenario) { Assert-SoftwareSourceReport -Record $record -Html $html -Scenario $SoftwareSourceScenario }
+    if ($ResourceSourceScenario) { Assert-ResourceSourceReport -Record $record -Html $html -Scenario $ResourceSourceScenario }
     if ($ConnectivitySourceScenario) {
         Assert-ConnectivitySourceReport -Record $record -Html $html -Scenario $ConnectivitySourceScenario -State $session.Transport.State
     }
