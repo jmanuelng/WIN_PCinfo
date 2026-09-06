@@ -1701,7 +1701,7 @@ function Get-LiveEffectivePolicyResult {
         $entries=@($smartScreenScopeState[$scopeIndex])
         if(@($entries|Where-Object state -eq 'Complete').Count -eq $entries.Count){
             Set-EffectivePolicyScopeState $result @($scopeIndex) Complete ''
-        } elseif(@($entries|Select-Object -ExpandProperty state -Unique).Count -eq 1){
+        } elseif(@($entries|ForEach-Object {[string]$_.state}|Select-Object -Unique).Count -eq 1){
             Set-EffectivePolicyScopeState $result @($scopeIndex) ([string]$entries[0].state) ([string]$entries[0].reasonCode)
         } else {
             Set-EffectivePolicyScopeState $result @($scopeIndex) Partial 'POLICY.SMARTSCREEN_INCOMPLETE'
