@@ -266,3 +266,15 @@ override. #145's missing WinRM fields, #138's historical memory excess, actual
 remain unwaived. Deadline remains end of September 6 in America/Chicago, before
 September 7 00:00 CDT / 05:00 UTC. Root owns review, delivery, issues and the
 requirement register.
+
+## Orchestrator final independent review and delivery readiness
+
+The initial clean checkpoint9b5deeaff21eeb4759298f8661e4ee1382d6c350 received fresh independent reviews against3a0cebca469dcc569302b1a75292fb79f95ab790. Standards reported zero documented violations and one nonblocking possible Speculative Generality judgment for unused printer CIM fixture branches. Spec identified two P2 implementation blockers: distinct same-name driver registrations collapsed, and exact matching connections discarded locally collected provider metadata. Those earlier pending-review statements are historical.
+
+A new implementation worker with no inherited conversation history corrected only those findings in c613fed3cccea8c0055a6bd9c84f616f5d149f59, with focused evidence at1afbb5e57da4e4114bb560f83029b9f8f330bf08. Root dispatched fresh affected-only Standards and Spec reviewers for9b5deeaff21eeb4759298f8661e4ee1382d6c350...1afbb5e57da4e4114bb560f83029b9f8f330bf08. Neither reran tests or reviewed the unchanged original diff again.
+
+**Standards correction result:** zero documented violations; zero new smell judgments. The original nonblocking maintenance judgment does not prevent delivery.
+
+**Spec correction result:** zero findings. Both original P2 findings are resolved. Driver name/environment/model and associated version/INF metadata survive source capture, normalization, canonical observations and HTML. Frozen fields and rule bounds cover the additions. Provider metadata survives only exact drive/endpoint correlation; mismatched or unavailable providers remain unknown and the active endpoint retains precedence. No correction scope creep or new incorrect behavior was identified.
+
+**Disposition:** the automated #147 implementation slice qualifies for delivery and closure after merge. Full #158/final regression and actual #161 provider/GUI/zero-egress acceptance remain pending; no live result, parent completion or release acceptance is claimed. #145's open WinRM source gaps and the old #160 candidate's collection hold remain unchanged. This review record changes documentation only; the final source/candidate identities and actual test results above are retained without duplicate runs.
