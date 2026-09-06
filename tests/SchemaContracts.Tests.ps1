@@ -42,6 +42,12 @@ foreach ($requestPath in @($localRequestPath, $connectivityRequestPath)) {
             { param($value) $value.deviceReadiness.collector.standardOutputMaximumBytes = 999999 },
             { param($value) $value.deviceReadiness.fieldIds = @('field:widened') },
             { param($value) $value.deviceReadiness.collector.cleanup = 'BestEffort' }
+            { param($value) $value.deviceReadiness.collector.sourceBounds.activationRows = 17 }
+            { param($value) $value.identityEnrollment.discoveryTasks = @($value.identityEnrollment.discoveryTasks | Select-Object -First 4) }
+            { param($value) $value.networkTopology.localScopes[1].fieldIds = @('field:network.profile.name','field:network.profile.category','field:network.profile.connectivity') }
+            { param($value) $value.networkTopology.localScopes[3].fieldIds = @('field:network.route.address-family','field:network.route.destination-prefix','field:network.route.next-hop','field:network.route.metric') }
+            { param($value) $value.networkTopology.localScopes[4].fieldIds = @('field:network.resolver.address-family','field:network.resolver.addresses') }
+            { param($value) $value.networkTopology.collector.networkBehavior = 'MicrosoftConnectivityEnabled' }
             { param($value) $value.firmwareReadiness.collector.operationId = 'caller-supplied' }
             { param($value) $value.firmwareReadiness.collector.source = 'caller supplied' }
             { param($value) $value.firmwareReadiness.collector.executionContext = 'StandardUser' }
@@ -60,7 +66,7 @@ foreach ($requestPath in @($localRequestPath, $connectivityRequestPath)) {
             & $mutation $changed
             $changedJson = $changed | ConvertTo-Json -Compress -Depth 30
             if (Test-Json -Json $changedJson -SchemaFile $planSchemaPath -ErrorAction SilentlyContinue) {
-                throw 'The immutable plan schema accepted a widened Device Readiness operation.'
+                throw 'The immutable plan schema accepted an altered release-owned operation.'
             }
         }
     }

@@ -35,10 +35,10 @@
   },
   "localScopes": [
     {"scopeId":"scope:network.adapters","sourceId":"source:windows.network-information.adapters","fieldIds":["field:network.adapter.name","field:network.adapter.status","field:network.adapter.interface-index","field:network.adapter.hardware-interface"]},
-    {"scopeId":"scope:network.connection-profiles","sourceId":"source:windows.network-list-manager.profiles","fieldIds":["field:network.profile.name","field:network.profile.category","field:network.profile.connectivity"]},
+    {"scopeId":"scope:network.connection-profiles","sourceId":"source:windows.network-list-manager.profiles","fieldIds":["field:network.profile.interface-index","field:network.profile.name","field:network.profile.category","field:network.profile.connectivity"]},
     {"scopeId":"scope:network.ip-configuration","sourceId":"source:windows.network-information.ip-configuration","fieldIds":["field:network.ip.interface-index","field:network.ip.address-family","field:network.ip.address","field:network.ip.prefix-length"]},
-    {"scopeId":"scope:network.routes","sourceId":"source:windows.ip-helper.routes","fieldIds":["field:network.route.address-family","field:network.route.destination-prefix","field:network.route.next-hop","field:network.route.metric"]},
-    {"scopeId":"scope:network.resolvers","sourceId":"source:windows.network-information.resolvers","fieldIds":["field:network.resolver.address-family","field:network.resolver.addresses"]},
+    {"scopeId":"scope:network.routes","sourceId":"source:windows.ip-helper.routes","fieldIds":["field:network.route.interface-index","field:network.route.address-family","field:network.route.destination-prefix","field:network.route.next-hop","field:network.route.metric"]},
+    {"scopeId":"scope:network.resolvers","sourceId":"source:windows.network-information.resolvers","fieldIds":["field:network.resolver.interface-index","field:network.resolver.address-family","field:network.resolver.addresses"]},
     {"scopeId":"scope:network.proxy","sourceId":"source:windows.current-user.internet-settings","fieldIds":["field:network.proxy.enabled","field:network.proxy.server","field:network.proxy.auto-config-url"]},
     {"scopeId":"scope:network.vpn-components","sourceId":"source:windows.current-user.ras-phonebook","fieldIds":["field:network.vpn.name","field:network.vpn.server-address","field:network.vpn.tunnel-type","field:network.vpn.connection-status"]},
     {"scopeId":"scope:network.security-components","sourceId":"source:windows.securitycenter2","fieldIds":["field:network.security-component.kind","field:network.security-component.name","field:network.security-component.state-code"]},

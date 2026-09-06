@@ -18,13 +18,13 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.12.0' $contractSet.contractVersion `
-    'the additive platform-protection and application-control contract has an explicit version'
+Assert-Equal '1.13.0' $contractSet.contractVersion `
+    'the additive typed network interface context contract has an explicit version'
 Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 259 @($contractSet.fieldDefinitions).Count `
+Assert-Equal 262 @($contractSet.fieldDefinitions).Count `
     'historical fields remain while bounded update, remote-management, SMB, legacy-auth, platform-protection, and app-control fields are admitted'
 Assert-Equal 104 @($contractSet.scopeDefinitions).Count `
     'historical through update, remote-management, SMB, legacy-auth, BitLocker, VBS, WDAC, and AppLocker scopes remain distinct'
@@ -259,4 +259,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.12 binds historical through platform-protection, AppLocker, and Microsoft Connectivity scopes to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.13 binds historical through platform-protection, AppLocker, and Microsoft Connectivity scopes to Draft 2020-12 contracts.'

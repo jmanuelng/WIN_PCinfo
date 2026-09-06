@@ -37,4 +37,7 @@ $denied=Complete-ValidatedNetworkTopologyAssessmentRecord $denied $networkPolicy
 Assert-Equal 0 @($denied.observations|Where-Object fieldId -like 'field:network.*').Count 'denied local sources fabricate no observations'
 Assert-Equal 'Indeterminate' @($denied.findings|Where-Object ruleId -eq 'rule:network.local-configuration/1.0.0')[0].outcome 'denied local evidence stays indeterminate'
 
+Assert-Equal 12 @($record.observations|Where-Object fieldId -eq 'field:network.route.interface-index')[0].value 'protected record keeps the route interface identity'
+Assert-Equal 12 @($record.observations|Where-Object fieldId -eq 'field:network.resolver.interface-index')[0].value 'protected record keeps the resolver interface identity'
+Assert-Equal 12 @($record.observations|Where-Object fieldId -eq 'field:network.profile.interface-index')[0].value 'protected record keeps the profile interface identity'
 Write-Output 'PASS: Network Topology composes canonical offline evidence and honest Local Only findings.'

@@ -1482,6 +1482,8 @@ $identityGuidance
 <dt>$networkCoverageLabel</dt><dd>$([Net.WebUtility]::HtmlEncode($networkCoverageOutcome))</dd></dl>
 <h3>Network-dependent checks not attempted</h3><ul>$($probeRows -join '')</ul>
 <details><summary>Restricted local topology evidence</summary><ul>$($topologyRows -join '')</ul></details>
+<p>Interface indices connect adapter, address, profile, route and resolver observations. Names are display evidence. Multiple routes do not establish which path a future connection will use. Hardware classification remains unknown when the observed interface type cannot establish it.</p>
+<p>Proxy evidence covers the initiating user's Internet Settings only. WinHTTP, service-account and effective PAC settings were not assessed. Configured resolver addresses and PAC URLs were read without name resolution or script retrieval. VPN evidence covers the bounded current-user RAS phonebook only; all-user and third-party VPN registrations were not assessed. Security-component coverage remains Unsupported when no approved offline source is available.</p>
 <p>Product or component names are inventory evidence only. They do not establish health, approval, reachability, trust, compliance, or future compatibility. WIN-PCInfo does not change an adapter, route, resolver, proxy, VPN, firewall, connection, or other network configuration.</p>
 "@
     }else{''}
@@ -2064,12 +2066,12 @@ function Get-DeviceReadinessSliceSelection {
 
 function Get-CombinedAssessmentContractSetVersion {
     param($ConnectivityCollector,$CertificateCollector,$SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
-    if($null -ne $ConnectivityCollector){'1.12.0'}
-    elseif($null -ne $CertificateCollector){'1.12.0'}
-    elseif($null -ne $SoftwareCollector){'1.12.0'}
-    elseif($null -ne $NetworkCollector){'1.12.0'}
-    elseif($null -ne $ResourceCollector){'1.12.0'}
-    elseif($null -ne $EffectivePolicyCollector){'1.12.0'}
+    if($null -ne $ConnectivityCollector){'1.13.0'}
+    elseif($null -ne $CertificateCollector){'1.13.0'}
+    elseif($null -ne $SoftwareCollector){'1.13.0'}
+    elseif($null -ne $NetworkCollector){'1.13.0'}
+    elseif($null -ne $ResourceCollector){'1.13.0'}
+    elseif($null -ne $EffectivePolicyCollector){'1.13.0'}
     elseif($null -ne $AdministratorCollector){'1.3.0'}
     elseif($null -ne $IdentityCollector){'1.2.0'}else{'1.1.0'}
 }

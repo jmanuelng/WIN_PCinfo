@@ -1084,6 +1084,13 @@
           "deadlineMilliseconds": 5000,
           "standardOutputMaximumBytes": 16384,
           "standardErrorMaximumBytes": 4096,
+          "sourceBounds": {
+            "activationRows": 16,
+            "enclosureRows": 1,
+            "chassisCodes": 8,
+            "batteryRows": 1,
+            "overflowProbeRows": 1
+          },
           "cleanup": "WindowsJobObjectAndNamedCancellationEventVerifiedAbsent"
         },
         "derivations": [
@@ -1639,6 +1646,20 @@
             "requiredRole": "EndpointManagementOwner",
             "approvedDestination": "AuthorizedOrganizationPlanningBoundary",
             "expectedSafeResult": "One approved target state or an explicit unresolved decision without changing the assessed device."
+          },
+          {
+            "definitionId": "task:confirm-approved-administrator-context/1.0.0",
+            "purpose": "Confirm intended administrator assignments with the device owner before planning enrollment or privilege changes. Direct local membership cannot establish organizational approval or nested group membership.",
+            "requiredRole": "EndpointManagementOwnerOrAuthorizedDirectoryReader",
+            "approvedDestination": "AuthorizedOrganizationIdentityAdministrationBoundary",
+            "expectedSafeResult": "An approved, unexpected, or unresolved assignment conclusion, with nested-group discovery assigned separately. Do not remove accounts or copy principal identifiers into public evidence."
+          },
+          {
+            "definitionId": "task:confirm-recovery-escrow/1.0.0",
+            "purpose": "Confirm the organization's intended recovery escrow destination and whether recovery material is available there before an enrollment or identity migration. Local registration and encryption state cannot establish escrow.",
+            "requiredRole": "AuthorizedRecoveryAdministrator",
+            "approvedDestination": "OrganizationApprovedRecoveryAdministrationBoundary",
+            "expectedSafeResult": "An available, unavailable, not applicable, or unresolved escrow conclusion for the assessed device. Use approved access without retrieving, displaying, exporting, or recording recovery secrets in this assessment."
           }
         ],
         "validationScenarios": [
@@ -3041,6 +3062,7 @@
             "scopeId": "scope:network.connection-profiles",
             "sourceId": "source:windows.network-list-manager.profiles",
             "fieldIds": [
+              "field:network.profile.interface-index",
               "field:network.profile.name",
               "field:network.profile.category",
               "field:network.profile.connectivity"
@@ -3060,6 +3082,7 @@
             "scopeId": "scope:network.routes",
             "sourceId": "source:windows.ip-helper.routes",
             "fieldIds": [
+              "field:network.route.interface-index",
               "field:network.route.address-family",
               "field:network.route.destination-prefix",
               "field:network.route.next-hop",
@@ -3070,6 +3093,7 @@
             "scopeId": "scope:network.resolvers",
             "sourceId": "source:windows.network-information.resolvers",
             "fieldIds": [
+              "field:network.resolver.interface-index",
               "field:network.resolver.address-family",
               "field:network.resolver.addresses"
             ]
