@@ -34,7 +34,8 @@ function Get-PrivilegedCollectionWorkerSource {
 [Threading.Thread]::CurrentThread.CurrentCulture=[Globalization.CultureInfo]::GetCultureInfo(`$culture)
 [Threading.Thread]::CurrentThread.CurrentUICulture=[Globalization.CultureInfo]::GetCultureInfo(`$culture)
 function Import-ControlledSecurityModule {
-    param(`$Name, [switch]`$PassThru, `$Scope, `$ErrorAction)
+    param(`$Name, [switch]`$PassThru, `$Scope, `$ErrorAction, [switch]`$SkipEditionCheck)
+    if('__CASE__' -eq 'CoreImport' -and -not `$SkipEditionCheck){throw [InvalidOperationException]::new('Synthetic manifest would route to an unapproved compatibility process.')}
     if('__CASE__' -eq 'Unsupported'){throw [IO.FileNotFoundException]::new('Synthetic inbox module unavailable.')}
     if('__CASE__' -eq 'ImportDenied'){throw [UnauthorizedAccessException]::new('Synthetic module denied.')}
     if(`$Name -notmatch 'WindowsPowerShell[\\/]v1.0[\\/]Modules[\\/](Defender[\\/]Defender|NetSecurity[\\/]NetSecurity)\.psd1$' -or -not `$PassThru -or `$Scope -ne 'Local'){throw 'Unexpected module source.'}
@@ -133,7 +134,7 @@ function Assert-SecuritySourceReport {
     foreach($title in @('Defender Antivirus and tamper protection','Attack surface reduction','Network protection','SmartScreen','Firewall')){
         Assert-Equal $true $Html.Contains($title) 'every released security family has a readable report section'
     }
-    $completeSecurity=$Scenario -in @('Active','Passive','AsrEmpty','es-MX','tr-TR','ja-JP','ar-SA')
+    $completeSecurity=$Scenario -in @('Active','CoreImport','Passive','AsrEmpty','es-MX','tr-TR','ja-JP','ar-SA')
     Assert-Equal $(if($completeSecurity){'Informational'}else{'Indeterminate'}) @($Record.findings|Where-Object ruleId -eq 'rule:policy.security-control-coverage/1.0.0')[0].outcome 'a coverage rule never invents a protection or compliance verdict'
     foreach($observation in @($Record.observations|Where-Object fieldId -like 'field:policy.defender.*')){
         $provenance=@($Record.provenance|Where-Object provenanceId -eq $observation.provenanceId)[0]

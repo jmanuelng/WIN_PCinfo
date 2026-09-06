@@ -1203,10 +1203,12 @@ function Get-SecurityCommand {
     param([ValidateSet('Get-MpPreference','Get-MpComputerStatus','Get-NetFirewallProfile')][string]$Name)
     # Windows ships these operations as CDXML functions. Import only the fixed
     # inbox manifest; ambient functions and PSModulePath cannot donate a command.
+    # Force native CDXML loading instead of an implicit Windows PowerShell 5.1
+    # compatibility process when the inbox manifest lacks a Core edition marker.
     $moduleName=if($Name -eq 'Get-NetFirewallProfile'){'NetSecurity'}else{'Defender'}
-    $path=[IO.Path]::Combine([Environment]::SystemDirectory,'WindowsPowerShell','v1.0','Modules',$moduleName,($moduleName+'.psd1'))
+    $path=[IO.Path]::Combine([Environment]::SystemDirectory,"WindowsPowerShell\v1.0\Modules\$moduleName\$moduleName.psd1")
     try {
-        return (Microsoft.PowerShell.Core\Import-Module -Name $path -PassThru -Scope Local -ErrorAction Stop).ExportedCommands[$Name]
+        return (Microsoft.PowerShell.Core\Import-Module -Name $path -PassThru -Scope Local -SkipEditionCheck -ErrorAction Stop).ExportedCommands[$Name]
     } catch {
         # Only an absent inbox module is Unsupported. Defer other discovery
         # failures to the caller's source-specific exception classification.
@@ -1620,13 +1622,13 @@ function Get-LiveEffectivePolicyResult {
                 # property is a gap; two present null arrays are an empty result.
                 $ids=@(if($null -ne $idsProperty.Value){$idsProperty.Value})
                 $actions=@(if($null -ne $actionsProperty.Value){$actionsProperty.Value})
-                $pairCount=[Math]::Min(@($ids).Count,@($actions).Count)
+                $pairCount=[Math]::Min($ids.Count,$actions.Count)
                 $boundedPairCount=[Math]::Min($pairCount,16)
                 $asrRules=@()
                 $asrMalformed=$false
                 for($index=0;$index -lt $boundedPairCount;$index++){
-                    $ruleId=([string]@($ids)[$index]).Trim().ToLowerInvariant()
-                    $action=Convert-EffectivePolicyDefenderActionValue @($actions)[$index]
+                    $ruleId=([string]$ids[$index]).Trim().ToLowerInvariant()
+                    $action=Convert-EffectivePolicyDefenderActionValue $actions[$index]
                     if($ruleId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' -or
                         [string]::IsNullOrWhiteSpace([string]$action)){
                         $asrMalformed=$true
@@ -1638,7 +1640,7 @@ function Get-LiveEffectivePolicyResult {
                 if($asrMalformed){
                     Set-EffectivePolicyScopeState $result @(20) Malformed 'POLICY.DEFENDER_ASR_MALFORMED'
                     $result.defenderAsrRules=@()
-                } elseif(@($ids).Count -ne @($actions).Count){
+                } elseif($ids.Count -ne $actions.Count){
                     Set-EffectivePolicyScopeState $result @(20) Partial 'POLICY.DEFENDER_PROPERTY_UNAVAILABLE'
                 } elseif($pairCount -gt 16){
                     Set-EffectivePolicyScopeState $result @(20) Partial 'POLICY.DEFENDER_ASR_EVIDENCE_BOUND_EXCEEDED'
@@ -1764,7 +1766,7 @@ function Get-LiveEffectivePolicyResult {
             if($null -eq $runningMode -or [string]::IsNullOrWhiteSpace([string]$runningMode.Value)){
                 $runtimeMissingProperty=$true
             } elseif($runningMode.Value -isnot [string] -or
-                [Text.Encoding]::UTF8.GetByteCount($runningMode.Value) -gt 64 -or
+                $runningMode.Value.Length -gt 64 -or
                 $runningMode.Value -notmatch '^[A-Za-z ]+$'){
                 throw [IO.InvalidDataException]::new()
             } else {
@@ -1781,7 +1783,7 @@ function Get-LiveEffectivePolicyResult {
                     continue
                 }
                 $value=$property.Value
-                if($null -ne $value -and $value -isnot [bool]){
+                if($value -isnot [bool]){
                     throw [IO.InvalidDataException]::new()
                 }
                 $result.defenderRuntime.([string]$mapping.target)=$value
