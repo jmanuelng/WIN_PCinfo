@@ -11,6 +11,18 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
 $hostPath = Resolve-WinPCInfoRuntime -ApplicationPath $candidate
+$provenance = [ordered]@{
+    sourceRevision = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+    candidateSha256 = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
+    candidateBytes = (Get-Item -LiteralPath $candidate).Length
+    powerShell = $PSVersionTable.PSVersion.ToString(); dotNet = [Environment]::Version.ToString()
+    architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+    windowsVersion = [Environment]::OSVersion.Version.ToString()
+    inputs = @(foreach ($file in @('Invoke-AssessmentSafetyQualification.ps1','StatusDeskEngine.Tests.ps1',
+        'AssessmentQualificationSupport.ps1','TestHarness.ps1','fixtures/assessment-safety-selection.json')) {
+        [ordered]@{ file=$file; sha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $file) -Algorithm SHA256).Hash.ToLowerInvariant() }
+    })
+}
 $null = [IO.Directory]::CreateDirectory([IO.Path]::GetFullPath($ResultDirectory))
 $cases = [Collections.Generic.List[object]]::new()
 if ($Mode -eq 'Coverage') {
@@ -64,4 +76,4 @@ foreach ($case in $cases) {
 }
 if ($results.Count -eq 0) { throw 'Qualification selection matched no cases.' }
 $summaryPath = Join-Path ([IO.Path]::GetFullPath($ResultDirectory)) "$Mode-summary.json"
-[IO.File]::WriteAllText($summaryPath, ($results.ToArray() | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($summaryPath, ([ordered]@{ provenance=$provenance; results=$results.ToArray() } | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))

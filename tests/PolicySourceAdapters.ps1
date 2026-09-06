@@ -158,7 +158,14 @@ function Assert-PolicySourceReport {
         if ($Scenario -eq 'MdmConflict') {
             Assert-Equal 30 @($Record.observations | Where-Object fieldId -eq 'field:policy.mdm.security-option.machine-inactivity-limit-seconds')[0].value 'the controlled SYSTEM result reaches the canonical observation unchanged'
         }
-        Assert-Equal $(if($Scenario -eq 'MdmConflict'){'NeedsAttention'}elseif($mdmState -eq 'Complete'){'ExpectedCondition'}else{'Indeterminate'}) $conflict.outcome 'local disagreement produces advice without guessing winning policy or tenant intent'
+        # This controlled Policy/Result provider does not implement the separate
+        # AppLocker CSP channel. Complete mapped MDM values cannot establish
+        # agreement across that unavailable channel (added by the platform slice).
+        Assert-Equal $(if($Scenario -eq 'MdmConflict'){'NeedsAttention'}else{'Indeterminate'}) $conflict.outcome 'local disagreement produces advice without guessing winning policy or tenant intent'
+        if ($Scenario -eq 'MdmWindows11') {
+            Assert-Equal 'Unavailable' @($Record.coverage | Where-Object scopeId -eq 'scope:policy.applocker.csp-channel')[0].state 'the controlled policy provider does not claim AppLocker CSP coverage'
+            Assert-Equal 'FINDING.POLICY_CSP_GPO_CONFLICT_INCOMPLETE' $conflict.reasonCode 'complete mapped MDM values preserve the missing independent channel'
+        }
     }
     if ($Scenario -eq 'ReferenceCollision') {
         Assert-Equal $false $Html.Contains('synthetic-wrong-link') 'a different policy reference cannot donate a link or precedence'
