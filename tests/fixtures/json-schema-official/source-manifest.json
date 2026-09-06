@@ -1,0 +1,559 @@
+{
+  "repository": "https://github.com/json-schema-org/JSON-Schema-Test-Suite",
+  "commit": "c9510e3bf8a896c3cba4e08509cf752b4f30dff8",
+  "draftTree": "db5782b10c73f2eee7bd3c9a0c57cfe24390e9b9",
+  "treeEntries": [
+    {
+      "path": "additionalProperties.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9618575e20859e478f42f91ab6f599cff5eb0d5b",
+      "size": 7711,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/9618575e20859e478f42f91ab6f599cff5eb0d5b"
+    },
+    {
+      "path": "allOf.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9e87903fe211027fbd9d81dbf455877e804f676c",
+      "size": 8701,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/9e87903fe211027fbd9d81dbf455877e804f676c"
+    },
+    {
+      "path": "anchor.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "99143fa11601fc3def58545170e727d314b0f73b",
+      "size": 3502,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/99143fa11601fc3def58545170e727d314b0f73b"
+    },
+    {
+      "path": "anyOf.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "89b192dbd0a6e75ed6376935233ec7a9f20c4f20",
+      "size": 5461,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/89b192dbd0a6e75ed6376935233ec7a9f20c4f20"
+    },
+    {
+      "path": "boolean_schema.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6d40f23f2622cc8accf0e1ed28e95f1f65365f22",
+      "size": 2818,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/6d40f23f2622cc8accf0e1ed28e95f1f65365f22"
+    },
+    {
+      "path": "const.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "72ea3f042b663d8f6703f1bffd09f8b5295d721b",
+      "size": 12413,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/72ea3f042b663d8f6703f1bffd09f8b5295d721b"
+    },
+    {
+      "path": "contains.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "08a00a753f7826aebfbd229f9cd00c073aea6b60",
+      "size": 5174,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/08a00a753f7826aebfbd229f9cd00c073aea6b60"
+    },
+    {
+      "path": "content.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "698f780576bdc0436e208edfcc60973393312e0b",
+      "size": 4397,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/698f780576bdc0436e208edfcc60973393312e0b"
+    },
+    {
+      "path": "default.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ceb3ae27172b980fd6e4761df591ae0642c97f88",
+      "size": 2444,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/ceb3ae27172b980fd6e4761df591ae0642c97f88"
+    },
+    {
+      "path": "defs.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "da2a503bfb9d23ab7412bcf90abdf217c2a4a30e",
+      "size": 637,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/da2a503bfb9d23ab7412bcf90abdf217c2a4a30e"
+    },
+    {
+      "path": "dependentRequired.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2baa38e9f488f8e1aff21857a577a5ca51355348",
+      "size": 4294,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/2baa38e9f488f8e1aff21857a577a5ca51355348"
+    },
+    {
+      "path": "dependentSchemas.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1c5f0574a0910b7274797963e13f02dc618494cb",
+      "size": 4973,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/1c5f0574a0910b7274797963e13f02dc618494cb"
+    },
+    {
+      "path": "dynamicRef.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "50555e844eb302651781389cf4170b1ddb12a374",
+      "size": 29642,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/50555e844eb302651781389cf4170b1ddb12a374"
+    },
+    {
+      "path": "enum.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dbc5e0d3184a022d656f7c68f9c9d32b044204b9",
+      "size": 11831,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/dbc5e0d3184a022d656f7c68f9c9d32b044204b9"
+    },
+    {
+      "path": "exclusiveMaximum.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "05db23351bebd6b319a44950323afb9d5249e6eb",
+      "size": 846,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/05db23351bebd6b319a44950323afb9d5249e6eb"
+    },
+    {
+      "path": "exclusiveMinimum.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "00af9d7ff5da30f3c7f3d75c57fd37fd7cbe819a",
+      "size": 846,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/00af9d7ff5da30f3c7f3d75c57fd37fd7cbe819a"
+    },
+    {
+      "path": "format.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "01adcbda31f3a4b155c4545177777b3b9903165b",
+      "size": 25644,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/01adcbda31f3a4b155c4545177777b3b9903165b"
+    },
+    {
+      "path": "if-then-else.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ce76d74760095c9290dd5a3c587801762d60caa8",
+      "size": 8629,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/ce76d74760095c9290dd5a3c587801762d60caa8"
+    },
+    {
+      "path": "infinite-loop-detection.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "46f157a35a510057fd218763aaed8047731ea1c1",
+      "size": 1051,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/46f157a35a510057fd218763aaed8047731ea1c1"
+    },
+    {
+      "path": "items.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6a3e1cf26e0d8221e9b55ddbf5c9f28d93ad5ece",
+      "size": 9209,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/6a3e1cf26e0d8221e9b55ddbf5c9f28d93ad5ece"
+    },
+    {
+      "path": "maxContains.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9a42b45d64eb2c5b7a08f7f801be1b0ec6480cfe",
+      "size": 3626,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/9a42b45d64eb2c5b7a08f7f801be1b0ec6480cfe"
+    },
+    {
+      "path": "maxItems.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f6a6b7c9af485e4e22e44b964f0f2010a304ada9",
+      "size": 1319,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/f6a6b7c9af485e4e22e44b964f0f2010a304ada9"
+    },
+    {
+      "path": "maxLength.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7462726d7608de83cd3d9b3533a17cd756d0be65",
+      "size": 1483,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/7462726d7608de83cd3d9b3533a17cd756d0be65"
+    },
+    {
+      "path": "maxProperties.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9cb745cad61f7cc63e2157dc4610cfdbec7b6989",
+      "size": 2552,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/9cb745cad61f7cc63e2157dc4610cfdbec7b6989"
+    },
+    {
+      "path": "maximum.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7eeab28771252e92efb29c3655cd2519034c7d74",
+      "size": 1660,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/7eeab28771252e92efb29c3655cd2519034c7d74"
+    },
+    {
+      "path": "minContains.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ee72d7d6209289812e6ebc712aed4b49f8bccb1b",
+      "size": 6604,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/ee72d7d6209289812e6ebc712aed4b49f8bccb1b"
+    },
+    {
+      "path": "minItems.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9d6a8b6d2fc2eb465206ddacddd35f0ea2ca8c58",
+      "size": 1302,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/9d6a8b6d2fc2eb465206ddacddd35f0ea2ca8c58"
+    },
+    {
+      "path": "minLength.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5076c5a928f71ac0bab733130c1edc49a39561ac",
+      "size": 1473,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/5076c5a928f71ac0bab733130c1edc49a39561ac"
+    },
+    {
+      "path": "minProperties.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "12587a5f86acf292b4952ecc4bf08ad7cce59bd6",
+      "size": 1913,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/12587a5f86acf292b4952ecc4bf08ad7cce59bd6"
+    },
+    {
+      "path": "minimum.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dc44052784c26a4abdbe32eec406de083e933da4",
+      "size": 2116,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/dc44052784c26a4abdbe32eec406de083e933da4"
+    },
+    {
+      "path": "multipleOf.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "76fa4765beb293a54aeedf58130cd6845a79a217",
+      "size": 2808,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/76fa4765beb293a54aeedf58130cd6845a79a217"
+    },
+    {
+      "path": "not.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d0f2b6e844768af3b1cc1708dca193b88baaa480",
+      "size": 8420,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/d0f2b6e844768af3b1cc1708dca193b88baaa480"
+    },
+    {
+      "path": "oneOf.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7a7c7ffe34b09955ef29b4591f5a160286813d38",
+      "size": 8123,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/7a7c7ffe34b09955ef29b4591f5a160286813d38"
+    },
+    {
+      "path": "optional",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "869d2acc6c3d74dd592224d03c80d90e9728ffc3",
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/trees/869d2acc6c3d74dd592224d03c80d90e9728ffc3"
+    },
+    {
+      "path": "pattern.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ed41f79a7195f2fd08e918ffed174180961375b8",
+      "size": 2461,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/ed41f79a7195f2fd08e918ffed174180961375b8"
+    },
+    {
+      "path": "patternProperties.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2d87b4383b2e982f54cb8ca4be94f3a097ea77aa",
+      "size": 6336,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/2d87b4383b2e982f54cb8ca4be94f3a097ea77aa"
+    },
+    {
+      "path": "prefixItems.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0adfc069e3f153ccf2b1062a4615a7d6095c2bb7",
+      "size": 2929,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/0adfc069e3f153ccf2b1062a4615a7d6095c2bb7"
+    },
+    {
+      "path": "properties.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "eb66fa8bd0b894eef9de333b35c746dc7036ca4c",
+      "size": 7731,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/eb66fa8bd0b894eef9de333b35c746dc7036ca4c"
+    },
+    {
+      "path": "propertyNames.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "84ca2b84e81381155f885eadcce79b17d901f029",
+      "size": 5171,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/84ca2b84e81381155f885eadcce79b17d901f029"
+    },
+    {
+      "path": "ref.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9ca82eeb0198c8bd379662107cc870f7317d2b06",
+      "size": 33550,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/9ca82eeb0198c8bd379662107cc870f7317d2b06"
+    },
+    {
+      "path": "refRemote.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6083aabb1e619a2c694e9b6ca0c3812ec2586b32",
+      "size": 10306,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/6083aabb1e619a2c694e9b6ca0c3812ec2586b32"
+    },
+    {
+      "path": "required.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "17db8939e75837bc0c7b913300fbe9c8f357961c",
+      "size": 4902,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/17db8939e75837bc0c7b913300fbe9c8f357961c"
+    },
+    {
+      "path": "type.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2123c408d9a516739378c5b2d35ac92079083d3d",
+      "size": 14365,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/2123c408d9a516739378c5b2d35ac92079083d3d"
+    },
+    {
+      "path": "unevaluatedItems.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d8a7c1b5b4d603d74e072fbb71dc7a58703c4619",
+      "size": 25395,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/d8a7c1b5b4d603d74e072fbb71dc7a58703c4619"
+    },
+    {
+      "path": "unevaluatedProperties.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "de6411ea9344d36f9e67509f03943cfb08a09792",
+      "size": 50423,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/de6411ea9344d36f9e67509f03943cfb08a09792"
+    },
+    {
+      "path": "uniqueItems.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4ea3bf985153a90a287e88e0239f328b5879418b",
+      "size": 14490,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/4ea3bf985153a90a287e88e0239f328b5879418b"
+    },
+    {
+      "path": "vocabulary.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1acb96a934daee396fb0bd5c28bc37f7aa5c192f",
+      "size": 1706,
+      "url": "https://api.github.com/repos/json-schema-org/JSON-Schema-Test-Suite/git/blobs/1acb96a934daee396fb0bd5c28bc37f7aa5c192f"
+    }
+  ],
+  "files": [
+    {
+      "file": "boolean_schema.json",
+      "upstreamPath": "tests/draft2020-12/boolean_schema.json",
+      "gitBlob": "6d40f23f2622cc8accf0e1ed28e95f1f65365f22",
+      "sha256": "9c8828d325b88a0c632fca22405d5481548b49fb0f9f5536ee401e4d66aa8582",
+      "bytes": 2818
+    },
+    {
+      "file": "defs.json",
+      "upstreamPath": "tests/draft2020-12/defs.json",
+      "gitBlob": "da2a503bfb9d23ab7412bcf90abdf217c2a4a30e",
+      "sha256": "5a352f0b1ad9aa906758fa4d363a77c4c4b29cfc193e8d6f7ab1e184be2a75d5",
+      "bytes": 637
+    },
+    {
+      "file": "ref.json",
+      "upstreamPath": "tests/draft2020-12/ref.json",
+      "gitBlob": "9ca82eeb0198c8bd379662107cc870f7317d2b06",
+      "sha256": "ae53f3f57c220879729225eb416cecac909f06b5adaf15f799b4f3e7c0612998",
+      "bytes": 33550
+    },
+    {
+      "file": "type.json",
+      "upstreamPath": "tests/draft2020-12/type.json",
+      "gitBlob": "2123c408d9a516739378c5b2d35ac92079083d3d",
+      "sha256": "4c5cbe6cbcd28af73761091367b20e07d0403847e236c06c31fc27061bd81192",
+      "bytes": 14365
+    },
+    {
+      "file": "const.json",
+      "upstreamPath": "tests/draft2020-12/const.json",
+      "gitBlob": "72ea3f042b663d8f6703f1bffd09f8b5295d721b",
+      "sha256": "83a148d2589cbd211e7e64b31763290f8869d763f513de4658e8d25f0fcc025e",
+      "bytes": 12413
+    },
+    {
+      "file": "enum.json",
+      "upstreamPath": "tests/draft2020-12/enum.json",
+      "gitBlob": "dbc5e0d3184a022d656f7c68f9c9d32b044204b9",
+      "sha256": "1abe7eb883bde4a78c62f08e484e16f32b72ca5c1be725aa54d85cc4546b5031",
+      "bytes": 11831
+    },
+    {
+      "file": "properties.json",
+      "upstreamPath": "tests/draft2020-12/properties.json",
+      "gitBlob": "eb66fa8bd0b894eef9de333b35c746dc7036ca4c",
+      "sha256": "58f01566cfe3e1fc4fb851d3b2eab13768d65ba5dbc4e9f9387ceaf4244a0522",
+      "bytes": 7731
+    },
+    {
+      "file": "required.json",
+      "upstreamPath": "tests/draft2020-12/required.json",
+      "gitBlob": "17db8939e75837bc0c7b913300fbe9c8f357961c",
+      "sha256": "3e3900dd0e546c1cb4aaab6b24ea0e06a8f7f8c05b272dcc87e85332501ed42e",
+      "bytes": 4902
+    },
+    {
+      "file": "additionalProperties.json",
+      "upstreamPath": "tests/draft2020-12/additionalProperties.json",
+      "gitBlob": "9618575e20859e478f42f91ab6f599cff5eb0d5b",
+      "sha256": "b96bd533416386ac6421737b48c5c072870ab5dbea910585e9e8fa6305c7ca91",
+      "bytes": 7711
+    },
+    {
+      "file": "allOf.json",
+      "upstreamPath": "tests/draft2020-12/allOf.json",
+      "gitBlob": "9e87903fe211027fbd9d81dbf455877e804f676c",
+      "sha256": "81045b06706a28f6aa337b485b41a764098e10ac73bb1d346ba0a4285a63e970",
+      "bytes": 8701
+    },
+    {
+      "file": "anyOf.json",
+      "upstreamPath": "tests/draft2020-12/anyOf.json",
+      "gitBlob": "89b192dbd0a6e75ed6376935233ec7a9f20c4f20",
+      "sha256": "7a6fe41602496c256334ffa3e6fb457b26ac23b97ca03cb16b724ad21a7d216d",
+      "bytes": 5461
+    },
+    {
+      "file": "dependentSchemas.json",
+      "upstreamPath": "tests/draft2020-12/dependentSchemas.json",
+      "gitBlob": "1c5f0574a0910b7274797963e13f02dc618494cb",
+      "sha256": "f77df8d5243c0f58e04053a14a30706f5a6d5a9e7eccbfd17f8d6445841f8752",
+      "bytes": 4973
+    },
+    {
+      "file": "if-then-else.json",
+      "upstreamPath": "tests/draft2020-12/if-then-else.json",
+      "gitBlob": "ce76d74760095c9290dd5a3c587801762d60caa8",
+      "sha256": "4bc76318e6df0e8294cb9aa8a3bf95f04fa9cfea96f295a3b55e725d1289c809",
+      "bytes": 8629
+    },
+    {
+      "file": "items.json",
+      "upstreamPath": "tests/draft2020-12/items.json",
+      "gitBlob": "6a3e1cf26e0d8221e9b55ddbf5c9f28d93ad5ece",
+      "sha256": "d924a8171f1f1d04ff026a4e3491d1376297145563158543005b7073b69ab913",
+      "bytes": 9209
+    },
+    {
+      "file": "prefixItems.json",
+      "upstreamPath": "tests/draft2020-12/prefixItems.json",
+      "gitBlob": "0adfc069e3f153ccf2b1062a4615a7d6095c2bb7",
+      "sha256": "5b2006fb0d99f9df8e25e384d665edc57427e7849ac0f963f541626fd82bb522",
+      "bytes": 2929
+    },
+    {
+      "file": "minimum.json",
+      "upstreamPath": "tests/draft2020-12/minimum.json",
+      "gitBlob": "dc44052784c26a4abdbe32eec406de083e933da4",
+      "sha256": "f6a29cb574b76621da23636a636cf12cb31b01646b89543e6ce1a813376439a3",
+      "bytes": 2116
+    },
+    {
+      "file": "maximum.json",
+      "upstreamPath": "tests/draft2020-12/maximum.json",
+      "gitBlob": "7eeab28771252e92efb29c3655cd2519034c7d74",
+      "sha256": "dfbc88ef4ede2966250fb2ad44076856d51481ea01ce679cca70efe47606ee90",
+      "bytes": 1660
+    },
+    {
+      "file": "minItems.json",
+      "upstreamPath": "tests/draft2020-12/minItems.json",
+      "gitBlob": "9d6a8b6d2fc2eb465206ddacddd35f0ea2ca8c58",
+      "sha256": "9792cedc446be654836b42d0312eca12051e9e2f24cd5d95dcd3f3fc9adccd0a",
+      "bytes": 1302
+    },
+    {
+      "file": "maxItems.json",
+      "upstreamPath": "tests/draft2020-12/maxItems.json",
+      "gitBlob": "f6a6b7c9af485e4e22e44b964f0f2010a304ada9",
+      "sha256": "59fa6236c0766aaac5fb7c9ef82e205c230efa94271485f614218291be7cbc5c",
+      "bytes": 1319
+    },
+    {
+      "file": "minLength.json",
+      "upstreamPath": "tests/draft2020-12/minLength.json",
+      "gitBlob": "5076c5a928f71ac0bab733130c1edc49a39561ac",
+      "sha256": "999e9731c57a1296e06e8b9b36b0531614ab7a6ac3c20db6fed50badbf3850ab",
+      "bytes": 1473
+    },
+    {
+      "file": "maxLength.json",
+      "upstreamPath": "tests/draft2020-12/maxLength.json",
+      "gitBlob": "7462726d7608de83cd3d9b3533a17cd756d0be65",
+      "sha256": "ac43a3991586f2d2d1e7e37cad01bb1a7b1c5d9ad7b558d6029d24b41a04d1a9",
+      "bytes": 1483
+    },
+    {
+      "file": "pattern.json",
+      "upstreamPath": "tests/draft2020-12/pattern.json",
+      "gitBlob": "ed41f79a7195f2fd08e918ffed174180961375b8",
+      "sha256": "60713a3b01957fad54f00ab30b378463b3e07b35242c945a9325f8d6ae7080fc",
+      "bytes": 2461
+    },
+    {
+      "file": "uniqueItems.json",
+      "upstreamPath": "tests/draft2020-12/uniqueItems.json",
+      "gitBlob": "4ea3bf985153a90a287e88e0239f328b5879418b",
+      "sha256": "ed84ef6ddc827659e257ba64cbe9679f06932b6320bea5c07622bf3d2cc4daa5",
+      "bytes": 14490
+    },
+    {
+      "file": "format.json",
+      "upstreamPath": "tests/draft2020-12/format.json",
+      "gitBlob": "01adcbda31f3a4b155c4545177777b3b9903165b",
+      "sha256": "3baf934e2aeace523012f92994e3c9f4b6142d68ba9ece0c12becaffa52eaf5f",
+      "bytes": 25644
+    },
+    {
+      "file": "LICENSE",
+      "upstreamPath": "LICENSE",
+      "gitBlob": "c28adbadd9114a30a302fef37c3d14f490645c1c",
+      "sha256": "837402bd25fad9b704265801ca3f92566a98157c1f9a7acd6f446299ba1c305a",
+      "bytes": 1057
+    }
+  ]
+}

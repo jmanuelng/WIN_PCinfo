@@ -1,0 +1,3 @@
+# Preserve verified upstream blob bytes, including LICENSE, on every checkout.
+*.json -text
+LICENSE -text
