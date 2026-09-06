@@ -8,6 +8,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $ReadinessSourceScenario = '',
     [string] $IdentitySourceScenario = '',
     [string] $PolicySourceScenario = '',
+    [string] $SecuritySourceScenario = '',
     [string] $NetworkSourceScenario = '',
     [string] $CertificateSourceScenario = '',
     [string] $ConnectivitySourceScenario = '',
@@ -144,6 +145,10 @@ if ($PolicySourceScenario) {
     . ([scriptblock]::Create('function Start-StatusDeskSession {' + $sessionSource + '}'))
     . (Join-Path $PSScriptRoot 'PolicySourceAdapters.ps1')
     $moduleText = Add-ControlledPolicySources -ModuleText $moduleText -Scenario $PolicySourceScenario
+}
+if ($SecuritySourceScenario) {
+    . (Join-Path $PSScriptRoot 'SecuritySourceAdapters.ps1')
+    $moduleText=Add-ControlledSecuritySources -ModuleText $moduleText -Scenario $SecuritySourceScenario
 }
 if ($NetworkSourceScenario) {
     . (Join-Path $PSScriptRoot 'NetworkSourceAdapters.ps1')
@@ -288,6 +293,7 @@ try {
     while (-not (Complete-StatusDeskSession $session) -and $watch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 25 }
     Assert-Equal $true $session.Completed 'ordinary collector chain reaches bounded completion'
     if ($IdentitySourceScenario -and $session.Transport.State.ContainsKey('IdentitySourceFailure')) { throw ($session.Transport.State.IdentitySourceFailure + ' ' + $session.Transport.State.IdentityPrivilegeReason) }
+    if ($SecuritySourceScenario -and $session.Transport.State.ContainsKey('SecuritySourceFailure')) { throw $session.Transport.State.SecuritySourceFailure }
     if ($PolicySourceScenario -and $session.Transport.State.ContainsKey('PolicySourceFailure')) { throw ($session.Transport.State.PolicySourceFailure + ' ' + $session.Transport.State.PolicyPrivilegeReason) }
     $terminal = $session.Transport.State.Terminal | ConvertFrom-Json
     if ($DeclinePreparation) {
@@ -383,6 +389,9 @@ try {
     }
     if ($PolicySourceScenario) {
         Assert-PolicySourceReport -Record $record -Html $html -Scenario $PolicySourceScenario
+    }
+    if ($SecuritySourceScenario) {
+        Assert-SecuritySourceReport -Record $record -Html $html -Scenario $SecuritySourceScenario
     }
     if (-not ($CancelAfterIdentity -or $CancelAfterResource)) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `

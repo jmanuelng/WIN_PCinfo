@@ -1817,6 +1817,7 @@ $firmwareSection
 $identitySection
 $administratorSection
 $effectivePolicySection
+$(if($null -ne $policyFinding){New-EffectivePolicySecurityReportSection -Record $Record})
 $resourceSection
 $networkSection
 $softwareSection

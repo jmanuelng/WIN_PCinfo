@@ -27,6 +27,13 @@ $plan=[pscustomobject][ordered]@{
 }
 $digest=Get-ObjectDigest -Value $plan -ConvertToJsonCommand $convertToJsonCommand
 $workerSource=Get-PrivilegedCollectionWorkerSource
+$reordered=New-EffectivePolicySyntheticPayload -Policy $policy -Scenario Workgroup
+[array]::Reverse($reordered.scopeStates)
+Assert-Equal $true (Test-EffectivePolicyCollectorPayload -Payload $reordered -Policy $policy) 'scope identity is independent of native source order'
+$canonical=Copy-EffectivePolicyCollectorPayload -Payload $reordered -Policy $policy
+Assert-Equal 'scope:policy.applied.user.identity' $canonical.scopeStates[0].scopeId 'copying restores the declared catalog order'
+$reordered.scopeStates[0]=$reordered.scopeStates[1]
+Assert-Equal $false (Test-EffectivePolicyCollectorPayload -Payload $reordered -Policy $policy) 'a duplicate scope cannot replace a missing scope'
 $collectorScopes=@(Get-EffectivePolicyCollectorScopes -Policy $policy)
 Assert-Equal $collectorScopes.Count (@($policy.scopes|Where-Object { [string]$_.scopeId -notlike 'scope:policy.mdm.*' }).Count) `
     'the privileged worker scope catalog carries every non-MDM Effective Policy scope'
@@ -66,7 +73,7 @@ foreach($fragment in @(
     'WscGetSecurityProviderHealth(','ReadSecurityProviderHealth([uint32]$providerDefinition.providerValue)',
     '[DllImport("Wscapi.dll")]','New-Object -ComObject ''WSCProductList''',
     'Get-MpComputerStatus','Get-MpPreference',
-    'Get-Command Get-NetFirewallProfile','-PolicyStore ActiveStore',
+    'Get-SecurityCommand Get-NetFirewallProfile','-PolicyStore ActiveStore',
     'AttackSurfaceReductionRules_Ids','AttackSurfaceReductionRules_Actions',
     'EnableNetworkProtection','IsTamperProtected',
     'MDM_Policy_Result01_Update02','DeferFeatureUpdatesPeriodInDays',
