@@ -31,7 +31,7 @@
       "items": false
     },
     "rules": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/rule" } },
-    "discoveryTasks": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/task" } },
+    "discoveryTasks": { "type": "array", "minItems": 6, "maxItems": 6, "items": { "$ref": "#/$defs/task" } },
     "validationScenarios": { "const": ["Workgroup", "DomainJoined", "EntraJoined", "Registered", "Mixed", "Unenrolled", "UserContextUnavailable", "StandardUser", "Administrator", "LocalSystem", "NonEnglish", "Malformed", "Denied"] }
   },
   "$defs": {

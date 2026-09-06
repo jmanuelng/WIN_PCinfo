@@ -23,7 +23,7 @@ function Get-IdentityEnrollmentPolicy {
     if ($policy.kind -ne 'win-pcinfo.identity-enrollment-policy' -or
         $policy.policyId -ne 'win-pcinfo.identity-enrollment/1.0.0' -or
         @($policy.collectors).Count -ne 3 -or @($policy.scopes).Count -ne 4 -or
-        @($policy.rules).Count -ne 3 -or @($policy.discoveryTasks).Count -ne 4 -or
+        @($policy.rules).Count -ne 3 -or @($policy.discoveryTasks).Count -ne 6 -or
         @($policy.validationScenarios).Count -ne 13) {
         throw 'The Identity and Enrollment policy is not the closed release policy.'
     }
@@ -422,12 +422,12 @@ namespace WinPCInfo.IdentityEnrollment
                     result.AadJoinType = info.joinType;
                     result.DeviceId = info.pszDeviceId;
                     result.TenantId = info.pszTenantId;
-                    result.JoinUserEmail = info.pszJoinUserEmail;
+                    if (workSchool) result.JoinUserEmail = info.pszJoinUserEmail;
                 }
             }
             finally { if (aad != IntPtr.Zero) NetFreeAadJoinInformation(aad); }
 
-            if (registrationUser)
+            if (registrationUser || workSchool)
             {
                 IntPtr sessions = IntPtr.Zero;
                 if (WTSEnumerateSessions(IntPtr.Zero, 0, 1, out sessions, out int count))
@@ -508,7 +508,9 @@ function Get-IdentityAadSourceState {
         [Parameter(Mandatory)] [bool] $InfoPresent
     )
     if(Test-IdentityNativeAccessDeniedCode $Code){return 'Denied'}
-    if($Code -eq 0 -and -not $InfoPresent){return 'Malformed'}
+    # The documented S_OK/NULL result also represents no default join. A
+    # nonempty result with S_FALSE contradicts that absence and is rejected.
+    if($Code -eq 1 -and $InfoPresent){return 'Malformed'}
     if(Test-IdentityAadSuccessCode $Code){return 'Complete'}
     'Unavailable'
 }
@@ -651,6 +653,7 @@ function Get-LiveIdentityEnrollmentPayload {
     param([Parameter(Mandatory)] $Policy)
     $startedAt=[DateTimeOffset]::UtcNow
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $processSessionId = [Diagnostics.Process]::GetCurrentProcess().SessionId
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     $isAdministrator = $principal.IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator
@@ -669,14 +672,28 @@ function Get-LiveIdentityEnrollmentPayload {
     # collector while the first tree might survive would violate both attempt
     # ownership and cleanup precedence.
     Assert-IdentityCollectorCleanupVerified -Attempt $registrationAttempt
-    $workSchoolAttempt=Invoke-BoundedIdentityNativeSnapshot -Policy $Policy `
-        -CollectorIndex 1 -Mode 'WorkSchool'
-    Assert-IdentityCollectorCleanupVerified -Attempt $workSchoolAttempt
     $registrationSnapshot=$registrationAttempt.snapshot
+    # The default work account belongs to the querying token. A verified WTS
+    # user alone is insufficient: both SID and session must match the caller.
+    # Otherwise skip that user-scoped read and retain an explicit coverage gap.
+    $sameUserContext = [bool]$registrationAttempt.succeeded -and
+        [bool]$registrationSnapshot.UserContextAvailable -and
+        [int]$registrationSnapshot.UserError -eq 0 -and
+        [string]$registrationSnapshot.UserSid -eq [string]$identity.User.Value -and
+        [int]$registrationSnapshot.UserSessionId -eq $processSessionId
+    $workSchoolAttempt=if ($sameUserContext) {
+        Invoke-BoundedIdentityNativeSnapshot -Policy $Policy -CollectorIndex 1 -Mode 'WorkSchool'
+    } else {
+        [pscustomobject]@{succeeded=$false;snapshot=$null;native=$null
+            reasonCode='COLLECTION.IDENTITY_USER_CONTEXT_UNAVAILABLE'
+            startedAt=[DateTimeOffset]::UtcNow;completedAt=[DateTimeOffset]::UtcNow}
+    }
+    Assert-IdentityCollectorCleanupVerified -Attempt $workSchoolAttempt
     $workSchoolSnapshot=$workSchoolAttempt.snapshot
     $registrationFailureState=if([bool]$registrationAttempt.succeeded){''}
         elseif($registrationAttempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
     $workSchoolFailureState=if([bool]$workSchoolAttempt.succeeded){''}
+        elseif($workSchoolAttempt.reasonCode -eq 'COLLECTION.IDENTITY_USER_CONTEXT_UNAVAILABLE'){'Unavailable'}
         elseif($workSchoolAttempt.reasonCode -match 'DENIED'){'Denied'}else{'Failed'}
     $domainState = if(-not $registrationFailureState -and
         $registrationSnapshot.DomainError -eq 0) {
@@ -696,12 +713,12 @@ function Get-LiveIdentityEnrollmentPayload {
             -InfoPresent ([bool]$workSchoolSnapshot.AadInfoPresent)
     }
     $entraType = if ($registrationAadState -eq 'Complete') {
-        switch ([int]$registrationSnapshot.AadJoinType) {
+        if (-not [bool]$registrationSnapshot.AadInfoPresent) { 'None' }
+        else { switch ([int]$registrationSnapshot.AadJoinType) {
             1 { 'EntraJoined' }
             2 { 'EntraRegistered' }
-            0 { 'None' }
             default { 'Unknown' }
-        }
+        } }
     } else { $null }
     $registrationState = if($registrationFailureState){$registrationFailureState}
     elseif ((Test-IdentityNativeAccessDeniedCode ([int]$registrationSnapshot.DomainError)) -or
@@ -713,6 +730,9 @@ function Get-LiveIdentityEnrollmentPayload {
         $registrationAadState -ne 'Complete') {
         'Unavailable'
     } else { 'Complete' }
+    if ($registrationState -eq 'Complete' -and $entraType -ne 'EntraJoined' -and -not $sameUserContext) {
+        $registrationState = 'Unavailable'
+    }
     $userState = if($registrationFailureState){$registrationFailureState}
     elseif (Test-IdentityNativeAccessDeniedCode ([int]$registrationSnapshot.UserError)) {
         'Denied'
@@ -721,9 +741,24 @@ function Get-LiveIdentityEnrollmentPayload {
         'Complete'
     } else { 'Unavailable' }
     $workSchoolState = $workSchoolAadState
+    if ($workSchoolState -eq 'Complete' -and (
+        -not [bool]$workSchoolSnapshot.UserContextAvailable -or
+        [int]$workSchoolSnapshot.UserError -ne 0 -or
+        [string]$workSchoolSnapshot.UserSid -ne [string]$identity.User.Value -or
+        [int]$workSchoolSnapshot.UserSessionId -ne $processSessionId)) {
+        $workSchoolState = if (Test-IdentityNativeAccessDeniedCode ([int]$workSchoolSnapshot.UserError)) {
+            'Denied'
+        } else { 'Unavailable' }
+    }
     $workSchoolType=if($workSchoolState -eq 'Complete'){
-        switch([int]$workSchoolSnapshot.AadJoinType){1{'EntraJoined'}2{'EntraRegistered'}0{'None'}default{'Unknown'}}
+        if (-not [bool]$workSchoolSnapshot.AadInfoPresent) { 'None' }
+        else { switch([int]$workSchoolSnapshot.AadJoinType){1{'EntraJoined'}2{'EntraRegistered'}default{'Unknown'}} }
     }else{$null}
+    # NetGetAadJoinInformation(NULL) prefers the device join on a joined
+    # device. That result cannot prove absence of separate user work accounts.
+    if ($workSchoolState -eq 'Complete' -and $workSchoolType -in @('EntraJoined','Unknown')) {
+        $workSchoolState = 'Unavailable'
+    }
     $workSchoolPresent = $workSchoolType -eq 'EntraRegistered'
     $payload = [pscustomobject][ordered]@{
         sourceLocale='und';registrationState=$registrationState;userContextState=$userState
@@ -733,20 +768,20 @@ function Get-LiveIdentityEnrollmentPayload {
         assessmentUserAccountName=if($userState -eq 'Complete'){[string]$registrationSnapshot.UserAccountName}else{$null}
         domainJoinState=if($registrationState -eq 'Complete'){$domainState}else{$null}
         domainName=if($registrationState -eq 'Complete' -and $domainState -eq 'DomainJoined'){
-            [string]$registrationSnapshot.DomainName
+            $registrationSnapshot.DomainName
         }else{$null}
         entraRegistrationType=if($registrationState -eq 'Complete'){$entraType}else{$null}
         entraDeviceId=if($registrationState -eq 'Complete' -and $entraType -ne 'None'){
-            [string]$registrationSnapshot.DeviceId
+            $registrationSnapshot.DeviceId
         }else{$null}
         entraTenantId=if($registrationState -eq 'Complete' -and $entraType -ne 'None'){
-            [string]$registrationSnapshot.TenantId
+            $registrationSnapshot.TenantId
         }else{$null}
         workSchoolAccountPresent=if($workSchoolState -eq 'Complete'){
             [bool]$workSchoolPresent
         }else{$null}
         workSchoolAccountIdentifier=if($workSchoolState -eq 'Complete' -and $workSchoolPresent){
-            [string]$workSchoolSnapshot.JoinUserEmail
+            $workSchoolSnapshot.JoinUserEmail
         }else{$null}
     }
     $relationship = if ($userState -ne 'Complete') { 'Unavailable' }
@@ -822,14 +857,14 @@ function Invoke-IdentityEnrollmentCollection {
         )},
         @{scope='scope:device.registration-context';state=[string]$payload.registrationState;collector=0;subject=$deviceSubject;fields=@(
             @{id='field:device.domain-join.state';property='domainJoinState'},
-            @{id='field:device.domain-join.name';property='domainName';absent=$true},
+            @{id='field:device.domain-join.name';property='domainName';absent=$payload.domainJoinState -eq 'Workgroup'},
             @{id='field:device.entra-registration.type';property='entraRegistrationType'},
-            @{id='field:device.entra-registration.device-id';property='entraDeviceId';absent=$true},
-            @{id='field:device.entra-registration.tenant-id';property='entraTenantId';absent=$true}
+            @{id='field:device.entra-registration.device-id';property='entraDeviceId';absent=$payload.entraRegistrationType -eq 'None'},
+            @{id='field:device.entra-registration.tenant-id';property='entraTenantId';absent=$payload.entraRegistrationType -eq 'None'}
         )},
         @{scope='scope:device.work-school-registration-context';state=[string]$payload.workSchoolState;collector=1;subject=$deviceSubject;fields=@(
             @{id='field:device.work-school-registration.present';property='workSchoolAccountPresent'},
-            @{id='field:device.work-school-registration.identifier';property='workSchoolAccountIdentifier';absent=$true}
+            @{id='field:device.work-school-registration.identifier';property='workSchoolAccountIdentifier';absent=$payload.workSchoolAccountPresent -eq $false}
         )}
     )
     $observations = [Collections.Generic.List[object]]::new()
@@ -844,9 +879,11 @@ function Invoke-IdentityEnrollmentCollection {
                 $observationId = "observation:$suffix`:$runId"
                 $provenanceId = "provenance:$suffix`:$runId"
                 $value = $payload.([string]$field.property)
-                $valueState = if ($null -eq $value -and $field.ContainsKey('absent')) {
+                $valueState = if ($null -eq $value -and $field.ContainsKey('absent') -and $field.absent) {
                     'ObservedAbsent'
-                } elseif ($null -eq $value) { 'SourceReportedUnknown' } else { 'ObservedValue' }
+                } elseif ($null -eq $value -or (
+                    $field.property -in @('domainJoinState','entraRegistrationType') -and $value -eq 'Unknown'
+                )) { 'SourceReportedUnknown' } else { 'ObservedValue' }
                 $observation = [ordered]@{
                     observationId=$observationId;fieldId=[string]$field.id
                     subjectId=[string]$scope.subject;provenanceId=$provenanceId

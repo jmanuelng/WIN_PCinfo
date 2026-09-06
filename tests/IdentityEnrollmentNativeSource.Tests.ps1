@@ -88,8 +88,10 @@ Assert-Equal $true (Test-IdentityAadSuccessCode -Code 1) `
     'S_FALSE is complete locale-neutral evidence that no default Entra join exists'
 Assert-Equal 'Complete' (Get-IdentityAadSourceState -Code 1 -InfoPresent $false) `
     'S_FALSE alone authoritatively represents absent default join information'
-Assert-Equal 'Malformed' (Get-IdentityAadSourceState -Code 0 -InfoPresent $false) `
-    'S_OK without its required DSREG_JOIN_INFO cannot fabricate a None observation'
+Assert-Equal 'Complete' (Get-IdentityAadSourceState -Code 0 -InfoPresent $false) `
+    'the documented S_OK with NULL join information also establishes no default join'
+Assert-Equal 'Malformed' (Get-IdentityAadSourceState -Code 1 -InfoPresent $true) `
+    'S_FALSE cannot contradict its absent join information'
 Assert-Equal 'Complete' (Get-IdentityAadSourceState -Code 0 -InfoPresent $true) `
     'S_OK is admitted only with the returned structured join information'
 

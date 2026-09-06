@@ -762,7 +762,17 @@ function Get-LiveAdministratorResult {
     # credential request. Safe failure: access denial, API failure, or the
     # eight-member evidence ceiling becomes a gap; it never becomes an empty
     # group and nested groups are never recursively expanded.
-    $snapshot=[WinPCInfoLocalAdministratorsSource]::Read(8)
+    try { $snapshot=[WinPCInfoLocalAdministratorsSource]::Read(8) }
+    catch {
+        # A failed local alias lookup/query is a source gap, not a corrupt
+        # privileged protocol. Preserve unrelated evidence from this phase.
+        $state=if ((Get-WorkerAccessState $_) -eq 'Denied') {'Denied'} else {'Failed'}
+        return [ordered]@{
+            sourceLocale='und';groupSid='S-1-5-32-544';enumerationState=$state
+            enumerationComplete=$false;directMembers=@();sourceReturnedEntries=0
+            duplicateEntriesRemoved=0;limitation='DirectMembersOnly'
+        }
+    }
     $members=@($snapshot.Sids|ForEach-Object {
         [ordered]@{sid=[string]$_;accountName=$null;principalKind='Unknown';origin='Unresolved'}
     })

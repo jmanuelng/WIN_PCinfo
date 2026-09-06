@@ -342,6 +342,9 @@ try {
         }
 
         if ($ProviderState -ne 'Complete') {
+            if ($ProviderState -eq 'Denied') {
+                return New-PolicyCatalogGap '' 'Denied' 'POLICY.MDM_PROVIDER_QUERY_DENIED'
+            }
             return New-PolicyCatalogGap '' 'Unavailable' 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE'
         }
         if (-not [bool]$ProviderAvailable) {
@@ -621,6 +624,12 @@ try {
         }
         catch {
             $providerState='Unavailable';$providerReasonCode='POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE'
+            if ($_.Exception -is [UnauthorizedAccessException] -or
+                ($_.Exception.HResult -band 0xffff) -eq 5 -or
+                ($_.Exception -is [Microsoft.Management.Infrastructure.CimException] -and
+                    $_.Exception.NativeErrorCode -eq [Microsoft.Management.Infrastructure.NativeErrorCode]::AccessDenied)) {
+                $providerState='Denied';$providerReasonCode='POLICY.MDM_PROVIDER_QUERY_DENIED'
+            }
             $null
         }
     }
@@ -2020,13 +2029,16 @@ function Invoke-SystemCollectionPlan {
             @($resultOperation.PSObject.Properties.Name).Count -ne 7 -or
             $resultOperation.operationId -ne $policy.operations[0].operationId -or
             $resultOperation.state -ne 'Completed' -or
-            [string]$resultOperation.providerState -notin @('Complete','Unavailable') -or
+            [string]$resultOperation.providerState -notin @('Complete','Unavailable','Denied') -or
             ([string]$resultOperation.providerState -eq 'Complete' -and
                 ($resultOperation.providerAvailable -isnot [bool] -or
                  -not [string]::IsNullOrEmpty([string]$resultOperation.providerReasonCode))) -or
             ([string]$resultOperation.providerState -eq 'Unavailable' -and
                 ($null -ne $resultOperation.providerAvailable -or
                  [string]$resultOperation.providerReasonCode -ne 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE')) -or
+            ([string]$resultOperation.providerState -eq 'Denied' -and
+                ($null -ne $resultOperation.providerAvailable -or
+                 [string]$resultOperation.providerReasonCode -ne 'POLICY.MDM_PROVIDER_QUERY_DENIED')) -or
             $resultOperation.policyCatalogId -isnot [string] -or
             @($resultOperation.fields).Count -ne $expectedFieldDefinitionCount) {
             throw 'The SYSTEM result failed its closed schema.'
@@ -2071,9 +2083,10 @@ function Invoke-SystemCollectionPlan {
                     'POLICY.MDM_RESULT_QUERY_UNAVAILABLE'
                 )
             }
+            elseif ([string]$fieldResult.state -eq 'Denied') { @('POLICY.MDM_PROVIDER_QUERY_DENIED') }
             else { @() }
             if ([string] $fieldResult.scopeId -ne [string] $definition.scopeId -or
-                [string] $fieldResult.state -notin @('Complete', 'Unsupported', 'Unavailable') -or
+                [string] $fieldResult.state -notin @('Complete', 'Unsupported', 'Unavailable', 'Denied') -or
                 [string] $fieldResult.valueState -notin @('ObservedValue', 'ObservedAbsent') -or
                 ([string] $fieldResult.state -eq 'Complete' -and
                     -not [string]::IsNullOrEmpty([string] $fieldResult.reasonCode)) -or
@@ -2114,7 +2127,11 @@ function Invoke-SystemCollectionPlan {
                 $null -ne $_.value
             }).Count -eq 0
         }
-        $stateMachineAccepted = if($providerState -eq 'Unavailable'){
+        $stateMachineAccepted = if($providerState -eq 'Denied'){
+            [string]::IsNullOrEmpty($catalogId) -and
+                (& $allFieldsMatch 'Denied' 'POLICY.MDM_PROVIDER_QUERY_DENIED')
+        }
+        elseif($providerState -eq 'Unavailable'){
             [string]::IsNullOrEmpty($catalogId) -and
                 (& $allFieldsMatch 'Unavailable' 'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE')
         }
@@ -2129,6 +2146,7 @@ function Invoke-SystemCollectionPlan {
             @($parsedFields|Where-Object {
                 [string]$_.reasonCode -in @(
                     'POLICY.MDM_PROVIDER_QUERY_UNAVAILABLE',
+                    'POLICY.MDM_PROVIDER_QUERY_DENIED',
                     'POLICY.MDM_PROVIDER_UNAVAILABLE',
                     'POLICY.MDM_BUILD_UNSUPPORTED'
                 )
@@ -2149,7 +2167,7 @@ function Invoke-SystemCollectionPlan {
         }
         else{
             $state='CompletedWithGaps';$reasonCode=[string]$resultOperation.providerReasonCode
-            $coverageState='Unavailable'
+            $coverageState=[string]$resultOperation.providerState
         }
     }
     catch [System.OperationCanceledException] {

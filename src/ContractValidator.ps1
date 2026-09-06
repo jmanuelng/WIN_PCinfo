@@ -386,6 +386,23 @@ function Get-AssessmentStateReason {
             } | Sort-Object -Unique)
             $expectedFieldIds = @($scopeDefinition.fieldIds | ForEach-Object { [string] $_ } |
                 Sort-Object -Unique)
+            if ($item.scopeId -eq 'scope:device.local-administrators.direct-membership') {
+                $scopeObservations=@($item.observationIds | ForEach-Object { $observationById[[string]$_] })
+                $emptyCount=@($scopeObservations | Where-Object {
+                    $_.fieldId -eq 'field:device.local-administrators.direct-member-count' -and
+                    $_.valueState -eq 'ObservedValue' -and $_.value -eq 0
+                })
+                $completeEnumeration=@($scopeObservations | Where-Object {
+                    $_.fieldId -eq 'field:device.local-administrators.enumeration-complete' -and
+                    $_.valueState -eq 'ObservedValue' -and $_.value -eq $true
+                })
+                # A complete empty group has no principal subject to invent.
+                # Require explicit count/completion evidence; retained principal
+                # fields still fail the exact field-set comparison below.
+                if ($emptyCount.Count -eq 1 -and $completeEnumeration.Count -eq 1) {
+                    $expectedFieldIds=@($expectedFieldIds | Where-Object { $_ -notlike 'field:principal.*' })
+                }
+            }
             if (@(Compare-Object -ReferenceObject $expectedFieldIds `
                     -DifferenceObject $coveredFieldIds).Count -gt 0) {
                 return 'CONTRACT.COVERAGE_INCONSISTENT'
