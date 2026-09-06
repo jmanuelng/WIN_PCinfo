@@ -36,6 +36,12 @@ and UTF-16 literals were read from PE sections using their raw-file mappings.
   0E7D34 bounds the enum to 0–1 and indexes VA 1801DC5B8; enum 0 points to
   `HTTP` at VA 1801F7348, enum 1 to `HTTPS` at VA 1801E7CE8. Settings BB8/BB9
   (address/transport) are identity keys, not ordinary registry values.
+* The aligned normal DWORD branch 03EA6D goes to 03EAE4; 03EB85–03EBC6 compares
+  the value with unsigned min/max words at record +1C/+20 before returning it
+  at 03EDFC–03EE0B. Direct reads of those words establish certificate and enabled
+  ranges 0–1, and Port 1–65535. GetBool's later nonzero conversion must not be
+  used to accept out-of-range registry integers. No missing-value default was
+  traced or imported into the product.
 
 These traces establish explicit normal local configuration storage. They do
 not establish defaults on missing values, full effective listener enumeration,
@@ -49,9 +55,18 @@ defines the configuration resource, not a request-free collection mechanism.
 ## Released bounded projection
 
 The worker reads the exact Registry64 HKLM service DWORD `auth_certificate`.
-Explicit zero is false; explicit nonzero is true, matching the traced GetBool.
+Explicit zero is false; explicit one is true, matching the traced integer bounds
+before GetBool. Other integers are Malformed rather than coerced to true.
 Missing, denied or wrongly typed values yield unknown coverage, never defaults.
 It never reads client authentication, certificate mappings, thumbprints or secrets.
+The value read uses the inbox Advapi32
+[RegGetValueW API](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-reggetvaluew)
+with REG_DWORD-only, Registry64 and zero-on-failure flags (`0x20010010`) and a
+fixed four-byte buffer. Unsupported types and oversized data are rejected by
+the bounded operation; the product never retries with a larger buffer. This
+avoids fetching a wrongly typed blob before checking its kind, including a
+type/read race. The C# declaration compiles with the existing worker; controlled
+tests replace only this native-call expression and verify its actual arguments.
 
 Listener collection checks SubKeyCount before enumeration and rechecks the
 returned count, refusing more than 32 direct records. Only selector suffixes

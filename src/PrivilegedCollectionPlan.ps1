@@ -514,6 +514,9 @@ public static class WinPCInfoEffectivePolicyNativeSource
     private static extern int LsaFreeMemory(IntPtr buffer);
     [DllImport("Advapi32.dll")]
     private static extern int LsaClose(IntPtr handle);
+    [DllImport("Advapi32.dll", EntryPoint = "RegGetValueW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int RegGetValue(IntPtr key, string subKey, string name,
+        uint flags, out uint type, out int data, ref uint size);
     [DllImport("Wscapi.dll")]
     private static extern int WscGetSecurityProviderHealth(
         uint providers, out WSC_SECURITY_PROVIDER_HEALTH health);
@@ -1354,6 +1357,20 @@ function Get-PlatformFailureState {
     Get-WorkerAccessState $Failure
 }
 
+function Read-WinrmConfigurationDword {
+    param([string]$Path,[string]$Name)
+    # Fixed four-byte buffer, REG_DWORD only, Registry64, zero on failure.
+    # Type filtering and bounded copying are one OS operation, not a type/read race.
+    [uint32]$type=0;[int]$value=0;[uint32]$size=4
+    $status=[WinPCInfoEffectivePolicyNativeSource]::RegGetValue([IntPtr]::new(-2147483646),$Path,$Name,0x20010010,[ref]$type,[ref]$value,[ref]$size)
+    if($status -eq 2){return $null}
+    if($status -eq 5){throw [UnauthorizedAccessException]::new()}
+    if($status -in @(234,1630)){throw [IO.InvalidDataException]::new()}
+    if($status -ne 0){throw [ComponentModel.Win32Exception]::new($status)}
+    if($type -ne 4 -or $size -ne 4){throw [IO.InvalidDataException]::new()}
+    $value
+}
+
 function Read-CiToolJson {
     # The child inherits the owned worker Job. Only the fixed inbox executable
     # and listing switches run; output is capped before JSON parsing. Neither
@@ -2026,16 +2043,13 @@ function Get-LiveEffectivePolicyResult {
     }
     # Installed service code maps ConfigSetting 0x7DD to this Registry64 DWORD.
     # Read the explicit normal service configuration, never client auth or mappings.
-    $state='Complete';$base=$null;$key=$null
+    $state='Complete'
     try {
-        $base=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,[Microsoft.Win32.RegistryView]::Registry64)
-        $key=$base.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Service',$false)
-        $raw=if($null -eq $key){$null}else{$key.GetValue('auth_certificate',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}
+        $raw=Read-WinrmConfigurationDword 'SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Service' 'auth_certificate'
         if($null -eq $raw){$state='Unavailable'}
-        elseif($key.GetValueKind('auth_certificate') -ne [Microsoft.Win32.RegistryValueKind]::DWord -or $raw -isnot [int]){$state='Malformed'}
+        elseif($raw -notin @(0,1)){$state='Malformed'}
         else{$result.winrmState.certificateAuthentication=($raw -ne 0)}
     } catch {$state=Get-PlatformFailureState $_}
-    finally {if($null -ne $key){$key.Dispose()};if($null -ne $base){$base.Dispose()}}
     $winrmAuthStates.Add($state)
     $authStates=@($winrmAuthStates|Select-Object -Unique)
     $authState=if($authStates.Count -eq 1){[string]$authStates[0]}else{'Partial'}
@@ -2059,18 +2073,12 @@ function Get-LiveEffectivePolicyResult {
                     foreach($name in $names){
                         $selector=[regex]::Match($name,'\A[^\\/\x00-\x1f+]{1,240}\+(HTTP|HTTPS)\z',[Text.RegularExpressions.RegexOptions]::CultureInvariant)
                         if(-not $selector.Success){throw [IO.InvalidDataException]::new()}
-                        $child=$null
-                        try {
-                            $child=$key.OpenSubKey($name,$false)
-                            if($null -eq $child){throw [IO.EndOfStreamException]::new()}
-                            $port=$child.GetValue('Port',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-                            $enabled=$child.GetValue('enabled',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-                            if($null -eq $port -or $null -eq $enabled){throw [IO.EndOfStreamException]::new()}
-                            if($child.GetValueKind('Port') -ne [Microsoft.Win32.RegistryValueKind]::DWord -or
-                                $child.GetValueKind('enabled') -ne [Microsoft.Win32.RegistryValueKind]::DWord -or
-                                $port -isnot [int] -or $port -lt 1 -or $port -gt 65535 -or $enabled -isnot [int]){throw [IO.InvalidDataException]::new()}
-                            $ports.Add($port);$enabledStates.Add(($enabled -ne 0));$transports.Add($selector.Groups[1].Value)
-                        } finally {if($null -ne $child){$child.Dispose()}}
+                        $path='SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Listener\'+$name
+                        $port=Read-WinrmConfigurationDword $path 'Port'
+                        $enabled=Read-WinrmConfigurationDword $path 'enabled'
+                        if($null -eq $port -or $null -eq $enabled){throw [IO.EndOfStreamException]::new()}
+                        if($port -lt 1 -or $port -gt 65535 -or $enabled -notin @(0,1)){throw [IO.InvalidDataException]::new()}
+                        $ports.Add($port);$enabledStates.Add(($enabled -ne 0));$transports.Add($selector.Groups[1].Value)
                     }
                     $distinctPorts=@($ports|Select-Object -Unique);$distinctTransports=@($transports|Select-Object -Unique)
                     $distinctEnabled=@($enabledStates|Select-Object -Unique)
