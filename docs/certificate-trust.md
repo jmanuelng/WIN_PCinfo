@@ -17,6 +17,8 @@ The collector keeps purpose and source together:
 
 Each selected store is opened with Windows `ReadOnly` and `OpenExistingOnly`. Candidate selection uses only the release-owned stores and EKU object identifiers above, with at most eight candidates per purpose. Store location and store name remain attached to each Restricted candidate so the source boundary can be audited later.
 
+The worker examines at most eight matching candidates per purpose, including malformed matches. A ninth match stops further metadata projection and chain building for that purpose and reports `Constrained` with `CERTIFICATE.CANDIDATE_LIMIT_EXCEEDED`. The retained subset is not a complete inventory. A well-formed certificate without an approved EKU does not match a purpose and is omitted. Windows supplies a store-local certificate snapshot for selection; that snapshot never enters evidence and its certificate objects are disposed even when selection stops early. The existing worker deadline and output limit still apply.
+
 ## Why the states are separate
 
 For each admitted candidate, WIN-PCInfo records distinct Restricted fields:
@@ -42,6 +44,8 @@ WIN-PCInfo checks only `HasPrivateKey`, a presence flag. It never requests a pri
 Chain evaluation is deliberately offline. Intermediate-certificate downloads are disabled and revocation mode is `NoCheck`; therefore the result makes no claim about current online revocation status. Store access and chain building run in a coordinator-owned Job Object worker. The 30-second operation limit covers those potentially blocking Windows APIs, and the coordinator must prove the entire worker tree absent before accepting its output. The application source comments explain these boundaries beside the security-sensitive Windows APIs.
 
 If the current process cannot be verified as the Assessment User, all six purpose scopes fail safely before a store is opened. An alternate administrator is never silently treated as that user.
+
+Admission also refuses observations attributed to an unverified user context, successful candidates attached to denied or unexamined scopes, reversed validity intervals, and trusted or untrusted conclusions for an incomplete or unevaluated chain. Assessment observations neither configure signing trust nor admit a Package Recipient. Those separate setup workflows retain their own authority and validation requirements.
 
 ## Reproduce the synthetic validation
 

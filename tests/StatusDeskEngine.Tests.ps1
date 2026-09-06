@@ -9,6 +9,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $IdentitySourceScenario = '',
     [string] $PolicySourceScenario = '',
     [string] $NetworkSourceScenario = '',
+    [string] $CertificateSourceScenario = '',
     [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
@@ -147,6 +148,10 @@ if ($NetworkSourceScenario) {
     . (Join-Path $PSScriptRoot 'NetworkSourceAdapters.ps1')
     $moduleText=Add-ControlledNetworkSources -ModuleText $moduleText -Scenario $NetworkSourceScenario
 }
+if ($CertificateSourceScenario) {
+    . (Join-Path $PSScriptRoot 'CertificateSourceAdapters.ps1')
+    $moduleText=Add-ControlledCertificateSources -ModuleText $moduleText -Scenario $CertificateSourceScenario
+}
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
 $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
@@ -265,6 +270,7 @@ try {
     $preparation = $session.Transport.State.Preparation | ConvertFrom-Json
     Assert-Equal $true $preparation.readyForApproval 'synthetic controlled run has ready local protection'
     Assert-Equal 0 @($preparation.plan.network.plannedRequests).Count 'Local Only freezes no requests'
+    if($CertificateSourceScenario){Assert-Equal $false $session.Transport.State.ContainsKey('CertificateSourceExecuted') 'preparation never examines certificate stores'}
     if ($NetworkSourceScenario) {
         Assert-Equal $false $session.Transport.State.ContainsKey('NetworkSourceExecuted') 'preparation executes no topology source before approval'
         Assert-Equal $false $session.Transport.State.ContainsKey('NetworkRequestAttempted') 'preparation invokes no network request adapter'
@@ -346,6 +352,10 @@ try {
         Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
     }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
+    if ($CertificateSourceScenario) {
+        Assert-Equal ($CertificateSourceScenario -ne 'AlternateAdministrator') $session.Transport.State.ContainsKey('CertificateSourceExecuted') 'certificate stores require the Assessment User context'
+        Assert-CertificateSourceReport -Record $record -Html $html -Scenario $CertificateSourceScenario
+    }
     if ($NetworkSourceScenario) {
         Assert-Equal $true $session.Transport.State.NetworkSourceExecuted 'actual generated local reducer executed'
         Assert-Equal $false $session.Transport.State.ContainsKey('NetworkRequestAttempted') 'Local Only never enters the nested network request adapter'

@@ -1554,13 +1554,15 @@ $identityGuidance
             $validityOutcome=[string]@($Record.findings|Where-Object findingId -like "finding:certificate-validity-$scopeSuffix`:*")[0].outcome
             $trustOutcome=[string]@($Record.findings|Where-Object findingId -like "finding:certificate-trust-$scopeSuffix`:*")[0].outcome
             $keyOutcome=[string]@($Record.findings|Where-Object findingId -like "finding:certificate-key-protection-$scopeSuffix`:*")[0].outcome
+            $storeContext=if(@($purpose.stores).Count){' Selected stores: '+(@($purpose.stores)-join ', ')+'.'}else{' No attributable store or service target is selected.'}
+            $coverageReason=if($purposeCoverage.state -ne 'Complete'){' Coverage reason: '+[string]$purposeCoverage.reasonCode+'.'}else{''}
             '<li><strong>'+[Net.WebUtility]::HtmlEncode([string]$purpose.purposeId)+':</strong> '+
                 [Net.WebUtility]::HtmlEncode([string]$purposeCoverage.state)+'. Presence: '+
                 [Net.WebUtility]::HtmlEncode($presenceOutcome)+'. Validity: '+
                 [Net.WebUtility]::HtmlEncode($validityOutcome)+'. Chain and trust: '+
                 [Net.WebUtility]::HtmlEncode($trustOutcome)+'. Key protection: '+
                 [Net.WebUtility]::HtmlEncode($keyOutcome)+'. '+
-                [Net.WebUtility]::HtmlEncode([string]$purpose.limitation)+'</li>'
+                [Net.WebUtility]::HtmlEncode([string]$purpose.limitation+$storeContext+$coverageReason)+'</li>'
         })
         $certificateSubjects=@($Record.subjects|Where-Object kind -eq Certificate)
         $certificateRows=@($certificateSubjects|ForEach-Object {
@@ -1575,6 +1577,7 @@ $identityGuidance
 <h3>Purpose coverage and limitations</h3><ul>$($purposeRows -join '')</ul>
 <details><summary>Restricted certificate metadata</summary><ul>$($certificateRows -join '')</ul></details>
 <p>An inaccessible store, incomplete chain, expired certificate, or absent purpose remains an explicit coverage or advisory state. Offline evaluation disables certificate downloads and makes no revocation or remote-service claim.</p>
+<p>Assessment certificate observations do not configure signing trust or Package Recipient setup. A locally trusted candidate does not approve this application or establish package-decryption access. Constrained coverage means the purpose exceeded its candidate limit; additional matching certificates were not evaluated.</p>
 <p>WIN-PCInfo opens only release-selected stores as read-only. It does not request a private-key handle, export a certificate or PFX, collect a password or recovery value, import or delete a certificate, enroll or renew, or change any trust configuration. Certificate values and fingerprints remain Restricted inside this protected package.</p>
 "@
     }else{''}
