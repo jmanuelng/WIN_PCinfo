@@ -2986,7 +2986,9 @@ function Invoke-DeviceReadinessSlice {
                     $bitLockerProtectorTypeCount=@($effectivePolicyCollector.payload.bitLockerProtectors).Count
                     $wdacPolicyCount=@($effectivePolicyCollector.payload.wdacPolicies).Count
                     $appLockerGpCollectionCount=@($effectivePolicyCollector.payload.appLockerGpCollections).Count
-                    $appLockerCspCollectionCount=@($effectivePolicyCollector.payload.appLockerCspCollections).Count
+                    $appLockerCspCollectionCount=@($record.observations|Where-Object {
+                        $_.fieldId -eq 'field:policy.applocker.csp.rule-collection' -and $_.valueState -eq 'ObservedValue'
+                    }).Count
                     $mdmPolicyCspFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.mdm-policy-csp-coverage/1.0.0')[0].outcome
                     $policyCspGpoConflictFinding=[string]@($record.findings|Where-Object ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome
                     $policyDiscoveryTaskCount=@($record.recommendations|Where-Object {

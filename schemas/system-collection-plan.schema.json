@@ -56,7 +56,7 @@
     "operation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["operationId", "collectorId", "collectorVersion", "requiredExecutionContext", "administratorSufficient", "privilege", "networkBehavior", "executable", "dependencies", "maximumAttempts", "deadlineMilliseconds", "maximumResultUtf8Bytes", "cleanup", "source", "supplementalSources", "authorityProof", "parameters", "policyResultCatalogs", "intendedScopeIds", "privateResultScopeIds", "subjectIds", "result"],
+      "required": ["operationId", "collectorId", "collectorVersion", "requiredExecutionContext", "administratorSufficient", "privilege", "networkBehavior", "executable", "dependencies", "maximumAttempts", "deadlineMilliseconds", "maximumResultUtf8Bytes", "cleanup", "source", "supplementalSources", "authorityProof", "parameters", "appLockerCspCatalog", "policyResultCatalogs", "intendedScopeIds", "privateResultScopeIds", "subjectIds", "result"],
       "properties": {
         "operationId": { "const": "op:windows.mdm-bridge.device-manageability" },
         "collectorId": { "const": "collector:windows.mdm-bridge.device-manageability" },
@@ -135,6 +135,7 @@
             }
           }
         },
+        "appLockerCspCatalog": { "const": {"scopeId":"scope:policy.applocker.csp-channel","sourceId":"source:windows.applocker.csp-policy","requiredExecutionContext":"LocalSystem","namespace":"Root\\cimv2\\mdm\\dmmap","properties":["EnforcementMode"],"maximumInstancesPerClass":8,"maximumCollections":5,"classes":["MDM_AppLocker_ApplicationLaunchRestrictions01_EXE03","MDM_AppLocker_DLL03","MDM_AppLocker_MSI03","MDM_AppLocker_Script03","MDM_AppLocker_ApplicationLaunchRestrictions01_StoreApps03"],"limitation":"MetadataOnlyMissingModeIsUnavailableNoPolicyXmlNoCrossGroupingWinnerNoGpInference"} },
         "policyResultCatalogs": {
           "type": "array",
           "minItems": 2,
@@ -151,7 +152,8 @@
             { "const": "scope:policy.mdm.security-option.lm-compatibility-level" },
             { "const": "scope:policy.mdm.update.defer-feature-updates" },
             { "const": "scope:policy.mdm.update.defer-quality-updates" },
-            { "const": "scope:policy.mdm.update.disable-dual-scan" }
+            { "const": "scope:policy.mdm.update.disable-dual-scan" },
+            { "const": "scope:policy.applocker.csp-channel" }
           ],
           "items": false
         },

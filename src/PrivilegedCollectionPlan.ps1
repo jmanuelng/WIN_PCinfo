@@ -1200,12 +1200,12 @@ function Convert-EffectivePolicyRegistryBooleanValue {
 }
 
 function Get-SecurityCommand {
-    param([ValidateSet('Get-MpPreference','Get-MpComputerStatus','Get-NetFirewallProfile')][string]$Name)
+    param([ValidateSet('Get-MpPreference','Get-MpComputerStatus','Get-NetFirewallProfile','Get-AppLockerPolicy')][string]$Name)
     # Windows ships these operations as CDXML functions. Import only the fixed
     # inbox manifest; ambient functions and PSModulePath cannot donate a command.
     # Force native CDXML loading instead of an implicit Windows PowerShell 5.1
     # compatibility process when the inbox manifest lacks a Core edition marker.
-    $moduleName=if($Name -eq 'Get-NetFirewallProfile'){'NetSecurity'}else{'Defender'}
+    $moduleName=switch($Name){Get-NetFirewallProfile {'NetSecurity'} Get-AppLockerPolicy {'AppLocker'} default {'Defender'}}
     $path=[IO.Path]::Combine([Environment]::SystemDirectory,"WindowsPowerShell\v1.0\Modules\$moduleName\$moduleName.psd1")
     try {
         return (Microsoft.PowerShell.Core\Import-Module -Name $path -PassThru -Scope Local -SkipEditionCheck -ErrorAction Stop).ExportedCommands[$Name]
@@ -1346,6 +1346,60 @@ function Read-SecurityResult {
     if($items.Count -eq 0){throw [IO.EndOfStreamException]::new()}
     if($items.Count -ne 1){throw [IO.InvalidDataException]::new()}
     $items[0]
+}
+
+function Get-PlatformFailureState {
+    param($Failure)
+    if($Failure.Exception -is [IO.InvalidDataException] -or $Failure.Exception -is [Text.DecoderFallbackException]){'Malformed'}
+    elseif($Failure.Exception -is [IO.EndOfStreamException]){'Unavailable'}
+    elseif($Failure.Exception -is [OperationCanceledException]){'TimedOut'}
+    else{Get-WorkerAccessState $Failure}
+}
+
+function Read-CiToolJson {
+    # The child inherits the owned worker Job. Only the fixed inbox executable
+    # and listing switches run; output is capped before JSON parsing. Neither
+    # policy bodies nor a caller-selected command can enter this operation.
+    $path=[IO.Path]::Combine([Environment]::SystemDirectory,'CiTool.exe')
+    if(-not [IO.File]::Exists($path)){throw [PlatformNotSupportedException]::new()}
+    if(([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw [IO.InvalidDataException]::new()}
+    $start=[Diagnostics.ProcessStartInfo]::new($path)
+    $start.UseShellExecute=$false;$start.CreateNoWindow=$true
+    $start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+    $start.ArgumentList.Add('-lp');$start.ArgumentList.Add('-json')
+    $child=$null;$deadline=[Threading.CancellationTokenSource]::new(2000)
+    $buffer=[byte[]]::new(65537);$length=0
+    try {
+        $child=[Diagnostics.Process]::Start($start)
+        while($length -lt $buffer.Length){
+            $count=$child.StandardOutput.BaseStream.ReadAsync($buffer,$length,$buffer.Length-$length,$deadline.Token).GetAwaiter().GetResult()
+            if($count -eq 0){break};$length+=$count
+        }
+        if($length -gt 65536){throw [IO.InvalidDataException]::new()}
+        $null=$child.WaitForExitAsync($deadline.Token).GetAwaiter().GetResult()
+        if($child.ExitCode -in @(5,-2147024891)){throw [UnauthorizedAccessException]::new()}
+        if($child.ExitCode -ne 0){throw [InvalidOperationException]::new()}
+        if($length -eq 0){throw [IO.EndOfStreamException]::new()}
+        [Text.UTF8Encoding]::new($false,$true).GetString($buffer,0,$length).TrimStart([char]0xfeff)
+    } finally {
+        if($null -ne $child){
+            try {if(-not $child.HasExited){$child.Kill($true);if(-not $child.WaitForExit(1000)){throw 'CiTool termination unverified.'}}}finally{$child.Dispose()}
+        }
+        [Array]::Clear($buffer);$deadline.Dispose()
+    }
+}
+
+function Read-BitLockerStatus {
+    param($Volume,[ValidateSet('GetConversionStatus','GetProtectionStatus','GetEncryptionMethod','GetLockStatus','GetKeyProtectors')][string]$Method,$Arguments=@{})
+    $item=Invoke-CimMethod -InputObject $Volume -MethodName $Method -Arguments $Arguments -ErrorAction Stop
+    $code=Convert-EffectivePolicyRegistryUnsignedIntegerValue $item.ReturnValue
+    if($null -eq $code){throw [IO.InvalidDataException]::new()}
+    # The provider documents FVE_E_NOT_ACTIVATED as no enabled BitLocker
+    # protector. This is a successful empty inventory for this method only.
+    if($Method -eq 'GetKeyProtectors' -and $code -eq 2150694920){return [pscustomobject]@{ReturnValue=[uint32]0;VolumeKeyProtectorID=@()}}
+    if($code -eq 2147942405){throw [UnauthorizedAccessException]::new()}
+    if($code -ne 0){throw [InvalidOperationException]::new()}
+    $item
 }
 
 function Get-EffectivePolicyUserContextState {
@@ -2086,6 +2140,131 @@ function Get-LiveEffectivePolicyResult {
             Set-EffectivePolicyScopeState $result @(40) $state "POLICY.SMB1_FEATURE_$($state.ToUpperInvariant())"
         }
     }
+    # Platform protection sources: only declared state fields cross the worker.
+    # Get-BitLockerVolume itself retrieves numerical recovery passwords. Read
+    # only status methods and type-filtered protector counts from the underlying
+    # inbox provider. Protector IDs are discarded, never retained or hashed.
+    try {
+        $drive=[IO.Path]::GetPathRoot([Environment]::SystemDirectory).TrimEnd('\')
+        if($drive -cnotmatch '^[A-Z]:$'){throw [IO.InvalidDataException]::new()}
+        $volumes=@(Get-CimInstance -Namespace 'root/CIMV2/Security/MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -Filter "DriveLetter='$drive'" -Property DeviceID -ErrorAction Stop)
+        if($volumes.Count -eq 0){throw [IO.EndOfStreamException]::new()}
+        if($volumes.Count -ne 1){throw [IO.InvalidDataException]::new()}
+        $volume=$volumes[0];$state='Complete'
+        foreach($definition in @(
+            @('ConversionStatus',@('FullyDecrypted','FullyEncrypted','EncryptionInProgress','DecryptionInProgress','EncryptionPaused','DecryptionPaused')),
+            @('ProtectionStatus',@('Off','On','Unknown')),
+            @('EncryptionMethod',@('None','Aes128Diffuser','Aes256Diffuser','Aes128','Aes256','HardwareEncryption','XtsAes128','XtsAes256')),
+            @('LockStatus',@('Unlocked','Locked'))
+        )){
+            $property=[string]$definition[0]
+            try {
+                $item=Read-BitLockerStatus $volume ('Get'+$property)
+                $raw=$item.PSObject.Properties[$property]
+                if($null -eq $raw -or $null -eq $raw.Value){$state='Partial';continue}
+                $value=Convert-EffectivePolicyRegistryUnsignedIntegerValue $raw.Value ($definition[1].Count-1)
+                if($null -eq $value){throw [IO.InvalidDataException]::new()}
+                $result.bitLockerSystemVolume[$property]=$definition[1][[int]$value]
+            } catch {$state='Partial'}
+        }
+        Set-EffectivePolicyScopeState $result @(41) $state 'POLICY.BITLOCKER_PROPERTY_UNAVAILABLE'
+        try {
+            $types=@('Tpm','ExternalKey','RecoveryPassword','TpmPin','TpmStartupKey','TpmPinStartupKey','PublicKey','Passphrase','TpmCertificate','Sid')
+            $state='Complete'
+            for($index=0;$index -lt $types.Count;$index++){
+                $item=Read-BitLockerStatus $volume GetKeyProtectors @{KeyProtectorType=[uint32]($index+1)}
+                $property=$item.PSObject.Properties['VolumeKeyProtectorID']
+                if($null -eq $property){throw [IO.InvalidDataException]::new()}
+                $count=@(if($null -ne $property.Value){$property.Value}).Count
+                if($count -gt 32 -or ($count -gt 0 -and $result.bitLockerProtectors.Count -ge 8)){$state='Partial';continue}
+                if($count){$result.bitLockerProtectors+=,@{protectorType=$types[$index];count=$count}}
+            }
+            Set-EffectivePolicyScopeState $result @(42) $state 'POLICY.BITLOCKER_PROTECTOR_BOUND_EXCEEDED'
+        } catch {
+            $state=Get-PlatformFailureState $_;$result.bitLockerProtectors=@()
+            Set-EffectivePolicyScopeState $result @(42) $state "POLICY.BITLOCKER_PROTECTORS_$($state.ToUpperInvariant())"
+        }
+    } catch {
+        $state=Get-PlatformFailureState $_
+        Set-EffectivePolicyScopeState $result @(41,42) $state "POLICY.BITLOCKER_$($state.ToUpperInvariant())"
+    }
+    try {
+        $items=@(Get-CimInstance -Namespace 'root/Microsoft/Windows/DeviceGuard' -ClassName Win32_DeviceGuard -Property @('VirtualizationBasedSecurityStatus','SecurityServicesConfigured','SecurityServicesRunning','UsermodeCodeIntegrityPolicyEnforcementStatus') -ErrorAction Stop)
+        if($items.Count -eq 0){throw [IO.EndOfStreamException]::new()}
+        if($items.Count -ne 1){throw [IO.InvalidDataException]::new()}
+        $item=$items[0];$state='Complete'
+        foreach($definition in @(
+            @('VirtualizationBasedSecurityStatus','virtualizationBasedSecurityStatus',@('Disabled','EnabledNotRunning','EnabledAndRunning')),
+            @('UsermodeCodeIntegrityPolicyEnforcementStatus','userModeCodeIntegrityState',@('Off','Audit','Enforced'))
+        )){
+            $property=$item.PSObject.Properties[$definition[0]]
+            if($null -eq $property -or $null -eq $property.Value){$state='Partial';continue}
+            $value=Convert-EffectivePolicyRegistryUnsignedIntegerValue $property.Value 2
+            if($null -eq $value){throw [IO.InvalidDataException]::new()}
+            $result.deviceGuard[$definition[1]]=$definition[2][[int]$value]
+        }
+        $configured=$item.PSObject.Properties['SecurityServicesConfigured'];$running=$item.PSObject.Properties['SecurityServicesRunning']
+        if($null -eq $configured -or $null -eq $running -or $null -eq $configured.Value -or $null -eq $running.Value){$state='Partial'}else{
+            foreach($values in @(@{items=@($configured.Value)},@{items=@($running.Value)})){
+                if($values.items.Count -gt 8){throw [IO.InvalidDataException]::new()}
+                foreach($value in $values.items){if($null -eq (Convert-EffectivePolicyRegistryUnsignedIntegerValue $value 7)){throw [IO.InvalidDataException]::new()}}
+            }
+            foreach($definition in @(@(1,'credentialGuardState'),@(2,'memoryIntegrityState'))){
+                $result.deviceGuard[$definition[1]]=if($definition[0] -in $running.Value){'Running'}elseif($definition[0] -in $configured.Value){'Configured'}else{'NotConfigured'}
+            }
+        }
+        Set-EffectivePolicyScopeState $result @(43) $state 'POLICY.VBS_PROPERTY_UNAVAILABLE'
+    } catch {
+        $state=Get-PlatformFailureState $_;$result.deviceGuard=(New-EffectivePolicyBaseResult Failed).deviceGuard
+        Set-EffectivePolicyScopeState $result @(43) $state "POLICY.VBS_$($state.ToUpperInvariant())"
+    }
+    try {
+        $command=Get-SecurityCommand Get-AppLockerPolicy
+        if($null -eq $command){throw [PlatformNotSupportedException]::new()}
+        $items=@(& $command -Effective -ErrorAction Stop)
+        if($items.Count -eq 0){throw [IO.EndOfStreamException]::new()}
+        if($items.Count -ne 1){throw [IO.InvalidDataException]::new()}
+        $property=$items[0].PSObject.Properties['RuleCollections']
+        if($null -eq $property){throw [IO.InvalidDataException]::new()}
+        $collections=@(if($null -ne $property.Value){$property.Value})
+        $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach($collection in $collections|Select-Object -First 5){
+            $type=[string]$collection.CollectionType;$mode=[string]$collection.EnforcementMode
+            if($type -cnotin @('Exe','Dll','Msi','Script','Appx') -or $mode -cnotin @('NotConfigured','Enabled','AuditOnly') -or -not $seen.Add($type)){throw [IO.InvalidDataException]::new()}
+            $result.appLockerGpCollections+=,@{ruleCollection=$type;enforcementMode=$mode}
+        }
+        Set-EffectivePolicyScopeState $result @(45) $(if($collections.Count -gt 5){'Partial'}else{'Complete'}) 'POLICY.APPLOCKER_GP_BOUND_EXCEEDED'
+    } catch {
+        $state=Get-PlatformFailureState $_;$result.appLockerGpCollections=@()
+        Set-EffectivePolicyScopeState $result @(45) $state "POLICY.APPLOCKER_GP_$($state.ToUpperInvariant())"
+    }
+    try {
+        if([Environment]::OSVersion.Version.Build -lt 22621){throw [PlatformNotSupportedException]::new()}
+        $json=Read-CiToolJson
+        if([Text.Encoding]::UTF8.GetByteCount($json) -gt 65536){throw [IO.InvalidDataException]::new()}
+        try {$inventory=ConvertFrom-Json -InputObject $json -Depth 8 -ErrorAction Stop}catch{throw [IO.InvalidDataException]::new()}
+        $property=$inventory.PSObject.Properties['Policies']
+        if($null -eq $property -or $null -eq $property.Value -or $property.Value -isnot [Array]){throw [IO.InvalidDataException]::new()}
+        $items=@($property.Value)
+        foreach($item in $items|Select-Object -First 8){
+            $values=@{}
+            foreach($name in @('IsEnforced','IsSystemPolicy','IsSignedPolicy')){
+                $raw=$item.PSObject.Properties[$name]
+                if($null -eq $raw){throw [IO.InvalidDataException]::new()}
+                $value=$raw.Value
+                if($value -is [string] -and $value -cin @('True','False','true','false')){$value=$value -cin @('True','true')}
+                if($value -isnot [bool]){throw [IO.InvalidDataException]::new()}
+                $values[$name]=$value
+            }
+            $result.wdacPolicies+=,@{deploymentChannel='Unknown';enforcementState=if($values.IsEnforced){'Active'}else{'Inactive'};platformPolicy=$values.IsSystemPolicy;signedPolicy=$values.IsSignedPolicy}
+        }
+        $state=if($items.Count){'Partial'}else{'Complete'}
+        $reason=if($items.Count -gt 8){'POLICY.WDAC_BOUND_EXCEEDED'}else{'POLICY.WDAC_DEPLOYMENT_CHANNEL_UNKNOWN'}
+        Set-EffectivePolicyScopeState $result @(44) $state $reason
+    } catch {
+        $state=Get-PlatformFailureState $_;$result.wdacPolicies=@()
+        Set-EffectivePolicyScopeState $result @(44) $state "POLICY.WDAC_$($state.ToUpperInvariant())"
+    }
     $groups=$result.policySettings|Group-Object target,settingId
     $result.appliedOrderConflict=@($groups|Where-Object {@($_.Group.objectId|Select-Object -Unique).Count -gt 1}).Count -gt 0
     Complete-EffectivePolicyLayerStates $result
@@ -2559,10 +2738,17 @@ function ConvertTo-PrivilegedCollectionInlineCommand {
         $compressedBase64 = [System.Convert]::ToBase64String($compressedStream.ToArray())
     }
     finally { $compressedStream.Dispose() }
-    # ArgumentList passes this fixed command directly to pwsh; no command shell
-    # interprets it. Avoiding a second UTF-16/base64 expansion preserves the
-    # in-memory boundary and remains well below Windows' command-line ceiling.
-    $inlineCommand="`$b=[Convert]::FromBase64String('$compressedBase64');`$m=[IO.MemoryStream]::new([byte[]]`$b);`$g=[IO.Compression.BrotliStream]::new(`$m,[IO.Compression.CompressionMode]::Decompress);`$r=[IO.StreamReader]::new(`$g,[Text.UTF8Encoding]::new(`$false,`$true));try{&([scriptblock]::Create(`$r.ReadToEnd()))}finally{`$r.Dispose();`$g.Dispose();`$m.Dispose()}"
+    # Windows launch limits count UTF-16 characters. Pack each pair of standard
+    # base64 symbols into a quote-free BMP character (U+4000..U+5080), preserving
+    # exact Brotli bytes without files, a new channel, or a larger launch bound.
+    # No shell expands these characters. Both launch paths use Unicode Windows
+    # APIs; the decoder accepts only this fixed alphabet before normal base64.
+    $alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+    $packed=[Text.StringBuilder]::new($compressedBase64.Length/2)
+    for($index=0;$index -lt $compressedBase64.Length;$index+=2){
+        [void]$packed.Append([char](16384+65*$alphabet.IndexOf($compressedBase64[$index])+$alphabet.IndexOf($compressedBase64[$index+1])))
+    }
+    $inlineCommand="`$a='$alphabet';`$s=[Text.StringBuilder]::new();foreach(`$c in '$packed'.ToCharArray()){`$n=[int]`$c-16384;if(`$n -lt 0 -or `$n -gt 4224){throw 'Invalid launch representation.'};[void]`$s.Append(`$a[[int][Math]::Floor(`$n/65)]).Append(`$a[`$n%65])};`$b=[Convert]::FromBase64String(`$s.ToString());`$m=[IO.MemoryStream]::new([byte[]]`$b);`$g=[IO.Compression.BrotliStream]::new(`$m,[IO.Compression.CompressionMode]::Decompress);`$r=[IO.StreamReader]::new(`$g,[Text.UTF8Encoding]::new(`$false,`$true));try{&([scriptblock]::Create(`$r.ReadToEnd()))}finally{`$r.Dispose();`$g.Dispose();`$m.Dispose()}"
     if ($inlineCommand.Length -gt 32500) {
         throw 'The reviewed privilege worker exceeds the Windows launch bound.'
     }

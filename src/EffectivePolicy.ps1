@@ -21,12 +21,18 @@ function New-EffectivePolicySecurityReportSection {
         'firewall.public-profile'='Firewall: Public profile'
         'security-center.antivirus-providers'='Registered antivirus providers'
         'security-center.firewall-providers'='Registered firewall providers'
+        'vbs.runtime'='Virtualization-based security and Credential Guard'
+        'bitlocker.operating-system-volume'='BitLocker operating-system volume'
+        'bitlocker.protectors'='BitLocker protector types and counts'
+        'applocker.gp-channel'='AppLocker Group Policy channel'
+        'applocker.csp-channel'='AppLocker CSP channel'
+        'wdac.inventory'='App Control for Business (WDAC) inventory'
     }
     $observations=@{};foreach($item in $Record.observations){$observations[[string]$item.observationId]=$item}
     $provenance=@{};foreach($item in $Record.provenance){$provenance[[string]$item.provenanceId]=$item}
     $sections=foreach($key in $titles.Keys){
         $scope=@($Record.coverage|Where-Object scopeId -eq "scope:policy.$key")[0]
-        $layer=if($key -like 'smartscreen.*' -or $key -in @('defender.asr','defender.network-protection')){'Configured Policy Signals'}else{'Current Control State'}
+        $layer=if($key -like 'smartscreen.*' -or $key -like 'applocker.*' -or $key -in @('defender.asr','defender.network-protection','wdac.inventory')){'Configured Policy Signals'}else{'Current Control State'}
         $reason=if($scope.PSObject.Properties['reasonCode']){' ('+[Net.WebUtility]::HtmlEncode([string]$scope.reasonCode)+')'}else{''}
         $rows=foreach($id in $scope.observationIds){
             $observation=$observations[[string]$id];$origin=$provenance[[string]$observation.provenanceId]
@@ -49,8 +55,9 @@ function New-EffectivePolicySecurityReportSection {
         '<h3>'+[Net.WebUtility]::HtmlEncode([string]$titles[$key])+'</h3><p>'+ $layer+
             '. Coverage: '+[Net.WebUtility]::HtmlEncode([string]$scope.state)+$reason+'</p>'+$evidence
     }
-    '<section aria-label="Security control evidence"><h2>Defender and attack-surface protection</h2>'+
+    '<section aria-label="Security control evidence"><h2>Security and platform protection</h2>'+
         '<p>These are local, source-backed observations. Defender preferences and SmartScreen registry signals do not prove applied organizational policy or current enforcement. Firewall ActiveStore describes each profile, not reachability. Registration names and category health do not identify a winning antivirus product.</p>'+
+        '<p>BitLocker status describes the local OS volume; protector types and counts do not prove recovery escrow. VBS distinguishes configured services from running services. AppLocker Group Policy and CSP remain separate channels, and configured enforcement does not prove an application was blocked. CiTool reports whether a WDAC policy is active; this does not identify its audit options or deployment channel. Unknown channel and incomplete evidence require discovery with the policy owner.</p>'+
         ($sections -join '')+
         '<p>Use the versioned advisory findings and next steps in this report to plan follow-up with the device and security-policy owners. Confirm current state, intended policy, applicable Windows and Defender versions, and tenant-side assignments before considering a change. Passive mode and tamper protection are constraints to investigate, not collection failures or compliance verdicts. Missing or bounded evidence remains a gap. WIN-PCInfo does not change these controls.</p></section>'
 }
@@ -1481,6 +1488,19 @@ function Add-EffectivePolicyEvidenceRecord {
         throw 'Effective Policy evidence cannot attach results from a different SYSTEM attempt.'
     }
     $systemEnvelope=$existingSystemEnvelope
+    $hasSystemCsp=$hasPrivateSystemResults -and $null -ne $SystemResult.PrivatePolicyCspResults.PSObject.Properties['appLockerCsp']
+    if($hasSystemCsp){
+        $payload=$payload|ConvertTo-Json -Depth 12|ConvertFrom-Json -Depth 12
+        $csp=$SystemResult.PrivatePolicyCspResults.appLockerCsp
+        $payload.appLockerCspCollections=@($csp.collections)
+        $scope=@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.applocker.csp-channel')[0]
+        $scope.state=[string]$csp.state;$scope.reasonCode=[string]$csp.reasonCode
+    }elseif($observedExecutionContext -ne 'Synthetic'){
+        $payload=Copy-EffectivePolicyCollectorPayload -Payload $payload -Policy $Policy
+        $payload.appLockerCspCollections=@()
+        $scope=@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.applocker.csp-channel')[0]
+        $scope.state='Unavailable';$scope.reasonCode='POLICY.APPLOCKER_CSP_UNAVAILABLE'
+    }
 
     function Add-PolicyObservation {
         param(
@@ -1489,6 +1509,12 @@ function Add-EffectivePolicyEvidenceRecord {
             [string]$EvidenceExecutionContext='',[string]$EvidenceCollectedAt='',
             [string]$EvidenceSourceLocale='',[string]$EvidenceSourceId=''
         )
+        if($ScopeId -eq 'scope:policy.applocker.csp-channel'){
+            $EvidenceCollector=$existingSystemEnvelope
+            $EvidenceExecutionContext=[string]$existingSystemEnvelope.executionContext
+            $EvidenceCollectedAt=[string]$existingSystemEnvelope.completedAt
+            $EvidenceSourceLocale='und'
+        }
         if($null -eq $EvidenceCollector){$EvidenceCollector=$collector}
         if([string]::IsNullOrEmpty($EvidenceExecutionContext)){$EvidenceExecutionContext=$observedExecutionContext}
         if([string]::IsNullOrEmpty($EvidenceCollectedAt)){$EvidenceCollectedAt=$collectedAt}
@@ -1806,9 +1832,7 @@ function Add-EffectivePolicyEvidenceRecord {
             @{property='lockStatus';fieldId='field:policy.bitlocker.lock-status'}
         )){
             $value=$payload.bitLockerSystemVolume.([string]$field.property)
-            if($null -eq $value){
-                Add-PolicyObservation 'scope:policy.bitlocker.operating-system-volume' "bitlocker-volume-$($field.property)" ([string]$field.fieldId) 'subject:device:primary' $null $true
-            } else {
+            if($null -ne $value){
                 Add-PolicyObservation 'scope:policy.bitlocker.operating-system-volume' "bitlocker-volume-$($field.property)" ([string]$field.fieldId) 'subject:device:primary' ([string]$value)
             }
         }
@@ -1835,9 +1859,7 @@ function Add-EffectivePolicyEvidenceRecord {
             @{property='userModeCodeIntegrityState';fieldId='field:policy.user-mode-code-integrity.state'}
         )){
             $value=$payload.deviceGuard.([string]$field.property)
-            if($null -eq $value){
-                Add-PolicyObservation 'scope:policy.vbs.runtime' "vbs-$($field.property)" ([string]$field.fieldId) 'subject:device:primary' $null $true
-            } else {
+            if($null -ne $value){
                 Add-PolicyObservation 'scope:policy.vbs.runtime' "vbs-$($field.property)" ([string]$field.fieldId) 'subject:device:primary' ([string]$value)
             }
         }
@@ -1976,14 +1998,15 @@ function Add-EffectivePolicyEvidenceRecord {
     $Record.provenance=@($Record.provenance)+@($provenance)
     $Record.coverage=@($Record.coverage)+@($coverage)
     $Record.diagnostics=@($Record.diagnostics)+@($diagnostics)
-    $effectiveScopes=@($Policy.scopes.scopeId|Where-Object {$_ -notlike 'scope:policy.mdm.*'})
-    $mdmScopes=@($Policy.scopes.scopeId|Where-Object {$_ -like 'scope:policy.mdm.*'})
-    $effectiveObservations=@($observations|Where-Object fieldId -notlike 'field:policy.mdm.*')
-    $mdmObservations=@($observations|Where-Object fieldId -like 'field:policy.mdm.*')
-    $effectiveCoverage=@($coverage|Where-Object scopeId -notlike 'scope:policy.mdm.*')
-    $mdmCoverageEntries=@($coverage|Where-Object scopeId -like 'scope:policy.mdm.*')
-    $effectiveDiagnostics=@($diagnostics|Where-Object scopeId -notlike 'scope:policy.mdm.*')
-    $mdmDiagnostics=@($diagnostics|Where-Object scopeId -like 'scope:policy.mdm.*')
+    $mdmScopes=@($Policy.scopes.scopeId|Where-Object {$_ -like 'scope:policy.mdm.*' -or $_ -eq 'scope:policy.applocker.csp-channel'})
+    $effectiveScopes=@($Policy.scopes.scopeId|Where-Object {$_ -notin $mdmScopes})
+    $systemObservationIds=@(foreach($scopeId in $mdmScopes){$scopeObservationIds[$scopeId]})
+    $effectiveObservations=@($observations|Where-Object observationId -notin $systemObservationIds)
+    $mdmObservations=@($observations|Where-Object observationId -in $systemObservationIds)
+    $effectiveCoverage=@($coverage|Where-Object scopeId -notin $mdmScopes)
+    $mdmCoverageEntries=@($coverage|Where-Object scopeId -in $mdmScopes)
+    $effectiveDiagnostics=@($diagnostics|Where-Object scopeId -notin $mdmScopes)
+    $mdmDiagnostics=@($diagnostics|Where-Object scopeId -in $mdmScopes)
     # Collector envelopes are trust statements, not presentation groupings.
     # The derived policy slice may compare both sources, but it must not merge
     # their provenance into one Administrator-owned attempt.
@@ -1999,6 +2022,7 @@ function Add-EffectivePolicyEvidenceRecord {
     $existingSystemEnvelope.intendedScopeIds=@(
         @($existingSystemEnvelope.intendedScopeIds)+$mdmScopes|Select-Object -Unique
     )
+    $existingSystemEnvelope.subjectIds=@(@($existingSystemEnvelope.subjectIds)+@($mdmObservations|ForEach-Object subjectId)|Select-Object -Unique)
     $existingSystemEnvelope.observationIds=@(
         @($existingSystemEnvelope.observationIds)+@($mdmObservations|ForEach-Object observationId)|Select-Object -Unique
     )

@@ -300,6 +300,25 @@ try {
         }
     }
 
+    function Get-PolicyQueryFailureClassification {
+        param([Exception] $Exception)
+        if ($Exception -is [UnauthorizedAccessException] -or
+            ($Exception.HResult -band 0xffff) -eq 5 -or
+            ($Exception -is [Microsoft.Management.Infrastructure.CimException] -and
+                $Exception.NativeErrorCode -eq [Microsoft.Management.Infrastructure.NativeErrorCode]::AccessDenied)) {
+            return @{ State = 'Denied'; ReasonCode = 'POLICY.MDM_RESULT_QUERY_DENIED' }
+        }
+        if ($Exception -is [Microsoft.Management.Infrastructure.CimException] -and
+            $Exception.NativeErrorCode -in @(
+                [Microsoft.Management.Infrastructure.NativeErrorCode]::InvalidNamespace,
+                [Microsoft.Management.Infrastructure.NativeErrorCode]::InvalidClass,
+                [Microsoft.Management.Infrastructure.NativeErrorCode]::NotSupported
+            )) {
+            return @{ State = 'Unsupported'; ReasonCode = 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED' }
+        }
+        @{ State = 'Unavailable'; ReasonCode = 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE' }
+    }
+
     function Read-MdmPolicyCatalog {
         param($ProviderAvailable, [string] $ProviderState)
 
@@ -326,25 +345,6 @@ try {
                 )) { return $false }
             $number = [decimal] $Value
             $number -ge $Minimum -and $number -le $Maximum
-        }
-
-        function Get-PolicyQueryFailureClassification {
-            param([Exception] $Exception)
-            if ($Exception -is [UnauthorizedAccessException] -or
-                ($Exception.HResult -band 0xffff) -eq 5 -or
-                ($Exception -is [Microsoft.Management.Infrastructure.CimException] -and
-                    $Exception.NativeErrorCode -eq [Microsoft.Management.Infrastructure.NativeErrorCode]::AccessDenied)) {
-                return @{ State = 'Denied'; ReasonCode = 'POLICY.MDM_RESULT_QUERY_DENIED' }
-            }
-            if ($Exception -is [Microsoft.Management.Infrastructure.CimException] -and
-                $Exception.NativeErrorCode -in @(
-                    [Microsoft.Management.Infrastructure.NativeErrorCode]::InvalidNamespace,
-                    [Microsoft.Management.Infrastructure.NativeErrorCode]::InvalidClass,
-                    [Microsoft.Management.Infrastructure.NativeErrorCode]::NotSupported
-                )) {
-                return @{ State = 'Unsupported'; ReasonCode = 'POLICY.MDM_RESULT_CLASS_UNSUPPORTED' }
-            }
-            @{ State = 'Unavailable'; ReasonCode = 'POLICY.MDM_RESULT_QUERY_UNAVAILABLE' }
         }
 
         if ($ProviderState -ne 'Complete') {
@@ -639,6 +639,42 @@ try {
             $null
         }
     }
+    function Read-AppLockerCsp {
+        # These five inbox classes are local-system partition metadata. Never
+        # query Policy, CodeIntegrity, enterprise data protection, or rule XML.
+        if ([bool] $configuration.validationFixture) {
+            return @{state='Complete';reasonCode='';collections=@()}
+        }
+        $collections=[Collections.Generic.List[object]]::new();$states=@()
+        foreach($definition in @(
+            @('Exe','MDM_AppLocker_ApplicationLaunchRestrictions01_EXE03'),
+            @('Dll','MDM_AppLocker_DLL03'),@('Msi','MDM_AppLocker_MSI03'),
+            @('Script','MDM_AppLocker_Script03'),@('Appx','MDM_AppLocker_ApplicationLaunchRestrictions01_StoreApps03')
+        )){
+            try {
+                $items=@(Get-CimInstance -Namespace 'Root\cimv2\mdm\dmmap' -ClassName $definition[1] -Property EnforcementMode -ErrorAction Stop)
+                if($items.Count -gt 8){$states+='Partial';continue}
+                $modes=@(@(foreach($item in $items){
+                    $property=$item.PSObject.Properties['EnforcementMode']
+                    if($null -eq $property -or $null -eq $property.Value -or $property.Value -ceq ''){throw [IO.EndOfStreamException]::new()}
+                    if($property.Value -isnot [string] -or $property.Value -cnotin @('Enabled','AuditOnly','NotConfigured')){throw [IO.InvalidDataException]::new()}
+                    $property.Value
+                })|Select-Object -Unique)
+                if($modes.Count -gt 1){$states+='Partial';continue}
+                if($modes.Count){$collections.Add(@{ruleCollection=$definition[0];enforcementMode=$modes[0]})}
+                $states+='Complete'
+            } catch {
+                if($_.Exception -is [IO.InvalidDataException]){$states+='Malformed'}
+                elseif($_.Exception -is [IO.EndOfStreamException]){$states+='Unavailable'}
+                elseif($_.Exception -is [PlatformNotSupportedException]){$states+='Unsupported'}
+                else{$states+=[string](Get-PolicyQueryFailureClassification -Exception $_.Exception).State}
+            }
+        }
+        $unique=@($states|Select-Object -Unique)
+        $state=if($unique.Count -eq 1){$unique[0]}else{'Partial'}
+        @{state=$state;reasonCode=if($state -eq 'Complete'){''}else{"POLICY.APPLOCKER_CSP_$($state.ToUpperInvariant())"};collections=@($collections)}
+    }
+    $appLockerCsp=Read-AppLockerCsp
     $policyResults = Read-MdmPolicyCatalog -ProviderAvailable $providerAvailable `
         -ProviderState $providerState
     if ([string] $configuration.workerFault -eq 'DuplicatePolicyFields') {
@@ -670,9 +706,10 @@ try {
             providerAvailable = $providerAvailable
             policyCatalogId = [string] $policyResults.catalogId
             fields = @($policyResults.fields)
+            appLockerCsp = $appLockerCsp
         })
     }
-    Write-SystemFrame -Stream $pipe -Json ($result | ConvertTo-Json -Compress -Depth 5) `
+    Write-SystemFrame -Stream $pipe -Json ($result | ConvertTo-Json -Compress -Depth 7) `
         -MaximumBytes ([int] $configuration.maximumBytes) -Token ([System.Threading.CancellationToken]::None)
 }
 finally {
@@ -785,6 +822,24 @@ function Get-SystemPolicyResultFieldDefinitions {
     @($definitions)
 }
 
+function Test-SystemAppLockerCspResult {
+    param($Result)
+    try {
+        if((@($Result.PSObject.Properties.Name|Sort-Object)-join '|') -ne 'collections|reasonCode|state' -or
+            $Result.state -cnotin @('Complete','Partial','Unavailable','Unsupported','Denied','Malformed') -or
+            $Result.collections -isnot [Array] -or $Result.collections.Count -gt 5 -or
+            $Result.reasonCode -cne $(if($Result.state -ceq 'Complete'){''}else{"POLICY.APPLOCKER_CSP_$($Result.state.ToUpperInvariant())"}) -or
+            ($Result.state -cnotin @('Complete','Partial') -and $Result.collections.Count)){return $false}
+        $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach($item in $Result.collections){
+            if((@($item.PSObject.Properties.Name|Sort-Object)-join '|') -ne 'enforcementMode|ruleCollection' -or
+                $item.ruleCollection -cnotin @('Exe','Dll','Msi','Script','Appx') -or
+                $item.enforcementMode -cnotin @('NotConfigured','Enabled','AuditOnly') -or -not $seen.Add($item.ruleCollection)){return $false}
+        }
+        $true
+    } catch {$false}
+}
+
 function New-SystemPrivatePolicyCspResults {
     param(
         [Parameter(Mandatory)] $Policy,
@@ -795,6 +850,7 @@ function New-SystemPrivatePolicyCspResults {
 
     [pscustomobject][ordered]@{
         catalogId = $CatalogId
+        appLockerCsp = [pscustomobject]@{state=$State;reasonCode=$ReasonCode;collections=@()}
         fields = @(Get-SystemPolicyResultFieldDefinitions -Policy $Policy | ForEach-Object {
             [pscustomobject][ordered]@{
                 fieldId = [string] $_.fieldId
@@ -2032,7 +2088,7 @@ function Invoke-SystemCollectionPlan {
             $result.phaseId -ne $Plan.phaseId -or
             $result.executionContext -ne $(if ($validationFixture) { 'Synthetic' } else { 'LocalSystem' }) -or
             @($result.operations).Count -ne 1 -or
-            @($resultOperation.PSObject.Properties.Name).Count -ne 7 -or
+            (@($resultOperation.PSObject.Properties.Name|Sort-Object)-join '|') -ne 'appLockerCsp|fields|operationId|policyCatalogId|providerAvailable|providerReasonCode|providerState|state' -or
             $resultOperation.operationId -ne $policy.operations[0].operationId -or
             $resultOperation.state -ne 'Completed' -or
             [string]$resultOperation.providerState -notin @('Complete','Unavailable','Denied') -or
@@ -2161,9 +2217,13 @@ function Invoke-SystemCollectionPlan {
         if(-not $stateMachineAccepted){
             throw 'The SYSTEM result contains a contradictory provider, catalog, or field state.'
         }
+        if(-not (Test-SystemAppLockerCspResult $resultOperation.appLockerCsp)){
+            throw 'The SYSTEM AppLocker result failed its closed schema.'
+        }
         $privatePolicyCspResults = [pscustomobject][ordered]@{
             catalogId = $catalogId
             fields = @($parsedFields)
+            appLockerCsp = $resultOperation.appLockerCsp
         }
         $assessmentEvidenceCrossed = $true
         $observationCollectedAt = [System.DateTimeOffset]::UtcNow

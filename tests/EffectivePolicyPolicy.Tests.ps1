@@ -73,15 +73,15 @@ Assert-Equal 'Get-ChildItem WSMan:\\localhost\\Service,Get-ChildItem WSMan:\\loc
     'WinRM state uses the structured WSMan provider and service source only'
 Assert-Equal 'Get-SmbClientConfiguration,Get-SmbServerConfiguration,Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol' $policy.sourceCatalog[13].interface `
     'SMB posture uses approved structured client, server, and feature-state objects only'
-Assert-Equal 'Get-BitLockerVolume' $policy.sourceCatalog[15].interface `
-    'BitLocker evidence uses the bounded structured volume cmdlet'
+Assert-Equal 'Win32_EncryptableVolume read-only status methods and type-filtered protector counts' $policy.sourceCatalog[15].interface `
+    'BitLocker evidence never invokes the recovery-material retrieving cmdlet'
 Assert-Equal 'Get-CimInstance Win32_DeviceGuard' $policy.sourceCatalog[16].interface `
     'VBS and Credential Guard use the device-reported structured class'
 Assert-Equal 'CiTool -lp -json' $policy.sourceCatalog[17].interface `
     'WDAC inventory is structured and never parsed from legacy text'
 Assert-Equal 'Get-AppLockerPolicy -Effective' $policy.sourceCatalog[18].interface `
     'Group Policy AppLocker state stays on the GP-only surface'
-Assert-Equal 'Get-CimInstance MDM_AppLocker_*' $policy.sourceCatalog[19].interface `
+Assert-Equal 'LocalSystem finite AppLocker WMI Bridge EnforcementMode catalog' $policy.sourceCatalog[19].interface `
     'AppLocker CSP state stays on the separate WMI Bridge surface'
 
 Assert-Equal 3 @($policy.auditSubcategories).Count `
