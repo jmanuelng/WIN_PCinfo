@@ -334,7 +334,7 @@ foreach($purpose in $purposes){
             $now=[DateTimeOffset]::UtcNow;$notBefore=[DateTimeOffset]$certificate.NotBefore;$notAfter=[DateTimeOffset]$certificate.NotAfter
             $validity=if($now -lt $notBefore){'NotYetValid'}elseif($now -gt $notAfter){'Expired'}else{'Valid'}
             $chain=[Security.Cryptography.X509Certificates.X509Chain]::new()
-            try{$chain.ChainPolicy.RevocationMode=[Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck;if($chain.ChainPolicy.PSObject.Properties['DisableCertificateDownloads']){$chain.ChainPolicy.DisableCertificateDownloads=$true};$built=$chain.Build($certificate);$chainResult=Resolve-Chain $chain $built}finally{$chain.Dispose()}
+            try{$chain.ChainPolicy.RevocationMode=[Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck;$chain.ChainPolicy.DisableCertificateDownloads=$true;$built=$chain.Build($certificate);$chainResult=Resolve-Chain $chain $built}finally{$chain.Dispose()}
             $fingerprint=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($certificate.RawData)).ToLowerInvariant()
             $selected.Add([pscustomobject][ordered]@{purposeId=$purpose.purposeId;scopeId=$purpose.scopeId;certificateId="sha256:$fingerprint";fingerprint=$fingerprint;storeLocation=[string]$location;storeName=[string]$name;notBefore=$notBefore.ToUniversalTime().ToString('o');notAfter=$notAfter.ToUniversalTime().ToString('o');validityState=$validity;chainState=$chainResult.chainState;trustState=$chainResult.trustState;keyProtectionState=if($certificate.HasPrivateKey){'PresentProtectionNotInspected'}else{'NoPrivateKey'}})
           }catch{$state='Partial';$reason='CERTIFICATE.SOURCE_ENTRY_MALFORMED'}

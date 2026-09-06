@@ -16,6 +16,10 @@ Microsoft Connectivity Enabled is a distinct approved request choice. It runs th
 
 The report distinguishes local-source coverage from network-dependent coverage. Complete means the cataloged local source completed within its bound. Partial, Denied, Malformed, Unavailable, TimedOut, Cancelled, or Failed identifies the affected scope without discarding successful unrelated scopes. An empty Complete scope can establish that the cataloged local source returned no items; an incomplete scope cannot establish absence.
 
+Adapter, IP, profile, route and resolver observations retain numeric Windows interface indices in the protected record and report. Names remain display evidence, including Unicode names. Multiple routes retain their own interface and metric; the report does not select a preferred route or infer reachability from it. Ethernet type alone cannot prove a physical adapter, so hardware classification remains unknown unless the observed type establishes a non-hardware loopback or tunnel.
+
+Proxy evidence describes only the initiating user's Internet Settings. It does not establish WinHTTP, service-account, browser-specific or effective PAC decisions. Invalid registry types or enable values are a malformed scope, never a successful disabled-proxy result. PAC URLs and configured resolver addresses are observations only: the collector does not retrieve PAC scripts or resolve names. VPN evidence covers the bounded current-user RAS phonebook; all-user and third-party registrations remain outside that source's coverage. Offline certificate evaluation requires both disabled certificate downloads and no revocation retrieval before chain evaluation.
+
 Adapter, profile, address, route, resolver, proxy, VPN, product-registration, and connection values are Restricted Diagnostic Evidence. Exact values remain only in the encrypted report and canonical Assessment Record. Public progress, validation, and terminal records contain counts, state names, stable reason codes, and booleans only. The collector excludes MAC addresses, interface GUIDs, process IDs, packet contents, Wi-Fi keys, stored credentials, proxy credentials, VPN credentials, and traffic payloads.
 
 VPN and security-product names are inventory facts only. Their presence, name, or Windows registration state does not prove that they are healthy, approved, configured correctly, enforcing policy, or suitable for a target environment.
@@ -35,3 +39,5 @@ pwsh -NoLogo -NoProfile -File ./tests/NetworkTopologyApplication.Tests.ps1
 ```
 
 The fixtures are synthetic and do not claim facts about the test computer. See [issue #61 validation evidence](validation/issue-61-network-topology.md) for the public-safe evidence projection.
+
+The [#148 implementation evidence](validation/issue-148-local-topology.md) records generated controlled-source checks and the pending private observation gate. A declared request count or a controlled adapter pass is not a live zero-egress measurement.

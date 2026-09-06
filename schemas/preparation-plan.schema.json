@@ -1084,6 +1084,13 @@
           "deadlineMilliseconds": 5000,
           "standardOutputMaximumBytes": 16384,
           "standardErrorMaximumBytes": 4096,
+          "sourceBounds": {
+            "activationRows": 16,
+            "enclosureRows": 1,
+            "chassisCodes": 8,
+            "batteryRows": 1,
+            "overflowProbeRows": 1
+          },
           "cleanup": "WindowsJobObjectAndNamedCancellationEventVerifiedAbsent"
         },
         "derivations": [
@@ -3041,6 +3048,7 @@
             "scopeId": "scope:network.connection-profiles",
             "sourceId": "source:windows.network-list-manager.profiles",
             "fieldIds": [
+              "field:network.profile.interface-index",
               "field:network.profile.name",
               "field:network.profile.category",
               "field:network.profile.connectivity"
@@ -3060,6 +3068,7 @@
             "scopeId": "scope:network.routes",
             "sourceId": "source:windows.ip-helper.routes",
             "fieldIds": [
+              "field:network.route.interface-index",
               "field:network.route.address-family",
               "field:network.route.destination-prefix",
               "field:network.route.next-hop",
@@ -3070,6 +3079,7 @@
             "scopeId": "scope:network.resolvers",
             "sourceId": "source:windows.network-information.resolvers",
             "fieldIds": [
+              "field:network.resolver.interface-index",
               "field:network.resolver.address-family",
               "field:network.resolver.addresses"
             ]

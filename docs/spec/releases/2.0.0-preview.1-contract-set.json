@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.12.0",
+  "contractVersion": "1.13.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [
@@ -27,6 +27,84 @@
     }
   ],
   "fieldDefinitions": [
+    {
+      "fieldId": "field:network.resolver.interface-index",
+      "capabilityIds": [
+        "CAP-0011"
+      ],
+      "purpose": "Correlate bounded local network configuration by the Windows interface index.",
+      "source": {
+        "sourceId": "source:windows.network-information.resolvers",
+        "kind": "StructuredWindowsSource",
+        "authoritativeIdentity": "Structured Windows interface index"
+      },
+      "valueType": "Integer",
+      "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": {
+        "maximumUtf8Bytes": 10,
+        "maximumOccurrencesPerSubject": 1
+      },
+      "redaction": {
+        "behavior": "OmitProhibitedMaterial",
+        "publicProjection": "DefinitionOnly"
+      },
+      "publicEligibility": {
+        "definition": true,
+        "values": false
+      }
+    },
+    {
+      "fieldId": "field:network.route.interface-index",
+      "capabilityIds": [
+        "CAP-0011"
+      ],
+      "purpose": "Correlate bounded local network configuration by the Windows interface index.",
+      "source": {
+        "sourceId": "source:windows.ip-helper.routes",
+        "kind": "StructuredWindowsSource",
+        "authoritativeIdentity": "Structured Windows interface index"
+      },
+      "valueType": "Integer",
+      "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": {
+        "maximumUtf8Bytes": 10,
+        "maximumOccurrencesPerSubject": 1
+      },
+      "redaction": {
+        "behavior": "OmitProhibitedMaterial",
+        "publicProjection": "DefinitionOnly"
+      },
+      "publicEligibility": {
+        "definition": true,
+        "values": false
+      }
+    },
+    {
+      "fieldId": "field:network.profile.interface-index",
+      "capabilityIds": [
+        "CAP-0011"
+      ],
+      "purpose": "Correlate bounded local network configuration by the Windows interface index.",
+      "source": {
+        "sourceId": "source:windows.network-list-manager.profiles",
+        "kind": "StructuredWindowsSource",
+        "authoritativeIdentity": "Structured Windows interface index"
+      },
+      "valueType": "Integer",
+      "sensitivity": "RestrictedDiagnosticEvidence",
+      "bounds": {
+        "maximumUtf8Bytes": 10,
+        "maximumOccurrencesPerSubject": 1
+      },
+      "redaction": {
+        "behavior": "OmitProhibitedMaterial",
+        "publicProjection": "DefinitionOnly"
+      },
+      "publicEligibility": {
+        "definition": true,
+        "values": false
+      }
+    },
     {
       "fieldId": "field:device.os.display-name",
       "capabilityIds": [
@@ -3464,11 +3542,11 @@
       "capabilityIds": [
         "CAP-0011"
       ],
-      "purpose": "Record whether Windows classifies the adapter as a hardware interface.",
+      "purpose": "Record known non-hardware interface types; other types remain unknown without a hardware flag.",
       "source": {
         "sourceId": "source:windows.network-information.adapters",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "Release-owned NetworkInterfaceType hardware classification"
+        "authoritativeIdentity": "NetworkInterfaceType Loopback/Tunnel are non-hardware; other types do not establish hardware"
       },
       "valueType": "Boolean",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -7980,6 +8058,7 @@
       ],
       "purpose": "Close Windows-reported connection-profile evidence without connectivity probing.",
       "fieldIds": [
+        "field:network.profile.interface-index",
         "field:network.profile.name",
         "field:network.profile.category",
         "field:network.profile.connectivity"
@@ -8023,6 +8102,7 @@
       ],
       "purpose": "Close bounded active local route evidence without changing route state.",
       "fieldIds": [
+        "field:network.route.interface-index",
         "field:network.route.address-family",
         "field:network.route.destination-prefix",
         "field:network.route.next-hop",
@@ -8045,6 +8125,7 @@
       ],
       "purpose": "Close configured resolver evidence without issuing a DNS request.",
       "fieldIds": [
+        "field:network.resolver.interface-index",
         "field:network.resolver.address-family",
         "field:network.resolver.addresses"
       ],

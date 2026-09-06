@@ -88,4 +88,10 @@ if(($projection|ConvertTo-Json -Depth 10 -Compress) -match '203\.0\.113|2001:db8
     throw 'Restricted network evidence entered the public projection.'
 }
 
+
+$oversizeProxy=New-NetworkTopologySyntheticPayload -Scenario Proxy -Policy $policy
+$oversizeProxy.proxy.autoConfigUrl='x'*1025
+$isolatedProxy=Copy-NetworkTopologyCollectorPayload -Payload $oversizeProxy -Policy $policy
+Assert-Equal 'Malformed' @($isolatedProxy.scopeStates|Where-Object scopeId -eq 'scope:network.proxy')[0].state 'invalid proxy evidence cannot become a false disabled partial result'
+
 Write-Output 'PASS: Network Topology fixtures preserve Local Only, coverage, bounds, and privacy.'

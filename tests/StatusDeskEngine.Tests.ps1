@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
+    [switch] $DeclinePreparation,
     [switch] $Wpf, [switch] $HoldRunLock,
     [ValidateSet('None','Cancel','Close')] [string] $ActiveAction = 'None',
     [ValidateSet('Privilege','System','NativeCooperative','NativeHard')] [string] $ActiveWorker = 'Privilege',
@@ -7,6 +8,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $ReadinessSourceScenario = '',
     [string] $IdentitySourceScenario = '',
     [string] $PolicySourceScenario = '',
+    [string] $NetworkSourceScenario = '',
     [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
@@ -141,6 +143,10 @@ if ($PolicySourceScenario) {
     . (Join-Path $PSScriptRoot 'PolicySourceAdapters.ps1')
     $moduleText = Add-ControlledPolicySources -ModuleText $moduleText -Scenario $PolicySourceScenario
 }
+if ($NetworkSourceScenario) {
+    . (Join-Path $PSScriptRoot 'NetworkSourceAdapters.ps1')
+    $moduleText=Add-ControlledNetworkSources -ModuleText $moduleText -Scenario $NetworkSourceScenario
+}
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
 $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
@@ -259,12 +265,24 @@ try {
     $preparation = $session.Transport.State.Preparation | ConvertFrom-Json
     Assert-Equal $true $preparation.readyForApproval 'synthetic controlled run has ready local protection'
     Assert-Equal 0 @($preparation.plan.network.plannedRequests).Count 'Local Only freezes no requests'
-    if (-not $Wpf) { Set-StatusDeskDecision -Session $session -Approve $true -PlanDigest $preparation.planDigest }
+    if ($NetworkSourceScenario) {
+        Assert-Equal $false $session.Transport.State.ContainsKey('NetworkSourceExecuted') 'preparation executes no topology source before approval'
+        Assert-Equal $false $session.Transport.State.ContainsKey('NetworkRequestAttempted') 'preparation invokes no network request adapter'
+    }
+    if (-not $Wpf) { Set-StatusDeskDecision -Session $session -Approve (-not $DeclinePreparation) -PlanDigest $preparation.planDigest }
     while (-not (Complete-StatusDeskSession $session) -and $watch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 25 }
     Assert-Equal $true $session.Completed 'ordinary collector chain reaches bounded completion'
     if ($IdentitySourceScenario -and $session.Transport.State.ContainsKey('IdentitySourceFailure')) { throw ($session.Transport.State.IdentitySourceFailure + ' ' + $session.Transport.State.IdentityPrivilegeReason) }
     if ($PolicySourceScenario -and $session.Transport.State.ContainsKey('PolicySourceFailure')) { throw ($session.Transport.State.PolicySourceFailure + ' ' + $session.Transport.State.PolicyPrivilegeReason) }
     $terminal = $session.Transport.State.Terminal | ConvertFrom-Json
+    if ($DeclinePreparation) {
+        Assert-Equal 'NotStarted' $terminal.outcome 'declined preparation starts no assessment'
+        Assert-Equal $false $terminal.collectionStarted 'declined preparation executes no local collector'
+        Assert-Equal $false $session.Transport.State.ContainsKey('NetworkSourceExecuted') 'declined preparation reaches no nested topology source'
+        Assert-Equal $false $session.Transport.State.ContainsKey('NetworkRequestAttempted') 'declined preparation reaches no network adapter'
+        Assert-Equal '' $session.Transport.State.PackagePath 'declined preparation invents no protected report'
+        return
+    }
     if ($FailureKind -ne 'None') {
         $expectedOutcome=if($FailureKind -eq 'Integrity'){'IntegrityFailed'}else{'CleanupIncomplete'}
         Assert-Equal $expectedOutcome $terminal.outcome 'structured terminal preserves integrity/cleanup precedence'
@@ -328,6 +346,11 @@ try {
         Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
     }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
+    if ($NetworkSourceScenario) {
+        Assert-Equal $true $session.Transport.State.NetworkSourceExecuted 'actual generated local reducer executed'
+        Assert-Equal $false $session.Transport.State.ContainsKey('NetworkRequestAttempted') 'Local Only never enters the nested network request adapter'
+        Assert-NetworkSourceReport -Record $record -Html $html -Scenario $NetworkSourceScenario
+    }
     if ($ReadinessSourceScenario) {
         Assert-ReadinessSourceReport -Record $record -Html $html -Scenario $ReadinessSourceScenario
     }
