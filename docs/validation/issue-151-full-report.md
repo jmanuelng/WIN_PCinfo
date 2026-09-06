@@ -222,3 +222,29 @@ issue completion. #158 integrated/final regression, #161 real Edge/print/keyboar
 and usefulness acceptance, and the existing private/live authority gates remain
 pending without waiver. Root owns review aggregation, ledger/GitHub operations
 and delivery.
+
+## Independent correction reviews and implementation closure
+
+Root dispatched fresh independent affected reviews of
+`c0d3ffaa94a8618810081c2b95917ca0e006cf60...e96cbb02071155ca16a31642e5f75e9a551064d3`
+(two commits, eight files).
+
+Standards: zero documented-standard violations; one nonblocking Duplicated Code
+judgment for the local and cross-domain observation-link renderer shapes.
+Canonical identities and direct references remain intact; shared suffixes are
+explicit, escaped and deterministic. The earlier test-decoder duplication
+judgment remains historical and was not repeated as a new blocker.
+
+Spec: zero findings; original P2 resolved. Visible finding IDs and versioned
+rules link to the exact ordered observation subset independently of cross-domain
+presence. Direct targets and the field/subject/value fallback identify the
+referenced evidence. Visible suffix mapping preserves distinct rows and exact
+values, including whitespace and supplementary Unicode. No actionable scope
+creep or regression was identified.
+
+Both reviewers inspected the changed source, assertions and recorded evidence
+without rerunning tests. This documentation-only review record preserves the
+exact tested candidate. #151 automated implementation qualifies for delivery;
+requirement-register ownership remains #158 for integrated regression and #161
+for actual offline Edge, printing, keyboard and consulting usefulness. Those
+live and integrated gates are pending, with no parent-spec completion claim.
