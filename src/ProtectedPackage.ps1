@@ -311,7 +311,7 @@ function New-DeterministicAssessmentPackage {
     $expectedPaths = @($definitions.relativePath)
     $actualPaths = @($Artifacts.Keys | ForEach-Object { [string] $_ })
     if ($actualPaths.Count -ne $expectedPaths.Count -or
-        @($actualPaths | Where-Object { $_ -notin $expectedPaths }).Count -gt 0) {
+        @($actualPaths | Where-Object { $_ -cnotin $expectedPaths }).Count -gt 0) {
         throw 'The inner package must contain exactly the release-declared artifacts.'
     }
 
@@ -469,12 +469,12 @@ function Read-DeterministicAssessmentPackage {
             $expectedNames = @('package-manifest.json') + @($policy.innerPackage.artifacts.relativePath)
             $actualNames = @($entries.FullName)
             if ($entries.Count -ne [int] $policy.innerPackage.maximumEntryCount -or
-                @($actualNames | Sort-Object -Unique).Count -ne $actualNames.Count -or
-                @($actualNames | Where-Object { $_ -notin $expectedNames }).Count -gt 0 -or
-                @($expectedNames | Where-Object { $_ -notin $actualNames }).Count -gt 0) {
+                @($actualNames | Sort-Object -CaseSensitive -Unique).Count -ne $actualNames.Count -or
+                @($actualNames | Where-Object { $_ -cnotin $expectedNames }).Count -gt 0 -or
+                @($expectedNames | Where-Object { $_ -cnotin $actualNames }).Count -gt 0) {
                 throw 'The archive entry graph is not the closed release package.'
             }
-            $manifestEntry = $entries | Where-Object FullName -eq 'package-manifest.json'
+            $manifestEntry = $entries | Where-Object FullName -ceq 'package-manifest.json'
             [byte[]] $manifestBytes = Read-ProtectedPackageZipEntry -Entry $manifestEntry -MaximumBytes 32768
             $manifestJson = [System.Text.UTF8Encoding]::new($false, $true).GetString($manifestBytes)
             if (-not (Test-ProtectedPackageJsonSchema -Json $manifestJson -Kind Manifest)) {
@@ -488,7 +488,7 @@ function Read-DeterministicAssessmentPackage {
             }
             $artifacts = [ordered]@{}
             foreach ($definition in @($policy.innerPackage.artifacts)) {
-                $entry = $entries | Where-Object FullName -eq $definition.relativePath
+                $entry = $entries | Where-Object FullName -ceq $definition.relativePath
                 $artifacts[[string] $definition.relativePath] = Read-ProtectedPackageZipEntry `
                     -Entry $entry -MaximumBytes ([int] $definition.maximumBytes)
             }
