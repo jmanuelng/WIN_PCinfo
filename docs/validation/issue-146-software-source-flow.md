@@ -150,3 +150,11 @@ Standards and Spec reviewers after this implementation turn ends.
   and the Code Review skill's complete smell baseline. No applicable ADR exists.
 - Preserve separate axis reports, the known maximum-case failure and explicit
   live/integrated gates. No duplicate review layer over unchanged code is required.
+
+## Orchestrator independent review and repair routing
+
+Fresh Standards and Spec reviewers inspected `2ce76f668a4bca9bf100687982ff27f58791778a...b25e91808fe049a2b754ff8babb0cc2c91c54781` after the implementation checkpoint. The pending review status above is historical. Both reviews were read-only and did not rerun tests.
+
+**Standards:** zero documented-standard violations and zero actionable smell findings. **Spec:** one P1 inherited acceptance blocker, the maximum inventory report/package failure described above; no newly introduced defect or scope creep identified in this diff.
+
+Bounded repair [#179](https://github.com/jmanuelng/WIN_PCinfo/issues/179) now owns the shared report/package composability correction. Its native blocker is completed #137; it blocks #146 and #154. Existing #151 blockers remain intact, avoiding a #146/#151 cycle. #146 remains OPEN and incomplete until the maximum contract and affected generated report/package checks pass after that repair. Full #158 and live #161 gates remain pending. This review-record addition changes documentation only; the source/candidate evidence above is unchanged.
