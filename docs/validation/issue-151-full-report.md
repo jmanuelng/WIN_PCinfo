@@ -5,6 +5,9 @@ September 6, 2026. Automated implementation evidence only. Original issue:
 requirements and #158 allocation. Implementation used the existing report,
 canonical record, generated worker and protected-package seams.
 
+The initial checkpoint below is historical. Its candidate and family-prefix
+navigation evidence are superseded by the P2 correction recorded at the end.
+
 ## Source and candidate
 
 - Dispatch / Code Review fixed point: `4c312346e2ecdba18d0853ea1f867a8a40d10e88`.
@@ -118,7 +121,7 @@ all relevant detail without clipped tables, and consulting usefulness. Static
 structure and fixture passes establish none of those human judgments. #160 and
 #162–164 retain their existing live authority/signing/publication boundaries.
 
-## Code Review handoff
+## Initial Code Review handoff (historical)
 
 Implement, TDD and Code Review skills were invoked. The fixed point resolves and
 `git diff 4c312346e2ecdba18d0853ea1f867a8a40d10e88...HEAD` is nonempty.
@@ -138,3 +141,84 @@ baseline. No `docs/adr` directory was present. Spec source is the current full
 #151 issue snapshot supplied at dispatch, plus relevant #134/#37/#158 snapshots
 in the orchestration worktree. Root owns review aggregation, shared requirement
 register updates, GitHub delivery and closure.
+
+## P2 correction: exact finding-to-observation navigation
+
+September 6, 2026. The dispatch reported initial Standards review with zero hard
+violations and one nonblocking duplicated-decoder judgment, and Spec review with
+one P2 finding. Empty family-prefix destinations neither identified the actual
+finding/rule/evidence subset nor survived records without cross-domain findings.
+
+- Correction fixed point: `c0d3ffaa94a8618810081c2b95917ca0e006cf60`.
+- DCO source checkpoint: `729a288d2b21a9de11ae5daf939fd2dc03bf3f65`.
+- Renderer identity: `assessment-report/1.1.1`.
+- Generated unsigned script: **3,291,353 B**, SHA-256
+  `575594e0a6e3d7cd3177a745f6b6ebcc249ce5abd5c3abb029e58b7038cd0a9f`.
+- Portable ZIP SHA-256:
+  `58710aa3bfb7822019d87ddcee156e7d0087457826df151beb3ad19aaea53dee`.
+
+Two consecutive final builds produced identical script bytes, matching the
+candidate used by the final focused tests. Build-reported
+`portablePackage.sourceRevisionSha256` remains
+`64af446777216a2d16a8dd364745786b729a252d78d0ee6bacd48e12a6563aaa`;
+that existing metadata is not the correction's Git commit identity or a fresh
+signing/qualification claim. The exact source and candidate identities are above.
+
+Every finding now visibly identifies its canonical finding ID and versioned
+rule. Direct observation links preserve the exact ordered canonical reference
+subset. The disclosed `oN` mapping uses immutable canonical observation positions
+and links to rendered values, rather than requiring a JSON lookup. Existing
+device, network, certificate, security, software and resource values receive
+destinations; remaining referenced values have a field/subject/value table.
+Missing observation references remain explicit. Local destinations no longer
+depend on cross-domain findings. Cross-domain source findings, recommendation
+Evidence links and typed relationships retain their connections and metadata.
+
+The original protected-report test failed because a finding had no individual
+evidence detail. Intermediate navigation compositions of **282,464 B** and
+**283,691 B** were safely refused at the unchanged **262,144 B** cap. These are
+historical failed working variants, not current candidates. The final renderer
+shares repeated long software text suffixes through visible, exact static HTML
+links. Each registration keeps its own row and prefix; the legend specifies
+literal concatenation with no added space. Short and unique values remain inline.
+No script, CSS-generated value, data truncation, collector or cryptographic
+change supplies the savings. Supplementary Unicode characters are not split.
+
+Final focused checks used installed PowerShell 7.6.5 x64 with
+`-NoLogo -NoProfile -File`, serializing generated tests. All exited 0:
+
+| Check | Final result |
+| --- | --- |
+| `FullReportApplication.Tests.ps1` | AcceptedElevation with Maximum inventory plus ElevationDenied; protected reopening, actual finding IDs/rules, distinct same-family evidence subsets, unique direct observation destinations, recommendation metadata, incomplete/no-cross-domain rendering, five cultures and derivation provenance. Maximum **236,813 B**. |
+| `SoftwareReportApplication.Tests.ps1 -Scenario Distinct` | **246,333 B**, **15,811 B** below the unchanged cap; all 128 registrations and exact values/source contexts survive reopening and deliberate export. |
+| `SoftwareReportApplication.Tests.ps1 -Scenario EscapedOverflow` | Safe refusal and verified owned cleanup. |
+| `RemoteSourceApplication.Tests.ps1 -Scenario Configured` | PASS, **21.2 s**; exact security observation/source references. The existing test decoder was updated to accept the new observation destination attribute. |
+| `ComprehensiveReportApplication.Tests.ps1` | Existing enabled-network, Local Only, Unicode and redirected-storage generated report contracts pass. |
+| `ComprehensiveReport.Tests.ps1` | Pure renderer terminal outcomes, determinism, incomplete scopes, Unicode and bounds pass. |
+| Changed-file parsing, `git diff --check`, two `build/Build.ps1` runs | PASS. |
+
+The maximum protected report additionally checks all 128 registrations through
+deliberate export. Its pure renderer variants verify exact shared-suffix
+reconstruction with distinct prefixes, escaping, preserved spaces and an emoji
+at the split boundary under all five cultures. Unchanged definition/collector
+matrices retain their honestly attributed initial evidence above; no whole-suite
+or duplicate unchanged review was performed. Temporary synthetic byte-measurement
+instrumentation and its temporary HTML file under the verified worktree path were removed. Final cleanup
+inspection found no `status-desk-*` test directory; unrelated outputs remain.
+
+Implement, TDD and Code Review were invoked for this correction. The fixed point
+resolves, `git diff c0d3ffaa94a8618810081c2b95917ca0e006cf60...HEAD` is nonempty,
+and `git log c0d3ffaa94a8618810081c2b95917ca0e006cf60..HEAD --oneline` identifies
+the source and evidence checkpoints. The standards/spec sources listed in the
+initial handoff still apply, with the full current #151 snapshot and the dispatched
+P2 correction as the review target.
+
+- **Standards: pending** fresh affected-axis review from root.
+- **Spec: pending** fresh affected-axis review from root.
+
+The retained-slot instruction requires root to dispatch those independent axes
+sequentially after this worker ends. This checkpoint is not review approval or
+issue completion. #158 integrated/final regression, #161 real Edge/print/keyboard
+and usefulness acceptance, and the existing private/live authority gates remain
+pending without waiver. Root owns review aggregation, ledger/GitHub operations
+and delivery.
