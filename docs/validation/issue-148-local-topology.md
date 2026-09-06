@@ -1,6 +1,6 @@
 # Local topology and Local Only implementation (#148)
 
-Starting revision: `ec79d3799d76634abc184c104ea7ceba60ef1c59`. #137 is merged;
+Starting revision: `ec79d3799d76634abc184c104ea7ceba60ef1c59`. Final application/schema revision: `d41e0255f160d180ef662b2add07856c9d49ea86`. #137 is merged;
 #142 was merged while this slice ran. This evidence establishes controlled-source
 implementation behavior, not a live assessment, measured zero egress, application
 acceptance, signing or release qualification. No observer, UAC, live collector,
@@ -67,18 +67,52 @@ these were corrected and are not live evidence.
 | NetworkTopologyPolicy / NetworkTopology / NetworkTopologyNativeSource | Pass: frozen policy, scoped malformed/denied/partial evidence, 160,196-byte admitted worst-case payload, exact 262,144-byte transport acceptance and one-byte-over rejection |
 | LocalOnlyRequestBoundary / CertificateTrustNativeSource / MicrosoftConnectivityPolicy | Pass: controlled chain/request attempts, offline source safety and unchanged enabled catalog |
 | AssessmentContractSet | Pass: version 1.13.0, 262 field definitions, 104 distinct scopes and existing definition admission |
-| SchemaContracts | Initial failure: the historical device preparation constant omitted existing sourceBounds. The exact release constant was aligned without changing policy/bounds; rerun pending |
-| ProtectedPackageContracts / DeviceReadinessPolicy / CertificateTrustPolicy / PolicyUserContextNativeSource / BuildDeterminism | Pending final focused run |
+| SchemaContracts | Pass (12.0 s before extra negatives; final negative set also passed): both modes and closed plan admission, including dropped topology identity fields, widened offline mode/bounds and omitted discovery tasks. Initial device/identity constant drift was corrected |
+| ProtectedPackageContracts / DeviceReadinessPolicy / CertificateTrustPolicy | Pass: manifest/envelope schema and offline collector/source authority (1.5 / 0.6 / 0.6 s) |
+| PolicyUserContextNativeSource | Pass: native source compilation without calls, exact nested SYSTEM source preservation and eight configured launch samples; maximum 31,985 of unchanged 32,500 characters (2.6 s) |
+| BuildDeterminism | Pass: independent directories, exact resource provenance and standalone build checks (51.5 s) |
 | Changed executable PowerShell syntax / diff whitespace | Pass |
 
-The schema consistency correction is confined to the already changed preparation
-schema: sourceBounds remains activationRows=16, enclosureRows=1, chassisCodes=8,
-batteryRows=1, overflowProbeRows=1. No device collector or source bound changes.
+The schema consistency corrections are confined to the already changed
+preparation schema: sourceBounds remains activationRows=16, enclosureRows=1,
+chassisCodes=8, batteryRows=1, overflowProbeRows=1; identity discoveryTasks now
+includes the existing approved-administrator and recovery-escrow tasks from #141.
+Both align exact existing release constants, preserving closed admission and
+unchanged source/behavior/bounds. A temporary edit hit the wrong discovery array;
+the schema gate rejected it, the edit was corrected to identityEnrollment, and
+the unrelated firmware constant has identical parsed content to the committed
+original. The final schema gate and added negative mutations passed.
 
-Exact final unsigned candidate identities and the two independent reviews will
-be recorded after the final focused gate. Ignored synthetic build outputs remain
-local; generated protected test evidence/viewing is cleaned by the existing owned
-cleanup. The separate signed private #160 candidate is unchanged.
+Exact unsigned candidate from final application/schema revision `d41e025`:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| WIN-PCInfo.ps1 | 3,159,845 | `3fbb460b93b7df1e54299f8691ea2ed275ab18505101f46511394de45f1d754f` |
+| WIN-PCInfo-2.0.0-preview.1-portable.zip | 4,679,973 | `c4d63fff444968f0346ccd7420b52a8d008400f61664ea5592ba8ea3047a06d6` |
+
+Both match both deterministic-build copies. Content-tree identity is
+`881d4d03172cf13282dd1793a773191cccf711a5aff5cde41ae4715415e882b7`.
+Ignored synthetic build outputs remain local; generated protected test evidence
+and viewing are cleaned by existing owned cleanup. The separate signed private
+#160 candidate is unchanged. Evidence-only edits do not renew signing/live gates.
+
+## Standards review
+
+Independent review of `ec79d379...5eb43e8`: zero documented-standard violations.
+One nonblocking judgment notes six pre-existing branches returning the same
+contract-version literal in DeviceReadiness. A broader version-selection refactor
+is unnecessary for this slice. Explicit field/transport bounds, honest
+unknown/malformed evidence, offline chain control, controlled-source authority
+and DCO were accepted. The affected `5eb43e8..d41e025` schema/test/evidence review found zero violations or new judgments and independently verified all candidate/copy digests and exact existing constants.
+
+## Spec review
+
+Independent review of `ec79d379...5eb43e8`: zero blocking implementation findings
+or scope creep. The reviewer confirmed typed identity/provenance, protected
+record/report, LocalOnly adapter boundaries and honest live/source gaps. Final
+focused checks and exact candidate evidence are now recorded above. The
+orchestrator must publish the requirement-owner contribution into the shared
+#134 register contribution through the merged document and durable orchestration ledger during delivery; #158 owns aggregation, and parent issues remain unchanged. The affected `5eb43e8..d41e025` schema/test/evidence review found zero findings and independently confirmed the exact six-task constant, closed admission and honest pending live gates.
 
 ## Requirement register contribution
 
