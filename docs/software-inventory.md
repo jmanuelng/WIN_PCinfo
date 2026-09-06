@@ -14,6 +14,8 @@ The operation reads only three structured Windows source families:
 
 The registry views are opened explicitly with `Microsoft.Win32.RegistryKey.OpenBaseKey`; redirection is not inferred from process bitness. MSI product codes and Windows package family/full names remain source identities. Version values remain bounded provider text: WIN-PCInfo does not assume semantic-version syntax. Main, bundle, framework, resource, and optional Windows packages remain distinct package types.
 
+The Windows PowerShell 5.1 process is the existing, release-declared source dependency for Windows Runtime package identities. The main application and test controller use the selected eligible PowerShell 7 runtime. This is an explicit isolated source boundary, with no runtime installation or implicit compatibility-module fallback. Its output uses UTF-8 so Unicode names and version text survive the protected record and report.
+
 These interfaces and their relevant behavior are documented by Microsoft in [Registry Redirector](https://learn.microsoft.com/windows/win32/winprog64/registry-redirector), [MsiEnumProductsExW](https://learn.microsoft.com/windows/win32/api/msi/nf-msi-msienumproductsexw), [MsiGetProductInfoExW](https://learn.microsoft.com/windows/win32/api/msi/nf-msi-msigetproductinfoexw), and [PackageManager](https://learn.microsoft.com/uwp/api/windows.management.deployment.packagemanager).
 
 ## What it never does
@@ -34,6 +36,8 @@ Each of the following eight scopes closes independently:
 - Assessment User and all-user Windows package identities.
 
 All-user package access can be denied on an otherwise valid standard-user run. That denial affects only its scope. Missing, denied, malformed, failed, timed-out, or over-ceiling sources retain a stable coverage reason and yield `Indeterminate` guidance; they do not erase independently completed scopes or fabricate absence. A `Complete` empty scope is the only path that creates `ObservedAbsent` evidence.
+
+MSI access denial and inability to initialize its inventory reader close only the two MSI scopes. Successful registry and package observations remain available. MSI property reads honor the documented successful size-probe result before requesting the bounded provider value; they never invoke an installer action.
 
 ## Privacy and guidance
 

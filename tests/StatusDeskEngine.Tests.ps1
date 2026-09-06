@@ -11,6 +11,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $SecuritySourceScenario = '',
     [string] $PlatformSourceScenario = '',
     [string] $RemoteSourceScenario = '',
+    [string] $SoftwareSourceScenario = '',
     [string] $NetworkSourceScenario = '',
     [string] $CertificateSourceScenario = '',
     [string] $ConnectivitySourceScenario = '',
@@ -159,6 +160,10 @@ if ($PlatformSourceScenario) {
 if ($RemoteSourceScenario) {
     . (Join-Path $PSScriptRoot 'RemoteSourceAdapters.ps1')
     $moduleText=Add-ControlledRemoteSources -ModuleText $moduleText -Scenario $RemoteSourceScenario
+}
+if ($SoftwareSourceScenario) {
+    . (Join-Path $PSScriptRoot 'SoftwareSourceAdapters.ps1')
+    $moduleText=Add-ControlledSoftwareSources -ModuleText $moduleText -Scenario $SoftwareSourceScenario
 }
 if ($NetworkSourceScenario) {
     . (Join-Path $PSScriptRoot 'NetworkSourceAdapters.ps1')
@@ -381,6 +386,7 @@ try {
         Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
     }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
+    if ($SoftwareSourceScenario) { Assert-SoftwareSourceReport -Record $record -Html $html -Scenario $SoftwareSourceScenario }
     if ($ConnectivitySourceScenario) {
         Assert-ConnectivitySourceReport -Record $record -Html $html -Scenario $ConnectivitySourceScenario -State $session.Transport.State
     }
