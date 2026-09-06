@@ -158,6 +158,13 @@ function Get-StatusDeskPreparationText {
     $lines.Add('Privileges: one frozen administrator boundary; only predefined SYSTEM operations. No later approval expands authority.')
     $lines.Add('Network: ' + $plan.network.behavior + '. No telemetry or authenticated cloud collection.')
     foreach ($request in $plan.network.plannedRequests) { $lines.Add('  ' + $request.protocol + ': ' + $request.purpose) }
+    if($plan.network.behavior -eq 'MicrosoftConnectivityEnabled'){
+        $lines.Add('  Uses the active Windows resolver and the frozen current-user static proxy or direct route. Changed context stops new requests; automatic PAC/WPAD is unavailable.')
+        foreach($endpoint in $plan.microsoftConnectivity.endpoints){
+            $lines.Add('  DNS ' + $endpoint.dnsName + '; direct TCP/TLS port ' + $endpoint.port + '; HEAD ' + $endpoint.uri)
+        }
+        $lines.Add('  At most 12 logical protocol attempts, 5 seconds each within 45 seconds. No redirects, response bodies, credentials, cookies, automatic certificate downloads or retries.')
+    }
     $lines.Add('Output destination: ' + $plan.output.destination)
     $lines.Add('Protection: encrypted package for the initiating Windows user/device. No automatic plaintext export.')
     $lines.Add('Additional recipient: ' + $plan.output.recipientProfile.mode)

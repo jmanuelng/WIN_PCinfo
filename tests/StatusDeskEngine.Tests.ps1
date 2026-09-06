@@ -10,6 +10,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $PolicySourceScenario = '',
     [string] $NetworkSourceScenario = '',
     [string] $CertificateSourceScenario = '',
+    [string] $ConnectivitySourceScenario = '',
     [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
@@ -148,6 +149,10 @@ if ($NetworkSourceScenario) {
     . (Join-Path $PSScriptRoot 'NetworkSourceAdapters.ps1')
     $moduleText=Add-ControlledNetworkSources -ModuleText $moduleText -Scenario $NetworkSourceScenario
 }
+if ($ConnectivitySourceScenario) {
+    . (Join-Path $PSScriptRoot 'ConnectivitySourceAdapters.ps1')
+    $moduleText=Add-ControlledConnectivitySources -ModuleText $moduleText -Scenario $ConnectivitySourceScenario
+}
 if ($CertificateSourceScenario) {
     . (Join-Path $PSScriptRoot 'CertificateSourceAdapters.ps1')
     $moduleText=Add-ControlledCertificateSources -ModuleText $moduleText -Scenario $CertificateSourceScenario
@@ -159,6 +164,7 @@ if (-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent, [StringCompa
 $request = Get-AutomationRequest -LiteralPath (Join-Path $PSScriptRoot 'fixtures/automation-request.json') `
     -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
 $request.outputDestination = $testRoot
+if ($ConnectivitySourceScenario -and $ConnectivitySourceScenario -ne 'LocalOnly') { $request.networkBehavior='MicrosoftConnectivityEnabled' }
 $request.automationChoices.allowStaleRecovery = [bool]$RecoveryAuthorized
 $context = @{ IsFixture = $false }
 foreach ($name in @('Preparation','Contract','Run','PrivilegedCollection','SystemCollection',
@@ -269,7 +275,10 @@ try {
     Assert-Equal $true ([bool]$session.Transport.State.Preparation) 'actual preparation runs inside the generated worker'
     $preparation = $session.Transport.State.Preparation | ConvertFrom-Json
     Assert-Equal $true $preparation.readyForApproval 'synthetic controlled run has ready local protection'
-    Assert-Equal 0 @($preparation.plan.network.plannedRequests).Count 'Local Only freezes no requests'
+    if ($ConnectivitySourceScenario -and $ConnectivitySourceScenario -ne 'LocalOnly') {
+        Assert-Equal 'ActiveWindowsResolver' $preparation.plan.network.context.resolver 'enabled approval freezes resolver context'
+        Assert-Equal $false $session.Transport.State.ContainsKey('ConnectivityRequests') 'preparation invokes no protocol request'
+    } else { Assert-Equal 0 @($preparation.plan.network.plannedRequests).Count 'Local Only freezes no requests' }
     if($CertificateSourceScenario){Assert-Equal $false $session.Transport.State.ContainsKey('CertificateSourceExecuted') 'preparation never examines certificate stores'}
     if ($NetworkSourceScenario) {
         Assert-Equal $false $session.Transport.State.ContainsKey('NetworkSourceExecuted') 'preparation executes no topology source before approval'
@@ -286,9 +295,11 @@ try {
         Assert-Equal $false $terminal.collectionStarted 'declined preparation executes no local collector'
         Assert-Equal $false $session.Transport.State.ContainsKey('NetworkSourceExecuted') 'declined preparation reaches no nested topology source'
         Assert-Equal $false $session.Transport.State.ContainsKey('NetworkRequestAttempted') 'declined preparation reaches no network adapter'
+        Assert-Equal $false $session.Transport.State.ContainsKey('ConnectivityRequests') 'declined enabled preparation reaches no protocol adapter'
         Assert-Equal '' $session.Transport.State.PackagePath 'declined preparation invents no protected report'
         return
     }
+    if ($ConnectivitySourceScenario -and $session.Transport.State.ContainsKey('ConnectivityFailure')) { throw $session.Transport.State.ConnectivityFailure }
     if ($FailureKind -ne 'None') {
         $expectedOutcome=if($FailureKind -eq 'Integrity'){'IntegrityFailed'}else{'CleanupIncomplete'}
         Assert-Equal $expectedOutcome $terminal.outcome 'structured terminal preserves integrity/cleanup precedence'
@@ -352,6 +363,9 @@ try {
         Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
     }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
+    if ($ConnectivitySourceScenario) {
+        Assert-ConnectivitySourceReport -Record $record -Html $html -Scenario $ConnectivitySourceScenario -State $session.Transport.State
+    }
     if ($CertificateSourceScenario) {
         Assert-Equal ($CertificateSourceScenario -ne 'AlternateAdministrator') $session.Transport.State.ContainsKey('CertificateSourceExecuted') 'certificate stores require the Assessment User context'
         Assert-CertificateSourceReport -Record $record -Html $html -Scenario $CertificateSourceScenario

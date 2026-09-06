@@ -230,7 +230,8 @@ function New-PreparationPlan {
         [Parameter(Mandatory)] $Request,
         [Parameter(Mandatory)] $Definition,
         [Parameter(Mandatory)] $PreparationFacts,
-        [Parameter(Mandatory)] $ConvertToJsonCommand
+        [Parameter(Mandatory)] $ConvertToJsonCommand,
+        [Parameter()] $ConnectivityContext
     )
 
     # Network consent is an exact two-state Windows assessment boundary. The
@@ -337,6 +338,15 @@ function New-PreparationPlan {
             automaticTelemetry = $false
             authenticatedCloudCollection = $false
             plannedRequests = @($networkRequests)
+            context = if($Request.networkBehavior -eq 'LocalOnly'){$null}else{
+                if($null -eq $ConnectivityContext){$ConnectivityContext=Get-MicrosoftConnectivityExecutionContext -Policy $Definition.microsoftConnectivity -Synthetic}
+                [pscustomobject][ordered]@{
+                    resolver='ActiveWindowsResolver'
+                    proxy='FrozenCurrentUserStaticProxyOrDirect'
+                    snapshotDigest=Get-MicrosoftConnectivityContextDigest $ConnectivityContext
+                    changeBehavior='StopNewRequests'
+                }
+            }
         }
         # Evidence protection is fixed before collection so plaintext or a new
         # recipient cannot become a late escape hatch. The plan carries only the
@@ -511,8 +521,17 @@ function Invoke-PreparationGate {
         return 20
     }
 
+    $connectivityContext=if($Request.networkBehavior -eq 'MicrosoftConnectivityEnabled'){
+        Get-MicrosoftConnectivityExecutionContext -Policy $definitionResult.Definition.microsoftConnectivity -Synthetic:$validationFixture
+    }else{$null}
+    if($null -ne $connectivityContext){
+        # A private per-preparation nonce prevents the published digest from
+        # becoming a stable resolver/proxy identifier across assessment runs.
+        $connectivityContext|Add-Member NoteProperty consentNonce ([Guid]::NewGuid().ToString('N'))
+    }
     $planResult = New-PreparationPlan -Request $Request -Definition $definitionResult.Definition `
         -PreparationFacts $facts `
+        -ConnectivityContext $connectivityContext `
         -ConvertToJsonCommand $ConvertToJsonCommand
     $summary = New-PreparationSummary -PlanResult $planResult -PrerequisiteChecks $facts.prerequisiteChecks
     Write-ContractRecord $summary -ConvertToJsonCommand $ConvertToJsonCommand
@@ -736,6 +755,7 @@ function Invoke-PreparationGate {
     }
     if ($accepted -and -not $ValidationFixture) {
         return Invoke-DeviceReadinessSlice `
+            -ConnectivityContext $connectivityContext `
             -PreparationPlan $planResult.Plan `
             -ApprovedOutputDestination ([string]$planResult.Plan.output.destination) `
             -ApprovedRecipient $recipientSelection.approvedRecipient `
