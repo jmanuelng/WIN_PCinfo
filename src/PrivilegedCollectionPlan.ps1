@@ -1767,7 +1767,7 @@ function Get-LiveEffectivePolicyResult {
                 $runtimeMissingProperty=$true
             } elseif($runningMode.Value -isnot [string] -or
                 $runningMode.Value.Length -gt 64 -or
-                $runningMode.Value -notmatch '^[A-Za-z ]+$'){
+                $runningMode.Value -cnotmatch '^[A-Za-z ]+$'){
                 throw [IO.InvalidDataException]::new()
             } else {
                 $result.defenderRuntime.runningMode=[string]$runningMode.Value

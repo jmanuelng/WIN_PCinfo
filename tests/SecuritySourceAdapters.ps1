@@ -30,7 +30,7 @@ function Get-PrivilegedCollectionWorkerSource {
     $source=$source.Replace('New-SyntheticEffectivePolicyResult -Scenario ([string]$configuration.effectivePolicyScenario)','Get-LiveEffectivePolicyResult -AssessmentUserSid $assessmentUserSid')
     $source=$source.Replace('Microsoft.PowerShell.Core\Import-Module -Name $path','Import-ControlledSecurityModule -Name $path')
     $prefix=@"
-`$culture=if('__CASE__' -in @('es-MX','tr-TR','ja-JP','ar-SA')){'__CASE__'}else{'en-US'}
+`$culture=if('__CASE__' -eq 'CultureMode'){'tr-TR'}elseif('__CASE__' -in @('es-MX','tr-TR','ja-JP','ar-SA')){'__CASE__'}else{'en-US'}
 [Threading.Thread]::CurrentThread.CurrentCulture=[Globalization.CultureInfo]::GetCultureInfo(`$culture)
 [Threading.Thread]::CurrentThread.CurrentUICulture=[Globalization.CultureInfo]::GetCultureInfo(`$culture)
 function Import-ControlledSecurityModule {
@@ -70,6 +70,7 @@ function Get-ControlledMpComputerStatus {
     if('__CASE__' -eq 'Denied'){throw [UnauthorizedAccessException]::new('Synthetic source denied.')}
     if('__CASE__' -eq 'Unavailable'){return}
     if('__CASE__' -eq 'Passive'){return [pscustomobject]@{AMRunningMode='Passive Mode';AntivirusEnabled=`$false;RealTimeProtectionEnabled=`$false;IsTamperProtected=`$false}}
+    if('__CASE__' -eq 'CultureMode'){return [pscustomobject]@{AMRunningMode=([char]0x130).ToString()*40;AntivirusEnabled=`$true;RealTimeProtectionEnabled=`$true;IsTamperProtected=`$true}}
     [pscustomobject]@{AMRunningMode='Normal';AntivirusEnabled=`$true;RealTimeProtectionEnabled=`$(if('__CASE__' -eq 'MalformedRuntime'){'true'}else{`$true});IsTamperProtected=`$(if('__CASE__' -eq 'NullRuntime'){`$null}else{`$true})}
 }
 function Get-ControlledNetFirewallProfile {
@@ -116,7 +117,7 @@ function Assert-SecuritySourceReport {
     param($Record,[string]$Html,[string]$Scenario)
     foreach($scope in @('defender.runtime','defender.asr','defender.network-protection','firewall.domain-profile','firewall.private-profile','firewall.public-profile','smartscreen.shell','smartscreen.app-install-control')){
         $expected=if($Scenario -eq 'NullRuntime' -and $scope -eq 'defender.runtime'){'Partial'}else{'Complete'}
-        if($Scenario -eq 'MalformedRuntime' -and $scope -eq 'defender.runtime'){$expected='Malformed'}
+        if($Scenario -in @('MalformedRuntime','CultureMode') -and $scope -eq 'defender.runtime'){$expected='Malformed'}
         if($Scenario -eq 'FirewallPartial' -and $scope -eq 'firewall.public-profile'){$expected='Unavailable'}
         if($Scenario -eq 'Unavailable' -and $scope -notlike 'smartscreen.*'){$expected='Unavailable'}
         if($Scenario -eq 'Unsupported' -and $scope -notlike 'smartscreen.*'){$expected='Unsupported'}
@@ -141,9 +142,9 @@ function Assert-SecuritySourceReport {
         $expectedSource=if($observation.fieldId -match '\.(asr\.|network-protection)'){'source:windows.defender.preferences'}else{'source:windows.defender.runtime-status'}
         Assert-Equal $expectedSource $provenance.sourceId 'security observations retain authoritative structured provenance'
         Assert-Equal $true ([bool]$provenance.collectedAt) 'security evidence retains collection time'
-        Assert-Equal $(if($Scenario -in @('es-MX','tr-TR','ja-JP','ar-SA')){$Scenario}else{'en-US'}) $provenance.sourceLocale 'source culture cannot change stable security semantics'
+        Assert-Equal $(if($Scenario -eq 'CultureMode'){'tr-TR'}elseif($Scenario -in @('es-MX','tr-TR','ja-JP','ar-SA')){$Scenario}else{'en-US'}) $provenance.sourceLocale 'source culture cannot change stable security semantics'
     }
-    if($Scenario -notin @('MalformedRuntime','Unavailable','Unsupported','Denied','ImportDenied')){
+    if($Scenario -notin @('MalformedRuntime','CultureMode','Unavailable','Unsupported','Denied','ImportDenied')){
         Assert-Equal $(if($Scenario -eq 'Passive'){'Passive Mode'}else{'Normal'}) @($Record.observations|Where-Object fieldId -eq 'field:policy.defender.running-mode')[0].value 'runtime is distinct from preferences'
     }
     if($Scenario -in @('Unavailable','Unsupported','Denied','ImportDenied')){
@@ -161,7 +162,7 @@ function Assert-SecuritySourceReport {
         Assert-Equal 16 @($Record.observations|Where-Object fieldId -eq 'field:policy.defender.asr.rule-id').Count 'the declared ASR bound is explicit and never silently raised'
         Assert-Equal $true $Html.Contains('POLICY.DEFENDER_ASR_EVIDENCE_BOUND_EXCEEDED') 'the report discloses the ASR evidence bound'
     }
-    if($Scenario -in @('NullRuntime','MalformedRuntime')){
+    if($Scenario -in @('NullRuntime','MalformedRuntime','CultureMode')){
         Assert-Equal 0 @($Record.observations|Where-Object fieldId -eq 'field:policy.defender.tamper-protected').Count 'unknown tamper protection cannot become false or enabled'
     }else{
         Assert-Equal ($Scenario -ne 'Passive') @($Record.observations|Where-Object fieldId -eq 'field:policy.defender.tamper-protected')[0].value 'tamper constraint survives into evidence'

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param([string[]]$Scenario=@('Active','CoreImport','Passive','Unsupported','ImportDenied','Denied','Unavailable',
-    'NullRuntime','MalformedRuntime','FirewallPartial','AsrEmpty','AsrBound',
+    'NullRuntime','MalformedRuntime','CultureMode','FirewallPartial','AsrEmpty','AsrBound',
     'AsrMismatch','NetworkMissing','SmartScreenMissing','SmartScreenMalformed',
     'es-MX','tr-TR','ja-JP','ar-SA'))
 Set-StrictMode -Version Latest
