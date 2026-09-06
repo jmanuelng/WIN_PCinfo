@@ -203,7 +203,8 @@ try {
     $pipe = [System.IO.Pipes.NamedPipeClientStream]::new(
         '.', [string] $configuration.pipe,
         [System.IO.Pipes.PipeDirection]::InOut,
-        [System.IO.Pipes.PipeOptions]::Asynchronous
+        [System.IO.Pipes.PipeOptions]::Asynchronous,
+        [System.Security.Principal.TokenImpersonationLevel]::Identification
     )
     $pipe.ConnectAsync($deadline.Token).GetAwaiter().GetResult()
     $serverProcessId = [WinPCInfo.SystemCollectionWorker.KernelTrust]::GetServerProcessId($pipe)
@@ -1209,7 +1210,8 @@ function Invoke-SystemActivationWorker {
         $launchSource=$source.Replace('__SYSTEM_WORKER_CONFIGURATION__',$encoded)
         $encodedWorker=ConvertTo-PrivilegedCollectionEncodedCommand -Source $launchSource
         $executable=Join-Path $PSHOME 'pwsh.exe'
-        Write-Frame -Stream $Stream -Json '{"kind":"SystemActivationReady"}' -MaximumBytes 16384 -Token $Token
+        $activationSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        Write-Frame -Stream $Stream -Json (@{kind='SystemActivationReady';activationSid=$activationSid}|ConvertTo-Json -Compress) -MaximumBytes 16384 -Token $Token
         # The initiating coordinator must durably record intent before a task
         # can be registered. Neither its journal nor package path crosses IPC.
         if ((Read-Frame -Stream $Stream -MaximumBytes 16384 -Token $Token) -cne '{"kind":"SystemActivationAuthorized"}') { throw 'SYSTEM intent was not recorded.' }
@@ -1224,7 +1226,10 @@ function Invoke-SystemActivationWorker {
         } else {
             $activation=Start-SystemCollectionTransientTask -TaskName $taskName -Executable $executable `
                 -EncodedWorker $encodedWorker -WorkingDirectory $PSHOME -InitiatingSid $InitiatingSid
-            $workerId=[int]$activation.RunningTask.EnginePID
+            # EnginePID identifies the scheduler engine, not necessarily its
+            # executable action. The coordinator admits the kernel pipe peer
+            # using its exact Job, identification SID and approved image.
+            $workerId=0
         }
         Write-Frame -Stream $Stream -Json (@{kind='SystemActivated';workerProcessId=$workerId}|ConvertTo-Json -Compress) -MaximumBytes 16384 -Token $Token
         if ((Read-Frame -Stream $Stream -MaximumBytes 16384 -Token $Token) -cne '{"kind":"ReleaseSystemPlan"}') { throw 'Invalid SYSTEM release frame.' }
@@ -1294,17 +1299,18 @@ function Start-SystemCollectionTransientTask {
     $definition = New-SystemCollectionTaskDefinition -Service $service -TaskName $TaskName -Executable $Executable -EncodedWorker $EncodedWorker -WorkingDirectory $WorkingDirectory
     $task = $null
     $runningTask = $null
+    $workerSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $journalVariable = Get-Variable -Name AssessmentRunJournalPath -Scope Script -ErrorAction SilentlyContinue
     if ($null -ne $journalVariable -and $journalVariable.Value) {
         # Durable intent precedes the persistent Task Scheduler write. A crash
         # between registration and activation therefore remains recoverable.
-        Register-SystemCollectionTaskOwnership -JournalPath $journalVariable.Value -TaskName $TaskName -Definition $definition
+        Register-SystemCollectionTaskOwnership -JournalPath $journalVariable.Value -TaskName $TaskName -Definition $definition -ActivationSid $workerSid
     }
     try {
-        $workerSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $taskAccess='D:P'+((@('S-1-5-18',$InitiatingSid,$workerSid)|Sort-Object -Unique|ForEach-Object { "(A;;GA;;;$_)" }) -join '')
         $task = $folder.RegisterTaskDefinition(
             $TaskName, $definition, 2, $null, $null, 5,
-            "D:P(A;;GA;;;SY)(A;;GA;;;$InitiatingSid)(A;;GA;;;$workerSid)"
+            $taskAccess
         ) # TASK_CREATE, TASK_LOGON_SERVICE_ACCOUNT
         # Registration crosses into Task Scheduler's persistent store. Read the
         # accepted definition back before starting it and compare every action
@@ -1495,7 +1501,8 @@ function Get-SystemCollectionTaskOwnershipDigest {
 function Register-SystemCollectionTaskOwnership {
     param([Parameter(Mandatory)] [string] $JournalPath,
         [Parameter(Mandatory)] [ValidatePattern('^WINPCInfo-SystemCollection-v1-[0-9a-f]{32}$')] [string] $TaskName,
-        [Parameter(Mandatory)] $Definition)
+        [Parameter(Mandatory)] $Definition,
+        [ValidatePattern('^S-1-[0-9-]+$')] [string] $ActivationSid = '')
     $journal = Read-RunRecoveryJournal -LiteralPath $JournalPath
     if (-not (Test-RunRecoveryJournalCurrentOwner -Journal $journal) -or
         $journal.contractVersion -ne '1.1.0' -or @($journal.systemTasks).Count -ne 0) {
@@ -1506,6 +1513,9 @@ function Register-SystemCollectionTaskOwnership {
         definitionSha256 = Get-SystemCollectionTaskOwnershipDigest -Definition $Definition
         absenceVerified = $false
     })
+    # Optional for compatibility with journals written before broker activation.
+    # This value comes only from the authenticated administrator readiness frame.
+    if ($ActivationSid) { $journal.systemTasks[0] | Add-Member -NotePropertyName activationSid -NotePropertyValue $ActivationSid }
     Write-RunRecoveryJournal -Journal $journal -LiteralPath $JournalPath
 }
 
@@ -1537,15 +1547,18 @@ function Set-SystemCollectionTaskAbsenceVerified {
 }
 
 function Test-SystemTaskRecoveryAccess {
-    param([Parameter(Mandatory)] $Task, [Parameter(Mandatory)] [string] $InitiatingSid)
+    param([Parameter(Mandatory)] $Task, [Parameter(Mandatory)] [string] $InitiatingSid,
+        [string] $ActivationSid = '')
+    $expectedIdentities=@(@($InitiatingSid,'S-1-5-18',$ActivationSid) | Where-Object { $_ } | Sort-Object -Unique)
     $descriptor = [Security.AccessControl.RawSecurityDescriptor]::new([string]$Task.GetSecurityDescriptor(4))
     if (($descriptor.ControlFlags -band [Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -eq 0 -or
-        $null -eq $descriptor.DiscretionaryAcl -or $descriptor.DiscretionaryAcl.Count -ne 2) { return $false }
+        $null -eq $descriptor.DiscretionaryAcl -or $descriptor.DiscretionaryAcl.Count -ne $expectedIdentities.Count) { return $false }
     $identities = @($descriptor.DiscretionaryAcl | ForEach-Object {
-        if ($_ -isnot [Security.AccessControl.CommonAce] -or $_.AceQualifier -ne 'AccessAllowed') { return 'invalid' }
+        if ($_ -isnot [Security.AccessControl.CommonAce] -or $_.AceQualifier -ne 'AccessAllowed' -or
+            $_.AceFlags -ne 'None') { return 'invalid' }
         $_.SecurityIdentifier.Value
     } | Sort-Object -Unique)
-    ($identities -join '|') -eq (@($InitiatingSid,'S-1-5-18' | Sort-Object -Unique) -join '|')
+    ($identities -join '|') -eq ($expectedIdentities -join '|')
 }
 
 function Remove-RecoverySystemCollectionTasks {
@@ -1565,8 +1578,9 @@ function Remove-RecoverySystemCollectionTasks {
                     @(Get-SystemTaskRecoveryInstances -TaskName $registration.taskName).Count -ne 0) { return $false }
                 continue
             }
+            $activationSid=if ($registration.PSObject.Properties['activationSid']) { [string]$registration.activationSid } else { '' }
             if ((Get-SystemCollectionTaskOwnershipDigest -Definition $task.Definition) -cne $registration.definitionSha256 -or
-                -not (Test-SystemTaskRecoveryAccess -Task $task -InitiatingSid $Journal.owner.initiatingUserSid)) { return $false }
+                -not (Test-SystemTaskRecoveryAccess -Task $task -InitiatingSid $Journal.owner.initiatingUserSid -ActivationSid $activationSid)) { return $false }
             $instances = $task.GetInstances(0)
             $ownedInstances = @(
                 for ($index=1; $index -le $instances.Count; $index++) { $instances.Item($index) }
@@ -1664,6 +1678,37 @@ function Invoke-SystemCollectionSyntheticCleanupProbe {
         [pscustomobject][ordered]@{ Absent = $false; Retries = $retries }
     }
     finally { if ($null -ne $ownedEvent) { $ownedEvent.Dispose() } }
+}
+
+function Get-SystemCollectionWorkerPeer {
+    param([Parameter(Mandatory)] $Server, [Parameter(Mandatory)] $OwnedJob,
+        [Parameter(Mandatory)] [string] $ExpectedExecutable,
+        [Parameter(Mandatory)] [string] $ExpectedDigest,
+        [Parameter(Mandatory)] [string] $ExpectedSid,
+        [Parameter(Mandatory)] [ref] $IdentityHandle,
+        [int] $ExpectedProcessId = 0)
+    $clientId=[WinPCInfo.PrivilegedCollectionPlan.PipePeer]::GetClientProcessId($Server)
+    if (($ExpectedProcessId -gt 0 -and $clientId -ne $ExpectedProcessId) -or
+        -not $OwnedJob.ContainsProcess($clientId)) { throw 'The SYSTEM pipe peer is outside the owned worker Job.' }
+    $process=[Diagnostics.Process]::GetProcessById($clientId)
+    $heldIdentity=$null
+    try {
+        # Process.Handle requests broad access; a standard coordinator needs
+        # only QUERY_LIMITED_INFORMATION to pin the authenticated PID lifetime.
+        $heldIdentity=[WinPCInfo.PrivilegedCollectionPlan.PipePeer]::HoldProcessIdentity($clientId)
+        if ([WinPCInfo.PrivilegedCollectionPlan.PipePeer]::GetIdentificationSid($Server) -cne $ExpectedSid) {
+            throw 'The SYSTEM pipe token does not match the required authority.'
+        }
+        $image=[WinPCInfo.PrivilegedCollectionPlan.PipePeer]::GetProcessImage($clientId)
+        if (-not [IO.Path]::GetFullPath($image).Equals([IO.Path]::GetFullPath($ExpectedExecutable),[StringComparison]::OrdinalIgnoreCase) -or
+            (Get-SystemCollectionSha256 -Bytes ([IO.File]::ReadAllBytes($image))) -cne $ExpectedDigest) { throw 'The SYSTEM worker image is not admitted.' }
+        $IdentityHandle.Value=$heldIdentity; $heldIdentity=$null
+        $result=$process; $process=$null; $result
+    }
+    finally {
+        if ($null -ne $process) { $process.Dispose() }
+        if ($null -ne $heldIdentity) { $heldIdentity.Dispose() }
+    }
 }
 
 function Invoke-SystemCollectionPlan {
@@ -1800,8 +1845,11 @@ function Invoke-SystemCollectionPlan {
     $runIntegrityCompromised = $false
     $activationCleanupUnverified = $false
     $brokerActivationStarted = $false
+    $brokerIntentRecorded = $false
     $brokerAlreadyReleased = $false
     $brokerReleaseVerified = $false
+    $expectedWorkerId = 0
+    $workerIdentityHandle = $null
     $failureStage = 'SETUP'
     $peerVerified = $false
     $assessmentEvidenceCrossed = $false
@@ -1860,13 +1908,17 @@ function Invoke-SystemCollectionPlan {
             $failureStage='BROKER_PROTOCOL'
             Write-BoundedCollectionChannelFrame -Stream $PrivilegeChannel.Stream -Json (@{kind='ActivateSystemPlan';configuration=$configuration}|ConvertTo-Json -Compress -Depth 5) -MaximumBytes 16384 -CancellationToken $deadline.Token
             $ready=Read-BoundedCollectionChannelFrame -Stream $PrivilegeChannel.Stream -MaximumBytes 16384 -CancellationToken $deadline.Token
-            if ($ready -cne '{"kind":"SystemActivationReady"}') { throw 'The SYSTEM broker rejected activation.' }
+            $ready=$ready|ConvertFrom-Json -Depth 3
+            if (@($ready.PSObject.Properties).Count -ne 2 -or $ready.kind -cne 'SystemActivationReady' -or
+                $ready.activationSid -isnot [string] -or $ready.activationSid.Length -gt 184 -or
+                $ready.activationSid -cnotmatch '^S-1-[0-9-]+$') { throw 'The SYSTEM broker rejected activation.' }
             if (-not $validationFixture) {
                 $service=New-Object -ComObject 'Schedule.Service'; $service.Connect()
                 $definition=New-SystemCollectionTaskDefinition -Service $service -TaskName $taskName -Executable $approvedExecutable -EncodedWorker $startInfo.ArgumentList[4] -WorkingDirectory $PSHOME
                 $journalVariable=Get-Variable -Name AssessmentRunJournalPath -Scope Script -ErrorAction SilentlyContinue
                 if ($null -eq $journalVariable -or -not $journalVariable.Value) { throw 'SYSTEM activation requires durable initiating-user intent.' }
-                Register-SystemCollectionTaskOwnership -JournalPath $journalVariable.Value -TaskName $taskName -Definition $definition
+                Register-SystemCollectionTaskOwnership -JournalPath $journalVariable.Value -TaskName $taskName -Definition $definition -ActivationSid $ready.activationSid
+                $brokerIntentRecorded=$true
             }
             Write-BoundedCollectionChannelFrame -Stream $PrivilegeChannel.Stream -Json '{"kind":"SystemActivationAuthorized"}' -MaximumBytes 16384 -CancellationToken $deadline.Token
             $activated=(Read-BoundedCollectionChannelFrame -Stream $PrivilegeChannel.Stream -MaximumBytes 16384 -CancellationToken $deadline.Token)|ConvertFrom-Json -Depth 3
@@ -1878,11 +1930,15 @@ function Invoke-SystemCollectionPlan {
                 throw 'SYSTEM activation was unavailable.'
             }
             if (@($activated.PSObject.Properties).Count -ne 2 -or $activated.kind -cne 'SystemActivated' -or
-                $activated.workerProcessId -isnot [long] -and $activated.workerProcessId -isnot [int] -or $activated.workerProcessId -le 0) { throw 'Invalid SYSTEM process identity.' }
-            $worker=[Diagnostics.Process]::GetProcessById([int]$activated.workerProcessId)
+                $activated.workerProcessId -isnot [long] -and $activated.workerProcessId -isnot [int] -or
+                ($validationFixture -and $activated.workerProcessId -le 0) -or
+                (-not $validationFixture -and $activated.workerProcessId -ne 0)) { throw 'Invalid SYSTEM process identity.' }
+            $expectedWorkerId=[int]$activated.workerProcessId
+            if ($expectedWorkerId -gt 0) { $worker=[Diagnostics.Process]::GetProcessById($expectedWorkerId) }
         }
         elseif ($validationFixture) {
             $worker = [System.Diagnostics.Process]::Start($startInfo)
+            $expectedWorkerId=$worker.Id
         }
         else {
             $taskActivation = Start-SystemCollectionTransientTask -TaskName $taskName `
@@ -1894,15 +1950,6 @@ function Invoke-SystemCollectionPlan {
         $null = $server.WaitForConnectionAsync($deadline.Token).GetAwaiter().GetResult()
         $failureStage = 'PEER_IDENTITY'
         $clientProcessId = [WinPCInfo.PrivilegedCollectionPlan.PipePeer]::GetClientProcessId($server)
-        if ($validationFixture -or $null -ne $PrivilegeChannel) {
-            if ($clientProcessId -ne $worker.Id) { throw 'The connected SYSTEM worker is not owned.' }
-        }
-        else {
-            $worker = [System.Diagnostics.Process]::GetProcessById($clientProcessId)
-            if ([int] $taskActivation.RunningTask.EnginePID -ne $clientProcessId) {
-                throw 'The connected SYSTEM worker is not the run-owned scheduled task process.'
-            }
-        }
         $hello = (Read-BoundedCollectionChannelFrame -Stream $server `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token) | ConvertFrom-Json -Depth 10
@@ -1918,6 +1965,14 @@ function Invoke-SystemCollectionPlan {
             $hello.treeControl -ne 'CoordinatorOwnedJobObject') {
             throw 'The SYSTEM worker hello failed identity validation.'
         }
+        # Identification is based on the last frame read, and never trusts the
+        # hello's own SID or Job claims as the source of kernel authority.
+        $admittedWorker=Get-SystemCollectionWorkerPeer -Server $server -OwnedJob $ownedJob `
+            -ExpectedExecutable $approvedExecutable -ExpectedDigest $executableDigest `
+            -ExpectedSid $(if ($validationFixture) { $initiatingSid } else { 'S-1-5-18' }) `
+            -ExpectedProcessId $expectedWorkerId -IdentityHandle ([ref]$workerIdentityHandle)
+        if ($null -ne $worker) { $worker.Dispose() }
+        $worker=$admittedWorker
         $peerVerified = $true
         if ($null -ne $PrivilegeChannel -and $null -ne $scenario.operationDeadlineMilliseconds) {
             $deadline.CancelAfter([int]$scenario.operationDeadlineMilliseconds)
@@ -2149,6 +2204,7 @@ function Invoke-SystemCollectionPlan {
             )
         }
         if ($null -ne $worker) { $worker.Dispose() }
+        if ($null -ne $workerIdentityHandle) { $workerIdentityHandle.Dispose() }
         if ($null -ne $ownedJob) { $ownedJob.Dispose() }
         $taskCleanup = Remove-SystemCollectionTransientTask -Activation $taskActivation `
             -TaskName $taskName `
@@ -2174,7 +2230,7 @@ function Invoke-SystemCollectionPlan {
             } catch { $taskAbsent=$false } finally { $brokerCleanup.Dispose() }
         }
         $journalVariable = Get-Variable -Name AssessmentRunJournalPath -Scope Script -ErrorAction SilentlyContinue
-        if ($taskAbsent -and $workerTreeAbsent -and ($null -ne $taskActivation -or ($brokerActivationStarted -and -not $validationFixture)) -and
+        if ($taskAbsent -and $workerTreeAbsent -and ($null -ne $taskActivation -or $brokerIntentRecorded) -and
             $null -ne $journalVariable -and $journalVariable.Value) {
             try {
                 if (@(Get-SystemTaskRecoveryInstances -TaskName $taskName).Count -ne 0) { throw 'An owned task instance remains.' }

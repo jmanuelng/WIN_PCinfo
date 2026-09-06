@@ -2175,6 +2175,12 @@ namespace WinPCInfo.PrivilegedCollectionPlan
         private static extern bool QueryFullProcessImageName(IntPtr process, uint flags, System.Text.StringBuilder path, ref int size);
         [DllImport("kernel32.dll")]
         private static extern bool CloseHandle(IntPtr handle);
+        public static SafeProcessHandle HoldProcessIdentity(int processId)
+        {
+            IntPtr process = OpenProcess(0x1000, false, processId);
+            if (process == IntPtr.Zero) throw new InvalidOperationException("Unable to hold the worker identity.");
+            return new SafeProcessHandle(process, true);
+        }
         public static string GetProcessImage(int processId)
         {
             IntPtr process = OpenProcess(0x1000, false, processId); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -2197,6 +2203,30 @@ namespace WinPCInfo.PrivilegedCollectionPlan
             if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out processId))
                 throw new InvalidOperationException("Unable to bind the worker process.");
             return checked((int)processId);
+        }
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool ImpersonateNamedPipeClient(SafePipeHandle pipe);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool RevertToSelf();
+        public static string GetIdentificationSid(PipeStream pipe)
+        {
+            if (!ImpersonateNamedPipeClient(pipe.SafePipeHandle))
+                throw new InvalidOperationException("Unable to identify the pipe token.");
+            try
+            {
+                using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent(true))
+                {
+                    if (identity == null || identity.ImpersonationLevel != System.Security.Principal.TokenImpersonationLevel.Identification)
+                        throw new InvalidOperationException("The worker did not restrict pipe identification.");
+                    return identity.User.Value;
+                }
+            }
+            finally
+            {
+                // No PowerShell, asynchronous continuation or caller operation
+                // runs while this thread holds even an identification token.
+                if (!RevertToSelf()) Environment.FailFast("Unable to revert pipe identification.");
+            }
         }
     }
 
@@ -2313,6 +2343,24 @@ namespace WinPCInfo.PrivilegedCollectionPlan
                 uint returned;
                 return QueryInformationJobObject(handle, JobObjectBasicProcessIdList,
                     buffer, 65536, out returned) && Marshal.ReadInt32(buffer, 4) == 0;
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+
+        public bool ContainsProcess(int processId)
+        {
+            if (handle == IntPtr.Zero || processId <= 0) return false;
+            IntPtr buffer = Marshal.AllocHGlobal(65536);
+            try
+            {
+                uint returned;
+                if (!QueryInformationJobObject(handle, JobObjectBasicProcessIdList, buffer, 65536, out returned))
+                    return false;
+                int count = Marshal.ReadInt32(buffer, 4);
+                if (count < 0 || count > (65536 - 8) / IntPtr.Size) return false;
+                for (int index = 0; index < count; index++)
+                    if (Marshal.ReadIntPtr(buffer, 8 + index * IntPtr.Size).ToInt64() == processId) return true;
+                return false;
             }
             finally { Marshal.FreeHGlobal(buffer); }
         }

@@ -77,6 +77,27 @@ try {
     Assert-Equal 'CleanupIncomplete' $survivingInstance.outcome 'a currently observed instance overrides an older absence witness'
     function Get-SystemTaskRecoveryInstances { param($TaskName); @() }
     Assert-Equal $true (Invoke-StaleRunRecovery -JournalPath $second.Journal.journalPath).cleanup.verified 'durable process proof plus independent current task/instance absence permits retirement'
+    $alternateRoot=Join-Path $testRoot 'alternate-administrator'
+    $null=[IO.Directory]::CreateDirectory($alternateRoot)
+    $alternate=New-EvidenceWorkspaceFixtureContext -Boundary ([pscustomobject]@{CaseRoot=$alternateRoot})
+    $activationSid='S-1-5-21-100-200-300-1002'
+    Register-SystemCollectionTaskOwnership -JournalPath $alternate.Journal.journalPath `
+        -TaskName ('WINPCInfo-SystemCollection-v1-'+[guid]::NewGuid().ToString('N')) `
+        -Definition $script:taskDefinition -ActivationSid $activationSid
+    Set-EvidenceWorkspaceFixtureOwnerStale -JournalPath $alternate.Journal.journalPath
+    $script:taskPresent=$true; $script:taskDeleted=$false
+    $script:recoveryTask | Add-Member -Force ScriptMethod GetSecurityDescriptor {
+        param($Flags); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        "D:P(A;;GA;;;SY)(A;;GA;;;$sid)(A;;GA;;;S-1-5-21-100-200-300-9999)"
+    }
+    Assert-Equal 'CleanupIncomplete' (Invoke-StaleRunRecovery -JournalPath $alternate.Journal.journalPath).outcome 'an unrecorded administrator cannot acquire recovery ownership'
+    Assert-Equal $false $script:taskDeleted 'unexpected task authority prevents deletion'
+    $script:recoveryTask | Add-Member -Force ScriptMethod GetSecurityDescriptor {
+        param($Flags); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        "D:P(A;;GA;;;SY)(A;;GA;;;$sid)(A;;GA;;;S-1-5-21-100-200-300-1002)"
+    }
+    Assert-Equal $true (Invoke-StaleRunRecovery -JournalPath $alternate.Journal.journalPath).cleanup.verified 'the durably authenticated alternate administrator task remains recoverable by the initiator'
+    Assert-Equal $true $script:taskDeleted 'exact alternate-administrator ownership permits cleanup'
 }
 finally { if ([IO.Directory]::Exists($testRoot)) { Remove-Item -LiteralPath $testRoot -Recurse -Force } }
 Write-Output 'PASS: generated stale recovery preserves foreign SYSTEM tasks and verifies exact owned task absence before retiring its journal.'

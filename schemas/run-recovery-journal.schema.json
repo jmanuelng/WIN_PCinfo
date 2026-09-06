@@ -52,7 +52,8 @@
         "properties": {
           "taskName": { "type": "string", "pattern": "^WINPCInfo-SystemCollection-v1-[0-9a-f]{32}$" },
           "definitionSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-          "absenceVerified": { "type": "boolean" }
+          "absenceVerified": { "type": "boolean" },
+          "activationSid": { "type": "string", "pattern": "^S-1-[0-9-]+$", "maxLength": 184 }
         }
       }
     },

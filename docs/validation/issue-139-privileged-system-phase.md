@@ -28,6 +28,23 @@ instances before recording an absence witness. The administrator grants task
 access only to the initiating user, its own selected administrator identity and
 SYSTEM; it never gains package access from this channel. Process image checks
 use limited query rights while retaining the exact executable digest check.
+The authenticated readiness frame supplies the selected administrator SID for
+the initiating user's durable journal. The optional `activationSid` field keeps
+older 1.1.0 journals readable; absent values retain the original two-principal
+task access contract. An unrecorded administrator ACE is refused during recovery.
+
+Worker admission uses the kernel pipe PID, membership in the exact coordinator
+Job, an Identification-level pipe token SID and the admitted executable digest.
+A limited-query process handle pins that identity through cleanup. The native
+SID query reverts its thread token synchronously before returning. Scheduler
+engine identity is separate from action identity: Microsoft's
+[EnginePID contract](https://learn.microsoft.com/en-us/windows/win32/taskschd/runningtask-enginepid)
+does not promise action-PID equality. Identification follows Microsoft's
+[pipe identification contract](https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-impersonatenamedpipeclient)
+without enabling additional privileges. Existing conservative scheduler-engine
+absence checks remain; if the engine persists on the acceptance machine, cleanup
+remains unverified and that limitation must be resolved in #161 rather than
+claiming live success from controlled workers.
 
 Denied UAC skips SYSTEM activation and preserves unrelated standard-user evidence
 through the canonical record, encryption and protected HTML opening. Source-scoped
@@ -55,6 +72,15 @@ Observed failures before their corrections:
 - Old early-cancel assertions incorrectly required a report after collection was
   moved behind the front-loaded privileged phase; they now require honest
   `VerifiedAbsent`, no report action and verified worker cleanup at that point.
+- Independent review exposed an alternate-administrator recovery ACL mismatch;
+  the new recovery regression failed before authenticated activation identity was
+  recorded, then passed while retaining refusal of an unrelated administrator.
+- Cancellation during the broker readiness exchange returned `CleanupIncomplete`
+  despite verified absence and no recorded intent. The regression now returns
+  `Cancelled` with verified cleanup and no persistent activation authorization.
+- The controlled SYSTEM peer regression failed before the kernel identity seam
+  existed. It now admits the actual Job-owned worker without any scheduler-engine
+  equality assumption and rejects wrong Job, SID, image, digest and expected PID.
 
 Passing focused checks recorded before independent review:
 
@@ -66,6 +92,8 @@ Passing focused checks recorded before independent review:
 | `PrivilegedCollectionPlanPolicy.Tests.ps1` and `PrivilegedCollectionPlan.Tests.ps1` | Closed policy plus nine existing peer, plan, denial, worker-loss, timeout, cancellation and owned-tree checks |
 | `SystemCollectionPlanPolicy.Tests.ps1` and `SystemCollectionPlan.Tests.ps1` | Closed policy plus twenty existing catalog, typed parameter, provenance, result, source-failure and cleanup cases |
 | `SystemTaskAbsence.Tests.ps1` and `SystemTaskRecovery.Tests.ps1` | Missing/failed observation never proves absence; foreign task preserved; exact owned task and independent instance checks retain recovery uncertainty |
+| `SystemBrokerCancellation.Tests.ps1` | Actual coordinator pipe/Job and empty journal, controlled broker transport: cancellation before readiness authorizes no task and reports verified cleanup |
+| `SystemWorkerPeer.Tests.ps1` | Real synthetic release worker, kernel pipe PID, owned Job, Identification SID, limited identity handle and admitted image checks; rejected peers always leave the thread token reverted |
 | `StatusDeskEngine.Tests.ps1 -RequireFrontLoadedPrivilege` | Generated ordinary approved flow reaches encrypted package and protected report |
 | Same test with `-PrivilegeOutcome ElevationDenied`, `AlreadyElevated`, `AlternateAdministrator` | Generated scope/ownership outcomes reach encrypted report; denied scopes remain explicit and standard evidence survives |
 | `StatusDeskCancellation.Tests.ps1` | Cancellation after identity/resource preserves usable partial evidence; active privileged cancellation safely permits no report |
