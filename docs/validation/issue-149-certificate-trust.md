@@ -1,6 +1,7 @@
 # Purpose-bound certificate implementation (#149)
 
-Starting revision: `a5df6b5b021333ffd658b51fbc4137e5bfab621e`. The #137 blocker
+Starting revision: `a5df6b5b021333ffd658b51fbc4137e5bfab621e`. Final application
+revision: `fed54efb3d83dbbb9c22f436bd619a261322de20`. The #137 blocker
 is merged, and #148 was merged during this slice. This evidence is exclusively
 controlled and synthetic. No real certificate store was read, live assessment
 run, key accessed/exported, certificate created, trust modified, candidate signed,
@@ -60,20 +61,54 @@ harness correction is not a product or live-device result.
 | CertificateTrustAdmission | Pass: incomplete-but-trusted, alternate-admin observations, denied-scope candidates and reversed validity intervals are rejected |
 | CertificateTrust / CertificateTrustPolicy | Pass: existing twelve scenario reducers, privacy negatives, scoped rules and unchanged finite offline policy |
 | CertificateTrustNativeSource / LocalOnlyRequestBoundary | Pass: actual source parsing/safety and unchanged NoCheck/download-disable checks, including fail-closed missing capability and zero LocalOnly request-adapter dispatch |
-| Existing generated CertificateTrustApplication / final deterministic candidate | Pending final focused execution and artifact digest capture |
+| CertificateTrustApplication | Pass: all twelve existing generated fixtures, including virtual-device/non-exportable provider facts, canonical record, validity/trust findings, HTML, encrypted package reopening, public-output privacy and verified owned cleanup |
+| BuildDeterminism | Pass in 50.5 seconds: independent output directories, LF/CRLF input mirrors, exact provenance, relocated device/software/certificate generated execution |
+| Changed executable syntax / diff whitespace | Pass: all seven changed PowerShell files parse and diff checks pass |
 | Whole repository regression / live acceptance | Pending #158/#161 under the user's focused per-ticket test cadence |
 
 Generated synthetic assessment packages and plaintext viewing are removed through
 the existing verified owned-cleanup harness. Ignored local build outputs remain
 available for review. No private identities or real assessment artifacts enter
-public evidence. Exact final candidate identity and independent review outcomes
-will be recorded here before ticket handoff.
+public evidence.
+
+Exact unsigned candidates from final application revision `fed54ef`:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| WIN-PCInfo.ps1 | 3,161,803 | `393512fe9dcc4b2657f4521b2b3abb6dfc96ab7548938706f583d4e59b4cd77d` |
+| WIN-PCInfo-2.0.0-preview.1-portable.zip | 4,682,981 | `419ee12cb979d97bf2be021af976dc5884fae5e7d40fb05f0158dda981cc171d` |
+
+Both artifacts match both independent deterministic-build copies in length and
+digest. Content-tree identity is
+`88fc728a80c2aab14e66dcb0df43d51438c68fc68ab92cd02c1ea53fb118e669`.
+Validation documents are excluded from the portable content tree; final
+evidence-only edits do not change these application/package bytes.
+
+## Standards review
+
+Independent fixed-point review of `a5df6b5...fed54ef`: Pass, zero documented
+standard violations and zero actionable baseline-smell judgments. The reviewer
+accepted explicit bounds, stable coverage reasons, observation/trust separation,
+privacy, DCO and the focused-test cadence override. Scenario adapter setup and
+expected outcomes serve independent test responsibilities. Review was read-only.
+
+## Spec review
+
+Fresh independent fixed-point review of `a5df6b5...fed54ef`: zero actionable
+findings, missing implementation requirements, scope creep or apparently wrong
+behavior. The reviewer independently ran CertificateSourceBounds and
+CertificateTrustAdmission successfully and inspected the generated adapter/report
+assertions. Its pending final fixture/digest evidence request is completed above;
+live and integrated gates remain explicitly pending. A retained-agent capacity
+limit prevented parallel reviewer creation, so Standards completed before a fresh
+Spec context was spawned. No prior-ticket reviewer conversation was reused and
+neither axis was omitted.
 
 ## Requirement register contribution
 
 | Requirement | Implementation disposition | Next owner |
 | --- | --- | --- |
-| #37 story 47; CAP-0014; CMP-0014 and certificate portion of CMP-0023 | Controlled purpose-selected user/machine source, bounds, metadata, advisory findings, package and HTML repaired and under focused validation | #161 private real source comparison; #158 integrated acceptance |
+| #37 story 47; CAP-0014; CMP-0014 and certificate portion of CMP-0023 | Pass at controlled purpose-selected user/machine source, bounds, metadata, advisory, package and HTML seams; live acceptance remains pending | #161 private real source comparison; #158 integrated acceptance |
 | #37 stories 49–54,66–67,69; #134 GUI stories 19–21,24 | Bounded #149 contribution: scoped missing evidence and references, privacy, stable values, unchanged preparation and protected workflow | #151 broader report/recommendation work; #158/#161 full integration/locale/GUI acceptance |
 | Local Only implicit chain/revocation/assessment requests | Controlled call boundaries pass; live zero-egress conclusion remains Blocked by delegated DNS/service attribution method | #160/#161 approved minimized observer method; #150 enabled connectivity |
 | Validity, trust, incomplete chains, multiple/absent purposes, denial, virtual and alternate-admin contexts on actual devices | NotStarted for this slice; synthetic evidence does not establish real acceptance | #161 private comparison checklist |
