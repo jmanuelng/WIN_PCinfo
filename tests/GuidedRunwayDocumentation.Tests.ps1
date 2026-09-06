@@ -13,11 +13,11 @@ $policy = Get-Content -LiteralPath (
 
 $headerText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src/ApplicationHeader.ps1') -Raw
 $allowedWorkflows = @(
-    'Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease'
+    'Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'OpenReport', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease'
 )
 $allowedModes = @('Guided', 'Automation')
 Assert-Equal $true (
-    $headerText.Contains("ValidateSet('Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')")
+    $headerText.Contains("ValidateSet('Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'OpenReport', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')")
 ) 'CheckRuntime and the existing generated-application workflows are declared explicitly'
 Assert-Equal $true ($headerText.Contains("ValidateSet('Guided', 'Automation', 'Gui')")) `
     'Guided and Automation remain available alongside the reserved Gui entry'
@@ -60,6 +60,10 @@ foreach ($topic in @($policy.requiredTopics)) {
 }
 
 $runwayText = [string] $documentTexts.guidedRunway
+foreach($instruction in @('Change network / output','New preparation / retry','Close viewing',
+    'Recover viewing residue','Personal Evaluation Build','private key','launch.cmd')){
+    Assert-Equal $true ($runwayText.Contains($instruction)) "the beginner runway explains $instruction"
+}
 foreach ($stage in @($policy.runway)) {
     Assert-Equal $true ($runwayText -match "(?m)^## $stage") `
         "the Guided Runway has a beginner heading for $stage"
