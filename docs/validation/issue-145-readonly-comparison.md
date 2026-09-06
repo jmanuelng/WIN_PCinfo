@@ -12,7 +12,7 @@ contents in the approved private workspace. Publish only sanitized outcomes.
 | --- | --- | --- |
 | Windows Update/WUfB | Read the three exact WindowsUpdate policy values: DeferFeatureUpdatesPeriodInDays, DeferQualityUpdatesPeriodInDays, DisableDualScan. Compare canonical values, absence, provenance and HTML with the same private read interval. | Configured signals with unproven freshness/channel. No update scan, success, active ring or tenant intent follows from the values. Windows 11 does not support DisableDualScan; Windows 10 uses legacy guidance. |
 | RDP | Read fDenyTSConnections, the TermService StartMode/State, the fixed RDP-Tcp Win32_TSGeneralSetting projection and its fEnableWinStation value. | Configuration is separate from service runtime. Disabled configured listener and absent provider are different; neither establishes reachability, sessions or use. |
-| WinRM | Read WinRM StartMode/State and five exact Service policy-registry values: AllowUnencryptedTraffic, AllowBasic, AllowKerberos, AllowNegotiate, AllowCredSSP. | Registry signals do not establish effective authentication or defaults. A running service cannot establish configured listeners. |
+| WinRM | Read WinRM StartMode/State and five Service policy values. In Registry64 HKLM, compare the explicit WSMAN Service auth_certificate DWORD and at most 32 direct Listener selector records (Port/enabled DWORD, +HTTP/+HTTPS identity only). | Explicit local configuration does not establish effective authentication, listener completeness, defaults or runtime. Compare aggregate configured state; shared port/transport only when all records agree. |
 | SMB | Import the fixed inbox SmbShare and DISM manifests in native Core mode. Compare the three client and five server Boolean settings, and SMB1Protocol optional-feature state. | No share/session enumeration, negotiated signing/encryption, guest use or SMB1 usage claim. EnableSecuritySignature is ignored by SMB2 and newer. |
 | Legacy authentication | Read LmCompatibilityLevel and NtlmMinClientSec/NtlmMinServerSec from the fixed LSA paths. | Exact configuration levels/masks only; no traffic, dependency, organization-wide restriction or protocol-use claim. |
 
@@ -24,24 +24,29 @@ and edition explicitly; catalog guidance does not confer a Supported claim.
 Separate denied access, unsupported sources, malformed values and partial fields.
 Confirm encrypted package reopening and complete owned viewing cleanup.
 
-## Unimplemented sources; no acceptance claim
+## Newly implemented sources; live comparison pending
 
-- `field:policy.winrm.auth-certificate`: no released, documented request-free
-  source is established. The authentication scope is Partial when policy values
-  are usable, with an explicit source-not-implemented reason. The field is absent
-  from observations; this never means certificate authentication is false.
-- `field:policy.winrm.listener-state`, `listener-transport`, `listener-port`:
-  no released request-free source is established. The listener scope is
-  Constrained with `POLICY.WINRM_REQUEST_FREE_LISTENER_SOURCE_NOT_IMPLEMENTED`.
-  No listener source executed in controlled or live validation. This is an
-  implementation limitation, not an absent/disabled environmental listener.
+The correction sources and static primary-code proof are recorded in
+[issue-145-winrm-source-proof.md](issue-145-winrm-source-proof.md). Compare
+explicit certificate true/false and unknown after absent/denied/malformed reads.
+Do not infer absent defaults or inspect certificate-mapping/credential blobs.
 
-These fields require a separately reviewed bounded local source before their
-full product acceptance. Their required-field status must be resolved by the
-#145 Spec review and parent acceptance register; honest coverage is not a waiver.
+For listeners, compare ConfiguredEnabled/ConfiguredDisabled/ConfiguredMixed with
+the explicit local records and the separate observed service runtime. Verify
+custom ports, multiple records with equal and differing ports/transports, denied
+access, missing values and unsupported selector shapes. No selector address,
+certificate thumbprint or hostname should enter canonical evidence or HTML.
+Empty storage must remain unknown, not an observed absence of listeners.
+
+Listener coverage stays Partial because policy-created, compatibility and default
+expansion, override precedence and current listening remain unobserved. Check
+those limits appear in the protected report, and validate Windows 10/11 source
+applicability with the exact admitted candidate. No live OS compatibility result
+follows from static inspection of one installed component.
+
 An explicitly authorized manual WSMan comparison in a separate human session
-would remain external comparison evidence and would not implement these sources.
-Do not run that comparison during the Local Only observer gate.
+remains external comparison evidence. Do not run it during the Local Only
+observer gate. The product source sends no WSMan/HTTP requests in either mode.
 
 ## Request and privacy checks
 
@@ -57,7 +62,7 @@ WindowsRemoteManagement.admx Service mappings and Microsoft's
 [RemoteManagement Policy CSP](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-remotemanagement).
 The [WSMan provider reference](https://learn.microsoft.com/en-us/powershell/module/microsoft.wsman.management/about/about_wsman_provider)
 says configuration is stored in the registry, but does not establish a stable
-direct mapping for the excluded listener/certificate-auth fields.
+direct mapping for listener/certificate-auth fields; the bounded installed-service code trace supplies that mapping for the inspected component.
 
 Versioned guidance uses Microsoft's
 [update scan-source guidance](https://learn.microsoft.com/en-us/windows/deployment/update/wufb-wsus)

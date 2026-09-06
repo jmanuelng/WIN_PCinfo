@@ -6458,7 +6458,7 @@
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Service\\Auth\\Certificate"
+        "authoritativeIdentity": "Registry64 HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WSMAN\\Service\\auth_certificate (explicit DWORD)"
       },
       "valueType": "Boolean",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -6510,7 +6510,7 @@
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Listener normalized listener presence and enabled state"
+        "authoritativeIdentity": "Registry64 HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WSMAN\\Listener selector records: explicit enabled DWORD aggregate; local configuration only"
       },
       "valueType": "String",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -6536,7 +6536,7 @@
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Listener\\Transport"
+        "authoritativeIdentity": "Registry64 HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WSMAN\\Listener selector +HTTP/+HTTPS suffix; shared transport only"
       },
       "valueType": "String",
       "sensitivity": "RestrictedDiagnosticEvidence",
@@ -6562,7 +6562,7 @@
       "source": {
         "sourceId": "source:windows.winrm.configuration",
         "kind": "StructuredWindowsSource",
-        "authoritativeIdentity": "WSMan:\\localhost\\Listener\\Port"
+        "authoritativeIdentity": "Registry64 HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WSMAN\\Listener selector records: explicit Port DWORD; shared port only"
       },
       "valueType": "Integer",
       "sensitivity": "RestrictedDiagnosticEvidence",

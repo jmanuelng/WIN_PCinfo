@@ -90,7 +90,7 @@ foreach($fragment in @(
     'SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate','NtlmMinClientSec',
     'NtlmMinServerSec','fDenyTSConnections','fEnableWinStation',
     'Win32_TSGeneralSetting','AllowBasic',
-    'POLICY.WINRM_REQUEST_FREE_LISTENER_SOURCE_NOT_IMPLEMENTED','Get-SmbClientConfiguration',
+    'POLICY.WINRM_LOCAL_LISTENER_CONFIG_ONLY','Get-SmbClientConfiguration',
     'Get-SmbServerConfiguration','Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol',
     'Convert-EffectivePolicyRdpSecurityLayer',
     'Convert-EffectivePolicyRdpMinEncryptionLevel',

@@ -33,13 +33,14 @@ function Get-PrivilegedCollectionWorkerSource {
     if($start -lt 0 -or $end -le $start -or $remoteEnd -le $remoteStart){throw 'Remote source boundary changed; refuse live fallback.'}
     $blocks=$live.Extent.Text.Substring($start,$end-$start)+$live.Extent.Text.Substring($remoteStart,$remoteEnd-$remoteStart)
     $blocks=$blocks.Replace('[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey(', '(Open-ControlledRemoteKey ')
-    $blocks=$blocks.Replace(',$false)', ' $false)')
+    $blocks=[regex]::Replace($blocks,'(\(Open-ControlledRemoteKey [^\r\n]*?),\$false\)', '$1 $$false)')
     $blocks=$blocks.Replace('Open-ControlledRemoteKey [string]$definition.path','Open-ControlledRemoteKey ([string]$definition.path)')
     $baseline=New-EffectivePolicySyntheticPayload -Policy (Get-EffectivePolicyPolicy -ConvertFromJsonCommand (Get-Command ConvertFrom-Json)) -Scenario Workgroup
     $json=($baseline|ConvertTo-Json -Depth 12 -Compress).Replace("'","''")
     $adapted='function Get-LiveEffectivePolicyResult { param($AssessmentUserSid) $result=ConvertFrom-Json -AsHashtable -InputObject '''+$json+''';' + "`n" +
         '$result.scopeStates=@(foreach($id in Get-EffectivePolicyScopeIds){$result.scopeStates|Where-Object scopeId -eq $id}); $empty=New-EffectivePolicyBaseResult Failed; foreach($name in @(''windowsUpdateSignals'',''legacyAuthenticationSignals'',''rdpState'',''winrmState'',''smbState'')){$result[$name]=$empty[$name]}; Set-EffectivePolicyScopeState $result @(15,16,17,18,19,30,31,32,33,34,35,36,37,38,39,40) Failed ''POLICY.SOURCE_NOT_EXECUTED'';' + "`n" + $blocks + "`n" + 'Complete-EffectivePolicyLayerStates $result }'
     $source=$source.Replace($live.Extent.Text,$adapted)
+    $source=$source.Replace('[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,[Microsoft.Win32.RegistryView]::Registry64)', '(Open-ControlledRemoteBaseKey)')
     $source=$source.Replace('New-SyntheticEffectivePolicyResult -Scenario ([string]$configuration.effectivePolicyScenario)','Get-LiveEffectivePolicyResult -AssessmentUserSid $assessmentUserSid')
     $source=$source.Replace('Microsoft.PowerShell.Core\Import-Module -Name $path','Import-ControlledRemoteModule -Name $path')
     $prefix=@"
@@ -66,14 +67,21 @@ function Get-Command {
 function Open-ControlledRemoteKey {
     param(`$Path,`$Writable)
     Assert-ControlledRemoteAvailability
-    if(`$Writable -or `$Path -notin @('SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate','SOFTWARE\Policies\Microsoft\Windows\WinRM\Service','SYSTEM\CurrentControlSet\Control\Lsa','SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0','SYSTEM\CurrentControlSet\Control\Terminal Server','SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp')){throw 'Unapproved registry access.'}
+    if(`$Writable -or `$Path -notin @('SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate','SOFTWARE\Policies\Microsoft\Windows\WinRM\Service','SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Service','SYSTEM\CurrentControlSet\Control\Lsa','SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0','SYSTEM\CurrentControlSet\Control\Terminal Server','SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp')){throw 'Unapproved registry access.'}
     `$key=[pscustomobject]@{}
     `$key|Add-Member ScriptMethod Dispose {}
+    `$key|Add-Member ScriptMethod GetValueKind {param(`$Name) if(`$Name -ne 'auth_certificate'){throw 'Unapproved typed value.'}; if('__CASE__' -eq 'CertificateKind'){return [Microsoft.Win32.RegistryValueKind]::QWord}; [Microsoft.Win32.RegistryValueKind]::DWord}
     `$key|Add-Member ScriptMethod GetValue {param(`$Name,`$Default,`$Options)
         if('__CASE__' -eq 'RegistryDenied'){throw [UnauthorizedAccessException]::new()}
         if('__CASE__' -eq 'Absent'){return `$null}
         if('__CASE__' -eq 'Malformed'){return '1'}
         switch(`$Name){
+            auth_certificate {
+                if('__CASE__' -eq 'CertificateAbsent'){return `$null}
+                if('__CASE__' -eq 'CertificateDenied'){throw [UnauthorizedAccessException]::new()}
+                if('__CASE__' -eq 'CertificateFalse'){return [int]0}
+                [int]1
+            }
             DeferFeatureUpdatesPeriodInDays {[int]14}
             DeferQualityUpdatesPeriodInDays {[int]3}
             DisableDualScan {[int]1}
@@ -89,6 +97,51 @@ function Open-ControlledRemoteKey {
             AllowCredSSP {if('__CASE__' -eq 'Partial'){return `$null};[int]0}
             default {throw 'Unapproved registry value.'}
         }
+    }
+    `$key
+}
+function Open-ControlledRemoteBaseKey {
+    Assert-ControlledRemoteAvailability
+    `$key=[pscustomobject]@{}
+    `$key|Add-Member ScriptMethod Dispose {}
+    `$key|Add-Member ScriptMethod OpenSubKey {param(`$Path,`$Writable)
+        if(`$Path -eq 'SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Listener'){
+            if(`$Writable){throw 'Writable listener access.'}
+            New-ControlledListenerKey
+        }else{Open-ControlledRemoteKey `$Path `$Writable}
+    }
+    `$key
+}
+function New-ControlledListenerKey {
+    if('__CASE__' -eq 'RegistryDenied'){throw [UnauthorizedAccessException]::new()}
+    if('__CASE__' -eq 'Absent'){return `$null}
+    `$key=[pscustomobject]@{SubKeyCount=`$(if('__CASE__' -eq 'ListenerBound'){33}else{1})}
+    `$key|Add-Member ScriptMethod Dispose {}
+    `$key|Add-Member ScriptMethod GetSubKeyNames {
+        switch('__CASE__'){
+            ListenerBound {throw 'Enumeration must not run above bound.'}
+            ListenerEmpty {return}
+            ListenerUnknown {return '*+UNKNOWN'}
+            ListenerHttps {return '*+HTTPS'}
+            ListenerMultiple {return @('*+HTTP','*+HTTPS')}
+            default {return '*+HTTP'}
+        }
+    }
+    `$key|Add-Member ScriptMethod OpenSubKey {param(`$Name,`$Writable)
+        if(`$Writable -or `$Name -notin @('*+HTTP','*+HTTPS')){throw 'Unapproved listener selector.'}
+        `$child=[pscustomobject]@{Selector=`$Name}
+        `$child|Add-Member ScriptMethod Dispose {}
+        `$child|Add-Member ScriptMethod GetValueKind {param(`$Name) if(`$Name -notin @('Port','enabled')){throw 'Unapproved listener kind.'};[Microsoft.Win32.RegistryValueKind]::DWord}
+        `$child|Add-Member ScriptMethod GetValue {param(`$Name,`$Default,`$Options)
+            if('__CASE__' -eq 'Malformed'){return '1'}
+            if('__CASE__' -eq 'ListenerMissing'){return `$null}
+            switch(`$Name){
+                Port {if('__CASE__' -eq 'ListenerBadPort'){return [int]65536};if(`$this.Selector -eq '*+HTTPS'){return [int]5986};[int]47099}
+                enabled {if('__CASE__' -eq 'ListenerDisabled' -or ('__CASE__' -eq 'ListenerMultiple' -and `$this.Selector -eq '*+HTTPS')){return [int]0};[int]1}
+                default {throw 'Prohibited listener property.'}
+            }
+        }
+        `$child
     }
     `$key
 }
@@ -153,8 +206,17 @@ function Assert-RemoteSourceReport {
         if($Scenario -eq 'Malformed' -and $scope -notin @('winrm.listener','smb.server','rdp.listener')){$expected='Malformed'}
         if($Scenario -eq 'Malformed' -and $scope -eq 'rdp.listener'){$expected='Malformed'}
         if($Scenario -eq 'Partial' -and $scope -in @('legacy-auth.ntlm-minimum-session-security','winrm.authentication','smb.client')){$expected='Partial'}
-        if($scope -eq 'winrm.authentication' -and $expected -eq 'Complete'){$expected='Partial'}
-        if($scope -eq 'winrm.listener'){$expected='Constrained'}
+        if($scope -eq 'winrm.authentication' -and $Scenario -in @('CertificateAbsent','CertificateDenied','CertificateKind')){$expected='Partial'}
+        if($scope -eq 'winrm.listener'){
+            $expected=switch($Scenario){
+                {$_ -in @('Absent','ListenerEmpty','ListenerMissing','Unavailable')} {'Unavailable'}
+                {$_ -in @('Denied','RegistryDenied')} {'Denied'}
+                Unsupported {'Unsupported'}
+                {$_ -in @('Malformed','ListenerUnknown','ListenerBadPort')} {'Malformed'}
+                ListenerBound {'Constrained'}
+                default {'Partial'}
+            }
+        }
         Assert-Equal $expected @($Record.coverage|Where-Object scopeId -eq "scope:policy.$scope")[0].state "source disposition for $scope"
     }
     if($Scenario -eq 'Absent'){
@@ -168,7 +230,9 @@ function Assert-RemoteSourceReport {
         Assert-Equal $true @($Record.observations|Where-Object fieldId -eq 'field:policy.smb.client-require-signing')[0].value 'SMB configuration survives protected reopening'
         Assert-Equal 14 @($Record.observations|Where-Object fieldId -eq 'field:policy.windows-update.defer-feature-updates-days')[0].value 'WUfB configured period survives protected reopening'
         Assert-Equal 537395232 @($Record.observations|Where-Object fieldId -eq 'field:policy.legacy-auth.ntlm-min-client-sec')[0].value 'NTLM masks retain exact configuration values'
-        Assert-Equal 0 @($Record.observations|Where-Object fieldId -like 'field:policy.winrm.listener-*').Count 'no request is made to infer listener or reachability'
+        Assert-Equal 'ConfiguredEnabled' @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.listener-state')[0].value 'explicit listener configuration remains distinct from runtime state'
+        Assert-Equal 'HTTP' @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.listener-transport')[0].value 'transport comes from the service selector'
+        Assert-Equal 47099 @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.listener-port')[0].value 'custom port survives actual-source collection and protected reopening'
     }
     foreach($title in @('Windows Update and WUfB','RDP connection configuration','WinRM policy signals','SMB client configuration','Legacy authentication')){
         Assert-Equal $true $Html.Contains($title) 'each assigned family has readable source-backed HTML'
@@ -190,8 +254,21 @@ function Assert-RemoteSourceReport {
         Assert-Equal $true ([bool]$origin.collectedAt) 'collection time survives protected reopening'
         Assert-Equal $true $Html.Contains($observation.observationId) 'report retains resolvable source evidence references'
     }
-    Assert-Equal 'Indeterminate' @($Record.findings|Where-Object ruleId -eq 'rule:policy.security-control-coverage/1.0.0')[0].outcome 'unimplemented listener/certificate sources prevent a completeness claim'
-    Assert-Equal 0 @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.auth-certificate').Count 'unimplemented certificate authentication never becomes false'
+    Assert-Equal 'Indeterminate' @($Record.findings|Where-Object ruleId -eq 'rule:policy.security-control-coverage/1.0.0')[0].outcome 'local configuration cannot establish complete effective listener coverage'
+    if($Scenario -eq 'Configured'){Assert-Equal $true @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.auth-certificate')[0].value 'explicit service certificate authentication survives actual-source collection and protected reopening'}
+    if($Scenario -eq 'CertificateFalse'){Assert-Equal $false @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.auth-certificate')[0].value 'explicit zero stays observed false'}
+    if($Scenario -in @('CertificateAbsent','CertificateDenied','CertificateKind','Absent','Denied','RegistryDenied','Malformed')){Assert-Equal 0 @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.auth-certificate').Count 'missing denied or malformed certificate state never becomes a default'}
+    if($Scenario -eq 'ListenerHttps'){
+        Assert-Equal 'HTTPS' @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.listener-transport')[0].value 'HTTPS identity survives'
+        Assert-Equal 5986 @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.listener-port')[0].value 'explicit HTTPS port survives'
+    }
+    if($Scenario -eq 'ListenerDisabled'){Assert-Equal 'ConfiguredDisabled' @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.listener-state')[0].value 'disabled is a configured state'}
+    if($Scenario -eq 'ListenerMultiple'){
+        Assert-Equal 'ConfiguredMixed' @($Record.observations|Where-Object fieldId -eq 'field:policy.winrm.listener-state')[0].value 'mixed enabled settings remain explicit'
+        Assert-Equal 1 @($Record.observations|Where-Object fieldId -like 'field:policy.winrm.listener-*').Count 'differing transports and ports cannot become a fabricated single endpoint'
+    }
+    if($Scenario -in @('ListenerEmpty','ListenerMissing','ListenerUnknown','ListenerBadPort','ListenerBound','Absent','Denied','RegistryDenied','Malformed')){Assert-Equal 0 @($Record.observations|Where-Object fieldId -like 'field:policy.winrm.listener-*').Count 'unusable listener snapshot cannot donate successful observations'}
+    Assert-Equal $true $Html.Contains('policy-created, compatibility and default listeners') 'report explains the explicit source completeness limit'
     if($Scenario -eq 'Stopped'){
         Assert-Equal 'Stopped' @($Record.observations|Where-Object fieldId -eq 'field:policy.rdp.service-state')[0].value 'configured RDP can coexist with an observed stopped service'
         Assert-Equal $true @($Record.observations|Where-Object fieldId -eq 'field:policy.rdp.connections-allowed')[0].value 'service state cannot overwrite the separate configured signal'
@@ -200,6 +277,6 @@ function Assert-RemoteSourceReport {
         Assert-Equal 2 @($Record.observations|Where-Object fieldId -like 'field:policy.smb.client-*').Count 'partial SMB fields stay useful without inventing the missing guest setting'
     }
     if($Scenario -in @('Configured','Stopped','Windows10','UnknownContext')){
-        Assert-Equal 4 @($Record.observations|Where-Object fieldId -like 'field:policy.winrm.auth-*').Count 'four policy-backed auth values remain separate from unimplemented certificate authentication'
+        Assert-Equal 5 @($Record.observations|Where-Object fieldId -like 'field:policy.winrm.auth-*').Count 'policy and explicit service authentication values survive with source provenance'
     }
 }

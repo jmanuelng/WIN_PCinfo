@@ -36,8 +36,8 @@ function New-EffectivePolicySecurityReportSection {
         'rdp.listener'='RDP listener configuration'
         'winrm.service'='WinRM service configuration and observed state'
         'winrm.configuration'='WinRM policy signals: unencrypted traffic'
-        'winrm.authentication'='WinRM policy signals: authentication'
-        'winrm.listener'='WinRM listener evidence limitation'
+        'winrm.authentication'='WinRM authentication configuration'
+        'winrm.listener'='WinRM local listener configuration'
         'smb.client'='SMB client configuration'
         'smb.server'='SMB server configuration'
         'smb.smb1-feature'='SMB1 optional-feature state'
@@ -56,7 +56,7 @@ function New-EffectivePolicySecurityReportSection {
     $sections=foreach($key in $titles.Keys){
         $scope=@($Record.coverage|Where-Object scopeId -eq "scope:policy.$key")[0]
         $layer=if($key -like 'smartscreen.*' -or $key -like 'applocker.*' -or $key -in @('defender.asr','defender.network-protection','wdac.inventory')){'Configured Policy Signals'}else{'Current Control State'}
-        if($key -like 'windows-update.*' -or $key -like 'legacy-auth.*' -or $key -in @('rdp.connections','rdp.authentication','rdp.listener','winrm.configuration','winrm.authentication','smb.client','smb.server')){$layer='Configured Policy Signals'}
+        if($key -like 'windows-update.*' -or $key -like 'legacy-auth.*' -or $key -in @('rdp.connections','rdp.authentication','rdp.listener','winrm.configuration','winrm.authentication','winrm.listener','smb.client','smb.server')){$layer='Configured Policy Signals'}
         if($key -in @('rdp.service','winrm.service')){$layer='Start mode is configuration; service state is Current Control State'}
         $reason=if($scope.PSObject.Properties['reasonCode']){' ('+[Net.WebUtility]::HtmlEncode([string]$scope.reasonCode)+')'}else{''}
         $rows=foreach($id in $scope.observationIds){
@@ -117,7 +117,7 @@ function New-EffectivePolicyRemoteGuidance {
     }
     '<aside aria-label="Update and remote-management guidance"><h3>Update and remote-management follow-up</h3><p>Guidance: update-remote-auth/1.0.0. '+$context+'</p>'+
         '<p>Registry values may outlive the policy that wrote them. Deferral periods alone do not establish an active update ring, successful updates, tenant assignments or organization-wide enforcement. Missing values do not establish defaults. Applied Policy Evidence, configured signals and service runtime remain separate.</p>'+
-        '<p>RDP listener configuration does not establish reachability or use. WinRM reads only local Service policy-registry signals and service state. Certificate authentication has no released request-free source; listener state, transport and port are not collected because WSMan queries can make requests even to localhost. These implementation gaps are not evidence that a listener or authentication method is absent. No WSMan request is permitted by this collector in either network mode.</p>'+
+        '<p>RDP listener configuration does not establish reachability or use. WinRM reads Service policy signals, explicit local certificate-authentication and listener configuration, and separate service state. Listener coverage stays partial: policy-created, compatibility and default listeners, configuration freshness, overrides and current listening are not established. Multiple local records retain only a shared transport or port; differing values remain unknown. Missing registry values never imply disabled authentication or no listener. No WSMan request is permitted by this collector in either network mode.</p>'+
         '<p>SMB client and server signing, encryption and guest settings describe configuration only. EnableSecuritySignature is ignored by SMB2 and newer; it does not prove negotiated signing. SMB1 feature state does not prove use. LAN Manager compatibility and NTLM security masks do not prove authentication traffic, dependencies or organization-wide restrictions.</p>'+
         '<p>Before migration, ask the device and policy owners to compare these fields with approved policy and separately authorized protocol-use discovery. Verify Windows edition/build applicability, update source, remote-access dependencies and legacy authentication consumers before planning any change. WIN-PCInfo does not enable services, probe endpoints or change these settings.</p></aside>'
 }
@@ -1884,7 +1884,7 @@ function Add-EffectivePolicyEvidenceRecord {
         if($null -ne $payload.winrmState.certificateAuthentication){Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-certificate' 'field:policy.winrm.auth-certificate' 'subject:device:primary' ([bool]$payload.winrmState.certificateAuthentication)}
         if($null -ne $payload.winrmState.credSspAuthentication){Add-PolicyObservation 'scope:policy.winrm.authentication' 'winrm-auth-credssp' 'field:policy.winrm.auth-credssp' 'subject:device:primary' ([bool]$payload.winrmState.credSspAuthentication)}
     }
-    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.listener')[0].state -eq 'Complete'){
+    if(@($payload.scopeStates|Where-Object scopeId -eq 'scope:policy.winrm.listener')[0].state -in @('Complete','Partial')){
         if($null -ne $payload.winrmState.listenerState){Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-state' 'field:policy.winrm.listener-state' 'subject:device:primary' ([string]$payload.winrmState.listenerState)}
         if($null -ne $payload.winrmState.listenerTransport){Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-transport' 'field:policy.winrm.listener-transport' 'subject:device:primary' ([string]$payload.winrmState.listenerTransport)}
         if($null -ne $payload.winrmState.listenerPort){Add-PolicyObservation 'scope:policy.winrm.listener' 'winrm-listener-port' 'field:policy.winrm.listener-port' 'subject:device:primary' ([int]$payload.winrmState.listenerPort)}

@@ -28,6 +28,7 @@
         "scope:policy.rdp.listener",
         "scope:policy.winrm.configuration",
         "scope:policy.winrm.authentication",
+        "scope:policy.winrm.listener",
         "scope:policy.smb.client",
         "scope:policy.smb.server",
         "scope:policy.security-option.machine-inactivity-limit",
@@ -63,7 +64,6 @@
         "scope:policy.firewall.public-profile",
         "scope:policy.rdp.service",
         "scope:policy.winrm.service",
-        "scope:policy.winrm.listener",
         "scope:policy.smb.smb1-feature",
         "scope:policy.bitlocker.operating-system-volume",
         "scope:policy.bitlocker.protectors",
@@ -179,7 +179,7 @@
     },
     {
       "sourceId": "source:windows.winrm.configuration",
-      "interface": "Win32_Service; HKLM Service policy registry: AllowUnencryptedTraffic,AllowBasic,AllowKerberos,AllowNegotiate,AllowCredSSP",
+      "interface": "Win32_Service; HKLM WinRM Service ADMX policy; Registry64 HKLM WSMAN Service auth_certificate DWORD; up to 32 Listener selectors: Port,enabled DWORD",
       "limitation": "LocalConfigurationAndServiceOnlyNoReachability"
     },
     {
