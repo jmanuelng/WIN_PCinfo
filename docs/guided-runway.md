@@ -66,6 +66,21 @@ One endpoint cannot prove tenant intent, Intune assignment, Defender for Endpoin
 
 ## Choose
 
+For a delivered Personal Evaluation Build, use the exact private candidate and
+instructions supplied for your authorized session. Extract the complete portable
+bundle into a private local folder and double-click `Start-WIN-PCInfo.cmd`. Keep its
+governing resources together. The launcher selects an eligible installed runtime
+and opens the WPF Status desk; it does not install a runtime. A source build alone
+is unsigned and cannot perform an ordinary assessment.
+
+The Status desk exposes **Change network / output** before approval. Choose either
+approved network behavior and a private results folder. The scope remains
+Comprehensive Local Assessment. Changing choices stops the old preparation and
+shows a new complete summary; approval never carries over. **Select recipient
+before assessment** similarly replaces the selection with zero or one confirmed
+recipient. Encrypted results are the default; plaintext HTML is a separate warned
+action, not an output-mode default.
+
 Choose whether WIN-PCInfo fits your purpose. Preview.1 exposes one Comprehensive Local Assessment. There is no capability picker.
 
 Choose one network behavior before approval:
@@ -82,6 +97,16 @@ Do not choose WIN-PCInfo if you need a compliance audit, tenant assessment, reme
 The following trust questions stay separate. Passing one never proves the others.
 
 ### Verify before run
+
+A private evaluator compares the supplied exact candidate digest and follows
+[Personal evaluation certificates](personal-evaluation-certificates.md) with the
+maintainer during the authorized session. Personal test signing and the separate
+non-exportable Current User encryption certificate are distinct identities. Keep
+machine paths, certificate identities, fingerprints and session records private.
+Personal trust does not establish public publisher trust, Preview qualification,
+or Supported status. Never weaken execution policy or add broad trust to get past
+a rejection. After runtime or trust changes, close and launch the exact approved
+candidate again; the retry button does not reauthenticate changed script bytes.
 
 Build the generated application yourself and compare the build-evidence digest with the file you are about to launch:
 
@@ -121,6 +146,21 @@ Microsoft’s own lifecycle, servicing channel, and edition status are independe
 
 ## Prepare
 
+In the GUI, read the entire preparation area, including unresolved prerequisites,
+scope, network requests, output destination, recipient, privilege plan, estimates,
+and cleanup. **Approve and start** authorizes only that plan. **Decline** starts
+no assessment. **Help** and **About** are passive local reading surfaces, available
+when requested; they never navigate, upload evidence or prompt for feedback.
+
+Keyboard use: Tab and Shift+Tab move between controls; Alt plus an underlined
+letter selects its control. Enter or Space activates a focused button. Scroll
+the preparation and activity regions to read long text. The main window and
+dialogs scroll on smaller displays. Actual keyboard, display scaling and beginner
+acceptance remain the private [#161 session](https://github.com/jmanuelng/WIN_PCinfo/issues/161).
+Automated control tests are not evidence that those live checks passed.
+
+The following console path remains available independently:
+
 ```powershell
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 -Mode Guided
 ```
@@ -139,13 +179,37 @@ On this unsigned development artifact, the same commands fail with `PREPARATION.
 
 ## Run
 
+In the GUI, phase/state activity and elapsed time describe work without inventing
+a percentage. A waiting heartbeat means the controller is responsive, not that a
+source returned evidence. **Cancel assessment** and closing an active window both
+wait for owned workers and safe finalization. Keep the application open while it
+reports cleanup attention. After verified cleanup, a failed preparation retains
+its unresolved prerequisites. Use **Change network / output** or **Select recipient**
+to correct the request; either action starts a fresh preparation for your approval.
+You can deliberately choose no recipient if that is the intended sharing route.
+**New preparation / retry** repeats the current choices after verified cleanup;
+it never resumes collection.
+
 After approval on a trusted artifact, the run continues without further prompts. You should see structured progress records, then packaging, then one terminal record.
 
 Cancel with Ctrl+C. The application acknowledges cancellation, stops owned work, protects recoverable evidence when it is safe to do so, and verifies cleanup. Cancellation does not resume later.
 
-If a previous run crashed, do not delete folders by guesswork. Recovery is cleanup-only. It never resumes collection. Guided launch currently sets `allowStaleRecovery` to false, so it will not authorize cleanup of a previous workspace. To request recovery today, use Automation with `automationChoices.allowStaleRecovery` set to true after you have identified the product-owned residue. The exact safety rules are in [Evidence Workspace and Stale-run Recovery](evidence-workspace-recovery.md).
+If a previous run crashed, do not delete folders by guesswork. Recovery is cleanup-only. It never resumes collection. The GUI exposes **Recover owned residue** when registered assessment residue blocks the destination; review and approve its recovery-only plan. **Recover viewing residue** lets you deliberately select a folder to inspect registered viewing residue. Unrelated or ambiguous paths stay untouched. Guided console launch sets `allowStaleRecovery` to false. Automation can request `automationChoices.allowStaleRecovery` after ownership is identified. The exact safety rules are in [Evidence Workspace and Stale-run Recovery](evidence-workspace-recovery.md).
+
+If viewing, export or recipient setup reports `CleanupIncomplete`, this invocation
+blocks new assessment, setup, viewing and export even if later recovery succeeds.
+Retain protected packages and recovery records; use deliberate recovery or close.
+Start a fresh invocation only after owned cleanup is verified.
 
 ## Interpret
+
+**Open report** is the primary completion action when a verified package is
+available. **Close viewing** closes the restricted viewer and removes its owned
+temporary HTML. A partial package can still be useful; read its terminal outcome
+and coverage before using findings. No package or an integrity failure disables
+report actions. The offline report supports keyboard links and expandable details;
+use zoom and scroll as needed. Embedded-viewer and Microsoft Edge behavior require
+the exact-candidate checks in #161; fixture reports do not establish live success.
 
 Read the report in this order: outcome, scope, completeness, limitations, prioritized advisory results, then next steps. After that, open the detailed observations.
 
@@ -171,6 +235,29 @@ The report is not a compliance certificate. Deeper report structure is in [Compr
 | `IntegrityFailed` | Evidence or package checks failed | Keep the original package if investigation is authorized; do not open it with another tool |
 
 ## Share
+
+Use **Reopen encrypted results** to select an existing `.winpcinfo` file, then
+explicitly choose initiating Windows user/device access or the approved recipient
+key in the Current User store. The recipient route never silently falls back to
+local access. **Recipient setup** creates a separate persistent non-exportable key
+and public profile only after deliberate confirmation and a synthetic round trip.
+Confirm the fingerprint with the recipient through an independent trusted channel
+before selecting the profile. A recipient cannot be added after package creation.
+
+Keep the recipient private key while any retained package depends on it. Removing
+it can permanently lose historical package access. The dedicated same-device test
+key does not prove independent off-device recovery. Before deliberate removal,
+verify another approved recipient can open retained packages, or decide to dispose
+of those packages; then follow the exact private certificate removal procedure.
+Never export private keys or remove unrelated certificates. Signing trust removal
+and encryption-key retention are separate decisions.
+
+**Save HTML for consultant** requires the displayed restricted-evidence warning
+and a chosen private file destination. Transfer the encrypted package to its
+already-approved recipient through your authorized private channel; use exported
+HTML only when that deliberate fallback is appropriate. The application never
+uploads or sends either file. Delete any exported plaintext after the review;
+browser/cache absence and forensic erasure are not promised.
 
 Keep the `.winpcinfo` package private. Never attach a package, Assessment Record, Recipient Profile, fingerprint, or exported HTML report to a public issue, Discussion, pull request, or CI log.
 

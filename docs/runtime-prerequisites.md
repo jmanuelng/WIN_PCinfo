@@ -1,16 +1,16 @@
 # Runtime prerequisites and safe launch
 
-This guide explains the first WIN-PCInfo v2 launch slice. It is for beginners as well as automation authors.
+This guide explains WIN-PCInfo v2 launch admission. It is for beginners as well as automation authors.
 
-## What this slice does
+## What launch checks
 
-The generated application normalizes a versioned Assessment Run Request, emits versioned progress records, and runs the local Runtime Compatibility Check. It then stops at the preparation boundary because assessment collection is not part of this slice.
+The generated application normalizes a versioned Assessment Run Request, emits versioned progress records, and runs the local Runtime Compatibility Check. An approved, trusted candidate can continue from its frozen Preparation Summary through assessment, reporting and protected packaging. The [Guided Runway](guided-runway.md) describes GUI and console operation.
 
-No launch in this slice collects device evidence, makes an assessment network request, requests elevation, installs software, changes a Windows Feature, or changes device configuration. A synthetic runtime-fixture option exists for automated security validation; it is marked in the terminal record and can never authorize collection.
+Runtime checking does not authorize collection. Assessment requires the trust and preparation gates and explicit approval. WIN-PCInfo never installs software or changes device configuration. A synthetic runtime-fixture option exists for automated security validation; it is marked in the terminal record and can never authorize live collection.
 
-`NotStarted` and process exit code `20` are therefore expected for both eligible and ineligible hosts:
+`NotStarted` and process exit code `20` describe admission failure or declined preparation:
 
-- On an eligible host, reason `SLICE.POST_APPROVAL_EXECUTION_NOT_IMPLEMENTED` means runtime and Preparation passed but ordinary execution reached the next safe boundary before real collection/package finalization.
+- An eligible runtime alone does not establish application trust, destination safety or approval. An unsigned development artifact fails with `PREPARATION.INTEGRITY_FAILED` before collection.
 - On an ineligible host, a `RUNTIME.*` reason identifies the failed check and the terminal record includes the official Microsoft installation page and a retry step.
 
 This behavior does not create a Preview Release or a supported-capability claim.
@@ -88,11 +88,12 @@ The guided adapter constructs the current default request:
   "updateChoice": "NoUpdateCheck",
   "diagnosticLevel": "Standard",
   "automationChoices": {
-    "acceptPreparation": false,
-    "allowElevation": false,
+    "allowAssessmentNetwork": false,
+    "allowElevation": true,
     "allowInstallation": false,
     "allowPersistentChanges": false,
-    "allowStaleRecovery": false
+    "allowStaleRecovery": false,
+    "verificationOverride": "None"
   }
 }
 ```
@@ -128,7 +129,7 @@ All current paths end as `NotStarted` / `20`. Common stable reasons are:
 | `RUNTIME.CRYPTOGRAPHY_INCOMPATIBLE` | Required SHA-256 or AES-GCM behavior did not pass. | Use an eligible stable PowerShell installation and retry. |
 | `RUNTIME.MODULE_LOADING_INCOMPATIBLE` | Literal built-in module loading did not pass. | Verify or repair PowerShell outside WIN-PCInfo, then retry. |
 | `RUNTIME.PROCESS_CONTROL_INCOMPATIBLE` | Bounded child-process control did not pass. | Close modified sessions, verify the PowerShell installation, and retry. |
-| `SLICE.POST_APPROVAL_EXECUTION_NOT_IMPLEMENTED` | Runtime and Preparation passed; ordinary execution intentionally stops before real collection and package finalization. | Do not treat this as completed assessment evidence. The synthetic lifecycle path is validation-only. |
+| `PREPARATION.INTEGRITY_FAILED` | Candidate trust or embedded integrity could not be proved. | Use the exact approved candidate; never bypass the gate. |
 
 ## Validate a contribution
 

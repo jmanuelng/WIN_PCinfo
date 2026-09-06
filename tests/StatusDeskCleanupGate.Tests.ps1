@@ -128,10 +128,11 @@ try {
                 $window.FindName($action).RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
                 if($Scenario -eq 'Export'){$window.FindName('SaveHtml').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))}
                 Assert-Equal $true ($window.FindName('Status').Text -like 'CleanupIncomplete*') ('the failed action reports cleanup uncertainty: '+$window.FindName('Status').Text+'; view observed: '+$test.SawView)
-                foreach($name in @('Approve','SelectRecipient','SetupRecipient','OpenExisting','OpenReport','SaveHtml')){
+                foreach($name in @('Approve','SelectRecipient','SetupRecipient','OpenExisting','OpenReport','SaveHtml','ChangeChoices','Retry')){
                     Assert-Equal $false $window.FindName($name).IsEnabled "$name cannot start new work after cleanup failure"
                 }
-                # A routed click cannot bypass the disabled approval control.
+                # Routed clicks cannot bypass disabled new-work controls.
+                foreach($name in @('ChangeChoices','Retry')){$window.FindName($name).RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))}
                 $window.FindName('Approve').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
                 $test.ActionFinished=$true
             }
