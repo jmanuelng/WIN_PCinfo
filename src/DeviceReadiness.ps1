@@ -733,10 +733,10 @@ function New-BoundedDiscoveryGuidanceHtml {
     $items=@($Tasks|ForEach-Object{
         $definition=$byId[[string]$_.definitionId]
         if($null -eq $definition){throw 'A discovery task does not resolve to its frozen definition.'}
-        '<li><strong>Purpose:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.purpose)+
-        '<br><strong>Owner:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.requiredRole)+
-        '<br><strong>Approved destination:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.approvedDestination)+
-        '<br><strong>Expected safe result:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.expectedSafeResult)+'</li>'
+        '<li id="'+[Net.WebUtility]::HtmlEncode([string]$_.recommendationId)+'"><b>Purpose:</b> '+[Net.WebUtility]::HtmlEncode([string]$definition.purpose)+
+        '<br><b>Owner:</b> '+[Net.WebUtility]::HtmlEncode([string]$definition.requiredRole)+
+        '<br><b>Approved destination:</b> '+[Net.WebUtility]::HtmlEncode([string]$definition.approvedDestination)+
+        '<br><b>Expected safe result:</b> '+[Net.WebUtility]::HtmlEncode([string]$definition.expectedSafeResult)+'</li>'
     })
     '<h3>Safe follow-up</h3><ul>'+($items -join '')+'</ul>'
 }
@@ -847,6 +847,7 @@ function Get-AssessmentReportDefinitionLookup {
                 requiredRole = if ($definition.PSObject.Properties['requiredRole']) {
                     [string] $definition.requiredRole
                 }
+                elseif ($definition.PSObject.Properties['recommendedAudience']) { [string]$definition.recommendedAudience }
                 else { $null }
                 verification = if ($definition.PSObject.Properties['verification']) {
                     [string] $definition.verification
@@ -856,6 +857,8 @@ function Get-AssessmentReportDefinitionLookup {
                     [string] $definition.caution
                 }
                 else { $null }
+                prerequisites = if ($definition.PSObject.Properties['prerequisites']) { @($definition.prerequisites) } else { @() }
+                authoritativeReferences = if ($definition.PSObject.Properties['authoritativeReferences']) { @($definition.authoritativeReferences) } else { @() }
             }
         }
     }
@@ -873,8 +876,10 @@ function Get-AssessmentReportRecommendationDetails {
     @(
         foreach ($recommendation in @($Record.recommendations | Where-Object kind -eq $Kind)) {
             $definition = $DefinitionLookup[[string] $recommendation.definitionId]
+            if ($null -eq $definition) { throw 'A report recommendation does not resolve to its portable definition.' }
             [pscustomobject][ordered]@{
                 recommendationId = [string] $recommendation.recommendationId
+                findingIds = @($recommendation.findingIds)
                 definitionId = [string] $recommendation.definitionId
                 title = if ($null -ne $definition -and $definition.title) {
                     [string] $definition.title
@@ -901,9 +906,18 @@ function Get-AssessmentReportRecommendationDetails {
                 }
                 else { '' }
                 caution = if ($null -ne $definition) { [string] $definition.caution } else { '' }
+                prerequisites = if ($null -ne $definition) { @($definition.prerequisites) } else { @() }
+                authoritativeReferences = if ($null -ne $definition) { @($definition.authoritativeReferences) } else { @() }
             }
         }
     )
+}
+
+function New-AssessmentReportReferenceLinks {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$References, [Parameter(Mandatory)]$Lookup)
+    (@($References | ForEach-Object {
+        '<a href="#ref-' + $Lookup[[string]$_] + '">[' + $Lookup[[string]$_] + ']</a>'
+    }) -join ' ')
 }
 
 function Get-AssessmentReportPrioritizedResults {
@@ -917,6 +931,7 @@ function Get-AssessmentReportPrioritizedResults {
             $CrossDomainModel.pathRecommendations | ForEach-Object {
                 [pscustomobject][ordered]@{
                     title = [string] $_.title
+                    recommendationId = [string] $_.recommendationId
                     finding = [string] $_.findingOutcome
                     severity = if ($null -eq $_.severity) { 'Not assigned' } else { [string] $_.severity }
                     confidence = if ($null -eq $_.confidence) { 'Unspecified' } else { [string] $_.confidence }
@@ -936,18 +951,10 @@ function Get-AssessmentReportPrioritizedResults {
                 ) | Select-Object -First 5)) {
             [pscustomobject][ordered]@{
                 title = $findingTitles[[string] $finding.findingId]
+                recommendationId = ''
                 finding = [string] $finding.outcome
-                severity = if ([string] $finding.outcome -eq 'NeedsAttention') {
-                    'Advisory'
-                }
-                elseif ([string] $finding.outcome -eq 'Indeterminate') {
-                    'CoverageGap'
-                }
-                else { 'Informational' }
-                confidence = if ([string] $finding.outcome -eq 'Indeterminate') {
-                    'Unspecified'
-                }
-                else { 'High' }
+                severity = 'Not assigned'
+                confidence = 'Unspecified'
                 recommendation = 'Review the detailed section and related recommendation before changing device or tenant state.'
             }
         }
@@ -1140,8 +1147,14 @@ function New-DeviceReadinessReportBytes {
         [Parameter()] $NetworkTopologyPolicy,
         [Parameter()] $SoftwareInventoryPolicy,
         [Parameter()] $CertificateTrustPolicy,
-        [Parameter()] $MicrosoftConnectivityPolicy
+        [Parameter()] $MicrosoftConnectivityPolicy,
+        [Parameter()][ValidateSet('Original','ReRendered','ReEvaluated')][string]$DerivationKind = 'Original',
+        [Parameter()][ValidatePattern('^[a-f0-9]{64}$')][string]$SourceReportSha256
     )
+
+    if (($DerivationKind -ne 'Original') -ne (-not [string]::IsNullOrEmpty($SourceReportSha256))) {
+        throw 'A derived report requires its source report digest; an original report cannot claim a source report.'
+    }
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
     $activationFinding = @($Record.findings | Where-Object {
@@ -1174,11 +1187,11 @@ function New-DeviceReadinessReportBytes {
         'field:device.battery.presence', 'field:device.battery.status',
         'field:device.battery.charge-percent',
         'field:device.battery.estimated-runtime-minutes'
-    )) { $values[$fieldId] = 'Not available' }
+    )) { $values[$fieldId] = 'Not observed' }
     foreach ($observation in @($Record.observations)) {
         $values[[string]$observation.fieldId] = if ($observation.valueState -eq 'ObservedValue') {
             [System.Net.WebUtility]::HtmlEncode([string]$observation.value)
-        } else { 'Not available' }
+        } else { [Net.WebUtility]::HtmlEncode([string]$observation.valueState) }
     }
     $summary = switch ([string]$finding.outcome) {
         'ExpectedCondition' { 'The available device facts meet this preview readiness check.' }
@@ -1431,7 +1444,7 @@ $identityGuidance
         }|ForEach-Object {
             $definitionId=[string]$_.definitionId
             $definition=@($ResourceDependenciesPolicy.recommendations|Where-Object definitionId -eq $definitionId)[0]
-            '<li><strong>'+[Net.WebUtility]::HtmlEncode([string]$definition.purpose)+'</strong><br>'+[Net.WebUtility]::HtmlEncode([string]$definition.verification)+'<br><strong>Caution:</strong> '+[Net.WebUtility]::HtmlEncode([string]$definition.caution)+'</li>'
+            '<li><a href="#'+[Net.WebUtility]::HtmlEncode([string]$_.recommendationId)+'">'+[Net.WebUtility]::HtmlEncode([string]$definition.purpose)+'</a></li>'
         })
 @"
 <h2>User resources and peripheral migration dependencies</h2>
@@ -1675,7 +1688,7 @@ $identityGuidance
             )
         )
         $crossDomainModel = Get-CrossDomainGuidanceModel -Record $Record -Policy $crossDomainPolicy
-        New-CrossDomainGuidanceHtml -Record $Record -Policy $crossDomainPolicy
+        ''
     }
     else { '' }
     $definitionLookup = Get-AssessmentReportDefinitionLookup `
@@ -1688,15 +1701,50 @@ $identityGuidance
         -CertificateTrustPolicy $CertificateTrustPolicy `
         -MicrosoftConnectivityPolicy $MicrosoftConnectivityPolicy `
         -CrossDomainPolicy $crossDomainPolicy
+    $jsonCommand = $ExecutionContext.InvokeCommand.GetCommand('ConvertTo-Json', [Management.Automation.CommandTypes]::Cmdlet)
+    $renderInputs = [ordered]@{ renderer = 'assessment-report/1.1.0'; language = 'en'; record = $Record
+        definitions = @($FirmwarePolicy,$IdentityEnrollmentPolicy,$AdministratorExposurePolicy,$EffectivePolicyPolicy,
+            $ResourceDependenciesPolicy,$NetworkTopologyPolicy,$SoftwareInventoryPolicy,$CertificateTrustPolicy,
+            $MicrosoftConnectivityPolicy,$crossDomainPolicy) }
+    $inputDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+        [Text.Encoding]::UTF8.GetBytes((& $jsonCommand -InputObject $renderInputs -Depth 100 -Compress)))).ToLowerInvariant()
+    $referenceLookup = [Collections.Generic.Dictionary[string,int]]::new([StringComparer]::Ordinal)
+    $referenceValues = [Collections.Generic.List[string]]::new()
+    foreach ($definition in $definitionLookup.Values) {
+        foreach ($reference in $definition.authoritativeReferences) {
+            if (-not $referenceValues.Contains([string]$reference)) { $referenceValues.Add([string]$reference) }
+        }
+    }
+    $referenceValues.Sort([StringComparer]::Ordinal)
+    $referenceRows = @($referenceValues | ForEach-Object {
+        $number = $referenceLookup.Count + 1
+        $referenceLookup.Add($_, $number)
+        '<li id="ref-' + $number + '">' + [Net.WebUtility]::HtmlEncode($_) + '</li>'
+    })
+    if ($null -ne $crossDomainModel) {
+        $crossDomainSection = New-CrossDomainGuidanceHtml -Record $Record -Policy $crossDomainPolicy -ReferenceLookup $referenceLookup
+    }
     $assessmentRecommendations = Get-AssessmentReportRecommendationDetails `
         -Record $Record -DefinitionLookup $definitionLookup -Kind AssessmentRecommendation
     $tenantTasks = Get-AssessmentReportRecommendationDetails `
         -Record $Record -DefinitionLookup $definitionLookup -Kind TenantSideDiscoveryTask
+    $findingAnchors = if ($null -ne $crossDomainModel) { Get-AssessmentReportFindingAnchors -Record $Record } else { @{} }
     $prioritizedResults = Get-AssessmentReportPrioritizedResults -Record $Record `
         -CrossDomainModel $crossDomainModel
     $reportOutcome = Get-AssessmentReportOutcomeLabel -Outcome ([string] $Record.run.outcome)
     $reportCompleteness = Get-AssessmentReportCompleteness -Record $Record
     $incompleteCoverage = @($Record.coverage | Where-Object state -ne 'Complete')
+    $coverageGroups = [ordered]@{}
+    foreach ($scope in $Record.coverage) {
+        $reason = if ($scope.PSObject.Properties['reasonCode']) { [string]$scope.reasonCode } else { '' }
+        $key = [string]$scope.state + $(if ($reason) { ' / ' + $reason })
+        if (-not $coverageGroups.Contains($key)) { $coverageGroups[$key] = [Collections.Generic.List[string]]::new() }
+        $coverageGroups[$key].Add([string]$scope.scopeId)
+    }
+    $coverageRows = @($coverageGroups.Keys | ForEach-Object {
+        '<li>' + [Net.WebUtility]::HtmlEncode([string]$_) + ': ' +
+            [Net.WebUtility]::HtmlEncode(($coverageGroups[$_] -join ', ')) + '</li>'
+    })
     $limitationItems = @(
         'This report uses only the validated local Assessment Record plus release-defined rendering inputs. It is advisory and does not provide a compliance verdict, overall score, or automatic remediation.'
         $(if ($incompleteCoverage.Count -gt 0) {
@@ -1721,61 +1769,67 @@ $identityGuidance
     })
     $priorityRows = if (@($prioritizedResults).Count -gt 0) {
         @($prioritizedResults | ForEach-Object {
-            '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
+            '<li><strong>' + $(if ($_.recommendationId) {
+                '<a href="#' + [Net.WebUtility]::HtmlEncode([string]$_.recommendationId) + '">' + [Net.WebUtility]::HtmlEncode([string]$_.title) + '</a>'
+            } else { [Net.WebUtility]::HtmlEncode([string]$_.title) }) + '</strong>' +
                 '<br><strong>Finding:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.finding) +
                 '<br><strong>Severity:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.severity) +
                 '<br><strong>Confidence:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.confidence) +
-                '<br><strong>Recommendation:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.recommendation) + '</li>'
+                $(if (-not $_.recommendationId) { '<br><strong>Recommendation:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.recommendation) }) + '</li>'
         })
     }
     else {
-        @('<li><strong>No prioritized advisory result was derived.</strong><br><strong>Finding:</strong> Informational<br><strong>Severity:</strong> Not assigned<br><strong>Confidence:</strong> High<br><strong>Recommendation:</strong> Review the detailed sections only if you need the underlying evidence.</li>')
+        @('<li><strong>No prioritized advisory result was derived.</strong><br><strong>Finding:</strong> Informational<br><strong>Severity:</strong> Not assigned<br><strong>Confidence:</strong> Unspecified<br><strong>Recommendation:</strong> Review the detailed sections only if you need the underlying evidence.</li>')
     }
     $assessmentRecommendationRows = if (@($assessmentRecommendations).Count -gt 0) {
-        @($assessmentRecommendations | ForEach-Object {
+        @($assessmentRecommendations | Group-Object definitionId | ForEach-Object {
+            $instances = @($_.Group)
+            $_ = $instances[0]
             if($null -ne $crossDomainModel -and $_.recommendationId -in @($crossDomainModel.pathRecommendations.recommendationId)){
-                return '<li><a href="#'+[Net.WebUtility]::HtmlEncode([string]$_.recommendationId)+'">'+
-                    [Net.WebUtility]::HtmlEncode([string]$_.title)+'</a> — '+
-                    [Net.WebUtility]::HtmlEncode([string]$_.priority)+
-                    '. See the migration path for purpose, prerequisites, owner, verification and cautions.</li>'
+                return
             }
-            '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
+            '<li>' + (@($instances | ForEach-Object {
+                '<span id="' + [Net.WebUtility]::HtmlEncode([string]$_.recommendationId) + '"></span>' +
+                (@($_.findingIds | Where-Object { $findingAnchors.ContainsKey([string]$_) } | ForEach-Object {
+                    '<a href="#' + $findingAnchors[[string]$_] + '">Evidence</a> '
+                }) -join '')
+            }) -join '') + '<strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
                 $(if(-not [string]::Equals([string]$_.title,[string]$_.purpose,[StringComparison]::Ordinal)){
-                    '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose)
+                    '<br><b>Purpose:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose)
                 }) +
                 $(if ($_.priority) {
                         '<br><strong>Priority:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.priority)
                     }
                     else { '' }) +
                 $(if ($_.priorityExplanation) {
-                        '<br><strong>Why now:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.priorityExplanation)
+                        '<br><b>Why now:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.priorityExplanation)
                     }
                     else { '' }) +
                 $(if ($_.role) {
-                        '<br><strong>Owner:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.role)
+                        '<br><b>Owner:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.role)
                     }
                     else { '' }) +
                 $(if ($_.verification) {
-                        '<br><strong>Verification:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.verification)
+                        '<br><b>Verification:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.verification)
                     }
                     else { '' }) +
                 $(if ($_.caution) {
-                        '<br><strong>Caution:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.caution)
+                        '<br><b>Caution:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.caution)
                     }
-                    else { '' }) + '</li>'
+                    else { '' }) +
+                '<br>Prerequisites: ' + [Net.WebUtility]::HtmlEncode((@($_.prerequisites) -join '; ')) +
+                '<br>Authoritative references: ' + (New-AssessmentReportReferenceLinks -References @($_.authoritativeReferences) -Lookup $referenceLookup) + '</li>'
         })
     }
     else { @('<li>No additional Assessment Recommendation is required by the current findings.</li>') }
     $tenantTaskRows = if (@($tenantTasks).Count -gt 0) {
         @($tenantTasks | ForEach-Object {
-            '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + '</strong>' +
-                $(if(-not [string]::Equals([string]$_.title,[string]$_.purpose,[StringComparison]::Ordinal)){
-                    '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose)
-                }) +
-                $(if ($_.role) {
-                        '<br><strong>Owner:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.role)
-                    }
-                    else { '' }) + '</li>'
+            if ($null -ne $EffectivePolicyPolicy -and $_.definitionId -in @($EffectivePolicyPolicy.discoveryTasks.definitionId)) {
+                return '<li id="' + [Net.WebUtility]::HtmlEncode([string]$_.recommendationId) + '">' +
+                    [Net.WebUtility]::HtmlEncode([string]$_.title) + '<br>Owner: ' + [Net.WebUtility]::HtmlEncode([string]$_.role) + '</li>'
+            }
+            '<li><a href="#' + [Net.WebUtility]::HtmlEncode([string]$_.recommendationId) + '">' +
+                [Net.WebUtility]::HtmlEncode(([string]$_.definitionId).Split(':')[-1].Split('/')[0].Replace('.', ': ').Replace('-', ' ')) + '</a></li>'
         })
     }
     else { @('<li>No Tenant-side Discovery Task is currently required.</li>') }
@@ -1785,7 +1839,22 @@ $identityGuidance
         })
     }
     else { @('<li>No diagnostic reason code was recorded.</li>') }
-    $scopeSummary = 'Comprehensive Local Assessment for one Windows client across device, identity, privilege, policy, applications, user dependencies, network, certificate trust, Microsoft connectivity, and cautious migration guidance.'
+    $scopeSummary = 'Selected evidence profile: ' + [string]$Record.run.evidenceProfileId +
+        '. Coverage describes only the scopes admitted in this record; excluded families are not failed collection.'
+    $familyAnchors = @{}
+    foreach ($family in @('device','firmware','identity','policy','resource','network','software','certificate','connectivity')) { $familyAnchors[$family] = '' }
+    foreach ($localFinding in @($Record.findings | Where-Object { $findingAnchors.ContainsKey([string]$_.findingId) -and $_.ruleId -notlike 'rule:cross-domain.*' })) {
+        $family = switch -Regex ([string]$localFinding.ruleId) {
+            '^rule:identity\.' { 'identity'; break }
+            '^rule:policy\.' { 'policy'; break }
+            '^rule:(resource|network|software|certificate)\.' { $Matches[1]; break }
+            '^rule:microsoft-connectivity\.' { 'connectivity'; break }
+            '^rule:(firmware|secure-boot|tpm)' { 'firmware'; break }
+            default { 'device' }
+        }
+        $key = $findingAnchors[[string]$localFinding.findingId]
+        $familyAnchors[$family] += '<span id="' + [Net.WebUtility]::HtmlEncode($key) + '"></span>'
+    }
     $html = @"
 <!doctype html>
 <html lang="en">
@@ -1794,17 +1863,17 @@ $identityGuidance
 <title>WIN-PCInfo Comprehensive Local Assessment</title>
 <style>
 :root { color-scheme: light; font-family: "Segoe UI", Tahoma, sans-serif; line-height: 1.45; }
-body { margin: 0 auto; max-width: 8.5in; padding: 1.25rem; color: #14213d; background: #f7f4ea; }
-a { color: #0a558c; }
+body { margin: 0 auto; max-width: 8.5in; padding: 1.25rem; color: #14213d; background: #F3F5F8; }
+a { color: #1765AE; }
 .skip-link { position: absolute; left: 0.75rem; top: -3rem; background: #ffffff; padding: 0.5rem 0.75rem; border: 2px solid #14213d; }
 .skip-link:focus-visible { top: 0.75rem; }
-nav { margin: 1rem 0; padding: 0.75rem 1rem; border: 1px solid #c8b88a; background: #fffdf6; }
+nav { margin: 1rem 0; padding: 0.75rem 1rem; border: 1px solid #CBD5E1; background: #FFFFFF; }
 nav ul { margin: 0; padding-left: 1.25rem; }
 section, details, nav, header { margin-bottom: 1rem; }
 h1, h2, h3 { color: #1d3557; }
-details { border: 1px solid #d4c39b; background: #fffdf8; padding: 0.5rem 0.75rem; }
+details { border: 1px solid #CBD5E1; background: #FFFFFF; padding: 0.5rem 0.75rem; }
 summary { cursor: pointer; font-weight: 600; }
-:focus-visible { outline: 3px solid #b85c38; outline-offset: 2px; }
+:focus-visible { outline: 3px solid #1765AE; outline-offset: 2px; }
 @page { margin: 12mm; }
 @media print {
   body { max-width: none; background: #ffffff; color: #000000; padding: 0; font-size: 10pt; }
@@ -1847,19 +1916,23 @@ summary { cursor: pointer; font-weight: 600; }
 <h2>Prioritized advisory results</h2>
 <ul>$($priorityRows -join '')</ul>
 <h2>Next steps</h2>
+<div id="next-steps"></div>
 <h3>Assessment Recommendations</h3>
 <ul>$($assessmentRecommendationRows -join '')</ul>
 <h3>Tenant-side Discovery Tasks</h3>
 <ul>$($tenantTaskRows -join '')</ul>
 </section>
 <section id="diagnostics">
+<details><summary>Scope states and reasons</summary><ul>$($coverageRows -join '')</ul></details>
 <h3>Diagnostics</h3>
 <ul>$($diagnosticRows -join '')</ul>
 </section>
 <section id="evidence">
 <h2>Evidence and provenance</h2>
+<details><summary>Report derivation</summary><p>$DerivationKind; renderer assessment-report/1.1.0, English. Input SHA-256 (record and definitions): $inputDigest. Source report SHA-256: $SourceReportSha256. References fN/rN use zero-based canonical finding/recommendation positions.</p></details>
 <p><strong>Observations:</strong> The detailed sections below preserve bounded Windows observations and provenance without relabeling them as findings.</p>
 <h2>Device, Windows, activation, and power context</h2><p>$summary</p>
+$($familyAnchors['device'])
 <p>This is advisory information, not a compliance result or a guarantee that every application or future update will work.</p>
 <dl><dt>Coverage</dt><dd>$([System.Net.WebUtility]::HtmlEncode([string]$coverage.state))</dd>
 <dt>Windows edition</dt><dd>$($values['field:device.windows.edition'])</dd>
@@ -1877,17 +1950,20 @@ summary { cursor: pointer; font-weight: 600; }
 <dt>Estimated runtime minutes</dt><dd>$($values['field:device.battery.estimated-runtime-minutes'])</dd></dl>
 <p>Advisory finding: $([System.Net.WebUtility]::HtmlEncode([string]$powerFinding.outcome)).</p>
 <p>These are bounded Windows observations, not a battery-health, calibration, capacity, or performance test. WIN-PCInfo does not change the active power plan.</p>
-$firmwareSection
-$identitySection
+$($familyAnchors['firmware'])$firmwareSection
+<div id="family-identity">$($familyAnchors['identity'])$identitySection
 $administratorSection
-$effectivePolicySection
+</div>
+<div id="family-policy">$($familyAnchors['policy'])$effectivePolicySection
 $(if($null -ne $policyFinding){New-EffectivePolicySecurityReportSection -Record $Record})
-$resourceSection
-$networkSection
-$softwareSection
-$certificateSection
-$connectivitySection
+</div>
+<div id="family-resource">$($familyAnchors['resource'])$resourceSection</div>
+<div id="family-network">$($familyAnchors['network'])$networkSection</div>
+<div id="family-software">$($familyAnchors['software'])$softwareSection</div>
+<div id="family-certificate">$($familyAnchors['certificate'])$certificateSection</div>
+<div id="family-connectivity">$($familyAnchors['connectivity'])$connectivitySection</div>
 $crossDomainSection
+<details><summary>Authoritative Microsoft references</summary><ol>$($referenceRows -join '')</ol></details>
 <h2>Evidence limitations</h2><p>$accessSummary</p>
 <details><summary>Device details and where they came from</summary>
 <p>These identifying values are Restricted Diagnostic Evidence and stay inside this protected package.</p>
@@ -1904,6 +1980,13 @@ $crossDomainSection
 </body>
 </html>
 "@
+    $recommendationIndex = 0
+    foreach ($recommendation in $Record.recommendations) {
+        $id = [Net.WebUtility]::HtmlEncode([string]$recommendation.recommendationId)
+        $html = $html.Replace('id="' + $id + '"', 'id="r' + $recommendationIndex + '"').Replace(
+            'href="#' + $id + '"', 'href="#r' + $recommendationIndex + '"')
+        $recommendationIndex++
+    }
     # Omit only HTML end tags whose following token implicitly closes them.
     # Encoded observation text cannot match these markup-only patterns.
     foreach($pattern in @(

@@ -404,6 +404,7 @@ function Get-CrossDomainGuidanceModel {
             else { $null }
             [pscustomobject][ordered]@{
                 recommendationId = [string] $recordRecommendation.recommendationId
+                findingId = $findingId
                 definitionId = [string] $definition.definitionId
                 title = [string] $definition.title
                 purpose = [string] $definition.purpose
@@ -474,64 +475,90 @@ function Get-CrossDomainGuidanceModel {
     }
 }
 
+function Get-AssessmentReportFindingAnchors {
+    param([Parameter(Mandatory)]$Record)
+    $anchors = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
+    foreach ($finding in $Record.findings) { $anchors.Add([string]$finding.findingId, 'f' + $anchors.Count) }
+    $anchors
+}
+
 function New-CrossDomainGuidanceHtml {
     param(
         [Parameter(Mandatory)] $Record,
-        [Parameter(Mandatory)] $Policy
+        [Parameter(Mandatory)] $Policy,
+        [Parameter()] $ReferenceLookup
     )
 
     $model = Get-CrossDomainGuidanceModel -Record $Record -Policy $Policy
     if (@($model.findings).Count -eq 0) { return '' }
+    # Record-order aliases are stable for identical canonical rendering inputs.
+    $anchors = Get-AssessmentReportFindingAnchors -Record $Record
 
     $findingRows = @($model.findings | ForEach-Object {
+        $findingId = [string]$_.findingId
+        $ruleId = [string]$_.ruleId
+        $rule = @($Policy.rules | Where-Object ruleId -eq $ruleId)[0]
+        $sources = @($Record.findings | Where-Object ruleId -in @($rule.sourceRuleIds) | ForEach-Object {
+            $key = [string]$_.findingId
+            $suffix = ':' + [string]$Record.run.runId
+            if ($key.EndsWith($suffix, [StringComparison]::Ordinal)) { $key = $key.Substring(0, $key.Length - $suffix.Length) }
+            '<a href="#' + [Net.WebUtility]::HtmlEncode([string]$anchors[[string]$_.findingId]) + '">' +
+                [Net.WebUtility]::HtmlEncode($key.Replace('finding:', '')) + '</a>: ' +
+                [Net.WebUtility]::HtmlEncode([string]$_.outcome)
+        }) -join ', '
         $severity = if ($null -eq $_.severity) { '' } else {
             '<br><strong>Severity:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.severity)
         }
         $confidence = if ($null -eq $_.confidence) { '' } else {
             '<br><strong>Confidence:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.confidence)
         }
-        '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + ':</strong> ' +
-        [Net.WebUtility]::HtmlEncode([string] $_.outcome) + $severity + $confidence + '</li>'
+        '<li id="' + [Net.WebUtility]::HtmlEncode([string]$anchors[$findingId]) + '"><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.title) + ':</strong> ' +
+        [Net.WebUtility]::HtmlEncode([string] $_.outcome) + $severity + $confidence +
+        '<br>Source findings: ' + $sources + '</li>'
     })
     $stepRows = @($model.pathRecommendations | ForEach-Object {
         $prerequisites = @($_.prerequisites | ForEach-Object {
             [Net.WebUtility]::HtmlEncode([string] $_)
         }) -join '; '
-        $references = @($_.authoritativeReferences | ForEach-Object {
+        $references = if ($null -ne $ReferenceLookup) {
+            New-AssessmentReportReferenceLinks -References @($_.authoritativeReferences) -Lookup $ReferenceLookup
+        } else { @($_.authoritativeReferences | ForEach-Object {
             [Net.WebUtility]::HtmlEncode([string] $_)
-        }) -join '; '
+        }) -join '; ' }
         '<li id="'+[Net.WebUtility]::HtmlEncode([string]$_.recommendationId)+'"><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.priority) + ':</strong> ' +
         [Net.WebUtility]::HtmlEncode([string] $_.title) +
+        '<br><a href="#' + $anchors[[string]$_.findingId] + '">Finding and evidence</a>' +
         '<br><strong>Current finding:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.findingOutcome) +
-        $(if ($_.severity) {
-                '<br><strong>Severity:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.severity)
-            } else { '' }) +
-        $(if ($_.confidence) {
-                '<br><strong>Confidence:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.confidence)
-            } else { '' }) +
-        '<br><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose) +
-        '<br><strong>Why now:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.priorityExplanation) +
-        '<br><strong>Prerequisites:</strong> ' + $prerequisites +
-        '<br><strong>Owner:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.responsibleRole) +
-        '<br><strong>Verification:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.verification) +
-        '<br><strong>Caution:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.caution) +
-        '<br><strong>Authoritative references:</strong> ' + $references + '</li>'
+        '<br><b>Purpose:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose) +
+        '<br><b>Why now:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.priorityExplanation) +
+        '<br><b>Prerequisites:</b> ' + $prerequisites +
+        '<br><b>Owner:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.responsibleRole) +
+        '<br><b>Verification:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.verification) +
+        '<br><b>Caution:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.caution) +
+        '<br><b>Authoritative references:</b> ' + $references + '</li>'
     })
     $relationshipRows = @($model.relationships | ForEach-Object {
         '<li><strong>' + [Net.WebUtility]::HtmlEncode([string] $_.kind) + ':</strong> ' +
+        '<a href="#' + [Net.WebUtility]::HtmlEncode([string]$_.fromRecommendationId) + '">From recommendation</a> → ' +
+        '<a href="#' + [Net.WebUtility]::HtmlEncode([string]$_.toRecommendationId) + '">To recommendation</a>. ' +
         [Net.WebUtility]::HtmlEncode([string] $_.explanation) + '</li>'
     })
     $taskRows = @($model.tasks | ForEach-Object {
-        '<li><strong>Purpose:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose) +
-        '<br><strong>Owner:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.requiredRole) +
-        '<br><strong>Approved destination:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.approvedDestination) +
-        '<br><strong>Expected safe result:</strong> ' + [Net.WebUtility]::HtmlEncode([string] $_.expectedSafeResult) + '</li>'
+        $references = if ($null -ne $ReferenceLookup) {
+            New-AssessmentReportReferenceLinks -References @($_.authoritativeReferences) -Lookup $ReferenceLookup
+        } else { [Net.WebUtility]::HtmlEncode((@($_.authoritativeReferences) -join '; ')) }
+        '<li id="'+[Net.WebUtility]::HtmlEncode([string]$_.recommendationId)+'"><b>Purpose:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.purpose) +
+        '<br><b>Owner:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.requiredRole) +
+        '<br><b>Approved destination:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.approvedDestination) +
+        '<br><b>Expected safe result:</b> ' + [Net.WebUtility]::HtmlEncode([string] $_.expectedSafeResult) +
+        '<br>Authoritative references: ' + $references + '</li>'
     })
 
 @"
 <h2>Cross-domain findings and cautious migration path</h2>
 <p>This section uses only the validated local Assessment Record plus release-versioned Microsoft guidance. It is advisory only: WIN-PCInfo does not produce a score, compliance verdict, fixed schedule, or automatic remediation plan.</p>
 <h3>Cross-domain findings</h3><ul>$($findingRows -join '')</ul>
+<p>Finding keys omit the canonical run suffix :$([Net.WebUtility]::HtmlEncode([string]$Record.run.runId)).</p>
 <h3>Ordered Microsoft Zero Trust migration path</h3><ol>$($stepRows -join '')</ol>
 <h3>Relationship notes</h3><ul>$($relationshipRows -join '')</ul>
 <h3>Tenant-side Discovery Tasks</h3><ul>$($taskRows -join '')</ul>

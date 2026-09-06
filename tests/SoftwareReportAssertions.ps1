@@ -50,19 +50,29 @@ function Assert-SoftwareReportEvidence {
         }
     }
     Assert-Equal $false ($Html -match '<script\b') 'the complete evidence report remains usable without scripts'
-    $securityRows=[regex]::Matches($Html,'<tr><td>([^<]*)<td>([^<]*)<td>([^<]*)<td><a href="#security-source-(\d+)">')
+    $securityRows=[regex]::Matches($Html,'<tr><td>([^<]*)<td>([^<]*)<td>([^<]*)<td><a href="#ss(\d+)">')
     Assert-Equal $true ($securityRows.Count -gt 0) 'the compact security table retains observable evidence'
     foreach($row in $securityRows){
         $id=[Net.WebUtility]::HtmlDecode($row.Groups[3].Value)
+        $idParts = [regex]::Match($Html, 'Prefix: <code>([^<]*)</code>; suffix: <code>([^<]*)</code>')
+        if ($idParts.Success) {
+            $id = if ($id.StartsWith('Full: ', [StringComparison]::Ordinal)) { $id.Substring(6) } else {
+                [Net.WebUtility]::HtmlDecode($idParts.Groups[1].Value) + $id + [Net.WebUtility]::HtmlDecode($idParts.Groups[2].Value)
+            }
+        }
         $observation=@($Record.observations|Where-Object observationId -CEQ $id)[0]
-        Assert-Equal ([string]$observation.fieldId) ([Net.WebUtility]::HtmlDecode($row.Groups[1].Value)) 'security observation IDs still identify the exact field'
+        $field = [Net.WebUtility]::HtmlDecode($row.Groups[1].Value)
+        if ($Html.Contains('Field prefix: field:policy.')) {
+            $field = if ($field.StartsWith('Full: ', [StringComparison]::Ordinal)) { $field.Substring(6) } else { 'field:policy.' + $field }
+        }
+        Assert-Equal ([string]$observation.fieldId) $field 'security observation IDs still identify the exact field'
         if($observation.valueState -eq 'ObservedValue'){
             Assert-Equal ([string]$observation.value) ([Net.WebUtility]::HtmlDecode($row.Groups[2].Value)) 'compact security rows preserve observed values'
         }
         $origin=@($Record.provenance|Where-Object provenanceId -CEQ $observation.provenanceId)[0]
-        $source=[regex]::Match($Html,'<li id="security-source-'+$row.Groups[4].Value+'">Source \d+: ([^<]*); <a href="#security-context-(\d+)">')
+        $source=[regex]::Match($Html,'<li id="ss'+$row.Groups[4].Value+'">Source \d+: ([^<]*); <a href="#sc(\d+)">')
         Assert-Equal ([string]$origin.sourceId) ([Net.WebUtility]::HtmlDecode($source.Groups[1].Value)) 'shared source links resolve the original provenance'
-        $context=[regex]::Match($Html,'<li id="security-context-'+$source.Groups[2].Value+'">Context \d+<br>Subject: ([^<]*)<br>Execution context: ([^<]*)<br>Collected: ([^<]*)<br>Source locale: ([^<]*)')
+        $context=[regex]::Match($Html,'<li id="sc'+$source.Groups[2].Value+'">Context \d+<br>Subject: ([^<]*)<br>Execution context: ([^<]*)<br>Collected: ([^<]*)<br>Source locale: ([^<]*)')
         Assert-Equal ([string]$observation.subjectId) ([Net.WebUtility]::HtmlDecode($context.Groups[1].Value)) 'shared contexts preserve the exact subject'
         Assert-Equal ([string]$origin.executionContext) ([Net.WebUtility]::HtmlDecode($context.Groups[2].Value)) 'shared contexts preserve execution context'
         Assert-Equal ([DateTimeOffset]$origin.collectedAt) ([DateTimeOffset]$context.Groups[3].Value) 'shared contexts preserve collection time through JSON reopening'

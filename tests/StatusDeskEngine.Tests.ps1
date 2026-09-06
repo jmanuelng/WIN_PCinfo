@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
     [switch] $DeclinePreparation,
-    [switch] $Wpf, [switch] $HoldRunLock,
+    [switch] $Wpf, [switch] $HoldRunLock, [switch] $ReportContract,
     [ValidateSet('None','Cancel','Close')] [string] $ActiveAction = 'None',
     [ValidateSet('Privilege','System','NativeCooperative','NativeHard')] [string] $ActiveWorker = 'Privilege',
     [switch] $RequireRecoveryJournal, [switch] $RequireFrontLoadedPrivilege,
@@ -412,6 +412,19 @@ try {
         Assert-Equal 0 @($policyFinding.evidenceReferences).Count 'absent policy references remain a valid empty list'
     }
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
+    if ($ReportContract) {
+        . (Join-Path $PSScriptRoot 'ReportContractAssertions.ps1')
+        Assert-ComprehensiveReportContract -OpenedPackage $opened
+    }
+    foreach ($link in [regex]::Matches($html, 'href="#([^"]+)"')) {
+        Assert-Equal $true $html.Contains('id="' + $link.Groups[1].Value + '"') ('every protected report reference resolves offline: ' + $link.Groups[1].Value)
+    }
+    $recommendationIndex = 0
+    foreach ($recommendation in $record.recommendations) {
+        Assert-Equal $true $html.Contains('id="r' + $recommendationIndex + '"') `
+            'each recommendation and tenant task has a stable report destination'
+        $recommendationIndex++
+    }
     if ($SoftwareReportScenario) {
         Assert-SoftwareReportEvidence -Record $record -Html $html
         $exportBoundary=New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (

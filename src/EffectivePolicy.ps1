@@ -53,6 +53,8 @@ function New-EffectivePolicySecurityReportSection {
     $sourceRows=[Collections.Generic.List[string]]::new()
     $contextIndex=[Collections.Generic.Dictionary[string,int]]::new([StringComparer]::Ordinal)
     $contextRows=[Collections.Generic.List[string]]::new()
+    $observationPrefix = 'observation:policy-'
+    $observationSuffix = ':' + [string]$Record.run.runId
     $sections=foreach($key in $titles.Keys){
         $scope=@($Record.coverage|Where-Object scopeId -eq "scope:policy.$key")[0]
         $layer=if($key -like 'smartscreen.*' -or $key -like 'applocker.*' -or $key -in @('defender.asr','defender.network-protection','wdac.inventory')){'Configured Policy Signals'}else{'Current Control State'}
@@ -71,12 +73,12 @@ function New-EffectivePolicySecurityReportSection {
                 $contextKey=($contextValues|ForEach-Object {$_.Length.ToString()+':'+$_}) -join ''
                 if(-not $contextIndex.ContainsKey($contextKey)){
                     $contextNumber=$contextRows.Count+1;$contextIndex.Add($contextKey,$contextNumber)
-                    $contextRows.Add('<li id="security-context-'+$contextNumber+'">Context '+$contextNumber+
+                    $contextRows.Add('<li id="sc'+$contextNumber+'">Context '+$contextNumber+
                         '<br>Subject: '+$encoded[0]+'<br>Execution context: '+$encoded[2]+
                         '<br>Collected: '+$encoded[3]+'<br>Source locale: '+$encoded[4]+'</li>')
                 }
-                $sourceRows.Add('<li id="security-source-'+$sourceNumber+'">Source '+$sourceNumber+
-                    ': '+$encoded[1]+'; <a href="#security-context-'+$contextIndex[$contextKey]+
+                $sourceRows.Add('<li id="ss'+$sourceNumber+'">Source '+$sourceNumber+
+                    ': '+$encoded[1]+'; <a href="#sc'+$contextIndex[$contextKey]+
                     '">Context '+$contextIndex[$contextKey]+'</a></li>')
             }
             $sourceNumber=$sourceIndex[$sourceKey]
@@ -85,10 +87,16 @@ function New-EffectivePolicySecurityReportSection {
                 ObservedAbsent {'Observed absent in this source scope'}
                 SourceReportedUnknown {'Source reported unknown'}
             }
-            '<tr><td>'+[Net.WebUtility]::HtmlEncode([string]$observation.fieldId)+
+            $reference = if (([string]$id).StartsWith($observationPrefix, [StringComparison]::Ordinal) -and
+                ([string]$id).EndsWith($observationSuffix, [StringComparison]::Ordinal)) {
+                ([string]$id).Substring($observationPrefix.Length, ([string]$id).Length - $observationPrefix.Length - $observationSuffix.Length)
+            } else { 'Full: ' + [string]$id }
+            $field = [string]$observation.fieldId
+            $field = if ($field.StartsWith('field:policy.', [StringComparison]::Ordinal)) { $field.Substring(13) } else { 'Full: ' + $field }
+            '<tr><td>'+[Net.WebUtility]::HtmlEncode($field)+
                 '<td>'+[Net.WebUtility]::HtmlEncode($value)+
-                '<td>'+[Net.WebUtility]::HtmlEncode([string]$id)+
-                '<td><a href="#security-source-'+$sourceNumber+'">'+$sourceNumber+'</a></tr>'
+                '<td>'+[Net.WebUtility]::HtmlEncode($reference)+
+                '<td><a href="#ss'+$sourceNumber+'">'+$sourceNumber+'</a></tr>'
         }
         $evidence=if(@($rows).Count){$rows -join ''}else{'<tr><td colspan="4">No usable observation was returned for this scope. Review its coverage reason; do not infer enabled or disabled protection.</tr>'}
         '<tbody><tr><th colspan="4" scope="rowgroup"><h3>'+[Net.WebUtility]::HtmlEncode([string]$titles[$key])+'</h3><p>'+ $layer+
@@ -98,7 +106,8 @@ function New-EffectivePolicySecurityReportSection {
         '<p>These are local, source-backed observations. Defender preferences and SmartScreen registry signals do not prove applied organizational policy or current enforcement. Firewall ActiveStore describes each profile, not reachability. Registration names and category health do not identify a winning antivirus product.</p>'+
         '<p>BitLocker status describes the local OS volume; protector types and counts do not prove recovery escrow. VBS distinguishes configured services from running services. AppLocker Group Policy and CSP remain separate channels, and configured enforcement does not prove an application was blocked. CiTool reports whether a WDAC policy is active; this does not identify its audit options or deployment channel. Unknown channel and incomplete evidence require discovery with the policy owner.</p>'+
         (New-EffectivePolicyRemoteGuidance -Record $Record)+
-        '<details><summary>Security observations and coverage</summary><div class="evidence-table" tabindex="0" role="region" aria-label="Security evidence"><table><thead><tr><th scope="col">Field</th><th scope="col">Value</th><th scope="col">Observation</th><th scope="col">Source</th></tr></thead>'+($sections -join '')+'</table></div></details>'+
+        '<details><summary>Security observations and coverage</summary><div class="evidence-table" tabindex="0" role="region" aria-label="Security evidence"><table><caption>Field prefix: field:policy. except cells marked Full. Observation ID = prefix + cell + suffix, except cells marked Full. Prefix: <code>'+ $observationPrefix +
+        '</code>; suffix: <code>' + [Net.WebUtility]::HtmlEncode($observationSuffix) + '</code>.</caption><thead><tr><th scope="col">Field</th><th scope="col">Value</th><th scope="col">Observation</th><th scope="col">Source</th></tr></thead>'+($sections -join '')+'</table></div></details>'+
         '<h3>Security evidence sources</h3><ul>'+($sourceRows -join '')+'</ul>'+
         '<h3>Security collection contexts</h3><ul>'+($contextRows -join '')+'</ul>'+
         '<p>Use the versioned advisory findings and next steps in this report to plan follow-up with the device and security-policy owners. Confirm current state, intended policy, applicable Windows and Defender versions, and tenant-side assignments before considering a change. Passive mode and tamper protection are constraints to investigate, not collection failures or compliance verdicts. Missing or bounded evidence remains a gap. WIN-PCInfo does not change these controls.</p></section>'
