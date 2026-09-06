@@ -133,7 +133,7 @@ function New-StatusDeskWindow {
  <DockPanel Grid.Row="2" Margin="0,0,0,14"><TextBlock Name="Elapsed" DockPanel.Dock="Right" Text="Elapsed 00:00"/><TextBlock Name="Status" Text="Checking preparation…" FontSize="20" FontWeight="SemiBold"/></DockPanel>
  <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Background="White" Padding="16"><TextBlock Name="Details" TextWrapping="Wrap" Text="Checking the installed runtime, frozen definition and local protection. No assessment collection has started."/></ScrollViewer>
  <GroupBox Grid.Row="4" Header="Activity" Margin="0,14,0,14"><ListBox Name="Timeline" Background="White" BorderThickness="0"/></GroupBox>
- <WrapPanel Grid.Row="5"><Button Name="Approve" Content="_Approve and start" IsEnabled="False"/><Button Name="Decline" Content="_Decline"/><Button Name="Cancel" Content="_Cancel assessment" IsEnabled="False"/><Button Name="OpenReport" Content="_Open report" IsEnabled="False"/><Button Name="Recover" Content="_Recover owned residue" Visibility="Collapsed"/><Button Name="Close" Content="C_lose"/></WrapPanel>
+ <WrapPanel Grid.Row="5"><Button Name="Approve" Content="_Approve and start" IsEnabled="False"/><Button Name="Decline" Content="_Decline"/><Button Name="Cancel" Content="_Cancel assessment" IsEnabled="False"/><Button Name="OpenReport" Content="_Open report" IsEnabled="False"/><Button Name="SaveHtml" Content="_Save HTML for consultant" IsEnabled="False"/><Button Name="OpenExisting" Content="_Reopen encrypted results"/><Button Name="RecoverViews" Content="Recover _viewing residue"/><Button Name="SelectRecipient" Content="Select reci_pient before assessment"/><Button Name="SetupRecipient" Content="Recipient set_up"/><Button Name="Recover" Content="_Recover owned residue" Visibility="Collapsed"/><Button Name="Close" Content="C_lose"/></WrapPanel>
  </Grid>
 </Window>
 '@
@@ -187,18 +187,33 @@ function Get-StatusDeskPreparationText {
 }
 
 function Show-StatusDeskReport {
-    param([Parameter(Mandatory)] [string] $PackagePath, [Parameter(Mandatory)] $Owner)
+    param([Parameter(Mandatory)] [string] $PackagePath, [Parameter()] $Owner,
+        [Parameter()] [ValidateSet('Local', 'Recipient')] [string] $ProtectionRoute = 'Local')
     $view = Open-EvidenceViewingSession -PackagePath $PackagePath `
-        -RequestedArtifact assessment-report.html -ViewingBasePath ([IO.Path]::GetDirectoryName($PackagePath))
+        -RequestedArtifact assessment-report.html -ViewingBasePath ([IO.Path]::GetDirectoryName($PackagePath)) `
+        -ProtectionRoute $ProtectionRoute
     if (-not $view.verified) { return $view }
     $browser = $null
     $viewFailed = $false
     try {
+        Add-Type -AssemblyName PresentationFramework
         $window = [System.Windows.Window]::new()
         $window.Title = 'WIN-PCInfo — Restricted offline report'
-        $window.Width = 1100; $window.Height = 800; $window.Owner = $Owner
+        $window.Width = 1100; $window.Height = 800
+        if ($null -ne $Owner) { $window.Owner = $Owner }
+        $panel = [System.Windows.Controls.DockPanel]::new()
+        $close = [System.Windows.Controls.Button]::new()
+        $close.Name = 'CloseViewing'; $close.Content = '_Close viewing and remove temporary HTML'
+        $close.Padding = [System.Windows.Thickness]::new(12)
+        [System.Windows.NameScope]::SetNameScope($window, [System.Windows.NameScope]::new())
+        $window.RegisterName('CloseViewing', $close)
+        [System.Windows.Controls.DockPanel]::SetDock($close, 'Top')
+        $close.Add_Click({ $window.Close() })
+        $null = $panel.Children.Add($close)
         $browser = [System.Windows.Controls.WebBrowser]::new()
-        $window.Content = $browser
+        $window.RegisterName('ReportBrowser', $browser)
+        $null = $panel.Children.Add($browser)
+        $window.Content = $panel
         $allowedPath = [IO.Path]::GetFullPath($view.artifactPath)
         $browser.Add_Navigating({
             param($sender, $eventArgs)
@@ -212,13 +227,98 @@ function Show-StatusDeskReport {
     }
     catch { $viewFailed = $true }
     finally {
-        if ($null -ne $browser) { $browser.Dispose() }
-        $cleanup = Close-EvidenceViewingSession -Session $view
+        try { if ($null -ne $browser) { $browser.Dispose() } }
+        catch { $viewFailed=$true }
+        finally { $cleanup = Close-EvidenceViewingSession -Session $view }
     }
     if ($viewFailed -and $cleanup.verified) {
         return [pscustomobject]@{ state='NotStarted'; verified=$false; cleanupVerified=$true }
     }
     $cleanup
+}
+
+function Show-StatusDeskRecipientDialog {
+    param([Parameter()] $Owner, [Parameter(Mandatory)] [ValidateSet('Selection','Setup')] [string] $Purpose)
+    Add-Type -AssemblyName PresentationFramework
+    [xml]$layout=@'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="WIN-PCInfo — Recipient selection" Width="690" Height="540" MinWidth="580" MinHeight="480" FontFamily="Segoe UI" FontSize="14" WindowStartupLocation="CenterScreen">
+ <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24">
+  <TextBlock Name="Explanation" TextWrapping="Wrap" Margin="0,0,0,18"/>
+  <TextBlock Text="Public Recipient Profile path"/><TextBox Name="ProfilePath" Margin="0,5,0,8"/><Button Name="Browse" Content="_Browse profile destination" HorizontalAlignment="Left" Padding="10"/>
+  <TextBlock Name="InputLabel" Text="SHA-256 fingerprint confirmed through your trusted relationship" Margin="0,15,0,0" TextWrapping="Wrap"/><TextBox Name="Fingerprint" Margin="0,5,0,15"/>
+  <TextBlock Name="RecipientStatus" TextWrapping="Wrap" Foreground="#8B0000" Margin="0,0,0,15"/>
+  <WrapPanel><Button Name="ConfirmRecipient" Content="_Confirm recipient" Padding="12" Margin="0,0,10,10"/><Button Name="NoRecipient" Content="_Use local protection only" Padding="12" Margin="0,0,10,10"/><Button Name="CancelRecipient" Content="_Cancel" Padding="12" Margin="0,0,0,10"/></WrapPanel>
+ </StackPanel></ScrollViewer>
+</Window>
+'@
+    $dialog=[System.Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($layout))
+    if($null -ne $Owner){$dialog.Owner=$Owner}
+    $fields=@{}
+    foreach($name in @('Explanation','ProfilePath','Browse','InputLabel','Fingerprint','RecipientStatus','ConfirmRecipient','NoRecipient','CancelRecipient')){$fields[$name]=$dialog.FindName($name)}
+    $result=@{Value=$null}
+    $fields.Explanation.Text='Select zero or one recipient before assessment approval. Confirm the fingerprint independently with the recipient, whose setup must have passed its synthetic round trip. The next complete preparation summary freezes this selection; recipients cannot be added after collection.'
+    if($Purpose -eq 'Setup'){
+        $dialog.Title='WIN-PCInfo — Separate recipient setup'
+        $fields.Explanation.Text='This separate, deliberate setup creates a persistent non-exportable Current User encryption key, preferring TPM protection with a clearly labeled Windows-user software fallback. Only the public profile is saved. Setup runs a synthetic round trip. Keep the key for retained packages; this same-device test key does not establish independent off-device recovery. No assessment starts.'
+        $fields.InputLabel.Text='Recipient label (up to 80 characters)'
+        $fields.ConfirmRecipient.Content='_Create recipient and verify setup'
+        $fields.NoRecipient.Visibility='Collapsed'
+    }
+    $fields.Browse.Add_Click({
+        $picker=if($Purpose -eq 'Setup'){[Microsoft.Win32.SaveFileDialog]::new()}else{[Microsoft.Win32.OpenFileDialog]::new()}
+        $picker.Filter='Public Recipient Profile|*.json'
+        if($picker.ShowDialog($dialog) -eq $true){$fields.ProfilePath.Text=$picker.FileName}
+    })
+    $fields.CancelRecipient.Add_Click({$dialog.Close()})
+    $fields.NoRecipient.Add_Click({
+        $result.Value=[pscustomobject]@{mode='None';profilePath=$null;fingerprintConfirmation=$null}
+        $dialog.Close()
+    })
+    $fields.ConfirmRecipient.Add_Click({
+        if([string]::IsNullOrWhiteSpace($fields.ProfilePath.Text) -or [string]::IsNullOrWhiteSpace($fields.Fingerprint.Text)){
+            $fields.RecipientStatus.Text='Provide both fields before confirming.';return
+        }
+        if($Purpose -eq 'Setup'){
+            $setup=New-RecipientProfileSetup -Label $fields.Fingerprint.Text -OutputPath $fields.ProfilePath.Text -ConfirmSetup
+            $result.Value=$setup
+            $fields.RecipientStatus.Text=$setup.reasonCode
+            if($setup.state -eq 'CleanupIncomplete'){$fields.ConfirmRecipient.IsEnabled=$false}
+            if($setup.state -eq 'Created'){
+                $fields.RecipientStatus.Text='Synthetic round trip verified. Protection: ' + $setup.protectionLevel + "`nConfirmed setup fingerprint: " + $setup.fingerprint + "`nShare only the public profile and verify this fingerprint separately. Retain the private key for historical packages."
+                $fields.ConfirmRecipient.IsEnabled=$false
+                $result.Value=$setup
+            }
+        }
+        else {
+            $admission=Import-RecipientProfile -LiteralPath $fields.ProfilePath.Text -ExpectedFingerprint $fields.Fingerprint.Text -ForNewPackage
+            $fields.RecipientStatus.Text=$admission.reasonCode
+            if($admission.state -eq 'Approved'){
+                try{$result.Value=[pscustomobject]@{mode='Profile';profilePath=[IO.Path]::GetFullPath($fields.ProfilePath.Text);fingerprintConfirmation=$admission.fingerprint}}
+                finally{$admission.certificate.Dispose()}
+                $dialog.Close()
+            }
+        }
+    })
+    $null=$dialog.ShowDialog()
+    $result.Value
+}
+
+function Stop-StatusDeskForCleanupFailure {
+    param([Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] [hashtable] $Controls,
+        [Parameter(Mandatory)] $Session)
+    # A different assessment destination cannot make unresolved plaintext safe.
+    # Keep this invocation blocked even if a later deliberate recovery succeeds.
+    $State.ViewingCleanupFailed=$true
+    $Session.ExitCode=60
+    if (-not $Session.Completed) {
+        Request-StatusDeskCancellation $Session
+        Set-StatusDeskDecision -Session $Session -Approve $false -PlanDigest 'cleanup-failed'
+    }
+    foreach ($name in @('Approve','Decline','Cancel','SelectRecipient','SetupRecipient','OpenExisting','OpenReport','SaveHtml')) {
+        $Controls[$name].IsEnabled=$false
+    }
+    $Controls.Status.Text='CleanupIncomplete — new work blocked'
+    $Controls.Details.Text += "`nNew assessment, setup, viewing and export are blocked for this invocation. Retain protected evidence and recovery records. Use deliberate recovery or close; start a fresh invocation only after owned cleanup is verified."
 }
 
 function Invoke-StatusDesk {
@@ -227,19 +327,29 @@ function Invoke-StatusDesk {
     $window = New-StatusDeskWindow
     $controls = @{}
     foreach ($name in @('ScopeFact','AuthorityFact','NetworkFact','OutputFact','Elapsed','Status',
-        'Details','Timeline','Approve','Decline','Cancel','OpenReport','Recover','Close')) { $controls[$name] = $window.FindName($name) }
+        'Details','Timeline','Approve','Decline','Cancel','OpenReport','SaveHtml','OpenExisting',
+        'SelectRecipient','SetupRecipient','RecoverViews','Recover','Close')) { $controls[$name] = $window.FindName($name) }
     $session = Start-StatusDeskSession -ModuleText $ModuleText -LaunchParameters $LaunchParameters
-    $state = @{ Preparation=''; Closing=$false; TerminalShown=$false; ViewingCleanupFailed=$false; RecoveryRequested=$false }
+    $state = @{ Preparation=''; Closing=$false; TerminalShown=$false; ViewingCleanupFailed=$false; RecoveryRequested=$false
+        NextSelection=$null; PackagePath=''; ProtectionRoute='Local' }
+    $workflowAllowed=$LaunchParameters.ArtifactTrustValid -and -not $LaunchParameters.ValidationContext.IsFixture -and
+        (Test-RuntimeCompatibility -Facts $LaunchParameters.RuntimeFacts).Eligible
+    $controls.SetupRecipient.IsEnabled = $workflowAllowed
+    $controls.OpenExisting.IsEnabled = $workflowAllowed
+    $controls.RecoverViews.IsEnabled = $controls.OpenExisting.IsEnabled
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $timer = [System.Windows.Threading.DispatcherTimer]::new()
     $timer.Interval = [TimeSpan]::FromMilliseconds(100)
     # Handlers run synchronously on this STA while ShowDialog keeps this scope
     # alive. A dynamic closure module would lose the generated script's helpers.
     $controls.Approve.Add_Click({
+        if ($state.ViewingCleanupFailed) { return }
         if ($state.Preparation) {
             $summary = $state.Preparation | ConvertFrom-Json
             Set-StatusDeskDecision -Session $session -Approve $true -PlanDigest $summary.planDigest
             $controls.Approve.IsEnabled=$false; $controls.Decline.IsEnabled=$false; $controls.Cancel.IsEnabled=$true
+            $controls.SelectRecipient.IsEnabled=$false; $controls.SetupRecipient.IsEnabled=$false; $controls.OpenExisting.IsEnabled=$false
+            $controls.RecoverViews.IsEnabled=$false
             $controls.Status.Text='Assessment running'
         }
     })
@@ -250,13 +360,78 @@ function Invoke-StatusDesk {
     $controls.Cancel.Add_Click({ Request-StatusDeskCancellation $session; $controls.Status.Text='Cancelling — stopping owned work and finalizing safely…'; $controls.Cancel.IsEnabled=$false })
     $controls.Close.Add_Click({ $window.Close() })
     $controls.Recover.Add_Click({ $state.RecoveryRequested=$true; $window.Close() })
+    $controls.SelectRecipient.Add_Click({
+        if ($state.ViewingCleanupFailed -or $session.Transport.DecisionReady.IsSet) { return }
+        $selection = Show-StatusDeskRecipientDialog -Owner $window -Purpose Selection
+        if ($null -ne $selection) {
+            $state.NextSelection=$selection
+            $window.Close()
+        }
+    })
+    $controls.SetupRecipient.Add_Click({
+        if ($state.ViewingCleanupFailed -or -not $controls.SetupRecipient.IsEnabled -or $session.Transport.DecisionReady.IsSet) { return }
+        $setup = Show-StatusDeskRecipientDialog -Owner $window -Purpose Setup
+        if($null -ne $setup -and $setup.state -eq 'CleanupIncomplete'){
+            $controls.Details.Text='Recipient setup requires cleanup attention.'
+            Stop-StatusDeskForCleanupFailure -State $state -Controls $controls -Session $session
+        }
+    })
+    $controls.OpenExisting.Add_Click({
+        if ($state.ViewingCleanupFailed) { return }
+        $dialog=[Microsoft.Win32.OpenFileDialog]::new()
+        $dialog.Title='Choose an existing encrypted Protected Evidence Package'
+        $dialog.Filter='Protected Evidence Package|*.winpcinfo|All files|*.*'
+        if ($dialog.ShowDialog($window) -ne $true) { return }
+        $route=[System.Windows.MessageBox]::Show($window,
+            'Choose the opening route. Yes: initiating Windows user/device. No: approved recipient key in this Windows user store. Cancel: do not open. The recipient route never falls back to local protection.',
+            'Protected opening route','YesNoCancel','Question')
+        if ($route -eq 'Cancel') { return }
+        $state.PackagePath=$dialog.FileName
+        $state.ProtectionRoute=if($route -eq 'Yes'){'Local'}else{'Recipient'}
+        $controls.OpenReport.IsEnabled=$true; $controls.SaveHtml.IsEnabled=$true
+        $controls.OpenReport.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
+    })
+    $controls.RecoverViews.Add_Click({
+        $picker=[Microsoft.Win32.OpenFolderDialog]::new()
+        $picker.Title='Choose the folder used for interrupted protected report viewing'
+        if($picker.ShowDialog($window) -ne $true){return}
+        if([System.Windows.MessageBox]::Show($window,
+            'Inspect registered residue in this exact folder and remove only verified owned temporary state? Protected packages are preserved; collection never resumes. Foreign or ambiguous objects remain untouched.',
+            'Deliberate viewing recovery','OKCancel','Warning') -ne 'OK'){return}
+        $recovery=Invoke-AssessmentRecoveryGate -Destination $picker.FolderName -Authorized $true
+        $controls.Status.Text=$recovery.outcome + ' — ' + $recovery.reasonCode
+        $controls.Details.Text=$recovery.guidance
+        if(-not $recovery.cleanup.verified -or $state.ViewingCleanupFailed){
+            Stop-StatusDeskForCleanupFailure -State $state -Controls $controls -Session $session
+        }
+    })
+    $controls.SaveHtml.Add_Click({
+        if ($state.ViewingCleanupFailed -or -not $state.PackagePath) { return }
+        $warning=Get-RestrictedReportExportWarning
+        if ([System.Windows.MessageBox]::Show($window,$warning.warning + "`n`n" +
+            'Choose a private local folder restricted to your Windows user and SYSTEM, outside repositories, public and synced folders. Every copy remains restricted; ordinary deletion is not forensic erasure.',
+            $warning.title,'OKCancel','Warning') -ne 'OK') { return }
+        $dialog=[Microsoft.Win32.SaveFileDialog]::new()
+        $dialog.Title='Save restricted HTML for consultant'
+        $dialog.Filter='Restricted HTML report|*.html'; $dialog.FileName='restricted-report.html'
+        $dialog.InitialDirectory=[IO.Path]::GetDirectoryName($state.PackagePath)
+        if ($dialog.ShowDialog($window) -ne $true) { return }
+        $export=Export-RestrictedAssessmentReport -PackagePath $state.PackagePath -OutputPath $dialog.FileName `
+            -ProtectionRoute $state.ProtectionRoute -WarningAcknowledgment $warning.acknowledgmentRequired
+        $controls.Status.Text=$export.state + ' — ' + $export.reasonCode
+        $controls.Details.Text += "`nExport remains Restricted Diagnostic Evidence. Transfer privately and delete all copies after use."
+        if ($export.state -eq 'CleanupIncomplete') {
+            Stop-StatusDeskForCleanupFailure -State $state -Controls $controls -Session $session
+        }
+    })
     $controls.OpenReport.Add_Click({
-        $result = Show-StatusDeskReport -PackagePath $session.Transport.State.PackagePath -Owner $window
+        if ($state.ViewingCleanupFailed) { return }
+        $result = Show-StatusDeskReport -PackagePath $state.PackagePath -Owner $window -ProtectionRoute $state.ProtectionRoute
         if (-not $result.verified) {
             if ($result.state -eq 'CleanupIncomplete') {
                 $controls.Status.Text='CleanupIncomplete — report viewing needs attention'
                 $controls.Details.Text='The viewing operation did not verify safe closure. Retain the protected package and recovery record for cleanup. Ordinary deletion is not forensic erasure.'
-                $state.ViewingCleanupFailed=$true; $session.ExitCode=60
+                Stop-StatusDeskForCleanupFailure -State $state -Controls $controls -Session $session
             }
             elseif ($result.state -eq 'IntegrityFailed') {
                 $controls.Status.Text='IntegrityFailed — protected report could not be verified'
@@ -264,7 +439,7 @@ function Invoke-StatusDesk {
                 $session.ExitCode=50
             }
             else { $controls.Status.Text='Report unavailable — temporary viewing cleanup verified' }
-            $controls.OpenReport.IsEnabled=$false
+            $controls.OpenReport.IsEnabled=$false; $controls.SaveHtml.IsEnabled=$false
         }
     })
     $window.Add_Closing({
@@ -273,7 +448,7 @@ function Invoke-StatusDesk {
             $eventArgs.Cancel=$true; $state.Closing=$true
             Request-StatusDeskCancellation $session
             Set-StatusDeskDecision -Session $session -Approve $false -PlanDigest 'closing'
-            $controls.Status.Text='Closing — waiting for owned work and cleanup…'
+            if (-not $state.ViewingCleanupFailed) { $controls.Status.Text='Closing — waiting for owned work and cleanup…' }
         }
     })
     $timer.Add_Tick({
@@ -291,10 +466,10 @@ function Invoke-StatusDesk {
             $controls.ScopeFact.Text=$summary.plan.scope.profileName
             $controls.NetworkFact.Text=$summary.plan.network.behavior
             $controls.OutputFact.Text='Encrypted · recipient ' + $summary.plan.output.recipientProfile.mode
-            $controls.Details.Text=Get-StatusDeskPreparationText $summary
+            if (-not $state.ViewingCleanupFailed) { $controls.Details.Text=Get-StatusDeskPreparationText $summary }
             if ($summary.plan.cleanup.staleRunRecovery.requested) { $controls.Approve.Content='_Approve recovery only' }
-            $controls.Status.Text=if($summary.readyForApproval){'Ready for your approval'}else{'Preparation unavailable'}
-            $controls.Approve.IsEnabled=$summary.readyForApproval -and -not $session.Transport.DecisionReady.IsSet
+            if (-not $state.ViewingCleanupFailed) { $controls.Status.Text=if($summary.readyForApproval){'Ready for your approval'}else{'Preparation unavailable'} }
+            $controls.Approve.IsEnabled=$summary.readyForApproval -and -not $session.Transport.DecisionReady.IsSet -and -not $state.ViewingCleanupFailed
         }
         [string]$json=''
         for ($index=0; $index -lt 32 -and $session.Transport.Events.TryTake([ref]$json); $index++) {
@@ -307,13 +482,20 @@ function Invoke-StatusDesk {
         if ((Complete-StatusDeskSession $session) -and -not $state.TerminalShown) {
             $state.TerminalShown=$true; $watch.Stop()
             $terminal=$session.Transport.State.Terminal | ConvertFrom-Json
-            $controls.Status.Text=$terminal.outcome
-            $controls.Details.Text='Outcome: ' + $terminal.outcome + "`nReason: " + $terminal.reasonCode + "`nCleanup verified: " + $terminal.cleanup.verified
+            if (-not $state.ViewingCleanupFailed) {
+                $controls.Status.Text=$terminal.outcome
+                $controls.Details.Text='Outcome: ' + $terminal.outcome + "`nReason: " + $terminal.reasonCode + "`nCleanup verified: " + $terminal.cleanup.verified
+            }
             $controls.Approve.IsEnabled=$false; $controls.Decline.IsEnabled=$false; $controls.Cancel.IsEnabled=$false
+            $controls.SelectRecipient.IsEnabled=$false; $controls.SetupRecipient.IsEnabled=$false
+            $controls.OpenExisting.IsEnabled=$workflowAllowed -and $terminal.cleanup.verified -and -not $state.ViewingCleanupFailed
+            $controls.RecoverViews.IsEnabled=$workflowAllowed
             if ($session.Transport.State.Completion) {
                 $summary=$session.Transport.State.Completion | ConvertFrom-Json
                 $controls.Details.Text += "`nProtected package: " + $summary.packageAvailability + "`nLocal access: " + $summary.resultSharingGuidance.localAccess + "`nRecipient access: " + $summary.resultSharingGuidance.recipientAccess + "`nResults are Restricted Diagnostic Evidence. Do not publish them."
-                $controls.OpenReport.IsEnabled=$terminal.outcome -ne 'IntegrityFailed' -and $summary.packageVerified -and $summary.packageAvailability -eq 'Available' -and [bool]$session.Transport.State.PackagePath
+                $controls.OpenReport.IsEnabled=-not $state.ViewingCleanupFailed -and $terminal.outcome -ne 'IntegrityFailed' -and $summary.packageVerified -and $summary.packageAvailability -eq 'Available' -and [bool]$session.Transport.State.PackagePath
+                $state.PackagePath=$session.Transport.State.PackagePath; $state.ProtectionRoute='Local'
+                $controls.SaveHtml.IsEnabled=$controls.OpenReport.IsEnabled
             }
             else { $controls.Details.Text += "`nNo usable package or report is available." }
             if ($terminal.reasonCode -like 'RECOVERY.*' -and -not $terminal.cleanup.verified) {
@@ -332,6 +514,13 @@ function Invoke-StatusDesk {
         if ($session.Completed) {
             $session.Transport.Cancellation.Dispose(); $session.Transport.DecisionReady.Dispose(); $session.Transport.Events.Dispose()
         }
+    }
+    if ($state.ViewingCleanupFailed) { return 60 }
+    if ($null -ne $state.NextSelection) {
+        $nextLaunch=$LaunchParameters.Clone()
+        $nextLaunch.Request=$LaunchParameters.Request | ConvertTo-Json -Depth 40 | ConvertFrom-Json -Depth 40
+        $nextLaunch.Request.recipientSelection=$state.NextSelection
+        return Invoke-StatusDesk -ModuleText $ModuleText -LaunchParameters $nextLaunch -ViewReady $ViewReady
     }
     if ($state.RecoveryRequested) {
         $nextLaunch = $LaunchParameters.Clone()

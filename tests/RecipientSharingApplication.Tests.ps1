@@ -14,8 +14,7 @@ $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $repositoryRoot 'src/ProtectedPackage.ps1')
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
-$recipientValidationRoot = Join-Path (Split-Path -Parent $candidatePath) `
-    '.recipient-sharing-validation'
+$recipientValidationRoot = Join-Path ([IO.Path]::GetTempPath()) 'WIN-PCInfo-recipient-sharing-validation'
 if ([System.IO.Directory]::Exists($recipientValidationRoot)) {
     $preexistingResidue = @([System.IO.Directory]::EnumerateFileSystemEntries(
         $recipientValidationRoot
@@ -40,6 +39,13 @@ Assert-Equal 'PREPARATION.INTEGRITY_FAILED' $untrustedSetup.Records[-1].reasonCo
     'persistent setup is gated by external artifact trust'
 Assert-Equal $false ([System.IO.File]::Exists($untrustedSetupPath)) `
     'the trust failure occurs before profile or certificate creation'
+foreach($workflow in @('OpenReport','RestrictedReportExport')) {
+    $blocked=Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
+        '-Workflow',$workflow,'-Mode','Gui','-PackageProtectionRoute','Recipient',
+        '-ProtectedPackagePath',(Join-Path $repositoryRoot '.test-output/does-not-exist.winpcinfo'))
+    Assert-Equal 20 $blocked.ExitCode "$workflow retains generated-artifact trust admission"
+    Assert-Equal 'PREPARATION.INTEGRITY_FAILED' $blocked.Records[-1].reasonCode "$workflow cannot use an unsigned artifact to open private evidence"
+}
 
 $selectionRoot = Join-Path $repositoryRoot `
     ".test-output/recipient-application-selection-$([guid]::NewGuid().ToString('N'))"
@@ -62,7 +68,7 @@ $selectedRequestPath = Join-Path $selectionRoot 'selected-request.json'
 )
 
 function Get-RecipientValidationResidue {
-    $root = Join-Path (Split-Path -Parent $candidatePath) '.recipient-sharing-validation'
+    $root = Join-Path ([IO.Path]::GetTempPath()) 'WIN-PCInfo-recipient-sharing-validation'
     if (-not [System.IO.Directory]::Exists($root)) { return @() }
     @([System.IO.Directory]::EnumerateFileSystemEntries($root) | ForEach-Object {
         [System.IO.Path]::GetFileName($_)

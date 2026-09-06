@@ -11,8 +11,9 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot 'src/RecipientSharing.ps1')
 . (Join-Path $repositoryRoot 'src/ProtectedPackage.ps1')
 
-$testRoot = Join-Path $repositoryRoot ".test-output/restricted-export-$([guid]::NewGuid().ToString('N'))"
-$null = [System.IO.Directory]::CreateDirectory($testRoot)
+$boundary = New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (
+    Join-Path ([IO.Path]::GetTempPath()) "winpcinfo-restricted-export-$([guid]::NewGuid().ToString('N'))")
+$testRoot = $boundary.CaseRoot
 $recordBytes = $null
 $reportBytes = $null
 try {
@@ -136,9 +137,7 @@ finally {
     if ($null -ne $reportBytes) {
         [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($reportBytes)
     }
-    if ([System.IO.Directory]::Exists($testRoot)) {
-        [System.IO.Directory]::Delete($testRoot, $true)
-    }
+    if (-not (Remove-EvidenceWorkspaceValidationBoundary $boundary)) { throw 'Owned export test cleanup failed.' }
 }
 
 Assert-Equal $false ([System.IO.Directory]::Exists($testRoot)) `

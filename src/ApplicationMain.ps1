@@ -1011,7 +1011,15 @@ if ($Workflow -ne 'Assessment') {
         exit 20
     }
     if ($Workflow -eq 'RecipientProfileSetup') {
-        $workflowResult = if ([string]::IsNullOrWhiteSpace($RecipientLabel) -or
+        $workflowResult = if ($Mode -eq 'Gui') {
+            $result = Show-StatusDeskRecipientDialog -Purpose Setup
+            if ($null -ne $result) { $result }
+            else { [pscustomobject]@{
+                state='NotStarted';reasonCode='RECIPIENT.SETUP_NOT_CONFIRMED'
+                profilePath=$null;fingerprint=$null;protectionLevel=$null;syntheticRoundTripVerified=$false
+            } }
+        }
+        elseif ([string]::IsNullOrWhiteSpace($RecipientLabel) -or
             [string]::IsNullOrWhiteSpace($RecipientProfileOutputPath)) {
             [pscustomobject][ordered]@{
                 state = 'NotStarted'; reasonCode = 'RECIPIENT.SETUP_INPUT_INVALID'
@@ -1049,6 +1057,21 @@ if ($Workflow -ne 'Assessment') {
         Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
         exit $exitCode
     }
+    if ($Workflow -eq 'OpenReport') {
+        $terminal=New-TerminalRecord -ReasonCode 'VIEWING.GUI_REQUIRED' -RuntimeResult $workflowRuntime -Phase Viewing
+        if ($Mode -eq 'Gui' -and -not [string]::IsNullOrWhiteSpace($ProtectedPackagePath)) {
+            $view=Show-StatusDeskReport -PackagePath $ProtectedPackagePath -ProtectionRoute $PackageProtectionRoute
+            $terminal.reasonCode='VIEWING.OPEN_FAILED'
+            if ($view.verified) { $terminal.outcome='Completed';$terminal.exitCode=0;$terminal.reasonCode='VIEWING.CLOSED_VERIFIED' }
+            elseif ($view.state -eq 'CleanupIncomplete') {
+                $terminal.outcome='CleanupIncomplete';$terminal.exitCode=60
+                $terminal.cleanup.required=$true;$terminal.cleanup.verified=$false
+            }
+            elseif ($view.state -eq 'IntegrityFailed') { $terminal.outcome='IntegrityFailed';$terminal.exitCode=50 }
+        }
+        Write-ContractRecord $terminal -ConvertToJsonCommand $convertToJsonCommand
+        exit $terminal.exitCode
+    }
     # The warning is an observable workflow step, not text hidden in help or in
     # the resulting HTML. It is emitted before checking the deliberate phrase,
     # so declining or mistyping still proves that no plaintext write preceded
@@ -1067,7 +1090,7 @@ if ($Workflow -ne 'Assessment') {
     else {
         Export-RestrictedAssessmentReport `
             -PackagePath $ProtectedPackagePath -OutputPath $RestrictedReportOutputPath `
-            -WarningAcknowledgment $RestrictedReportWarningAcknowledgment
+            -WarningAcknowledgment $RestrictedReportWarningAcknowledgment -ProtectionRoute $PackageProtectionRoute
     }
     Write-ContractRecord ([pscustomobject][ordered]@{
         recordType = 'win-pcinfo.restricted-report-export'

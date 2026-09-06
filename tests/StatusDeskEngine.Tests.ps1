@@ -233,11 +233,11 @@ try {
         $reportCloser.Add_Tick({
             if ($null -ne $uiState.Window -and $uiState.Window.OwnedWindows.Count -gt 0) {
                 $reportWindow=$uiState.Window.OwnedWindows[0]
-                $document=$reportWindow.Content.Document
+                $document=$reportWindow.FindName('ReportBrowser').Document
                 if ($null -ne $document -and $null -ne $document.body -and
                     [string]$document.body.innerText -like '*WIN-PCInfo Comprehensive Local Assessment*') {
                     $uiState.ReportObserved=$true
-                    $reportWindow.Close()
+                    $reportWindow.FindName('CloseViewing').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
                 }
             }
             if ($uiWatch.Elapsed.TotalSeconds -gt 90 -and $null -ne $uiState.Window) {
@@ -414,11 +414,16 @@ try {
     $html = [Text.Encoding]::UTF8.GetString($opened.artifacts['assessment-report.html'])
     if ($SoftwareReportScenario) {
         Assert-SoftwareReportEvidence -Record $record -Html $html
-        $exportPath=Join-Path $testRoot 'software-report.html'
-        $export=Export-RestrictedAssessmentReport -PackagePath $session.Transport.State.PackagePath `
-            -OutputPath $exportPath -WarningAcknowledgment 'I UNDERSTAND THIS IS RESTRICTED DIAGNOSTIC EVIDENCE'
-        Assert-Equal 'Exported' $export.state 'maximum software report deliberately exports after verified reopening'
-        Assert-SoftwareReportEvidence -Record $record -Html ([IO.File]::ReadAllText($exportPath))
+        $exportBoundary=New-EvidenceWorkspaceValidationBoundary -ValidationRootPath (
+            Join-Path ([IO.Path]::GetTempPath()) ('winpcinfo-software-export-'+[guid]::NewGuid().ToString('N')))
+        try {
+            $exportPath=Join-Path $exportBoundary.CaseRoot 'software-report.html'
+            $export=Export-RestrictedAssessmentReport -PackagePath $session.Transport.State.PackagePath `
+                -OutputPath $exportPath -WarningAcknowledgment 'I UNDERSTAND THIS IS RESTRICTED DIAGNOSTIC EVIDENCE'
+            Assert-Equal 'Exported' $export.state 'maximum software report deliberately exports after verified reopening'
+            Assert-SoftwareReportEvidence -Record $record -Html ([IO.File]::ReadAllText($exportPath))
+        }
+        finally { if(-not (Remove-EvidenceWorkspaceValidationBoundary $exportBoundary)){throw 'Software export test cleanup failed.'} }
         Write-Output "Software report $SoftwareReportScenario bytes: $($opened.artifacts['assessment-report.html'].Length)"
     }
     if ($SoftwareSourceScenario) { Assert-SoftwareSourceReport -Record $record -Html $html -Scenario $SoftwareSourceScenario }

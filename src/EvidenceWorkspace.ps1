@@ -798,8 +798,12 @@ function Invoke-StaleRunRecovery {
             if ([System.IO.File]::Exists([string] $artifact.path)) { $attemptFailed = $true }
         }
 
-        $temporaryDirectory = Join-Path ([string] $workspace.path) `
-            ([string] $policy.temporaryEvidence.directoryName)
+        # Interrupted viewing owns a separate fixed directory. Remove it only
+        # after registered files are absent, using the same nonrecursive,
+        # no-reparse checks as temporary collection evidence.
+        foreach ($directoryName in @([string] $policy.temporaryEvidence.directoryName,
+            [string](Get-OwnedEvidenceArtifactDefinition -Kind EvidenceViewingArtifact).directoryName)) {
+        $temporaryDirectory = Join-Path ([string] $workspace.path) $directoryName
         try {
             if ([System.IO.Directory]::Exists($temporaryDirectory)) {
                 if (([System.IO.File]::GetAttributes($temporaryDirectory) -band
@@ -811,6 +815,7 @@ function Invoke-StaleRunRecovery {
             }
         }
         catch { $attemptFailed = $true }
+        }
 
         if ($preservedPackages.Count -eq 0) {
             try {

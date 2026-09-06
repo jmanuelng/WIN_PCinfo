@@ -35,6 +35,15 @@ Successful setup prints the profile path, fingerprint, protection level, and `sy
 
 ## Select zero or one recipient before collection
 
+In the Status desk, use **Select recipient before assessment** before approving.
+Choose the public profile and enter the fingerprint confirmed with the recipient.
+The application rejects mismatches and expired profiles, then displays a fresh
+complete Preparation Summary for your approval. **Use local protection only**
+chooses zero recipients. The choice cannot change after approval or collection.
+**Recipient setup** opens a separate deliberate setup dialog on a trusted build;
+it displays the synthetic round-trip result and protection level. Creating a key
+is separate from approving an assessment.
+
 No recipient is the default. In automation, omission of `recipientSelection` normalizes to this exact choice. You may also state it explicitly:
 
 ```json
@@ -82,9 +91,46 @@ An unavailable or unrelated private key returns `ProtectionUnavailable` and no p
 
 ## Deliberately export only the HTML report
 
+Use **Reopen encrypted results** in the Status desk to choose an existing package
+and explicitly choose local or recipient protection. Recipient opening searches
+the current Windows user's private-key store and never falls back to local DPAPI.
+Both routes authenticate and validate the entire package before exposing only
+the requested HTML. **Close viewing and remove temporary HTML** verifies removal
+of that view. Closing the report window uses the same cleanup. Browser tab closure
+is not a cleanup signal, and the product makes no browser-cache or forensic-erasure
+promise. After an interrupted application, use **Recover viewing residue**, choose
+the folder containing that package and its viewing recovery directory, and confirm
+the cleanup. It preserves encrypted packages and refuses foreign or ambiguous
+ownership; it never resumes collection.
+
+The separate trusted command opens a historical package without starting an assessment:
+
+```powershell
+pwsh -NoLogo -NoProfile -STA -File ./artifacts/WIN-PCInfo.ps1 `
+  -Workflow OpenReport -Mode Gui `
+  -ProtectedPackagePath C:\PrivateResults\package-example.winpcinfo `
+  -PackageProtectionRoute Recipient
+```
+
+Use `Local` for the initiating Windows user/device route. `OpenReport` requires
+the GUI so that the foreground window controls viewing lifetime. The recipient
+key must remain usable, but historical opening requires neither the old profile
+nor current certificate validity. A same-device test recipient is not independent
+off-device recovery evidence.
+
 Restricted Report Export is a fallback for authorized private handling when an encrypted recipient workflow is unavailable. It is not a share button and never produces Publicly Shareable Evidence. The exported HTML remains unencrypted **Restricted Diagnostic Evidence**.
 
-Read the warning phrase exactly, choose a new `.html` path in an existing local directory, and invoke the separate workflow:
+In the Status desk, **Save HTML for consultant** presents the full restricted-evidence
+warning before asking for a new `.html` path. Completion never saves it silently.
+The destination must already be a private local directory with a protected ACL
+allowing only the current user and SYSTEM, outside a repository, public folders,
+known OneDrive roots and redirected paths. The original assessment package's
+restricted directory is a suitable choice when it remains in its private location.
+The product refuses unsuitable destinations before any temporary or final export
+write and does not change permissions on the directory you choose.
+
+For the separate command, read the warning phrase exactly and choose that same
+kind of private destination:
 
 ```powershell
 pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 `
@@ -93,6 +139,11 @@ pwsh -NoLogo -NoProfile -File ./artifacts/WIN-PCInfo.ps1 `
   -RestrictedReportOutputPath C:\PrivateTransfer\restricted-report.html `
   -RestrictedReportWarningAcknowledgment 'I UNDERSTAND THIS IS RESTRICTED DIAGNOSTIC EVIDENCE'
 ```
+
+Add `-PackageProtectionRoute Recipient` to export through the approved recipient
+key instead of local protection. Complete and safely recoverable partial packages
+use the same opening and export safety checks. The saved HTML retains its permanent
+Restricted designation, and exporting does not replace the encrypted package.
 
 Before it checks the phrase or writes plaintext, the public application emits a dedicated `win-pcinfo.restricted-report-warning` record marked `Restricted`. It states that the output is unencrypted and not publicly shareable, requires private transfer and limited access, assigns deletion after use, and repeats the exact deliberate acknowledgment. The phrase must match exactly. Declining or mistyping it writes nothing. The workflow fully reopens and validates the package, selects only `assessment-report.html`, prepends a permanent visible `RESTRICTED DIAGNOSTIC EVIDENCE … NOT PUBLICLY SHAREABLE` banner, durably writes a provisional file, and publishes the final name only after success. An interruption removes and verifies the exact provisional plaintext. The workflow creates no upload, retention service, scheduled task, cleaner, or monitor.
 

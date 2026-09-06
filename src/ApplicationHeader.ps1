@@ -57,7 +57,7 @@ param(
     # an immutable-tag rule. The trust assumption is that the request
     # is synthetic. Safe failure is NotStarted, or an evaluated
     # denial that cannot create a GitHub release.
-    [ValidateSet('Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')]
+    [ValidateSet('Assessment', 'CheckRuntime', 'RecipientProfileSetup', 'OpenReport', 'RestrictedReportExport', 'Help', 'About', 'Verify', 'VerifyAttestation', 'AdmitValidationRound', 'RunValidationRound', 'RecoverValidationRound', 'EvaluateReleaseGates', 'SignAndVerifyCandidate', 'QualifyPreviewCandidate', 'PublishPreviewRelease')]
     [string] $Workflow = 'Assessment',
 
     # These paths exist only to locate the sidecar bundle and the unchanged
@@ -108,6 +108,11 @@ param(
     # can request another inner artifact, upload, retention, or background work.
     [Parameter()]
     [string] $ProtectedPackagePath,
+
+    # A recipient opening never falls back to the initiating-user protector.
+    [Parameter()]
+    [ValidateSet('Local', 'Recipient')]
+    [string] $PackageProtectionRoute = 'Local',
 
     [Parameter()]
     [string] $RestrictedReportOutputPath,
