@@ -49,7 +49,7 @@ foreach ($entry in $PSBoundParameters.GetEnumerator()) {
 $qualificationFailed = $false
 $projection = $null
 $qualityWatch = [Diagnostics.Stopwatch]::StartNew()
-$quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=0L; packageBytes=0L; htmlBytes=0L }
+$quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=0L; workspaceSamplingLosses=0L; packageBytes=0L; htmlBytes=0L }
 function Measure-QualificationWorkload {
     $process = [Diagnostics.Process]::GetCurrentProcess()
     try {
@@ -58,9 +58,16 @@ function Measure-QualificationWorkload {
     }
     finally { $process.Dispose() }
     if ([IO.Directory]::Exists($testRoot)) {
-        $bytes = 0L
-        foreach ($file in @(Get-ChildItem -LiteralPath $testRoot -File -Recurse)) { $bytes += $file.Length }
-        $quality.sampledWorkspaceBytes = [Math]::Max($quality.sampledWorkspaceBytes, $bytes)
+        try {
+            $bytes = 0L
+            foreach ($file in @(Get-ChildItem -LiteralPath $testRoot -File -Recurse)) { $bytes += $file.Length }
+            $quality.sampledWorkspaceBytes = [Math]::Max($quality.sampledWorkspaceBytes, $bytes)
+        }
+        catch [IO.DirectoryNotFoundException], [IO.FileNotFoundException], [Management.Automation.ItemNotFoundException] {
+            # Owned cleanup can remove a path during enumeration. Preserve the
+            # observed maximum and disclose the lost sample; other errors fail.
+            $quality.workspaceSamplingLosses++
+        }
     }
 }
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')

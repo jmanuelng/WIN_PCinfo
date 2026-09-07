@@ -19,6 +19,32 @@ try {
     $summary = Get-Content -LiteralPath $summaryFiles[0].FullName -Raw | ConvertFrom-Json
     Assert-Equal 'Fail' $summary.results[0].result 'the first failure survives in evidence'
     Assert-Equal 'Pass' $summary.results[1].result 'the subsequent executed file is independently recorded'
+
+    $samplerPath = Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'
+    $samplerAst = [Management.Automation.Language.Parser]::ParseFile($samplerPath, [ref]$null, [ref]$null)
+    $sampler = $samplerAst.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Measure-QualificationWorkload'
+    }, $true)
+    . ([scriptblock]::Create($sampler.Extent.Text))
+    $testRoot = $root
+    $quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=42L; workspaceSamplingLosses=0L }
+    function Get-ChildItem { param($LiteralPath, [switch]$File, [switch]$Recurse) throw $samplerFault }
+    foreach ($samplerFault in @(
+        [IO.DirectoryNotFoundException]::new('Synthetic owned directory removal'),
+        [IO.FileNotFoundException]::new('Synthetic owned file removal'),
+        [Management.Automation.ItemNotFoundException]::new('Synthetic owned item removal')
+    )) {
+        $previousLosses = $quality.workspaceSamplingLosses
+        Measure-QualificationWorkload
+        Assert-Equal ($previousLosses + 1) $quality.workspaceSamplingLosses 'owned path removal is counted as a lost sample'
+        Assert-Equal 42L $quality.sampledWorkspaceBytes 'a lost sample preserves the previous observed maximum'
+    }
+    $samplerFault = [UnauthorizedAccessException]::new('Synthetic unexpected access denial')
+    $denialPropagated = $false
+    try { Measure-QualificationWorkload }
+    catch [UnauthorizedAccessException] { $denialPropagated = $true }
+    Assert-Equal $true $denialPropagated 'unexpected sampler errors still fail the test'
+    Assert-Equal 3L $quality.workspaceSamplingLosses 'access denial is not relabeled as owned cleanup'
 }
 finally {
     $resolved = [IO.Path]::GetFullPath($root)
