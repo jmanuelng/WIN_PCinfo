@@ -1,5 +1,11 @@
 # #154 automated qualification
 
+**Historical checkpoint:** the subsequent independent Spec review found two
+blocking gaps. Its full-pass statement below is preserved as historical and
+does not qualify the correction candidate. See
+[the bounded review corrections](issue-154-review-corrections.md) for current
+source identities, refreshed affected evidence and pending root-owned gates.
+
 Assigned specification: [#154](https://github.com/jmanuelng/WIN_PCinfo/issues/154),
 with the approved #134/#37 specifications and #158 allocation. This continuation
 supersedes the outstanding automated work in
