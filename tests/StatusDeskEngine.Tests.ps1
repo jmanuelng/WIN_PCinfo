@@ -121,6 +121,8 @@ if ($QualificationPlanFault) {
         $scenario=if($QualificationPlanFault -eq 'PrivilegeTimeout'){'Timeout'}else{'LostWorker'}
         $moduleText=$moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
             '-LocalPackageProtector $LocalPackageProtector -ValidationScenario '+$scenario)
+        $moduleText=$moduleText.Replace('$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }',
+            '$script:StatusDeskTransport.State.QualificationPrivilegeState=$result.state; $script:StatusDeskTransport.State.QualificationPrivilegeReason=$result.reasonCode; $script:StatusDeskTransport.State.QualificationPrivilegeOperationCount=@($result.operations).Count; $script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }')
         if ($QualificationPlanFault -eq 'PrivilegeTimeout') {
             # The combined privilege/SYSTEM budget exceeds the original
             # 10-second standalone fault. Keep both owned processes waiting
@@ -468,9 +470,16 @@ try {
         foreach($scope in $attemptCoverage){Assert-Equal $expected $scope.state 'every SYSTEM field retains the actual interrupted attempt state'}
     }
     if ($QualificationPlanFault.StartsWith('Privilege')) {
-        $expected=if($QualificationPlanFault -eq 'PrivilegeTimeout'){'TimedOut'}else{'IntegrityFailed'}
+        $isTimeout=$QualificationPlanFault -eq 'PrivilegeTimeout'
+        Assert-Equal $(if($isTimeout){'TimedOut'}else{'IntegrityFailed'}) $session.Transport.State.QualificationPrivilegeState 'the actual privileged protocol reaches the requested fault'
+        Assert-Equal $(if($isTimeout){'PRIVILEGE.DEADLINE_EXCEEDED'}else{'PRIVILEGE.WORKER_LOST'}) $session.Transport.State.QualificationPrivilegeReason 'the worker supplies the specific fault reason'
+        Assert-Equal 0 $session.Transport.State.QualificationPrivilegeOperationCount 'the interrupted protocol admits no operation envelopes'
+        # LostWorker exits after hello, before receiving its collection plan.
+        # Preserve the distinction between protocol failure and a started run.
+        $expected=if($isTimeout){'TimedOut'}else{'NotStarted'}
         Assert-Equal $expected $terminal.outcome 'lost or timed-out privileged protocol cannot produce a completed assessment'
-        Assert-Equal $(if($expected -eq 'TimedOut'){40}else{50}) $session.ExitCode 'privileged interruption retains its truthful terminal code'
+        Assert-Equal $isTimeout $terminal.collectionStarted 'only the timeout fault reaches the collection plan'
+        Assert-Equal $(if($isTimeout){40}else{20}) $session.ExitCode 'privileged interruption retains its truthful terminal code'
         Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'a failed privileged worker cannot schedule SYSTEM'
         Assert-Equal '' $session.Transport.State.PackagePath 'no authenticated operation payload means no final package'
         Assert-Equal $true $terminal.cleanup.verified 'privileged worker failure verifies owned cleanup'
