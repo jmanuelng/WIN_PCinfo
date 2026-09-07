@@ -589,6 +589,98 @@ function Get-AssessmentFieldReason {
     return $null
 }
 
+function Test-AssessmentCalendarFormat {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Value,
+        [Parameter()] [switch] $Timestamp)
+
+    # RFC 3339 sections 5.6-5.7: ASCII wire grammar and Gregorian dates,
+    # independent of the operator's culture/calendar. Do not round fractions,
+    # cap offsets at DateTimeOffset's 14 hours, or reject the four-digit year 0.
+    $pattern = '\A([0-9]{4})-([0-9]{2})-([0-9]{2})'
+    if ($Timestamp) {
+        $pattern += '[Tt]([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9]|60)(?:\.[0-9]+)?([Zz]|([+-])([01][0-9]|2[0-3]):([0-5][0-9]))'
+    }
+    $match = [regex]::Match($Value, $pattern + '\z', [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { return $false }
+    $year = [int]$match.Groups[1].Value
+    $month = [int]$match.Groups[2].Value
+    $day = [int]$match.Groups[3].Value
+    # Gregorian leap years repeat every 400 years; this also permits year 0000.
+    $calendarYear = 2000 + ($year % 400)
+    if ($month -lt 1 -or $month -gt 12 -or $day -lt 1 -or
+        $day -gt [datetime]::DaysInMonth($calendarYear, $month)) { return $false }
+    if ($Timestamp -and $match.Groups[6].Value -eq '60') {
+        $offsetMinutes = if ($match.Groups[8].Success) {
+            ([int]$match.Groups[9].Value * 60 + [int]$match.Groups[10].Value) *
+                $(if ($match.Groups[8].Value -eq '-') { -1 } else { 1 })
+        } else { 0 }
+        $utc = [datetime]::new($calendarYear, $month, $day,
+            [int]$match.Groups[4].Value, [int]$match.Groups[5].Value, 59).AddMinutes(-$offsetMinutes)
+        # Leap seconds occur at a UTC month end, even when the local offset
+        # puts them on another day. No changing external leap-second table is
+        # fetched, and no claim about announced future insertions is made.
+        return $utc.Hour -eq 23 -and $utc.Minute -eq 59 -and
+            $utc.Day -eq [datetime]::DaysInMonth($utc.Year, $utc.Month)
+    }
+    return $true
+}
+
+function Test-AssessmentRecognitionUriFormat {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Value)
+
+    # RFC 3986 sections 2-3. The record schema already requires https://.
+    # Validate the original URI, never a Uri object's repaired/escaped string.
+    # Keep generic URI syntax (including IPvFuture and an unbounded digit port)
+    # separate from network reachability or a new publisher allowlist.
+    $atom = '(?:[A-Za-z0-9._~!$&''()*+,;=-]|%[0-9A-Fa-f]{2})'
+    $pattern = '\Ahttps://(?:' + $atom + '|:)*@'
+    $withoutUser = [regex]::Replace($Value, $pattern, 'https://')
+    $parts = [regex]::Match($withoutUser,
+        '\Ahttps://(?<host>\[[^\]]+\]|' + $atom + '*)(?::[0-9]*)?' +
+        '(?:/(?:' + $atom + '|[:@/])*)?(?:\?(?:' + $atom + '|[:@/?])*)?(?:#(?:' + $atom + '|[:@/?])*)?\z',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $parts.Success) { return $false }
+    $hostText = $parts.Groups['host'].Value
+    if ($hostText.StartsWith('[')) {
+        $literal = $hostText.Substring(1, $hostText.Length - 2)
+        if ([regex]::IsMatch($literal, '\A[vV][0-9A-Fa-f]+\.[A-Za-z0-9._~!$&''()*+,;=:-]+\z')) { return $true }
+        if ($literal -notmatch '\A[0-9A-Fa-f:.]+\z') { return $false }
+        if ($literal.Contains('.')) {
+            $ipv4 = $literal.Substring($literal.LastIndexOf(':') + 1)
+            $octets = $ipv4.Split('.')
+            if ($octets.Count -ne 4) { return $false }
+            foreach ($octet in $octets) {
+                if ($octet -notmatch '\A(?:0|[1-9][0-9]{0,2})\z' -or [int]$octet -gt 255) { return $false }
+            }
+        }
+        $address = $null
+        return [Net.IPAddress]::TryParse($literal, [ref]$address) -and
+            $address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetworkV6
+    }
+    return $true
+}
+
+function Get-AssessmentFormatReason {
+    param([Parameter(Mandatory)] $Record)
+
+    foreach ($origin in @($Record.provenance)) {
+        if (-not (Test-AssessmentCalendarFormat -Value $origin.collectedAt -Timestamp)) { return 'CONTRACT.FORMAT_INVALID' }
+    }
+    foreach ($envelope in @($Record.collectorResults)) {
+        if (-not (Test-AssessmentCalendarFormat -Value $envelope.startedAt -Timestamp) -or
+            -not (Test-AssessmentCalendarFormat -Value $envelope.completedAt -Timestamp)) { return 'CONTRACT.FORMAT_INVALID' }
+    }
+    if ($Record.PSObject.Properties['softwareRecognition']) {
+        foreach ($annotation in @($Record.softwareRecognition)) {
+            foreach ($origin in @($annotation.provenance)) {
+                if (-not (Test-AssessmentCalendarFormat -Value $origin.verifiedOn) -or
+                    -not (Test-AssessmentRecognitionUriFormat -Value $origin.url)) { return 'CONTRACT.FORMAT_INVALID' }
+            }
+        }
+    }
+    return $null
+}
+
 function Get-AssessmentRecordSemanticReason {
     param(
         [Parameter(Mandatory)] $Record,
@@ -605,6 +697,8 @@ function Get-AssessmentRecordSemanticReason {
     }).Count -gt 0) {
         return 'CONTRACT.PRIVACY_VIOLATION'
     }
+    $reason = Get-AssessmentFormatReason -Record $Record
+    if ($reason) { return $reason }
     $reason = Get-AssessmentReferenceReason -Record $Record `
         -ContractDefinition $ContractDefinition
     if ($reason) { return $reason }
@@ -683,7 +777,7 @@ function Test-AssessmentContract {
             return New-ContractValidationRecord -ReasonCode 'CONTRACT.SCHEMA_INVALID' `
                 -SchemaDraft ([string] $contract.Definition.schemaDraft)
         }
-        $record = & $ConvertFromJsonCommand -InputObject $json -Depth 30
+        $record = & $ConvertFromJsonCommand -InputObject $json -Depth 30 -DateKind String
         try {
             $recordVersion = [version] [string] $record.contractVersion
             $contractVersion = [version] [string] $contract.Definition.contractVersion

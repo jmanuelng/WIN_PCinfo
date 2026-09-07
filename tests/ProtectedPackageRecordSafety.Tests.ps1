@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 . (Join-Path $PSScriptRoot 'PackageSafetyTestSupport.ps1')
+. (Join-Path $PSScriptRoot 'ContractFormatTestSupport.ps1')
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
@@ -21,6 +22,11 @@ try {
         'assessment-record.json' = $record; 'assessment-report.html' = $report
     }) -AssessmentContractSetVersion 1.0.0 -Completeness Complete
     $cases = [ordered]@{
+        timestamp = { param($r) $r.provenance[0].collectedAt = 'not-a-time' }
+        envelopeStart = { param($r) $r.collectorResults[0].startedAt = '2000-02-30T00:00:00Z' }
+        envelopeEnd = { param($r) $r.collectorResults[0].completedAt = '2000-01-01T24:00:00Z' }
+        recognitionDate = { param($r) $r.softwareRecognition[0].provenance[0].verifiedOn = '1900-02-29' }
+        recognitionUri = { param($r) $r.softwareRecognition[0].provenance[0].url = 'https://[' }
         major = { param($r) $r.contractVersion = '99.0.0' }
         feature = { param($r) $r.requiredFeatures += 'unknown-required-feature' }
         field = { param($r) $r.observations[0].fieldId = 'field:undeclared.secret' }
@@ -35,6 +41,7 @@ try {
     }
     foreach ($name in @($cases.Keys) + @('duplicate', 'unicode', 'unsafe-integer')) {
         $changed = $originalText | ConvertFrom-Json -Depth 30
+        if ($name -in @('recognitionDate','recognitionUri')) { $changed = New-FormatContractRecord }
         if ($cases.Contains($name)) {
             & $cases[$name] $changed
             $bytes = [Text.Encoding]::UTF8.GetBytes(($changed | ConvertTo-Json -Depth 30 -Compress))
