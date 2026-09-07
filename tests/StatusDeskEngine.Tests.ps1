@@ -37,6 +37,32 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+if (-not $QualificationPath -and $env:WINPCINFO_TEST_EVIDENCE) {
+    $QualificationPath = Join-Path $env:WINPCINFO_TEST_EVIDENCE ('case-' + [guid]::NewGuid().ToString('N') + '.json')
+}
+$qualificationArguments = [ordered]@{}
+foreach ($entry in $PSBoundParameters.GetEnumerator()) {
+    if ($entry.Key -notin @('QualificationPath','RecoveryDestination','InterruptHandoffPath')) {
+        $qualificationArguments[$entry.Key] = if ($entry.Value -is [Management.Automation.SwitchParameter]) { [bool]$entry.Value } else { $entry.Value }
+    }
+}
+$qualificationFailed = $false
+$projection = $null
+$qualityWatch = [Diagnostics.Stopwatch]::StartNew()
+$quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=0L; packageBytes=0L; htmlBytes=0L }
+function Measure-QualificationWorkload {
+    $process = [Diagnostics.Process]::GetCurrentProcess()
+    try {
+        $quality.sampledPrivateBytes = [Math]::Max($quality.sampledPrivateBytes, $process.PrivateMemorySize64)
+        $quality.sampledWorkingSetBytes = [Math]::Max($quality.sampledWorkingSetBytes, $process.WorkingSet64)
+    }
+    finally { $process.Dispose() }
+    if ([IO.Directory]::Exists($testRoot)) {
+        $bytes = 0L
+        foreach ($file in @(Get-ChildItem -LiteralPath $testRoot -File -Recurse)) { $bytes += $file.Length }
+        $quality.sampledWorkspaceBytes = [Math]::Max($quality.sampledWorkspaceBytes, $bytes)
+    }
+}
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 $candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
@@ -433,7 +459,10 @@ try {
         Assert-Equal $false $session.Transport.State.ContainsKey('NetworkRequestAttempted') 'preparation invokes no network request adapter'
     }
     if (-not $Wpf) { Set-StatusDeskDecision -Session $session -Approve (-not $DeclinePreparation) -PlanDigest $preparation.planDigest }
-    while (-not (Complete-StatusDeskSession $session) -and $watch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 25 }
+    while (-not (Complete-StatusDeskSession $session) -and $watch.Elapsed.TotalSeconds -lt 120) {
+        if ($QualificationPath) { Measure-QualificationWorkload }
+        Start-Sleep -Milliseconds 25
+    }
     Assert-Equal $true $session.Completed 'ordinary collector chain reaches bounded completion'
     if ($IdentitySourceScenario -and $session.Transport.State.ContainsKey('IdentitySourceFailure')) { throw ($session.Transport.State.IdentitySourceFailure + ' ' + $session.Transport.State.IdentityPrivilegeReason) }
     if ($SecuritySourceScenario -and $session.Transport.State.ContainsKey('SecuritySourceFailure')) { throw $session.Transport.State.SecuritySourceFailure }
@@ -746,7 +775,34 @@ try {
     Assert-Equal $true (Close-EvidenceViewingSession $viewing).verified 'closing report verifies owned plaintext cleanup'
     foreach ($bytes in $opened.artifacts.Values) { [Security.Cryptography.CryptographicOperations]::ZeroMemory([byte[]]$bytes) }
 }
+catch { $qualificationFailed = $true; throw }
 finally {
+    if ($QualificationPath) {
+        Measure-QualificationWorkload
+        if ($Wpf -and $null -ne $session) {
+            $quality.sampledPrivateBytes = [Math]::Max($quality.sampledPrivateBytes, $uiState.PeakPrivateBytes)
+            $quality.sampledWorkingSetBytes = [Math]::Max($quality.sampledWorkingSetBytes, $uiState.PeakWorkingSetBytes)
+        }
+        if ($null -ne $session -and $session.Transport.State.ContainsKey('PackagePath') -and [IO.File]::Exists($session.Transport.State.PackagePath)) {
+            $quality.packageBytes = (Get-Item -LiteralPath $session.Transport.State.PackagePath).Length
+        }
+        if (Get-Variable -Name html -Scope Local -ErrorAction SilentlyContinue) { $quality.htmlBytes = [Text.Encoding]::UTF8.GetByteCount($html) }
+        if ($null -eq $projection) { $projection = [ordered]@{ candidateSha256=(Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant(); coverage=@() } }
+        $projection['arguments'] = $qualificationArguments
+        $projection['bodyAssertions'] = if ($qualificationFailed) { 'Fail' } else { 'Pass' }
+        $projection['testCleanup'] = 'Pending'
+        $projection['elapsedMilliseconds'] = $qualityWatch.ElapsedMilliseconds
+        $projection['quality'] = $quality
+        if ($null -ne $session) {
+            $timing = [ordered]@{}
+            foreach ($name in @('FirstProgressMilliseconds','MaximumProgressGapMilliseconds','TerminalMilliseconds','CancellationRequestedMilliseconds')) {
+                if ($session.Transport.State.ContainsKey($name)) { $timing[$name] = $session.Transport.State[$name] }
+            }
+            if ($Wpf) { $timing['acknowledgmentMilliseconds'] = $uiState.AcknowledgmentMilliseconds }
+            $projection['timing'] = $timing
+        }
+        [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+    }
     if ($null -ne $session -and $session.Transport.State.ContainsKey('SyntheticLock')) { $session.Transport.State.SyntheticLock.Dispose() }
     if ($null -ne $runLock) { if ($runLockOwned) { $runLock.ReleaseMutex() }; $runLock.Dispose() }
     if ($null -ne $session -and -not $session.Completed) {
@@ -763,5 +819,9 @@ finally {
     $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
     if (-not $resolved.StartsWith($ownedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected synthetic cleanup target.' }
     if (-not $RecoveryDestination -and (Test-Path -LiteralPath $resolved)) { Remove-Item -LiteralPath $resolved -Recurse -Force }
+    if ($QualificationPath) {
+        $projection['testCleanup'] = if ($RecoveryDestination) { 'RetainedForRecoveryTest' } else { 'VerifiedAbsent' }
+        [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+    }
 }
 Write-Output 'PASS: generated Status desk worker executes controlled comprehensive collectors, protects a useful offline report, and cleans viewing.'

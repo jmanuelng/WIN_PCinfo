@@ -60,7 +60,7 @@ elseif ($Mode -eq 'Cultures') {
     }
 }
 elseif ($Mode -eq 'Workers') {
-    foreach($fault in @('PrivilegeTimeout','PrivilegeLoss','SystemCancel','SystemTimeout','SystemLoss')) {
+    foreach($fault in @('PrivilegeTimeout','PrivilegeLoss','PrivilegePostStartLoss','SystemCancel','SystemTimeout','SystemLoss')) {
         $cases.Add(@{id=$fault;arguments=@('-QualificationPlanFault',$fault)})
     }
     foreach ($family in @('Software','Resource','Network','Certificate','IdentityRegistration','IdentityWorkSchool')) {

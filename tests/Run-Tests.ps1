@@ -24,9 +24,32 @@ if ($testFiles.Count -eq 0) {
     throw 'No test files were found.'
 }
 
-foreach ($testFile in $testFiles) {
-    Write-Output "RUN: $($testFile.Name)"
-    & $testFile.FullName
+$evidenceRoot = Join-Path (Split-Path $PSScriptRoot) ('.test-output/suite-' + [guid]::NewGuid().ToString('N'))
+$null = [IO.Directory]::CreateDirectory($evidenceRoot)
+$previousEvidenceRoot = $env:WINPCINFO_TEST_EVIDENCE
+$env:WINPCINFO_TEST_EVIDENCE = $evidenceRoot
+$suiteResults = [Collections.Generic.List[object]]::new()
+$suiteWatch = [Diagnostics.Stopwatch]::StartNew()
+Write-Output "EVIDENCE: $evidenceRoot"
+try {
+    foreach ($testFile in $testFiles) {
+        Write-Output "RUN: $($testFile.Name)"
+        $fileWatch = [Diagnostics.Stopwatch]::StartNew()
+        $fileResult = 'Pass'
+        try { & $testFile.FullName }
+        catch {
+            $fileResult = 'Fail'
+            Write-Output "FAIL: $($testFile.Name): $($_.Exception.Message)"
+        }
+        $suiteResults.Add([ordered]@{ file=$testFile.Name; result=$fileResult;
+            elapsedMilliseconds=$fileWatch.ElapsedMilliseconds;
+            sha256=(Get-FileHash -LiteralPath $testFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant() })
+        [IO.File]::WriteAllText((Join-Path $evidenceRoot 'suite-summary.json'),
+            ([ordered]@{ elapsedMilliseconds=$suiteWatch.ElapsedMilliseconds; expectedFiles=$testFiles.Count;
+                results=$suiteResults.ToArray() } | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    }
 }
-
+finally { $env:WINPCINFO_TEST_EVIDENCE = $previousEvidenceRoot }
+$failedFiles = @($suiteResults | Where-Object result -eq Fail)
+if ($failedFiles.Count) { throw "Full gate failed: $($failedFiles.Count) of $($testFiles.Count) files failed; all files executed. Evidence: $evidenceRoot" }
 Write-Output "PASS: $($testFiles.Count) test files completed."

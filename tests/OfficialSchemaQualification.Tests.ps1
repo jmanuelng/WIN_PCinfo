@@ -17,6 +17,9 @@ try {
     Assert-Equal 0 $result.externalFetches 'selected reference resolution remains offline'
 }
 finally {
+    if ($env:WINPCINFO_TEST_EVIDENCE -and [IO.File]::Exists($resultPath)) {
+        Copy-Item -LiteralPath $resultPath -Destination (Join-Path $env:WINPCINFO_TEST_EVIDENCE 'official-schema-results.json')
+    }
     $resolved = [IO.Path]::GetFullPath($resultRoot)
     if ([IO.Path]::GetDirectoryName($resolved) -ne [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))) {
         throw 'Official qualification cleanup escaped its owned parent.'
