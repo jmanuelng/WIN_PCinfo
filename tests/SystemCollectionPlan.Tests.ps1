@@ -204,13 +204,19 @@ $liveAssessment = $systemAssessment | ConvertTo-Json -Depth 30 | ConvertFrom-Jso
 $liveAssessment.run.validationFixture = $false
 $liveAssessment.provenance[0].executionContext = 'LocalSystem'
 $liveAssessment.collectorResults[0].executionContext = 'LocalSystem'
-$liveReason = Get-SystemAssessmentRecordValidationReason -Record $liveAssessment `
-    -Policy (Get-SystemCollectionPlanPolicy) `
-    -ConvertFromJsonCommand (Get-Command ConvertFrom-Json) `
-    -ConvertToJsonCommand $convertToJsonCommand -TestJsonCommand $testJsonCommand
-if ($liveReason) {
-    throw "The normal Assessment Record rejected LocalSystem provenance: $liveReason"
-}
+$savedCulture=[cultureinfo]::CurrentCulture
+try {
+    foreach($culture in @('en-US','es-MX','tr-TR','ja-JP','ar-SA')) {
+        [cultureinfo]::CurrentCulture=[cultureinfo]::GetCultureInfo($culture)
+        $liveReason = Get-SystemAssessmentRecordValidationReason -Record $liveAssessment `
+            -Policy (Get-SystemCollectionPlanPolicy) `
+            -ConvertFromJsonCommand (Get-Command ConvertFrom-Json) `
+            -ConvertToJsonCommand $convertToJsonCommand -TestJsonCommand $testJsonCommand
+        if ($liveReason) {
+            throw "The normal Assessment Record rejected LocalSystem provenance in ${culture}: $liveReason"
+        }
+    }
+} finally { [cultureinfo]::CurrentCulture=$savedCulture }
 
 $serialized = $accepted | ConvertTo-Json -Compress -Depth 30
 if ($serialized -match '(?i)recipientProfile|localPackageProtector|assessmentUserContext|packageKey|credential|password|secret|scriptText|commandText|executablePath|taskName|pipeName') {

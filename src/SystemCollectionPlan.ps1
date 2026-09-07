@@ -1185,7 +1185,11 @@ function Get-SystemAssessmentRecordValidationReason {
     }
     $definition = Get-SystemAssessmentContractDefinition -Policy $Policy `
         -ConvertFromJsonCommand $ConvertFromJsonCommand
-    Get-AssessmentRecordSemanticReason -Record $Record -ContractDefinition $definition
+    # Evaluate the same wire representation that passed the schema. In-memory
+    # DateTime values serialize canonically but a culture-dependent string cast
+    # is not that representation; keep JSON timestamp strings intact here too.
+    $wireRecord = & $ConvertFromJsonCommand -InputObject $json -Depth 30 -DateKind String
+    Get-AssessmentRecordSemanticReason -Record $wireRecord -ContractDefinition $definition
 }
 
 function Test-SystemCollectionAdministrator {
