@@ -705,7 +705,7 @@ try {
     if ($PlatformSourceScenario -and -not $QualificationSourceCase) { Assert-PlatformSourceReport -Record $record -Html $html -Scenario $PlatformSourceScenario }
     if ($RemoteSourceScenario -and -not $QualificationSourceCase) { Assert-RemoteSourceReport -Record $record -Html $html -Scenario $RemoteSourceScenario }
     if ($QualificationSourceCase) { Assert-AdditionalScopeSource -Record $record -Html $html -Case $sourceCase -State $session.Transport.State }
-    if (-not ($CancelAfterIdentity -or $CancelAfterResource -or $QualificationCancelAfter -in @('Identity','Resource') -or ($QualificationWorkerFamily -like 'Identity*' -and $QualificationWorkerFault -eq 'Cancel'))) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
+    if (-not ($CancelAfterIdentity -or $CancelAfterResource -or $QualificationCancelAfter -in @('Identity','Resource') -or (($QualificationWorkerFamily -like 'Identity*' -or $QualificationWorkerFamily -eq 'Resource') -and $QualificationWorkerFault -eq 'Cancel'))) { Assert-Equal $true $html.Contains('Local Only') 'offline report preserves network choice' }
     $viewing = Open-EvidenceViewingSession -PackagePath $session.Transport.State.PackagePath `
         -RequestedArtifact assessment-report.html -ViewingBasePath $testRoot
     Assert-Equal 'Opened' $viewing.state 'Open report uses a registered protected viewing boundary'
