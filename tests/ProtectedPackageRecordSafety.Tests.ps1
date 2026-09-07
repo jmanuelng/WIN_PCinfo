@@ -21,6 +21,30 @@ try {
     $inner = New-DeterministicAssessmentPackage -Artifacts ([ordered]@{
         'assessment-record.json' = $record; 'assessment-report.html' = $report
     }) -AssessmentContractSetVersion 1.0.0 -Completeness Complete
+    $savedCulture=[cultureinfo]::CurrentCulture
+    try {
+        foreach($culture in @('en-US','es-MX','tr-TR','ja-JP','ar-SA')) {
+            [cultureinfo]::CurrentCulture=[cultureinfo]::GetCultureInfo($culture)
+            $valid=New-FormatContractRecord
+            $valid.provenance[0].collectedAt='2000-02-29T23:59:59.123456789012+23:59'
+            $valid.collectorResults[0].startedAt='1990-12-31T15:59:60-08:00'
+            $valid.collectorResults[0].completedAt='0000-02-29t00:00:00z'
+            $bytes=[Text.Encoding]::UTF8.GetBytes(($valid|ConvertTo-Json -Depth 30 -Compress))
+            $validPackage=New-ProtectedEvidencePackage -DestinationDirectory $root -Artifacts ([ordered]@{
+                'assessment-record.json'=$bytes; 'assessment-report.html'=$report
+            }) -AssessmentContractSetVersion 1.0.0 -Completeness Complete
+            Assert-Equal 'Verified' $validPackage.state "$culture legitimate semantic formats reach final naming"
+            $opened=Read-ProtectedEvidencePackage -LiteralPath $validPackage.packagePath
+            try {
+                Assert-Equal 'Verified' $opened.state "$culture legitimate formats reopen"
+                Assert-Equal ([Convert]::ToBase64String($bytes)) ([Convert]::ToBase64String($opened.artifacts['assessment-record.json'])) 'admission preserves exact Unicode, offsets and fractional precision'
+            } finally {
+                if($null -ne $opened.artifacts){foreach($buffer in $opened.artifacts.Values){[Security.Cryptography.CryptographicOperations]::ZeroMemory($buffer)}}
+                [Security.Cryptography.CryptographicOperations]::ZeroMemory($bytes)
+            }
+            Write-Output "PASS: $culture legitimate semantic formats survive authenticated packaging byte-for-byte."
+        }
+    } finally { [cultureinfo]::CurrentCulture=$savedCulture }
     $cases = [ordered]@{
         timestamp = { param($r) $r.provenance[0].collectedAt = 'not-a-time' }
         envelopeStart = { param($r) $r.collectorResults[0].startedAt = '2000-02-30T00:00:00Z' }
