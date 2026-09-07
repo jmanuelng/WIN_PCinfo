@@ -121,6 +121,29 @@ if ($QualificationPlanFault) {
         $scenario=if($QualificationPlanFault -eq 'PrivilegeTimeout'){'Timeout'}else{'LostWorker'}
         $moduleText=$moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
             '-LocalPackageProtector $LocalPackageProtector -ValidationScenario '+$scenario)
+        if ($QualificationPlanFault -eq 'PrivilegeTimeout') {
+            # The combined privilege/SYSTEM budget exceeds the original
+            # 10-second standalone fault. Keep both owned processes waiting
+            # beyond that budget so this case actually reaches timeout.
+            . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+            $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionWorkerSource -Replacement Get-TimeoutOriginalPrivilegeWorkerSource
+            $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionPlanPolicy -Replacement Get-TimeoutOriginalPrivilegePolicy
+            $moduleText+=@'
+
+function Get-PrivilegedCollectionWorkerSource {
+    $source=Get-TimeoutOriginalPrivilegeWorkerSource
+    $wait='[System.Threading.Thread]::Sleep(10000)'
+    if(([regex]::Matches($source,[regex]::Escape($wait))).Count -ne 2){throw 'Controlled privilege timeout boundary changed.'}
+    $source.Replace($wait,'[System.Threading.Thread]::Sleep(30000)')
+}
+function Get-PrivilegedCollectionPlanPolicy {
+    $policy=Get-TimeoutOriginalPrivilegePolicy
+    $source=(Get-PrivilegedCollectionWorkerSource).Replace("`r`n","`n").Replace("`r","`n")
+    $policy.worker.payloadSha256=Get-PrivilegedCollectionPlanSha256 -Bytes ([Text.Encoding]::UTF8.GetBytes($source))
+    $policy
+}
+'@
+        }
     }
     else {
         $scenario=@{SystemCancel='Cancellation';SystemTimeout='Timeout';SystemLoss='WorkerLost'}[$QualificationPlanFault]
