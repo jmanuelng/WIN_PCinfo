@@ -1,0 +1,79 @@
+{
+  "provenance": {
+    "sourceRevision": "3b33754730fc6c4f92af742ba3ded83fb891c7ba",
+    "candidateSha256": "1c2e77746a5714ff01206868e1c39027a83e12ae5b3b86ea60c1387797466a49",
+    "candidateBytes": 3312123,
+    "powerShell": "7.6.5",
+    "dotNet": "10.0.11",
+    "architecture": "X64"
+  },
+  "testFilesPassed": 9,
+  "testFilesFailed": 0,
+  "elapsedMilliseconds": 285937,
+  "originalResultSha256": "f87641c25f41396c144d0fc7ef02ed077824cb607f2af16af6a8e4a8c6f9392f",
+  "results": [
+    {
+      "test": "tests/CertificateCulture.Tests.ps1",
+      "testSha256": "7a6f9b4e27baf564260f2a5aca694e639cfb4d8886a3f47228d8373874440659",
+      "elapsedMilliseconds": 1283,
+      "exitCode": 0,
+      "logSha256": "e43a4a09a765e5ad9f75a97c8df1837d2a78d443caa7975b651b2610cadddfc2"
+    },
+    {
+      "test": "tests/CertificateTrustPolicy.Tests.ps1",
+      "testSha256": "325e83b5bfd753e28cb48f4658e8ca9e70f44a9ef3c3fa18f42493cc3fc08245",
+      "elapsedMilliseconds": 789,
+      "exitCode": 0,
+      "logSha256": "61d0ea45c9856c73a1e40f4d8a6552ef348993a6f30ec49fb8663fbcddec2851"
+    },
+    {
+      "test": "tests/CertificateTrustNativeSource.Tests.ps1",
+      "testSha256": "b2d707f5b691652861d5376d8fd35316da7a809f804d5a2f28e8c2c70a5665ee",
+      "elapsedMilliseconds": 927,
+      "exitCode": 0,
+      "logSha256": "7fc82ec84e6b6f4e1eb2626df003acf2e8cad98a132815e4a469e1b1447bee9d"
+    },
+    {
+      "test": "tests/CertificateTrust.Tests.ps1",
+      "testSha256": "01374125f5068d8c6f07d048656a5c5e741e613088f8fb1f757014353a4ffdcc",
+      "elapsedMilliseconds": 1152,
+      "exitCode": 0,
+      "logSha256": "56cc07adf24c3e78ca487732b75a39da142a204a0fb2a2d274eaa9989744d8eb"
+    },
+    {
+      "test": "tests/CertificateTrustAdmission.Tests.ps1",
+      "testSha256": "48615d0d05cc62ba4d1394234719008bb8052b1d2442887288238b920d9d22e7",
+      "elapsedMilliseconds": 885,
+      "exitCode": 0,
+      "logSha256": "ee789050b6b081e7ef93a8a6a7e3f040b2ebd1d1c38101407d23021072837fec"
+    },
+    {
+      "test": "tests/CertificateSourceBounds.Tests.ps1",
+      "testSha256": "3c8cce7a85e95af30724f93e77093b4d86f20b723350a9d1d8dcceec4c3bea5b",
+      "elapsedMilliseconds": 1002,
+      "exitCode": 0,
+      "logSha256": "08cc6ebf5b8ce9d7472804cd51339bfaff7512b2dd023d016d23f0c30efa8570"
+    },
+    {
+      "test": "tests/CertificateTrustApplication.Tests.ps1",
+      "testSha256": "b37ae37ae5d77d618e570e0e756921f8966998c3a0e5926f1b6c140b3645c78a",
+      "elapsedMilliseconds": 200242,
+      "exitCode": 0,
+      "logSha256": "b03242335bcb04e2b05828ca43e6b69a88096092d25634f6d04ec7481c1efa04"
+    },
+    {
+      "test": "tests/ComprehensiveReport.Tests.ps1",
+      "testSha256": "97094267b327e5155a9a9f3cc6a1c0ec1401d9deb9e75f3639fa2d1281fc9ebc",
+      "elapsedMilliseconds": 3412,
+      "exitCode": 0,
+      "logSha256": "e5e25008ef6d1997b533097a98374161b2205ff037a8a556ad023d3de48d3a9d"
+    },
+    {
+      "test": "tests/ComprehensiveReportApplication.Tests.ps1",
+      "testSha256": "a5b9c1c963649bd24de1d8abd9f1de560e61888730f567c12f33f837035c97ab",
+      "elapsedMilliseconds": 76245,
+      "exitCode": 0,
+      "logSha256": "fa6d566a705515a9d2d9a2f8bec0635eb88e58ef643faecef6bda33f7f28512d"
+    }
+  ]
+}

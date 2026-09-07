@@ -1,0 +1,212 @@
+{
+  "candidateSha256": "2f471e321de719de02a902633e637f6395a0476d5545a2d924f914eec52d1181",
+  "candidateBytes": 3311711,
+  "powerShell": "7.6.5",
+  "dotNet": "10.0.11",
+  "architecture": "X64",
+  "testFilesPassed": 27,
+  "testFilesFailed": 0,
+  "elapsedMilliseconds": 708736.0,
+  "batches": [
+    {
+      "sourceRevision": "f879ed73bdf2e1211d7432d664552b539cb7bed0",
+      "results": [
+        {
+          "logSha256": "a830df10fbc4ae3ab749e5e9936eb1a7205e8935c6092e695100c5fc0b9a3650",
+          "test": "tests/ProtectedPackageBufferSafety.Tests.ps1",
+          "testSha256": "883a5c588fa858be4319416d4d76329943c11dc387d2e6ec2300ac0bacb5dc35",
+          "elapsedMilliseconds": 6840,
+          "exitCode": 0
+        },
+        {
+          "logSha256": "aca8fcc1421d639b984a3a2b4b825d0158e5a6dc8ca2b38c93954b545220d93b",
+          "test": "tests/ProtectedPackageRecordSafety.Tests.ps1",
+          "testSha256": "6c9135594bdc51f9fa098c86d76b08d2c77ac1cb7b8c15576b4e703cbceefcf8",
+          "elapsedMilliseconds": 6983,
+          "exitCode": 0
+        }
+      ]
+    },
+    {
+      "sourceRevision": "9eee5ad65ed0ac799e84a93a53e552dc98c75742",
+      "results": [
+        {
+          "elapsedMilliseconds": 7086,
+          "exitCode": 0,
+          "logSha256": "0fa84ed7af8b1283a20d46a2a26d10316c1845aa84534fd9dca4f12e53017881",
+          "test": "tests/DeviceProhibitedMaterial.Tests.ps1",
+          "testSha256": "98cebdca4c43270bc24b6055cc13d8b068b0ed7e02f6a33acf5ff0a472348f20"
+        },
+        {
+          "elapsedMilliseconds": 32863,
+          "exitCode": 0,
+          "logSha256": "d550baf6417686c43824dcdc37ac7c6af28a73122e27c1e367a534423094e3b9",
+          "test": "tests/ContractCultureOutput.Tests.ps1",
+          "testSha256": "d78bc12a82203aa84178265109c2c7c541542bd94731337eb09523664767a365"
+        },
+        {
+          "elapsedMilliseconds": 52804,
+          "exitCode": 0,
+          "logSha256": "cbb0aa7a2900d370b5bdb3b50a7232a79438fc3773ff5292741e1d7045cf440e",
+          "test": "tests/ContractValidator.Tests.ps1",
+          "testSha256": "4fa6370fcc6054d940f56f2f759caf306940878089b1bec5e875474e695841c6"
+        },
+        {
+          "elapsedMilliseconds": 63594,
+          "exitCode": 0,
+          "logSha256": "918f12bcc2b27ce9bbda6722a9dcffdf3412f95dbee8862002fa45440dd3bcb2",
+          "test": "tests/ContractSemanticMatrix.Tests.ps1",
+          "testSha256": "9f8a49119d26411b09ea778cd5f9b5db74d9fe108df167102609ff4433cc4682"
+        },
+        {
+          "elapsedMilliseconds": 2063,
+          "exitCode": 0,
+          "logSha256": "4e1d0ff30c00444cb31da9c9019a4bc248b0a53f0298a71b11a89c9b3c3bbae4",
+          "test": "tests/ProtectedPackage.Tests.ps1",
+          "testSha256": "d898d27ffffa6b3cc0faa9ffa8f80d94e7e8fd62d54cf66cbdb7d405db41a0bb"
+        },
+        {
+          "elapsedMilliseconds": 2279,
+          "exitCode": 0,
+          "logSha256": "521fddde1d465d51c20574cd8915782ac7f389d13ec87235820e5f4ada338633",
+          "test": "tests/ProtectedPackageRecipient.Tests.ps1",
+          "testSha256": "f4730dbb807482f7080897b905dbd95675113e5d5b09c9f659315733c5fcf8cb"
+        },
+        {
+          "elapsedMilliseconds": 1900,
+          "exitCode": 0,
+          "logSha256": "be8e3e65d8c00b7753547a565cffa3b18c8d1535cd242a5f212115bcbdd36732",
+          "test": "tests/RecipientProfile.Tests.ps1",
+          "testSha256": "e00fe3e46807a0f454cf7df8ec8a3c46e8e45f1dfac34a39791f6bf570f9a9b3"
+        },
+        {
+          "elapsedMilliseconds": 2054,
+          "exitCode": 0,
+          "logSha256": "52608be6ef4c858d0be225fe43025b2390e1292ac22c335ce13e95bebf3a5bf4",
+          "test": "tests/ProtectedPackageWriteFailure.Tests.ps1",
+          "testSha256": "8416b6231fd456e8544c2c8b3fc5c25ac24ef9c5d172dabbc89f312ab83bfc91"
+        },
+        {
+          "elapsedMilliseconds": 2077,
+          "exitCode": 0,
+          "logSha256": "584f2058a36c85c8ee82fd590efc6f12f427b6726c01cbcdd4d2984ca9af37cb",
+          "test": "tests/ProtectedPackageViewing.Tests.ps1",
+          "testSha256": "b28c9c42093d5369dc723891144cc4a6e43f83334a43690e3c5d26fd2de399ed"
+        },
+        {
+          "elapsedMilliseconds": 2856,
+          "exitCode": 0,
+          "logSha256": "7f94c415e700fc7e85b8a0a4808453ac175d63cefdd41e07c8ed7602efbf01b5",
+          "test": "tests/ProtectedPackageNegative.Tests.ps1",
+          "testSha256": "5cd22a00d4dd94ee474365653ccfd6073e3337024a4a223f5db6c50943f9f557"
+        },
+        {
+          "elapsedMilliseconds": 45888,
+          "exitCode": 0,
+          "logSha256": "ad7f6564cd97f772065367ca916d66a7da19a5051c10822e2e3ad7b546d3b35a",
+          "test": "tests/ProtectedPackageApplication.Tests.ps1",
+          "testSha256": "ad2f5e9e7c3d007092e824a47d6e7ec09bc592d8ff2bac99b8111944806a11d1"
+        },
+        {
+          "elapsedMilliseconds": 9553,
+          "exitCode": 0,
+          "logSha256": "536b14fa47f0d061eaab23337584a47708b6cedc38e878dcdbef909a43372657",
+          "test": "tests/RecipientViewingApplication.Tests.ps1",
+          "testSha256": "e5ecc72faf35be86de803dde2d596fb6caccac4daf9ca0f9c56822f48e95a447"
+        },
+        {
+          "elapsedMilliseconds": 19786,
+          "exitCode": 0,
+          "logSha256": "f3d3488af12f90ad831345ddbb879893208019839a47a286ca8823aea5f22b8f",
+          "test": "tests/SystemCollectionPlan.Tests.ps1",
+          "testSha256": "b3068afb09d576b57587ffeda2556f974113a8fe6aa00c9121992c4a6e47f01a"
+        },
+        {
+          "elapsedMilliseconds": 58528,
+          "exitCode": 0,
+          "logSha256": "babfc7561bce9f26513d01f66abe4739ee553606af90076ca5b0a990d6fb55e7",
+          "test": "tests/SystemCollectionPlanApplication.Tests.ps1",
+          "testSha256": "0317d00a033372bf071c9a7f3d6430e0c6af848bc09f46e67132b09b3e08f8bc"
+        },
+        {
+          "elapsedMilliseconds": 1040,
+          "exitCode": 0,
+          "logSha256": "ae9177a6417060bb4ed62650331b3ec6b21ac0a41b5d853cda85411ca7cfb852",
+          "test": "tests/IdentityEnrollmentContract.Tests.ps1",
+          "testSha256": "02e42a19f04e30168b4b107f15567f55915c13686db67f02d757ea96bd577f12"
+        },
+        {
+          "elapsedMilliseconds": 44514,
+          "exitCode": 0,
+          "logSha256": "e88c5a97e74a14c3c816646f8e1e968947e0ab731db9717ce0802d698c923f89",
+          "test": "tests/SoftwareInventoryContract.Tests.ps1",
+          "testSha256": "e6361fe36adadaa1711e2dad47122593a921480a30d03fdfe75c9e0435b23a21"
+        },
+        {
+          "elapsedMilliseconds": 25336,
+          "exitCode": 0,
+          "logSha256": "de0136b3199ddb05e2f1594483ea3acb119c4ce457df8c5fe063b19e480782df",
+          "test": "tests/ResourceDependenciesContract.Tests.ps1",
+          "testSha256": "dba731ade832cb7a55779adf33ce2c243b1c5b06b277302094a18d4e887cfc8e"
+        },
+        {
+          "elapsedMilliseconds": 30081,
+          "exitCode": 0,
+          "logSha256": "78069b8a6c2390ad2d50cdb3b2799aa2ef9021a61567d3607f32bea86f7f46ca",
+          "test": "tests/EffectivePolicyContract.Tests.ps1",
+          "testSha256": "7e30580e6c2528c2fec7657129ed4e1f97a8ace3ad0d6ccaf9944180d80cf683"
+        },
+        {
+          "elapsedMilliseconds": 18216,
+          "exitCode": 0,
+          "logSha256": "6d6b007c063798e63862c6a14438729adb43e1106bc3e717dd5020ce6ebcf1c0",
+          "test": "tests/PrivilegedCollectionPlan.Tests.ps1",
+          "testSha256": "30e06d482aac1658282ff8058b457380f99049d6e695df43d392e58f74171b82"
+        },
+        {
+          "elapsedMilliseconds": 64474,
+          "exitCode": 0,
+          "logSha256": "2332e9c40bb4e7db10b497d60932275d462a0018d30d8840b2b342ea1a7f9a89",
+          "test": "tests/PrivilegedCollectionPlanApplication.Tests.ps1",
+          "testSha256": "7e9d05f3d9c93a5a8e1ecb34093994a270516ab29fcbdb6ff0f75179c6b534a8"
+        },
+        {
+          "elapsedMilliseconds": 14889,
+          "exitCode": 0,
+          "logSha256": "baa821707d3d8dc02f57e86114af692f9af5700c942bf82a3c817268ec0f2657",
+          "test": "tests/PrivilegedInlineRepresentation.Tests.ps1",
+          "testSha256": "be427e83766257e8e1aacf1686d37ee11c0d2ae1ce7eb791acb0a2f964c70cab"
+        },
+        {
+          "elapsedMilliseconds": 3402,
+          "exitCode": 0,
+          "logSha256": "e5e25008ef6d1997b533097a98374161b2205ff037a8a556ad023d3de48d3a9d",
+          "test": "tests/ComprehensiveReport.Tests.ps1",
+          "testSha256": "97094267b327e5155a9a9f3cc6a1c0ec1401d9deb9e75f3639fa2d1281fc9ebc"
+        },
+        {
+          "elapsedMilliseconds": 76061,
+          "exitCode": 0,
+          "logSha256": "fa6d566a705515a9d2d9a2f8bec0635eb88e58ef643faecef6bda33f7f28512d",
+          "test": "tests/ComprehensiveReportApplication.Tests.ps1",
+          "testSha256": "a5b9c1c963649bd24de1d8abd9f1de560e61888730f567c12f33f837035c97ab"
+        },
+        {
+          "elapsedMilliseconds": 104404,
+          "exitCode": 0,
+          "logSha256": "fe2ecde68bd6600ea43cf8e9feb80791e523644409c7ec89390884e6fdcf2282",
+          "test": "tests/DeviceReadinessScenarios.Tests.ps1",
+          "testSha256": "35933fa3b2307b3987ed4d42c8ae352521b9bbdde50dfeb5280d8947530e01f9"
+        },
+        {
+          "elapsedMilliseconds": 9165,
+          "exitCode": 0,
+          "logSha256": "741b30155e28ac345dd3165bad5111218f2de003b5f40b711d7a5b1cb6b561ad",
+          "test": "tests/RunLifecycle.Tests.ps1",
+          "testSha256": "2fefe17ce3b2fba6c94e84d64b57458e570d4960b8b09b19904e93ade8a91bb6"
+        }
+      ]
+    }
+  ],
+  "continuity": "The first two package tests predate a correction confined to DeviceProhibitedMaterial.Tests.ps1. The remaining 25 include that correction. Through 2bfeb37ed0f6b09c677fd65931e684f3cc45f090, subsequent changes affected separate source-qualification fixtures/harness paths only; actual inputs and candidate bytes were rechecked. Commit 3b33754730fc6c4f92af742ba3ded83fb891c7ba later changes only CertificateTrust timestamp handling and adds its regression test. The two ComprehensiveReport entries are superseded by issue-154-certificate-results.json; ContractCultureOutput is superseded by issue-154-output-results.json on the current candidate. The remaining 24 retain this baseline candidate identity and qualify unchanged validator, crypto, recipient, lifecycle and fixture boundaries; they are not claimed as new-candidate application executions."
+}
