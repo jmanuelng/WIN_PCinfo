@@ -2683,7 +2683,7 @@ function Invoke-DeviceReadinessSlice {
                     elseif([bool]$sliceSelection.usesSyntheticPrerequisites){'SyntheticSuccess'}else{''})
             $privilegeState = [string]$privilegeResult.state
             $privilegeUacInteractionCount = [int]$privilegeResult.elevation.uacInteractionCount
-            $collectionStarted = $collectionStarted -or @($privilegeResult.operations).Count -gt 0
+            $collectionStarted = $collectionStarted -or [bool]$privilegeResult.executionStarted
             if ($privilegeResult.state -in @('TimedOut','Cancelled')) {
                 # These states are produced only after the bounded worker path
                 # begins. Preserve that lifecycle fact even though a failed

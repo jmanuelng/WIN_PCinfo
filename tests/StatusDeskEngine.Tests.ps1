@@ -4,7 +4,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $QualificationCancelAfter = '',
     [string] $QualificationPath = '',
     [string] $QualificationSourceCase = '',
-    [ValidateSet('','PrivilegeTimeout','PrivilegeLoss','SystemCancel','SystemTimeout','SystemLoss')] [string] $QualificationPlanFault = '',
+    [ValidateSet('','PrivilegeTimeout','PrivilegeLoss','PrivilegePostStartLoss','SystemCancel','SystemTimeout','SystemLoss')] [string] $QualificationPlanFault = '',
     [ValidateSet('','en-US','es-MX','tr-TR','ja-JP','ar-SA')] [string] $QualificationCulture = '',
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity','Firmware','Administrator','Policy','System')]
     [string] $QualificationProhibited = '',
@@ -123,6 +123,33 @@ if ($QualificationPlanFault) {
             '-LocalPackageProtector $LocalPackageProtector -ValidationScenario '+$scenario)
         $moduleText=$moduleText.Replace('$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }',
             '$script:StatusDeskTransport.State.QualificationPrivilegeState=$result.state; $script:StatusDeskTransport.State.QualificationPrivilegeReason=$result.reasonCode; $script:StatusDeskTransport.State.QualificationPrivilegeOperationCount=@($result.operations).Count; $script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }')
+        if ($QualificationPlanFault -eq 'PrivilegePostStartLoss') {
+            . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+            $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionWorkerSource -Replacement Get-LossOriginalPrivilegeWorkerSource
+            $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionPlanPolicy -Replacement Get-LossOriginalPrivilegePolicy
+            $moduleText+=@'
+
+function Get-PrivilegedCollectionWorkerSource {
+    $source=Get-LossOriginalPrivilegeWorkerSource
+    $early='if ($configuration.workerFault -eq ''ExitAfterHello'') { exit 71 }'
+    $collected='New-SyntheticFirmwareResult -Scenario ([string]$configuration.firmwareScenario)'
+    foreach($anchor in @($early,$collected)) {
+        if(([regex]::Matches($source,[regex]::Escape($anchor))).Count -ne 1){throw 'Controlled post-start loss source changed.'}
+    }
+    # Execute the real synthetic firmware reducer inside the owned worker,
+    # retain only a fixed witness outside the product channel, then die before
+    # its operation envelopes. No live source or arbitrary protocol work.
+    $source=$source.Replace($early,'')
+    $source.Replace($collected, '$null = ' + $collected + '; [IO.File]::WriteAllText(''__POST_START_WITNESS__'',''SyntheticFirmwareReturned''); exit 71')
+}
+function Get-PrivilegedCollectionPlanPolicy {
+    $policy=Get-LossOriginalPrivilegePolicy
+    $source=(Get-PrivilegedCollectionWorkerSource).Replace("`r`n","`n").Replace("`r","`n")
+    $policy.worker.payloadSha256=Get-PrivilegedCollectionPlanSha256 -Bytes ([Text.Encoding]::UTF8.GetBytes($source))
+    $policy
+}
+'@
+        }
         if ($QualificationPlanFault -eq 'PrivilegeTimeout') {
             # The combined privilege/SYSTEM budget exceeds the original
             # 10-second standalone fault. Keep both owned processes waiting
@@ -278,6 +305,8 @@ if ($QualificationPath -or $QualificationProhibited -or $QualificationCulture) {
 }
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
+$postStartWitness=Join-Path $testRoot 'synthetic-post-start.txt'
+$moduleText=$moduleText.Replace('__POST_START_WITNESS__',$postStartWitness.Replace("'","''"))
 $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
 if (-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Test output must remain in its owned test boundary.' }
 $request = Get-AutomationRequest -LiteralPath (Join-Path $PSScriptRoot 'fixtures/automation-request.json') `
@@ -471,18 +500,23 @@ try {
     }
     if ($QualificationPlanFault.StartsWith('Privilege')) {
         $isTimeout=$QualificationPlanFault -eq 'PrivilegeTimeout'
+        $postStartLoss=$QualificationPlanFault -eq 'PrivilegePostStartLoss'
+        if($postStartLoss) {
+            Assert-Equal 'SyntheticFirmwareReturned' ([IO.File]::ReadAllText($postStartWitness)) 'the actual owned worker completed controlled source execution before dying'
+        }
         Assert-Equal $(if($isTimeout){'TimedOut'}else{'IntegrityFailed'}) $session.Transport.State.QualificationPrivilegeState 'the actual privileged protocol reaches the requested fault'
         Assert-Equal $(if($isTimeout){'PRIVILEGE.DEADLINE_EXCEEDED'}else{'PRIVILEGE.WORKER_LOST'}) $session.Transport.State.QualificationPrivilegeReason 'the worker supplies the specific fault reason'
         Assert-Equal 0 $session.Transport.State.QualificationPrivilegeOperationCount 'the interrupted protocol admits no operation envelopes'
         # LostWorker exits after hello, before receiving its collection plan.
         # Preserve the distinction between protocol failure and a started run.
-        $expected=if($isTimeout){'TimedOut'}else{'NotStarted'}
+        $expected=if($isTimeout){'TimedOut'}elseif($postStartLoss){'IntegrityFailed'}else{'NotStarted'}
         Assert-Equal $expected $terminal.outcome 'lost or timed-out privileged protocol cannot produce a completed assessment'
-        Assert-Equal $isTimeout $terminal.collectionStarted 'only the timeout fault reaches the collection plan'
-        Assert-Equal $(if($isTimeout){40}else{20}) $session.ExitCode 'privileged interruption retains its truthful terminal code'
+        Assert-Equal ($isTimeout -or $postStartLoss) $terminal.collectionStarted 'only authenticated execution preserves the collection-started lifecycle fact'
+        Assert-Equal $(if($isTimeout){40}elseif($postStartLoss){50}else{20}) $session.ExitCode 'privileged interruption retains its truthful terminal code'
         Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'a failed privileged worker cannot schedule SYSTEM'
         Assert-Equal '' $session.Transport.State.PackagePath 'no authenticated operation payload means no final package'
         Assert-Equal $true $terminal.cleanup.verified 'privileged worker failure verifies owned cleanup'
+        Write-Output "PASS: $QualificationPlanFault reaches $expected with zero envelopes, no SYSTEM/package and verified cleanup."
         return
     }
     if ($SoftwareReportScenario -eq 'EscapedOverflow') {

@@ -2426,6 +2426,16 @@ try {
     finally { $requestDocument.Dispose() }
 
     $workerStage = 'OperationExecution'
+    $phaseId = 'phase:privileged:primary'
+    # This bounded, identity-bound transition is sent only after the complete
+    # approved plan is validated and the worker enters execution. It survives
+    # loss before final envelopes; process creation and hello do not prove it.
+    $execution = [ordered]@{
+        kind = 'ExecutionStarted'; contractVersion = '1.0.0'
+        nonce = [string]$configuration.nonce
+        planDigest = [string]$configuration.planDigest; phaseId = $phaseId
+    } | ConvertTo-Json -Compress
+    Write-Frame -Stream $pipe -Json $execution -MaximumBytes $maximumBytes -Token $tokenSource.Token
     if ($configuration.workerFault -eq 'HangAfterPlan') {
         # This fixed validation fault creates one fixed child and then becomes
         # deliberately uncooperative. No child path or command crosses the
@@ -2449,7 +2459,6 @@ try {
         $null = [System.Diagnostics.Process]::Start($childStartInfo)
         [System.Threading.Thread]::Sleep(10000)
     }
-    $phaseId = 'phase:privileged:primary'
     $resultBody = [ordered]@{
         kind = 'PlanResult'
         contractVersion = '1.0.0'
@@ -2857,7 +2866,7 @@ function Read-BoundedCollectionChannelExactBytes {
         $read = $Stream.ReadAsync(
             $bytes, $offset, $Count - $offset, $CancellationToken
         ).GetAwaiter().GetResult()
-        if ($read -eq 0) { throw 'The collection channel closed before a complete frame.' }
+        if ($read -eq 0) { throw [IO.EndOfStreamException]::new('The collection channel closed before a complete frame.') }
         $offset += $read
     }
     $bytes
@@ -2978,6 +2987,7 @@ function New-PrivilegedCollectionResult {
         [Parameter(Mandatory)] [bool] $ChannelVerified,
         [Parameter(Mandatory)] [bool] $CleanupVerified,
         [Parameter(Mandatory)] [string] $ValidationScenario,
+        [Parameter()] [bool] $ExecutionStarted = $false,
         [Parameter()] $PrivateFirmwareCollectorResult,
         [Parameter()] $PrivateAdministratorCollectorResult,
         [Parameter()] $PrivateEffectivePolicyCollectorResult
@@ -2998,6 +3008,7 @@ function New-PrivilegedCollectionResult {
         reasonCode = $ReasonCode
         planDigest = $PlanDigest
         operations = @($Operations)
+        executionStarted = $ExecutionStarted
         coverage = @([pscustomobject][ordered]@{
             scopeId = 'scope:synthetic.privileged-collection-plan'
             state = $coverageState
@@ -3292,6 +3303,7 @@ function Invoke-PrivilegedCollectionPlan {
     }
     $deadline.CancelAfter($phaseMaximumMilliseconds)
     $channelVerified = $false
+    $executionStarted = $false
     $operations = @()
     $cleanupVerified = $false
     $state = 'IntegrityFailed'
@@ -3484,6 +3496,21 @@ finally { $pipe.Dispose() }
         Write-BoundedCollectionChannelFrame -Stream $server -Json $requestJson `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
             -CancellationToken $deadline.Token
+        $failureStage = 'READ_EXECUTION'
+        $executionJson = Read-BoundedCollectionChannelFrame -Stream $server `
+            -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
+            -CancellationToken $deadline.Token
+        $failureStage = 'VALIDATE_EXECUTION'
+        $execution = $executionJson | ConvertFrom-Json -Depth 10
+        $executionNames = @($execution.PSObject.Properties.Name | Sort-Object)
+        if (($executionNames -join '|') -cne 'contractVersion|kind|nonce|phaseId|planDigest' -or
+            @($execution.PSObject.Properties | Where-Object { $_.Value -isnot [string] }).Count -gt 0 -or
+            $execution.kind -cne 'ExecutionStarted' -or $execution.contractVersion -cne '1.0.0' -or
+            $execution.nonce -cne $nonce -or $execution.planDigest -cne $PlanDigest -or
+            $execution.phaseId -cne 'phase:privileged:primary') {
+            throw 'The privilege worker execution transition failed its closed session contract.'
+        }
+        $executionStarted = $true
         $failureStage = 'READ_RESULT'
         $resultJson = Read-BoundedCollectionChannelFrame -Stream $server `
             -MaximumBytes ([int] $policy.channel.maximumMessageUtf8Bytes) `
@@ -3500,7 +3527,7 @@ finally { $pipe.Dispose() }
             $workerResult.kind -ne 'PlanResult' -or
             $workerResult.contractVersion -ne '1.0.0' -or
             $workerResult.nonce -ne $nonce -or $workerResult.planDigest -ne $PlanDigest -or
-            [string]::IsNullOrWhiteSpace([string] $workerResult.phaseId) -or
+            $workerResult.phaseId -cne $execution.phaseId -or
             @($workerResult.operations).Count -ne 3) {
             throw 'The privilege worker result failed its closed schema.'
         }
@@ -3660,6 +3687,10 @@ finally { $pipe.Dispose() }
         elseif ($failureStage -eq 'PEER_IDENTITY') {
             'PRIVILEGE.PEER_IDENTITY_INVALID'
         }
+        elseif ($failureStage -in @('READ_EXECUTION','READ_RESULT') -and
+            $_.Exception.GetBaseException() -is [IO.EndOfStreamException]) {
+            'PRIVILEGE.WORKER_LOST'
+        }
         elseif (-not [string]::IsNullOrWhiteSpace([string] $scenario.failureReasonCode)) {
             [string] $scenario.failureReasonCode
         }
@@ -3716,6 +3747,7 @@ finally { $pipe.Dispose() }
         -UacInteractionCount $uacInteractionCount -AlreadyElevated $alreadyElevated `
         -WorkerPrincipalRelationship $workerRelationship -Operations $operations `
         -ChannelVerified $channelVerified -CleanupVerified $cleanupVerified `
+        -ExecutionStarted $executionStarted `
         -ValidationScenario $ValidationScenario `
         -PrivateFirmwareCollectorResult $privateFirmwareCollectorResult `
         -PrivateAdministratorCollectorResult $privateAdministratorCollectorResult `
@@ -3866,7 +3898,7 @@ function Invoke-PrivilegedCollectionPlanFixture {
         exitCode = Get-AssessmentRunExitCode -Outcome $outcome
         reasonCode = $reasonCode
         phase = 'Terminal'
-        collectionStarted = ($null -ne $standardResult -or @($privilegeResult.operations).Count -gt 0)
+        collectionStarted = ($null -ne $standardResult -or $privilegeResult.executionStarted)
         validationFixture = $true
         planDigest = $PlanDigest
         privilege = [pscustomobject][ordered]@{
