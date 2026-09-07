@@ -1,0 +1,23 @@
+{
+  "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7",
+  "candidateSha256": "262f069f9d228c1636f84165846b9996bf257993f0900f423e9154166467a86e",
+  "file": "tests/AzureValidationAdmission.Tests.ps1",
+  "sha256": "fc3693401fcdf9fe385b64a8832559a5081f4e5555951d56df510f4c4070ae76",
+  "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -File ./tests/AzureValidationAdmission.Tests.ps1",
+  "authority": "User-authorized bounded sandbox escalation for controlled-source synthetic filesystem-negative checks; no Azure contact or private artifact access",
+  "startUtc": "2026-09-07T04:48:11.3615898Z",
+  "endUtc": "2026-09-07T04:48:13.0953111Z",
+  "elapsedMilliseconds": 1734,
+  "exitCode": 0,
+  "expected": "All unchanged offline admission assertions, including rejection of a newly owned public-path fixture before rendering, pass; owned synthetic targets are absent afterward",
+  "observed": {
+    "filePassed": true,
+    "publicNegativeFixtureResult": "Rejected / VALIDATION.WORKSPACE_PUBLIC_PATH; rendered false",
+    "newPublicResidue": 0,
+    "newTemporaryResidue": 0,
+    "cleanupVerified": true
+  },
+  "result": "Pass",
+  "logSha256": "0a9b21e670101dabc1a5f7a719904e7cee17d66bd63b83fde5bc1ae4b6b23f1e",
+  "historicalFullRun": "Original sandbox-denied full-run entry retained unchanged; this is separate affected evidence, not a relabeled full Pass"
+}

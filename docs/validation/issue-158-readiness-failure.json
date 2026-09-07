@@ -1,0 +1,32 @@
+{
+  "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7",
+  "candidateSha256": "262f069f9d228c1636f84165846b9996bf257993f0900f423e9154166467a86e",
+  "file": "tests/DeviceReadinessApplication.Tests.ps1",
+  "sha256": "e70efa3796402bc119ef1ded6df86935eba590b06c6a6162e4058a476c673a89",
+  "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -File .test-output/capture158-readiness.ps1 (dot-sources the unchanged owning test to retain only minimized failure witnesses)",
+  "method": "One affected reproduction after the full suite; exact unchanged test and controlled fixture. No product correction, broad repair or real assessment. Property paths, marker classes and digests only; public output values are not copied.",
+  "startUtc": "2026-09-07T04:48:21.2074332Z",
+  "endUtc": "2026-09-07T04:48:33.7186598Z",
+  "elapsedMilliseconds": 12511,
+  "result": "Fail",
+  "failure": "Restricted synthetic device-identifying values entered public progress or validation output.",
+  "applicationExitCode": 0,
+  "stdoutSha256": "6003bf92a8d35bc4884fd58cb4bd50ab1066cb8cd34260d804f537636d765ae0",
+  "stderrPresent": false,
+  "matches": [
+    {
+      "recordType": "win-pcinfo.preparation-summary",
+      "propertyPath": "/plan/softwareInventory/recommendations/0/caution",
+      "markerClass": "entitlementWord",
+      "matchedBoundary": "StringValue"
+    },
+    {
+      "recordType": "win-pcinfo.preparation-summary",
+      "propertyPath": "/plan/softwareInventory/recommendations/1/caution",
+      "markerClass": "entitlementWord",
+      "matchedBoundary": "StringValue"
+    }
+  ],
+  "cleanupVerified": true,
+  "nextOwner": "root / fresh #140 public-output marker/projection correction, coordinated with #154 privacy qualification"
+}

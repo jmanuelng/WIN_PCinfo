@@ -1,0 +1,74 @@
+{
+  "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7",
+  "candidateSha256": "262f069f9d228c1636f84165846b9996bf257993f0900f423e9154166467a86e",
+  "harnessSha256": "2b9673f1eb52611e1efb7607c28ea9840c5cb1be58576b4b25ed9d17e3ed6dfd",
+  "method": "Complete the six cases not reached after the Virtual sampler race, using the exact existing generated-case command and original retained projection. No earlier case replay or source edit. Original full file and Virtual failure stay failed.",
+  "results": [
+    {
+      "scenario": "MicrosoftPhysical",
+      "result": "Pass",
+      "exitCode": 0,
+      "startUtc": "2026-09-07T05:01:41.9835963Z",
+      "endUtc": "2026-09-07T05:02:05.5640022Z",
+      "elapsedMilliseconds": 23581,
+      "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -File ./tests/StatusDeskEngine.Tests.ps1 -ReadinessSourceScenario MicrosoftPhysical",
+      "expected": "Exact unchanged generated case assertions and owned cleanup",
+      "logSha256": "09bb1b3cbed45f2d1d1477e50f5913980c340e85dbc22bb846f28c6ef77d94ca"
+    },
+    {
+      "scenario": "FirmwareBounded",
+      "result": "Pass",
+      "exitCode": 0,
+      "startUtc": "2026-09-07T05:02:05.6402408Z",
+      "endUtc": "2026-09-07T05:02:27.8773946Z",
+      "elapsedMilliseconds": 22237,
+      "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -File ./tests/StatusDeskEngine.Tests.ps1 -ReadinessSourceScenario FirmwareBounded",
+      "expected": "Exact unchanged generated case assertions and owned cleanup",
+      "logSha256": "09bb1b3cbed45f2d1d1477e50f5913980c340e85dbc22bb846f28c6ef77d94ca"
+    },
+    {
+      "scenario": "TimedOut",
+      "result": "Pass",
+      "exitCode": 0,
+      "startUtc": "2026-09-07T05:02:27.9266077Z",
+      "endUtc": "2026-09-07T05:02:54.1325484Z",
+      "elapsedMilliseconds": 26205,
+      "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -File ./tests/StatusDeskEngine.Tests.ps1 -ReadinessSourceScenario TimedOut",
+      "expected": "Exact unchanged generated case assertions and owned cleanup",
+      "logSha256": "09bb1b3cbed45f2d1d1477e50f5913980c340e85dbc22bb846f28c6ef77d94ca"
+    },
+    {
+      "scenario": "MalformedOutput",
+      "result": "Pass",
+      "exitCode": 0,
+      "startUtc": "2026-09-07T05:02:54.1786020Z",
+      "endUtc": "2026-09-07T05:03:15.9759979Z",
+      "elapsedMilliseconds": 21797,
+      "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -File ./tests/StatusDeskEngine.Tests.ps1 -ReadinessSourceScenario MalformedOutput",
+      "expected": "Exact unchanged generated case assertions and owned cleanup",
+      "logSha256": "09bb1b3cbed45f2d1d1477e50f5913980c340e85dbc22bb846f28c6ef77d94ca"
+    },
+    {
+      "scenario": "OversizeOutput",
+      "result": "Pass",
+      "exitCode": 0,
+      "startUtc": "2026-09-07T05:03:16.0210541Z",
+      "endUtc": "2026-09-07T05:03:37.8974863Z",
+      "elapsedMilliseconds": 21876,
+      "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -File ./tests/StatusDeskEngine.Tests.ps1 -ReadinessSourceScenario OversizeOutput",
+      "expected": "Exact unchanged generated case assertions and owned cleanup",
+      "logSha256": "09bb1b3cbed45f2d1d1477e50f5913980c340e85dbc22bb846f28c6ef77d94ca"
+    },
+    {
+      "scenario": "Cancelled",
+      "result": "Pass",
+      "exitCode": 0,
+      "startUtc": "2026-09-07T05:03:37.9435013Z",
+      "endUtc": "2026-09-07T05:04:00.9638142Z",
+      "elapsedMilliseconds": 23020,
+      "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -File ./tests/StatusDeskEngine.Tests.ps1 -ReadinessSourceScenario Cancelled",
+      "expected": "Exact unchanged generated case assertions and owned cleanup",
+      "logSha256": "09bb1b3cbed45f2d1d1477e50f5913980c340e85dbc22bb846f28c6ef77d94ca"
+    }
+  ]
+}
