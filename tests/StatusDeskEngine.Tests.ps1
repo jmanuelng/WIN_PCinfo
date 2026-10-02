@@ -5,7 +5,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $QualificationPath = '',
     [switch] $RequireQualityBudgets,
     [string] $QualificationSourceCase = '',
-    [ValidateSet('','PrivilegeTimeout','PrivilegeLoss','PrivilegePostStartLoss','SystemCancel','SystemTimeout','SystemLoss')] [string] $QualificationPlanFault = '',
+    [ValidateSet('','PrivilegeTimeout','PrivilegePreStartTimeout','PrivilegePreStartCancel','PrivilegeLoss','PrivilegePostStartLoss','SystemCancel','SystemTimeout','SystemLoss')] [string] $QualificationPlanFault = '',
     [ValidateSet('','en-US','es-MX','tr-TR','ja-JP','ar-SA')] [string] $QualificationCulture = '',
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity','Firmware','Administrator','Policy','System')]
     [string] $QualificationProhibited = '',
@@ -208,11 +208,39 @@ if ($CancelDuringPrivilege) {
 }
 if ($QualificationPlanFault) {
     if ($QualificationPlanFault.StartsWith('Privilege')) {
-        $scenario=if($QualificationPlanFault -eq 'PrivilegeTimeout'){'Timeout'}else{'LostWorker'}
+        $scenario=if($QualificationPlanFault -in @('PrivilegeTimeout','PrivilegePreStartTimeout','PrivilegePreStartCancel')){'Timeout'}else{'LostWorker'}
         $moduleText=$moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
             '-LocalPackageProtector $LocalPackageProtector -ValidationScenario '+$scenario)
         $moduleText=$moduleText.Replace('$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }',
-            '$script:StatusDeskTransport.State.QualificationPrivilegeState=$result.state; $script:StatusDeskTransport.State.QualificationPrivilegeReason=$result.reasonCode; $script:StatusDeskTransport.State.QualificationPrivilegeOperationCount=@($result.operations).Count; $script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }')
+            '$script:StatusDeskTransport.State.QualificationPrivilegeExecutionStarted=$result.executionStarted; $script:StatusDeskTransport.State.QualificationPrivilegeCleanupVerified=$result.cleanup.verified; $script:StatusDeskTransport.State.QualificationPrivilegeState=$result.state; $script:StatusDeskTransport.State.QualificationPrivilegeReason=$result.reasonCode; $script:StatusDeskTransport.State.QualificationPrivilegeOperationCount=@($result.operations).Count; $script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }')
+        if ($QualificationPlanFault -in @('PrivilegePreStartTimeout','PrivilegePreStartCancel')) {
+            . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+            $moduleText=$moduleText.Replace('Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -DeviceReadinessScenario Complete -CancellationToken $CancellationToken }',
+                '$script:StatusDeskTransport.State.QualificationDeviceInvoked=$true; $result=Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -DeviceReadinessScenario Complete -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.QualificationDeviceProcessStarted=$result.Supervision.processStarted; $result }')
+            if ($QualificationPlanFault -eq 'PrivilegePreStartCancel') {
+                $moduleText=$moduleText.Replace('$result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
+                    '$script:StatusDeskTransport.Cancellation.CancelAfter(5000); $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
+            }
+            $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionWorkerSource -Replacement Get-PreStartOriginalPrivilegeWorkerSource
+            $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionPlanPolicy -Replacement Get-PreStartOriginalPrivilegePolicy
+            $moduleText+=@'
+
+function Get-PrivilegedCollectionWorkerSource {
+    $source=Get-PreStartOriginalPrivilegeWorkerSource
+    $hello='Write-Frame -Stream $pipe -Json $hello -MaximumBytes $maximumBytes -Token $tokenSource.Token'
+    if(([regex]::Matches($source,[regex]::Escape($hello))).Count -ne 1){throw 'Controlled pre-start hello boundary changed.'}
+    # Stall the actual fixed worker after peer verification, before hello and
+    # before receiving ExecutePlan. This never fabricates a controller result.
+    $source.Replace($hello, '[IO.File]::WriteAllText(''__PRE_START_WITNESS__'',''SyntheticBeforeWorkerHello''); [Threading.Thread]::Sleep(30000); '+$hello)
+}
+function Get-PrivilegedCollectionPlanPolicy {
+    $policy=Get-PreStartOriginalPrivilegePolicy
+    $source=(Get-PrivilegedCollectionWorkerSource).Replace("`r`n","`n").Replace("`r","`n")
+    $policy.worker.payloadSha256=Get-PrivilegedCollectionPlanSha256 -Bytes ([Text.Encoding]::UTF8.GetBytes($source))
+    $policy
+}
+'@
+        }
         if ($QualificationPlanFault -eq 'PrivilegePostStartLoss') {
             . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
             $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionWorkerSource -Replacement Get-LossOriginalPrivilegeWorkerSource
@@ -464,6 +492,8 @@ function Invoke-ApprovedCollectorProcess {
 }
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
+$preStartWitness=Join-Path $testRoot 'synthetic-pre-start-hello.txt'
+$moduleText=$moduleText.Replace('__PRE_START_WITNESS__',$preStartWitness.Replace("'","''"))
 $postStartWitness=Join-Path $testRoot 'synthetic-post-start.txt'
 $moduleText=$moduleText.Replace('__POST_START_WITNESS__',$postStartWitness.Replace("'","''"))
 $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
@@ -655,7 +685,7 @@ if ($RequireQualityBudgets) {
         $projection = [ordered]@{
             candidateSha256 = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
             outcome = $terminal.outcome; exitCode = $session.ExitCode
-            cleanupVerified = $terminal.cleanup.verified; coverage = @(); culture = $QualificationCulture
+            collectionStarted = $terminal.collectionStarted; cleanupVerified = $terminal.cleanup.verified; coverage = @(); culture = $QualificationCulture
             attemptCoverage = if($session.Transport.State.ContainsKey('QualificationSystemCoverage')){$session.Transport.State.QualificationSystemCoverage}else{@()}
         }
         [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -709,20 +739,29 @@ if ($RequireQualityBudgets) {
         foreach($scope in $attemptCoverage){Assert-Equal $expected $scope.state 'every SYSTEM field retains the actual interrupted attempt state'}
     }
     if ($QualificationPlanFault.StartsWith('Privilege')) {
-        $isTimeout=$QualificationPlanFault -eq 'PrivilegeTimeout'
+        $isTimeout=$QualificationPlanFault -in @('PrivilegeTimeout','PrivilegePreStartTimeout')
+        $isCancel=$QualificationPlanFault -eq 'PrivilegePreStartCancel'
+        $preStartFault=$QualificationPlanFault -in @('PrivilegePreStartTimeout','PrivilegePreStartCancel')
+        if($preStartFault){
+            Assert-Equal 'SyntheticBeforeWorkerHello' ([IO.File]::ReadAllText($preStartWitness)) 'the actual owned worker reached its fixed before-hello stall'
+            Assert-Equal $true ($session.Transport.State.QualificationPrivilegeExecutionStarted -is [bool]) 'the controller reports an actual Boolean execution fact'
+            Assert-Equal $false $session.Transport.State.QualificationPrivilegeExecutionStarted 'no plan was sent and no authenticated execution transition occurred'
+            Assert-Equal $true $session.Transport.State.QualificationPrivilegeCleanupVerified 'the actual controller verifies its owned worker tree and channel cleanup'
+            Assert-Equal $false $session.Transport.State.ContainsKey('QualificationDeviceInvoked') 'pre-start interruption cannot dispatch a subsequent device collector'
+        }
         $postStartLoss=$QualificationPlanFault -eq 'PrivilegePostStartLoss'
         if($postStartLoss) {
             Assert-Equal 'SyntheticFirmwareReturned' ([IO.File]::ReadAllText($postStartWitness)) 'the actual owned worker completed controlled source execution before dying'
         }
-        Assert-Equal $(if($isTimeout){'TimedOut'}else{'IntegrityFailed'}) $session.Transport.State.QualificationPrivilegeState 'the actual privileged protocol reaches the requested fault'
-        Assert-Equal $(if($isTimeout){'PRIVILEGE.DEADLINE_EXCEEDED'}else{'PRIVILEGE.WORKER_LOST'}) $session.Transport.State.QualificationPrivilegeReason 'the worker supplies the specific fault reason'
+        Assert-Equal $(if($isCancel){'Cancelled'}elseif($isTimeout){'TimedOut'}else{'IntegrityFailed'}) $session.Transport.State.QualificationPrivilegeState 'the actual privileged protocol reaches the requested fault'
+        Assert-Equal $(if($isCancel){'PRIVILEGE.CANCELLED'}elseif($isTimeout){'PRIVILEGE.DEADLINE_EXCEEDED'}else{'PRIVILEGE.WORKER_LOST'}) $session.Transport.State.QualificationPrivilegeReason 'the worker supplies the specific fault reason'
         Assert-Equal 0 $session.Transport.State.QualificationPrivilegeOperationCount 'the interrupted protocol admits no operation envelopes'
         # LostWorker exits after hello, before receiving its collection plan.
         # Preserve the distinction between protocol failure and a started run.
-        $expected=if($isTimeout){'TimedOut'}elseif($postStartLoss){'IntegrityFailed'}else{'NotStarted'}
+        $expected=if($isCancel){'Cancelled'}elseif($isTimeout){'TimedOut'}elseif($postStartLoss){'IntegrityFailed'}else{'NotStarted'}
         Assert-Equal $expected $terminal.outcome 'lost or timed-out privileged protocol cannot produce a completed assessment'
-        Assert-Equal ($isTimeout -or $postStartLoss) $terminal.collectionStarted 'only authenticated execution preserves the collection-started lifecycle fact'
-        Assert-Equal $(if($isTimeout){40}elseif($postStartLoss){50}else{20}) $session.ExitCode 'privileged interruption retains its truthful terminal code'
+        Assert-Equal (($isTimeout -and -not $preStartFault) -or $postStartLoss) $terminal.collectionStarted 'only authenticated execution preserves the collection-started lifecycle fact'
+        Assert-Equal $(if($isCancel){30}elseif($isTimeout){40}elseif($postStartLoss){50}else{20}) $session.ExitCode 'privileged interruption retains its truthful terminal code'
         Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'a failed privileged worker cannot schedule SYSTEM'
         Assert-Equal '' $session.Transport.State.PackagePath 'no authenticated operation payload means no final package'
         Assert-Equal $true $terminal.cleanup.verified 'privileged worker failure verifies owned cleanup'
@@ -996,6 +1035,17 @@ finally {
         }
         if ($null -ne $qualificationHtml) { $quality.htmlBytes = [Text.Encoding]::UTF8.GetByteCount([string]$qualificationHtml.Value) }
         if ($null -eq $projection) { $projection = [ordered]@{ candidateSha256=(Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant(); coverage=@() } }
+        if ($QualificationPlanFault.StartsWith('Privilege') -and $null -ne $session -and
+            $session.Transport.State.ContainsKey('QualificationPrivilegeExecutionStarted')) {
+            $projection['deviceCollectorInvoked']=$session.Transport.State.ContainsKey('QualificationDeviceInvoked')
+            $projection['deviceProcessStarted']=if($session.Transport.State.ContainsKey('QualificationDeviceProcessStarted')){$session.Transport.State.QualificationDeviceProcessStarted}else{$false}
+            $projection['privilegeExecutionStarted']=$session.Transport.State.QualificationPrivilegeExecutionStarted
+            $projection['privilegeOperationEnvelopeCount']=$session.Transport.State.QualificationPrivilegeOperationCount
+            $projection['privilegeCleanupVerified']=$session.Transport.State.QualificationPrivilegeCleanupVerified
+            $projection['systemInvoked']=$session.Transport.State.ContainsKey('SystemInvoked')
+            $projection['packageExposed']=$session.Transport.State.ContainsKey('PackagePath') -and
+                -not [string]::IsNullOrEmpty($session.Transport.State.PackagePath)
+        }
         $projection['arguments'] = $qualificationArguments
         $projection['bodyAssertions'] = if ($qualificationFailed) { 'Fail' } else { 'Pass' }
         $projection['testCleanup'] = 'Pending'

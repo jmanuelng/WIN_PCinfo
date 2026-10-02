@@ -2735,12 +2735,6 @@ function Invoke-DeviceReadinessSlice {
             $privilegeState = [string]$privilegeResult.state
             $privilegeUacInteractionCount = [int]$privilegeResult.elevation.uacInteractionCount
             $collectionStarted = $collectionStarted -or [bool]$privilegeResult.executionStarted
-            if ($privilegeResult.state -in @('TimedOut','Cancelled')) {
-                # These states are produced only after the bounded worker path
-                # begins. Preserve that lifecycle fact even though a failed
-                # worker cannot return its four operation envelopes.
-                $collectionStarted = $true
-            }
             if (-not [bool]$privilegeResult.cleanup.verified) {
                 $exception = [InvalidOperationException]::new(
                     'The privileged worker cleanup was not verified.'
@@ -2940,6 +2934,11 @@ function Invoke-DeviceReadinessSlice {
                     $effectivePolicyCollector = New-EffectivePolicyPrivilegeGapResult -PrivilegeResult $stoppedPrivilege -Policy $effectivePolicy -ValidationFixture $isFixture
                 }
             }
+        }
+        if ((Get-AssessmentCancellationToken).IsCancellationRequested -and -not $collectionStarted) {
+            $exception=[OperationCanceledException]::new('Assessment was cancelled before source execution.')
+            $exception.Data['ReasonCode']='RUN.CANCELLED'
+            throw $exception
         }
         $collectorScenario = if ($isFixture) { $scenario } else { '' }
         $sliceStage='DEVICE_COLLECTOR'

@@ -1,0 +1,162 @@
+{
+  "kind": "win-pcinfo.controlled-prestart-honesty-repair-evidence",
+  "version": 1,
+  "issue": 196,
+  "baselineCommit": "9f84dda28e7e1faaa8f70b7bf51724e044739cda",
+  "state": "ActualAffectedChecksPassIndependentNarrowReviewsCleanFullApplicationGatePending",
+  "inputSha256": {
+    "src/DeviceReadiness.ps1": "9e7b89ed692099623a24527dc348dce3adf67ce9c70f7fd5b6f8806557c08c3d",
+    "tests/StatusDeskEngine.Tests.ps1": "96d933c6ce9a66bcdb7a97756844e2f608d3ad71c681706d8a44664e99fab29d",
+    "tests/PrivilegedPreStartTimeoutApplication.Tests.ps1": "712496afff00c6601b4e22f6d3167aec5390cfa81d7ef966b16854a5cd16b5c1",
+    "tests/PrivilegedPreStartCancelApplication.Tests.ps1": "dbfb3caba58f1498ba6c7b88fcc89a168fae99ceee3a93844f3e2656c0465362"
+  },
+  "genuineOriginalPublicFlowFailures": [
+    {
+      "candidateSha256": "a87d5239bb1687667bdb6fb37e2c940547ac51d225dda4daab714bf7bdf64ba6",
+      "outcome": "TimedOut",
+      "exitCode": 40,
+      "collectionStarted": true,
+      "privilegeExecutionStarted": false,
+      "privilegeOperationEnvelopeCount": 0,
+      "privilegeCleanupVerified": true,
+      "systemInvoked": false,
+      "packageExposed": false,
+      "bodyAssertions": "Fail",
+      "testCleanup": "VerifiedAbsent"
+    },
+    {
+      "candidateSha256": "a87d5239bb1687667bdb6fb37e2c940547ac51d225dda4daab714bf7bdf64ba6",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "collectionStarted": true,
+      "privilegeExecutionStarted": false,
+      "privilegeOperationEnvelopeCount": 0,
+      "privilegeCleanupVerified": true,
+      "systemInvoked": false,
+      "packageExposed": false,
+      "bodyAssertions": "Fail",
+      "testCleanup": "VerifiedAbsent"
+    }
+  ],
+  "additionalActualSchedulingFailure": {
+    "candidateSha256": "1dced6098718a1b1baafce6709fda9e83abb9c412e7bb1b225d0bfe761ca282f",
+    "outcome": "Cancelled",
+    "exitCode": 30,
+    "collectionStarted": true,
+    "privilegeExecutionStarted": false,
+    "deviceCollectorInvoked": true,
+    "deviceProcessStarted": true,
+    "bodyAssertions": "Fail",
+    "testCleanup": "VerifiedAbsent"
+  },
+  "controlledGeneratedCases": [
+    {
+      "candidateSha256": "a3a44df8d7c58b20d289834d51b208c191626c575a994dda74ac9db8d839e93e",
+      "outcome": "TimedOut",
+      "exitCode": 40,
+      "collectionStarted": false,
+      "privilegeExecutionStarted": false,
+      "privilegeOperationEnvelopeCount": 0,
+      "privilegeCleanupVerified": true,
+      "deviceCollectorInvoked": false,
+      "deviceProcessStarted": false,
+      "systemInvoked": false,
+      "packageExposed": false,
+      "arguments": {
+        "QualificationPlanFault": "PrivilegePreStartTimeout"
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    },
+    {
+      "candidateSha256": "a3a44df8d7c58b20d289834d51b208c191626c575a994dda74ac9db8d839e93e",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "collectionStarted": false,
+      "privilegeExecutionStarted": false,
+      "privilegeOperationEnvelopeCount": 0,
+      "privilegeCleanupVerified": true,
+      "deviceCollectorInvoked": false,
+      "deviceProcessStarted": false,
+      "systemInvoked": false,
+      "packageExposed": false,
+      "arguments": {
+        "QualificationPlanFault": "PrivilegePreStartCancel"
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    },
+    {
+      "candidateSha256": "a3a44df8d7c58b20d289834d51b208c191626c575a994dda74ac9db8d839e93e",
+      "outcome": "TimedOut",
+      "exitCode": 40,
+      "collectionStarted": true,
+      "privilegeExecutionStarted": true,
+      "privilegeOperationEnvelopeCount": 0,
+      "privilegeCleanupVerified": true,
+      "deviceCollectorInvoked": false,
+      "deviceProcessStarted": false,
+      "systemInvoked": false,
+      "packageExposed": false,
+      "arguments": {
+        "QualificationPlanFault": "PrivilegeTimeout"
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    },
+    {
+      "candidateSha256": "a3a44df8d7c58b20d289834d51b208c191626c575a994dda74ac9db8d839e93e",
+      "outcome": "NotStarted",
+      "exitCode": 20,
+      "collectionStarted": false,
+      "privilegeExecutionStarted": false,
+      "privilegeOperationEnvelopeCount": 0,
+      "privilegeCleanupVerified": true,
+      "deviceCollectorInvoked": false,
+      "deviceProcessStarted": false,
+      "systemInvoked": false,
+      "packageExposed": false,
+      "arguments": {
+        "QualificationPlanFault": "PrivilegeLoss"
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    },
+    {
+      "candidateSha256": "a3a44df8d7c58b20d289834d51b208c191626c575a994dda74ac9db8d839e93e",
+      "outcome": "IntegrityFailed",
+      "exitCode": 50,
+      "collectionStarted": true,
+      "privilegeExecutionStarted": true,
+      "privilegeOperationEnvelopeCount": 0,
+      "privilegeCleanupVerified": true,
+      "deviceCollectorInvoked": false,
+      "deviceProcessStarted": false,
+      "systemInvoked": false,
+      "packageExposed": false,
+      "arguments": {
+        "QualificationPlanFault": "PrivilegePostStartLoss"
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    },
+    {
+      "candidateSha256": "a3a44df8d7c58b20d289834d51b208c191626c575a994dda74ac9db8d839e93e",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "collectionStarted": true,
+      "arguments": {
+        "CancelDuringPrivilege": true
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    }
+  ],
+  "affectedNativeExitCode": 0,
+  "independentReviews": {
+    "Standards": "NarrowStaticAdvisoryNoFurtherP1P2",
+    "Spec": "NarrowStaticAdvisoryNoFurtherP1P2"
+  },
+  "scope": "Actual controlled worker before-hello deadline/cancellation and existing interruption regressions only. No claim of physical non-execution after plan-send without acknowledgement. No eligible-client live acceptance, signing, full qualification or tester delivery claim.",
+  "githubActionsMinutesUsed": 0
+}
