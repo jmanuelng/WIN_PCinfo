@@ -3,6 +3,8 @@ param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
+Assert-QualificationCleanupReady
 
 # Generated-application tests inherit this console. A default Windows OEM
 # 437 code page fails the documented UTF-8 contract with
@@ -44,9 +46,17 @@ try {
         $suiteResults.Add([ordered]@{ file=$testFile.Name; result=$fileResult;
             elapsedMilliseconds=$fileWatch.ElapsedMilliseconds;
             sha256=(Get-FileHash -LiteralPath $testFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant() })
+        $cleanupBlocked=[IO.File]::Exists((Get-QualificationCleanupBlockerPath))
+        if ($cleanupBlocked) {
+            foreach ($unexecuted in $testFiles | Select-Object -Skip $suiteResults.Count) {
+                $suiteResults.Add([ordered]@{file=$unexecuted.Name; result='Blocked'; elapsedMilliseconds=0;
+                    sha256=(Get-FileHash -LiteralPath $unexecuted.FullName -Algorithm SHA256).Hash.ToLowerInvariant()})
+            }
+        }
         [IO.File]::WriteAllText((Join-Path $evidenceRoot 'suite-summary.json'),
             ([ordered]@{ elapsedMilliseconds=$suiteWatch.ElapsedMilliseconds; expectedFiles=$testFiles.Count;
                 results=$suiteResults.ToArray() } | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+        if ($cleanupBlocked) { throw 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: remaining test files were blocked and preserved in the inventory.' }
     }
 }
 finally { $env:WINPCINFO_TEST_EVIDENCE = $previousEvidenceRoot }

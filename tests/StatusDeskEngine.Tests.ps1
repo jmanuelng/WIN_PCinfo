@@ -355,6 +355,7 @@ foreach ($name in @('Preparation','Contract','Run','PrivilegedCollection','Syste
 $session = $null
 $runLock = $null
 $runLockOwned = $false
+$qualificationBodyError = $null
 try {
     if ($HoldRunLock) {
         $runLock = [Threading.Mutex]::new($false, [string](Get-AssessmentRunLifecyclePolicy).activeRunLock.name)
@@ -782,8 +783,16 @@ try {
     Assert-Equal $true (Close-EvidenceViewingSession $viewing).verified 'closing report verifies owned plaintext cleanup'
     foreach ($bytes in $opened.artifacts.Values) { [Security.Cryptography.CryptographicOperations]::ZeroMemory([byte[]]$bytes) }
 }
-catch { $qualificationFailed = $true; throw }
+catch {
+    $qualificationFailed = $true; $qualificationBodyError = $_
+    # The WPF invocation can fail before it returns its already-started session.
+    # Recover that exact session from the ViewReady callback for owned cleanup.
+    if ($Wpf -and $null -eq $session -and (Get-Variable -Name uiState -Scope Local -ErrorAction SilentlyContinue)) {
+        $session = $uiState.Session
+    }
+}
 finally {
+    Complete-QualificationHarness -BodyError $qualificationBodyError -RetainEvidence {
     if ($QualificationPath) {
         Measure-QualificationWorkload
         if ($Wpf -and $null -ne $session) {
@@ -810,25 +819,41 @@ finally {
         }
         [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
     }
-    if ($null -ne $session -and $session.Transport.State.ContainsKey('SyntheticLock')) { $session.Transport.State.SyntheticLock.Dispose() }
-    if ($null -ne $runLock) { if ($runLockOwned) { $runLock.ReleaseMutex() }; $runLock.Dispose() }
+    } -Cleanup @(
+    { if ($null -ne $session -and $session.Transport.State.ContainsKey('SyntheticLock')) { $session.Transport.State.SyntheticLock.Dispose() } },
+    { if ($null -ne $runLock) { try { if ($runLockOwned) { $runLock.ReleaseMutex() } } finally { $runLock.Dispose() } } },
+    {
     if ($null -ne $session -and -not $session.Completed) {
         $session.Transport.Cancellation.Cancel()
         Set-StatusDeskDecision -Session $session -Approve $false -PlanDigest 'test-cleanup'
+    }
+    },
+    {
+    if ($null -ne $session -and -not $session.Completed) {
         $cleanupWatch=[Diagnostics.Stopwatch]::StartNew()
         while (-not (Complete-StatusDeskSession $session) -and $cleanupWatch.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 50 }
         if (-not $session.Completed) { throw 'Owned test worker is still active; preserve its evidence and recovery directory.' }
     }
+    },
+    {
     if (-not $Wpf -and $null -ne $session -and $session.Completed) {
-        $session.Transport.Cancellation.Dispose(); $session.Transport.DecisionReady.Dispose(); $session.Transport.Events.Dispose()
+        try { $session.Transport.Cancellation.Dispose() }
+        finally { try { $session.Transport.DecisionReady.Dispose() } finally { $session.Transport.Events.Dispose() } }
     }
+    },
+    {
+    if ($null -ne $session -and -not $session.Completed) { throw 'Owned test worker is still active; preserve its evidence and recovery directory.' }
     $resolved = [IO.Path]::GetFullPath($testRoot)
     $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
     if (-not $resolved.StartsWith($ownedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected synthetic cleanup target.' }
     if (-not $RecoveryDestination -and (Test-Path -LiteralPath $resolved)) { Remove-Item -LiteralPath $resolved -Recurse -Force }
+    if (-not $RecoveryDestination -and [IO.Directory]::Exists($resolved)) { throw 'Owned qualification directory absence could not be verified.' }
+    }
+    ) -RetainCleanupEvidence {
     if ($QualificationPath) {
         $projection['testCleanup'] = if ($RecoveryDestination) { 'RetainedForRecoveryTest' } else { 'VerifiedAbsent' }
         [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+    }
     }
 }
 Write-Output 'PASS: generated Status desk worker executes controlled comprehensive collectors, protects a useful offline report, and cleans viewing.'

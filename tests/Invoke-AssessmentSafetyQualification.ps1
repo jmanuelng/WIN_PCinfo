@@ -22,7 +22,7 @@ $provenance = [ordered]@{
     runtime = [ordered]@{ file=[IO.Path]::GetFileName($hostPath); sha256=(Get-FileHash -LiteralPath $hostPath -Algorithm SHA256).Hash.ToLowerInvariant() }
     softwareWorkerRuntime = [ordered]@{ file='powershell.exe'; version=(Get-Item -LiteralPath $windowsPowerShellPath).VersionInfo.FileVersion; sha256=(Get-FileHash -LiteralPath $windowsPowerShellPath -Algorithm SHA256).Hash.ToLowerInvariant() }
     inputs = @(foreach ($file in @('Invoke-AssessmentSafetyQualification.ps1','StatusDeskEngine.Tests.ps1',
-        'AssessmentQualificationSupport.ps1','AdditionalScopeSourceAdapters.ps1','TestHarness.ps1',
+        'AssessmentQualificationSupport.ps1','AdditionalScopeSourceAdapters.ps1','TestHarness.ps1','QualificationCleanup.ps1',
         'ReadinessSourceAdapters.ps1','IdentitySourceAdapters.ps1','PolicySourceAdapters.ps1','SecuritySourceAdapters.ps1',
         'PlatformSourceAdapters.ps1','RemoteSourceAdapters.ps1','SoftwareSourceAdapters.ps1','ResourceSourceAdapters.ps1',
         'NetworkSourceAdapters.ps1','CertificateSourceAdapters.ps1','ConnectivitySourceAdapters.ps1',
@@ -92,6 +92,7 @@ try {
         $watch = [Diagnostics.Stopwatch]::StartNew()
         $arguments = @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'), '-QualificationPath', $resultPath) + $case.arguments
         & $hostPath @arguments
+        Assert-QualificationCleanupReady
         if ($LASTEXITCODE -ne 0) { throw "Assessment qualification failed: $($case.id)" }
         $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
         $results.Add([ordered]@{ id=$case.id; elapsedMilliseconds=$watch.ElapsedMilliseconds; evidence=$result })
