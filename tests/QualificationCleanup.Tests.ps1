@@ -174,7 +174,10 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
 # A file in place of the parent makes marker retention fail without leaving a
 # marker file or marker directory. No application or worker process is started.
-[IO.File]::WriteAllText((Split-Path (Get-QualificationCleanupBlockerPath)),'synthetic parent collision')
+$nativeOutput=Join-Path (Split-Path $PSScriptRoot) '.test-output'
+$null=[IO.Directory]::CreateDirectory($nativeOutput)
+[IO.File]::WriteAllText((Join-Path $nativeOutput 'blocked-parent'),'synthetic parent collision')
+function Get-QualificationCleanupBlockerPath { Join-Path (Split-Path $PSScriptRoot) '.test-output/blocked-parent/marker.json' }
 Complete-QualificationHarness -Cleanup @({throw 'Synthetic native cleanup failure'})
 '@)
     try {
@@ -183,8 +186,53 @@ Complete-QualificationHarness -Cleanup @({throw 'Synthetic native cleanup failur
         catch { $failure=$_ }
         Assert-Equal $true ($null -ne $failure) 'a native cleanup failure cannot become a passing case'
         Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'native cleanup state propagates even when no stop marker can be retained'
+
+        # Exercise an existing wrapper and the actual suite runner, substituting
+        # only build/runtime discovery and the child assessment boundary.
+        Copy-Item -LiteralPath $childPath -Destination (Join-Path $nativeTests 'StatusDeskEngine.Tests.ps1')
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CertificateSourceApplication.Tests.ps1') -Destination (Join-Path $nativeTests 'A.Tests.ps1')
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Run-Tests.ps1') -Destination $nativeTests
+        [IO.File]::WriteAllText((Join-Path $nativeTests 'TestHarness.ps1'), @'
+. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
+Assert-QualificationCleanupReady
+function Resolve-WinPCInfoRuntime { param($ApplicationPath) Join-Path $PSHOME 'pwsh.exe' }
+'@)
+        $nativeBuild=Join-Path $nativeRoot 'build'; $null=[IO.Directory]::CreateDirectory($nativeBuild)
+        [IO.File]::WriteAllText((Join-Path $nativeBuild 'Build.ps1'),'param($OutputPath)')
+        [IO.File]::WriteAllText((Join-Path $nativeTests 'B.Tests.ps1'),"Write-Output 'SYNTHETIC_NEXT_WRAPPER_EXECUTED'")
+        $suiteOutput=& (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -File (Join-Path $nativeTests 'Run-Tests.ps1') 2>&1
+        Assert-Equal $true ($LASTEXITCODE -ne 0) 'unsafe cleanup from an existing wrapper fails the suite'
+        Assert-Equal $false (($suiteOutput -join "`n").Contains('SYNTHETIC_NEXT_WRAPPER_EXECUTED')) 'an existing native wrapper blocks the next suite test despite unavailable marker persistence'
+        [IO.File]::WriteAllText((Join-Path $nativeTests 'StatusDeskEngine.Tests.ps1'),"Write-Output 'PASS: Synthetic child assessment boundary'")
+        $suiteOutput=& (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -File (Join-Path $nativeTests 'Run-Tests.ps1') 2>&1
+        Assert-Equal 0 $LASTEXITCODE 'the existing wrapper still completes successful native cases'
+        Assert-Equal $true (($suiteOutput -join "`n").Contains('SYNTHETIC_NEXT_WRAPPER_EXECUTED')) 'verified native completion permits subsequent suite tests'
     }
     finally { if ([IO.Directory]::Exists($nativeRoot)) { [IO.Directory]::Delete($nativeRoot,$true) } }
 }
 Test-NativeCleanupFailure
+
+function Test-RecoveryParentCleanupFailure {
+    $repositoryRoot=Split-Path -Parent $PSScriptRoot
+    $allowedRoot=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
+    $testRoot=Join-Path $repositoryRoot ('.test-output/recovery-parent-'+[guid]::NewGuid().ToString('N'))
+    $null=[IO.Directory]::CreateDirectory($testRoot)
+    $child=$null; $ownedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new(); $recoveryBodyError=$null
+    $failure=$null
+    try {
+        try {
+            . (Get-HarnessFinalization -File 'StatusDeskRecovery.Tests.ps1' -Body '$failure=[InvalidOperationException]::new("Synthetic recovery child failure"); $failure.Data["OwnedCleanupUnverified"]=$true; throw $failure')
+        }
+        catch { $failure=$_ }
+        Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'recovery parent preserves unverified child recovery state'
+        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'recovery parent keeps unsafe state through its own finalization'
+        Assert-Equal $true ($failure.Exception.ToString().Contains('Synthetic recovery child failure')) 'recovery cleanup does not erase the body failure'
+    }
+    finally {
+        if ([IO.Directory]::Exists($testRoot)) { [IO.Directory]::Delete($testRoot,$true) }
+        if ([IO.Directory]::Exists($testRoot)) { throw 'Controlled recovery-parent cleanup remains unverified.' }
+        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+    }
+}
+Test-RecoveryParentCleanupFailure
 Write-Output 'PASS: evidence retention failure cannot bypass owned qualification cleanup.'

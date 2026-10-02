@@ -26,18 +26,24 @@ function Test-QualificationCleanupUnverified {
     return $false
 }
 
-function Invoke-QualificationTestProcess {
-    param([Parameter(Mandatory)] [string] $HostPath, [Parameter(Mandatory)] [string[]] $Arguments)
-    $caseOutput=@(& $HostPath @Arguments 2>&1)
-    $caseExitCode=$LASTEXITCODE
-    foreach ($line in $caseOutput) { Write-Output $line }
-    if (@($caseOutput | Where-Object { $_.ToString() -eq 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED' }).Count) {
+function Assert-QualificationTestProcessResult {
+    param([AllowEmptyCollection()] [object[]] $Output, [int] $ExitCode)
+    if (@($Output | ForEach-Object { $_.ToString() -split '\r?\n' } | Where-Object { $_ -eq 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED' }).Count) {
         $exception=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: native child cleanup remains unverified.')
         $exception.Data['OwnedCleanupUnverified']=$true
         throw $exception
     }
-    if ($caseExitCode -ne 0) { throw "Assessment qualification child failed with exit code $caseExitCode." }
+    if ($ExitCode -ne 0) { throw "Assessment qualification child failed with exit code $ExitCode." }
     Assert-QualificationCleanupReady
+}
+
+function Invoke-QualificationTestProcess {
+    param([Parameter(Mandatory)] [string] $HostPath, [Parameter(Mandatory)] [string[]] $Arguments)
+    Assert-QualificationCleanupReady
+    $caseOutput=@(& $HostPath @Arguments 2>&1)
+    $caseExitCode=$LASTEXITCODE
+    foreach ($line in $caseOutput) { Write-Output $line }
+    Assert-QualificationTestProcessResult -Output $caseOutput -ExitCode $caseExitCode
 }
 
 function Complete-QualificationHarness {

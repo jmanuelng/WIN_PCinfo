@@ -11,11 +11,13 @@ $null = [IO.Directory]::CreateDirectory($testRoot)
 $destination = Join-Path $testRoot 'assessment'
 $handoffPath = Join-Path $testRoot 'worker-ready'
 $child = $null
+$recoveryBodyError = $null
 $ownedProcesses = [Collections.Generic.List[Diagnostics.Process]]::new()
 function Assert-GeneratedRecovery {
     param([string] $Reason, [switch] $Authorized)
-    & (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1') `
-        -RecoveryDestination $destination -RecoveryExpectedReason $Reason -RecoveryAuthorized:$Authorized
+    $arguments=@('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),'-RecoveryDestination',$destination,'-RecoveryExpectedReason',$Reason)
+    if ($Authorized) { $arguments += '-RecoveryAuthorized' }
+    Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments $arguments
     if ($LASTEXITCODE -ne 0) { throw 'Generated recovery failed its terminal/no-collection assertions.' }
 }
 try {
@@ -32,7 +34,11 @@ try {
     $childError = $child.StandardError.ReadToEndAsync()
     $watch = [Diagnostics.Stopwatch]::StartNew()
     while (-not [IO.File]::Exists($handoffPath) -and -not $child.HasExited -and $watch.Elapsed.TotalSeconds -lt 45) { Start-Sleep -Milliseconds 25 }
-    if (-not [IO.File]::Exists($handoffPath) -and $child.HasExited) { throw ('Controlled child did not reach its worker: ' + $childError.GetAwaiter().GetResult() + $childOutput.GetAwaiter().GetResult()) }
+    if (-not [IO.File]::Exists($handoffPath) -and $child.HasExited) {
+        $earlyOutput=$childOutput.GetAwaiter().GetResult(); $earlyError=$childError.GetAwaiter().GetResult()
+        Assert-QualificationTestProcessResult -Output @($earlyOutput,$earlyError) -ExitCode $child.ExitCode
+        throw ('Controlled child did not reach its worker: ' + $earlyError + $earlyOutput)
+    }
     Assert-Equal $true ([IO.File]::Exists($handoffPath)) 'ordinary generated run reached the controlled supervised worker'
     # Observe only descendants of this exact owned test process. Keep process
     # handles, not reusable PIDs, for absence verification after parent loss.
@@ -74,9 +80,31 @@ try {
     Assert-Equal 0 @(Get-ChildItem -LiteralPath $destination -Force).Count 'recovery proves all registered transient objects absent'
     Assert-GeneratedRecovery RECOVERY.NO_RESIDUE -Authorized
 }
+catch { $recoveryBodyError=$_ }
 finally {
-    if ($null -ne $child) { if (-not $child.HasExited) { $child.Kill($true); $null=$child.WaitForExit(5000) }; $child.Dispose() }
-    foreach ($process in $ownedProcesses) { $process.Dispose() }
-    if ([IO.Directory]::Exists($testRoot)) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
+    Complete-QualificationHarness -BodyError $recoveryBodyError -Cleanup @(
+        {
+            if ($null -ne $child -and -not $child.HasExited) { $child.Kill($true) }
+            if ($null -ne $child -and -not $child.WaitForExit(5000)) { throw 'Owned recovery application remains active.' }
+            foreach ($process in $ownedProcesses) {
+                if (-not $process.WaitForExit(5000)) { throw 'Owned recovery descendant remains active.' }
+            }
+        },
+        {
+            if ($null -ne $recoveryBodyError -and (Test-QualificationCleanupUnverified -Exception $recoveryBodyError.Exception)) { throw 'Preserve unverified child recovery state.' }
+            if ($null -ne $child -and -not $child.HasExited) { throw 'Preserve active application recovery state.' }
+            foreach ($process in $ownedProcesses) {
+                if (-not $process.HasExited) { throw 'Preserve active descendant recovery state.' }
+            }
+            $resolved=[IO.Path]::GetFullPath($testRoot)
+            if (-not $resolved.StartsWith($allowedRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'Recovery cleanup escaped its owned parent.' }
+            if ([IO.Directory]::Exists($resolved)) { Remove-Item -LiteralPath $resolved -Recurse -Force }
+            if ([IO.Directory]::Exists($resolved)) { throw 'Owned recovery directory absence remains unverified.' }
+        },
+        {
+            if ($null -ne $child) { $child.Dispose() }
+            foreach ($process in $ownedProcesses) { $process.Dispose() }
+        }
+    )
 }
 Write-Output 'PASS: generated ordinary interruption stops its nested process tree; deliberate recovery refuses foreign paths and never resumes collection.'

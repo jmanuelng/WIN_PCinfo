@@ -62,6 +62,23 @@ initially allowed the second file to execute; native cleanup state initially los
 its unsafe flag; and report-size evidence initially recorded 0 instead of the
 known 16-byte fixture. Corrected focused checks pass, including explicit recovery
 retention and native-process propagation without any marker file or directory.
+The second frozen review (`6f517e4`) found one P1 on each axis: other native Status
+desk callers did not yet propagate the unsafe-cleanup signal. All native source,
+report, GUI, cancellation, lock and deliberate recovery callers now use the shared
+process helper. Recovery's independently supervised child uses the same output
+result guard; its parent finalization retains unsafe child state and aggregates
+cleanup failures. The same-process post-start-loss caller already preserves the
+exception object and does not need a native conversion.
+
+A new RED/GREEN regression executes the actual certificate wrapper and suite
+runner with only build/runtime discovery and the child assessment substituted.
+The child provokes a real marker-write failure without a marker file/directory;
+the original wrapper allowed the next file to execute, while the corrected wrapper
+blocks it. Successful native cases still execute subsequent files. Recovery parent
+finalization is separately replayed with an unsafe child error and preserves its
+workspace and original error. Both focused commands pass, in about ten and three
+seconds respectively, without executing an application candidate.
+
 Final independent re-review is pending. Findings in the initial review: Standards
 1 (worst P1), Spec 2 (worst P1); neither axis is combined with the other.
 
