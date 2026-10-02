@@ -17,6 +17,190 @@ function Get-HarnessFinalization {
     [scriptblock]::Create($source.Remove($offset,$statement.Body.Extent.Text.Length).Insert($offset,'{'+$Body+'}'))
 }
 
+function Test-CompletedSessionCleanupFault {
+    param([ValidateSet('UnsafeBody','UnsafeTerminal','MissingTerminal','InvalidRecord','MalformedTerminal','StringVerified','ArrayTerminal','NullTerminal','ArrayRecordType','ArrayOutcome','NullOutcome')][string]$Fault='UnsafeBody')
+    $repositoryRoot=Split-Path -Parent $PSScriptRoot
+    $ownedParent=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
+    $testRoot=Join-Path $repositoryRoot ('.test-output/completed-unsafe-'+[guid]::NewGuid().ToString('N'))
+    $resolvedRoot=[IO.Path]::GetFullPath($testRoot)
+    if(-not $resolvedRoot.StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
+    $null=[IO.Directory]::CreateDirectory($testRoot)
+    $journal=Join-Path $testRoot 'owned-recovery-journal.txt'
+    [IO.File]::WriteAllText($journal,'synthetic owned recovery evidence')
+    $FailureKind='None'
+    $QualificationPath='';$qualificationFailed=$false;$qualificationBodyError=$null
+    $RequireQualityBudgets=$false;$assessmentQuality=$null;$quality=[ordered]@{}
+    $qualityWatch=[Diagnostics.Stopwatch]::StartNew();$qualificationArguments=[ordered]@{}
+    $projection=[ordered]@{coverage=@()};$Wpf=$false;$runLock=$null;$runLockOwned=$false;$RecoveryDestination=''
+    $terminalJson=if($Fault -ceq 'UnsafeTerminal'){
+        '{"recordType":"win-pcinfo.terminal","outcome":"CleanupIncomplete","cleanup":{"verified":false}}'
+    }else{'{"recordType":"win-pcinfo.terminal","outcome":"IntegrityFailed","cleanup":{"verified":true}}'}
+    $session=[pscustomobject]@{Completed=$true;Transport=@{
+        State=@{Terminal=$terminalJson}
+        Cancellation=[Threading.CancellationTokenSource]::new()
+        DecisionReady=[Threading.ManualResetEventSlim]::new()
+        Events=[Threading.ManualResetEventSlim]::new()
+    }}
+    if($Fault -ceq 'MissingTerminal'){$session.Transport.State.Remove('Terminal')}
+    if($Fault -ceq 'InvalidRecord'){$session.Transport.State.Terminal='{"recordType":"unexpected","outcome":"Completed","cleanup":{"verified":true}}'}
+    if($Fault -ceq 'MalformedTerminal'){$session.Transport.State.Terminal='{'}
+    if($Fault -ceq 'StringVerified'){$session.Transport.State.Terminal='{"recordType":"win-pcinfo.terminal","outcome":"Completed","cleanup":{"verified":"true"}}'}
+    if($Fault -ceq 'ArrayTerminal'){$session.Transport.State.Terminal='[{"recordType":"win-pcinfo.terminal","outcome":"Completed","cleanup":{"verified":true}}]'}
+    if($Fault -ceq 'NullTerminal'){$session.Transport.State.Terminal=$null}
+    if($Fault -ceq 'ArrayRecordType'){$session.Transport.State.Terminal='{"recordType":["win-pcinfo.terminal"],"outcome":"Completed","cleanup":{"verified":true}}'}
+    if($Fault -ceq 'ArrayOutcome'){$session.Transport.State.Terminal='{"recordType":"win-pcinfo.terminal","outcome":["Completed"],"cleanup":{"verified":true}}'}
+    if($Fault -ceq 'NullOutcome'){$session.Transport.State.Terminal='{"recordType":"win-pcinfo.terminal","outcome":null,"cleanup":{"verified":true}}'}
+    $caught=$null
+    try{
+        try{
+            $body=if($Fault -ceq 'UnsafeBody'){
+                '$failure=[InvalidOperationException]::new("Synthetic completed child cleanup uncertainty");$failure.Data["OwnedCleanupUnverified"]=$true;throw $failure'
+            }else{'throw "Synthetic assertion before local terminal parsing"'}
+            . (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body $body)
+        }catch{$caught=$_}
+        Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'a completed runspace cannot erase an unverified child recovery workspace'
+        Assert-Equal 'synthetic owned recovery evidence' ([IO.File]::ReadAllText($journal)) 'unsafe body metadata preserves the exact recovery journal'
+        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $caught.Exception) 'completed unsafe child metadata remains a scheduling blocker'
+        Assert-Equal $true ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'completed unsafe body produces a durable scheduling stop'
+    }finally{
+        $session.Transport.Cancellation.Dispose();$session.Transport.DecisionReady.Dispose();$session.Transport.Events.Dispose()
+        # This replay creates no process and owns exactly this fresh synthetic root.
+        if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
+        if([IO.Directory]::Exists($testRoot)){[IO.Directory]::Delete($testRoot,$true)}
+        if([IO.Directory]::Exists($testRoot)){throw 'Controlled replay directory absence not verified.'}
+        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+    }
+}
+Test-CompletedSessionCleanupFault
+Test-CompletedSessionCleanupFault -Fault UnsafeTerminal
+Test-CompletedSessionCleanupFault -Fault MissingTerminal
+Test-CompletedSessionCleanupFault -Fault InvalidRecord
+Test-CompletedSessionCleanupFault -Fault MalformedTerminal
+Test-CompletedSessionCleanupFault -Fault StringVerified
+Test-CompletedSessionCleanupFault -Fault ArrayTerminal
+Test-CompletedSessionCleanupFault -Fault NullTerminal
+Test-CompletedSessionCleanupFault -Fault ArrayRecordType
+Test-CompletedSessionCleanupFault -Fault ArrayOutcome
+Test-CompletedSessionCleanupFault -Fault NullOutcome
+
+function Test-LateSessionCleanupUncertainty {
+    $repositoryRoot=Split-Path -Parent $PSScriptRoot
+    $ownedParent=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
+    $testRoot=Join-Path $repositoryRoot ('.test-output/late-finalization-'+[guid]::NewGuid().ToString('N'))
+    if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
+    $null=[IO.Directory]::CreateDirectory($testRoot)
+    $journal=Join-Path $testRoot 'owned-recovery-journal.txt'
+    [IO.File]::WriteAllText($journal,'synthetic late cleanup recovery')
+    $tokens=$null;$parseErrors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repositoryRoot 'src/StatusDesk.ps1'),[ref]$tokens,[ref]$parseErrors)
+    if($parseErrors.Count){throw 'Actual session finalization source did not parse.'}
+    foreach($name in @('Set-StatusDeskDecision','Complete-StatusDeskSession')){
+        $definition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$false)
+        if($null -eq $definition){throw 'Actual finalization function is missing.'}
+        . ([scriptblock]::Create($definition.Extent.Text))
+    }
+    $runspace=[RunspaceFactory]::CreateRunspace();$runspace.Open()
+    $worker=[PowerShell]::Create();$worker.Runspace=$runspace
+    $null=$worker.AddScript('$failure=[InvalidOperationException]::new("Synthetic late EndInvoke cleanup uncertainty");$failure.Data["OwnedCleanupUnverified"]=$true;throw $failure')
+    $pending=$worker.BeginInvoke()
+    $QualificationPath='';$qualificationFailed=$false;$qualificationBodyError=$null;$FailureKind='None'
+    $RequireQualityBudgets=$false;$assessmentQuality=$null;$quality=[ordered]@{}
+    $qualityWatch=[Diagnostics.Stopwatch]::StartNew();$qualificationArguments=[ordered]@{}
+    $projection=[ordered]@{coverage=@()};$Wpf=$false;$runLock=$null;$runLockOwned=$false;$RecoveryDestination=''
+    $session=[pscustomobject]@{Completed=$false;ExitCode=0;Worker=$worker;Runspace=$runspace;Pending=$pending;Transport=@{
+        State=@{Terminal='{"recordType":"win-pcinfo.terminal","outcome":"Completed","cleanup":{"verified":true}}'}
+        Cancellation=[Threading.CancellationTokenSource]::new()
+        DecisionReady=[Threading.ManualResetEventSlim]::new()
+        Events=[Threading.ManualResetEventSlim]::new()
+    }}
+    $caught=$null
+    try{
+        if(-not $pending.AsyncWaitHandle.WaitOne(5000)){throw 'Owned synthetic runspace did not finish within its bound.'}
+        try{. (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body 'throw "Synthetic early ordinary assertion"')}catch{$caught=$_}
+        Assert-Equal $true $session.Completed 'actual EndInvoke consumes its result and disposes both exact owned handles'
+        Assert-Equal $true $session.Finalization.WorkerDisposed 'late cleanup uncertainty does not skip worker disposal'
+        Assert-Equal $true $session.Finalization.RunspaceDisposed 'late cleanup uncertainty does not skip runspace disposal'
+        Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'unsafe EndInvoke metadata discovered during finalization preserves recovery root'
+        Assert-Equal 'synthetic late cleanup recovery' ([IO.File]::ReadAllText($journal)) 'late uncertainty retains the exact recovery journal'
+        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $caught.Exception) 'late unsafe result remains explicitly blocked'
+        Assert-Equal $true ($caught.Exception.ToString().Contains('Synthetic early ordinary assertion')) 'early body failure remains independently retained'
+        Assert-Equal $true ($caught.Exception.ToString().Contains('Synthetic late EndInvoke cleanup uncertainty')) 'late worker failure remains independently retained'
+        Assert-Equal $true ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'late unsafe result emits a durable blocker'
+    }finally{
+        $worker.Dispose();$runspace.Dispose()
+        $session.Transport.Cancellation.Dispose();$session.Transport.DecisionReady.Dispose();$session.Transport.Events.Dispose()
+        if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
+        if([IO.Directory]::Exists($testRoot)){[IO.Directory]::Delete($testRoot,$true)}
+        if([IO.Directory]::Exists($testRoot)){throw 'Controlled replay directory absence not verified.'}
+        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+    }
+}
+Test-LateSessionCleanupUncertainty
+
+function Test-VerifiedSyntheticCleanupRelease {
+    param([ValidateSet('None','Privilege','System','Standard','MissingProof','StringProof','WrongPath','InvalidPath','MemoryStream','UnsafeBody','VerifiedTerminal')][string]$Fault='None')
+    $repositoryRoot=Split-Path -Parent $PSScriptRoot
+    $ownedParent=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
+    $testRoot=Join-Path $repositoryRoot ('.test-output/known-cleanup-'+[guid]::NewGuid().ToString('N'))
+    if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
+    $null=[IO.Directory]::CreateDirectory($testRoot)
+    $journal=Join-Path $testRoot 'synthetic-owned-evidence.txt'
+    [IO.File]::WriteAllText($journal,'synthetic known file lock')
+    $syntheticLock=[IO.File]::Open($journal,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+    $QualificationPath='';$qualificationFailed=$false;$qualificationBodyError=$null
+    $RequireQualityBudgets=$false;$assessmentQuality=$null;$quality=[ordered]@{}
+    $qualityWatch=[Diagnostics.Stopwatch]::StartNew();$qualificationArguments=[ordered]@{}
+    $projection=[ordered]@{coverage=@()};$Wpf=$false;$runLock=$null;$runLockOwned=$false;$RecoveryDestination=''
+    $FailureKind='Cleanup'
+    $session=[pscustomobject]@{Completed=$true;Transport=@{
+        State=@{
+            Terminal='{"recordType":"win-pcinfo.terminal","outcome":"CleanupIncomplete","cleanup":{"verified":false}}'
+            SyntheticLock=$syntheticLock;SyntheticLockPath=$journal
+            SyntheticPrivilegeAbsent=$true;SyntheticSystemAbsent=$true;SyntheticStandardAbsent=$true
+        }
+        Cancellation=[Threading.CancellationTokenSource]::new()
+        DecisionReady=[Threading.ManualResetEventSlim]::new()
+        Events=[Threading.ManualResetEventSlim]::new()
+    }}
+    if($Fault -in @('Privilege','System','Standard')){$session.Transport.State['Synthetic'+$Fault+'Absent']=$false}
+    if($Fault -ceq 'MissingProof'){$session.Transport.State.Remove('SyntheticSystemAbsent')}
+    if($Fault -ceq 'StringProof'){$session.Transport.State.SyntheticPrivilegeAbsent='true'}
+    if($Fault -ceq 'WrongPath'){$session.Transport.State.SyntheticLockPath=Join-Path $testRoot 'different-lock.txt'}
+    if($Fault -ceq 'InvalidPath'){$session.Transport.State.SyntheticLockPath='invalid'+[char]0+'path'}
+    if($Fault -ceq 'MemoryStream'){$syntheticLock.Dispose();$syntheticLock=[IO.MemoryStream]::new();$session.Transport.State.SyntheticLock=$syntheticLock}
+    if($Fault -ceq 'VerifiedTerminal'){
+        $FailureKind='None'
+        $session.Transport.State.Terminal='{"recordType":"win-pcinfo.terminal","outcome":"Completed","cleanup":{"verified":true}}'
+    }
+    $unsafe=$Fault -notin @('None','VerifiedTerminal')
+    $body=if($Fault -ceq 'UnsafeBody'){
+        '$failure=[InvalidOperationException]::new("Synthetic unsafe child despite known lock release");$failure.Data["OwnedCleanupUnverified"]=$true;throw $failure'
+    }else{'$null=0'}
+    $caught=$null
+    try{
+        try{. (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body $body)}catch{$caught=$_}
+        Assert-Equal $false $syntheticLock.CanRead 'the exact fixture FileStream is closed'
+        Assert-Equal $unsafe ([IO.Directory]::Exists($testRoot)) 'only exact lock release with every independent native absence proof permits fixture cleanup'
+        Assert-Equal (-not $unsafe) ($null -eq $caught) 'missing, false or mistyped proofs and unsafe body metadata block further scheduling'
+        Assert-Equal $unsafe ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'unsafe fixture recovery stays durably blocked'
+        if($unsafe){
+            Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $caught.Exception) 'unsafe fixture cleanup is explicitly unverified'
+            Assert-Equal 'synthetic known file lock' ([IO.File]::ReadAllText($journal)) 'unsafe fixture preserves its exact recovery evidence'
+        }
+    }finally{
+        $syntheticLock.Dispose()
+        $session.Transport.Cancellation.Dispose();$session.Transport.DecisionReady.Dispose();$session.Transport.Events.Dispose()
+        if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
+        if([IO.Directory]::Exists($testRoot)){[IO.Directory]::Delete($testRoot,$true)}
+        if([IO.Directory]::Exists($testRoot)){throw 'Controlled replay directory absence not verified.'}
+        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+    }
+}
+Test-VerifiedSyntheticCleanupRelease
+foreach($fault in @('Privilege','System','Standard','MissingProof','StringProof','WrongPath','InvalidPath','MemoryStream','UnsafeBody','VerifiedTerminal')){
+    Test-VerifiedSyntheticCleanupRelease -Fault $fault
+}
+
 function Test-StatusDeskRetentionFailure {
     param([ValidateSet('Write','Sampling','Serialization','Worker')] [string] $Fault = 'Write')
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
@@ -56,6 +240,9 @@ function Test-StatusDeskRetentionFailure {
         param($Session)
         $witness.cancelled=$Session.Transport.Cancellation.IsCancellationRequested
         if ($Fault -eq 'Worker') { throw 'Synthetic owned worker remains active' }
+        # This adapter creates no process and reports its proved synthetic
+        # completion explicitly; production deletion requires terminal evidence.
+        $Session.Transport.State.Terminal='{"recordType":"win-pcinfo.terminal","outcome":"IntegrityFailed","cleanup":{"verified":true}}'
         $witness.completed=$true; $Session.Completed=$true; return $true
     }
     $errorRecord=$null

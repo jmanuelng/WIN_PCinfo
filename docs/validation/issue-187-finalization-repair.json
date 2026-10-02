@@ -1,0 +1,71 @@
+{
+  "kind": "win-pcinfo.controlled-finalization-repair-evidence",
+  "version": 1,
+  "issue": 187,
+  "baselineCommit": "c74ce0e47d8a0fb26169b614232819a9f9ec13cf",
+  "state": "ReviewedRepairAffectedChecksPassFullApplicationGatePending",
+  "tests": {
+    "tests/StatusDeskEngine.Tests.ps1": "bdda8150e6956a575df6c2c77e65b985b19412418af0d7c8f7b3d1dbfadad14a",
+    "tests/QualificationCleanup.Tests.ps1": "9b90af6039df04b968ee352a29b1c45314068b7cf9174b93659bd8aa9b169df8"
+  },
+  "independentReviews": {
+    "Standards": "NarrowStaticAdvisoryNoFurtherP1P2",
+    "Spec": "NarrowStaticAdvisoryNoFurtherP1P2"
+  },
+  "isolatedReplay": {
+    "result": "Pass",
+    "nativeExitCode": 0,
+    "genuineFailuresRetained": true,
+    "unsafeBodyPreservesRecovery": true,
+    "unsafeLateEndInvokePreservesRecovery": true,
+    "missingFalseMalformedTerminalPreservesRecovery": true,
+    "exactFileStreamDisposalIndependentOfPathFailure": true,
+    "knownLockExemptionRequiresIndependentTypedNativeAbsence": true,
+    "initialScratchDiscriminatorCorrectedToActualContractBeforeIntegration": true
+  },
+  "controlledGeneratedCases": [
+    {
+      "candidateSha256": "a87d5239bb1687667bdb6fb37e2c940547ac51d225dda4daab714bf7bdf64ba6",
+      "outcome": "CleanupIncomplete",
+      "exitCode": 60,
+      "cleanupVerified": false,
+      "arguments": {
+        "FailureKind": "Cleanup"
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    },
+    {
+      "candidateSha256": "a87d5239bb1687667bdb6fb37e2c940547ac51d225dda4daab714bf7bdf64ba6",
+      "outcome": "IntegrityFailed",
+      "exitCode": 50,
+      "cleanupVerified": true,
+      "arguments": {
+        "FailureKind": "Integrity"
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    },
+    {
+      "candidateSha256": "a87d5239bb1687667bdb6fb37e2c940547ac51d225dda4daab714bf7bdf64ba6",
+      "outcome": "CompletedWithGaps",
+      "exitCode": 10,
+      "cleanupVerified": true,
+      "arguments": {
+        "FailureKind": "None"
+      },
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent"
+    }
+  ],
+  "originalFull199": {
+    "state": "StoppedByExplicitRootSafetyReviewHoldNotQualified",
+    "nativeExitCode": 1,
+    "pass": 28,
+    "reviewHoldFailure": 1,
+    "blocked": 170,
+    "actualSurvivingWorkerObserved": false
+  },
+  "scope": "Controlled test-harness repair only; no live eligible-client acceptance, signed package, broad qualification, or tester delivery claim",
+  "githubActionsMinutesUsed": 0
+}

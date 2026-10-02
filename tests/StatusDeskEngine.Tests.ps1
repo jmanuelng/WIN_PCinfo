@@ -340,7 +340,7 @@ elseif ($FailureKind -eq 'Integrity') {
 }
 elseif ($FailureKind -eq 'Cleanup') {
     $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty }',
-        '$result=Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty; $temporary=Add-TemporaryEvidence -JournalPath $script:AssessmentRunJournalPath -Content ([Text.Encoding]::UTF8.GetBytes("synthetic locked residue")); $script:StatusDeskTransport.State.SyntheticLock=[IO.File]::Open($temporary.literalPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None); $result }')
+        '$result=Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty; $temporary=Add-TemporaryEvidence -JournalPath $script:AssessmentRunJournalPath -Content ([Text.Encoding]::UTF8.GetBytes("synthetic locked residue")); $script:StatusDeskTransport.State.SyntheticLockPath=$temporary.literalPath; $script:StatusDeskTransport.State.SyntheticLock=[IO.File]::Open($temporary.literalPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None); $result }')
 }
 if ($ReadinessSourceScenario) {
     . (Join-Path $PSScriptRoot 'ReadinessSourceAdapters.ps1')
@@ -422,6 +422,45 @@ if ($QualificationSourceCase) {
 if ($QualificationPath -or $QualificationProhibited -or $QualificationCulture) {
     $moduleText = $moduleText.Replace('switch ([string] $Record.recordType) {',
         'if (-not $Transport.State.ContainsKey("QualificationOutput")) { $Transport.State.QualificationOutput = [Collections.Generic.List[string]]::new() }; $Transport.State.QualificationOutput.Add($json); switch ([string] $Record.recordType) {')
+}
+if ($FailureKind -eq 'Cleanup') {
+    # Preserve independent controller proofs before the known file-lock fixture
+    # makes package cleanup false. No absence is inferred from runspace completion.
+    . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+    $moduleText=Rename-QualificationFunction -Source $moduleText -Name Invoke-PrivilegedCollectionPlan -Replacement Invoke-SyntheticCleanupOriginalPrivilegePlan
+    $moduleText=Rename-QualificationFunction -Source $moduleText -Name Invoke-ApprovedCollectorProcess -Replacement Invoke-SyntheticCleanupOriginalApprovedCollector
+    $moduleText += @'
+
+function Invoke-PrivilegedCollectionPlan {
+    param($PreparationPlan, $PlanDigest, $AssessmentUserContext, $AssessmentUserSid,
+        $LocalPackageProtector, $ValidationScenario, $FirmwareScenario, $AdministratorScenario,
+        $EffectivePolicyScenario, $CancellationToken, $SystemPlanResult, $SystemValidationScenario)
+    $result=Invoke-SyntheticCleanupOriginalPrivilegePlan @PSBoundParameters
+    $script:StatusDeskTransport.State.SyntheticPrivilegeAbsent=
+        $result.cleanup.verified -is [bool] -and $result.cleanup.verified -and
+        $result.cleanup.workerTreeAbsent -is [bool] -and $result.cleanup.workerTreeAbsent -and
+        $result.cleanup.channelAbsent -is [bool] -and $result.cleanup.channelAbsent -and
+        $result.cleanup.stagingAbsent -is [bool] -and $result.cleanup.stagingAbsent
+    $script:StatusDeskTransport.State.SyntheticSystemAbsent=$false
+    if ($null -ne $result.PSObject.Properties['PrivateSystemResult'] -and $null -ne $result.PrivateSystemResult) {
+        $cleanup=$result.PrivateSystemResult.cleanup
+        $script:StatusDeskTransport.State.SyntheticSystemAbsent=
+            $cleanup.verified -is [bool] -and $cleanup.verified -and
+            $cleanup.taskAbsent -is [bool] -and $cleanup.taskAbsent -and
+            $cleanup.workerTreeAbsent -is [bool] -and $cleanup.workerTreeAbsent -and
+            $cleanup.pipeAbsent -is [bool] -and $cleanup.pipeAbsent
+    }
+    $result
+}
+function Invoke-ApprovedCollectorProcess {
+    param($OperationId, $DeviceReadinessScenario, $CancellationToken)
+    $result=Invoke-SyntheticCleanupOriginalApprovedCollector @PSBoundParameters
+    $script:StatusDeskTransport.State.SyntheticStandardAbsent=
+        $result.Supervision.completeOwnedTreeAbsent -is [bool] -and $result.Supervision.completeOwnedTreeAbsent -and
+        $result.Supervision.temporaryArtifactsAbsent -is [bool] -and $result.Supervision.temporaryArtifactsAbsent
+    $result
+}
+'@
 }
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
@@ -1013,7 +1052,27 @@ finally {
         # attributed controlled assessment is enforced after verified cleanup.
     }
     } -Cleanup @(
-    { if ($null -ne $session -and $session.Transport.State.ContainsKey('SyntheticLock')) { $session.Transport.State.SyntheticLock.Dispose() } },
+    {
+    if ($null -ne $session -and $session.Transport.State.ContainsKey('SyntheticLock')) {
+        $state=$session.Transport.State
+        $state.SyntheticLockReleased=$false
+        $lock=$state.SyntheticLock
+        $fileHandle=$null;$ownedLock=$false
+        try {
+            if ($lock -is [IO.FileStream] -and $state.ContainsKey('SyntheticLockPath') -and
+                $state.SyntheticLockPath -is [string]) {
+                $lockPath=[IO.Path]::GetFullPath($lock.Name)
+                $expectedPath=[IO.Path]::GetFullPath($state.SyntheticLockPath)
+                $rootPrefix=[IO.Path]::GetFullPath($testRoot)+[IO.Path]::DirectorySeparatorChar
+                $ownedLock=$lockPath.Equals($expectedPath,[StringComparison]::OrdinalIgnoreCase) -and
+                    $lockPath.StartsWith($rootPrefix,[StringComparison]::OrdinalIgnoreCase)
+                $fileHandle=$lock.SafeFileHandle
+            }
+        } finally { $lock.Dispose() }
+        $state.SyntheticLockReleased=$ownedLock -and $null -ne $fileHandle -and
+            $fileHandle.IsClosed -and -not $lock.CanRead
+    }
+    },
     { if ($null -ne $runLock) { try { if ($runLockOwned) { $runLock.ReleaseMutex() } } finally { $runLock.Dispose() } } },
     {
     if ($null -ne $session -and -not $session.Completed) {
@@ -1035,7 +1094,56 @@ finally {
     }
     },
     {
+    if ($null -ne $qualificationBodyError -and
+        (Test-QualificationCleanupUnverified -Exception $qualificationBodyError.Exception)) {
+        throw 'Owned child cleanup remains unverified; preserve its recovery directory.'
+    }
     if ($null -ne $session -and -not $session.Completed) { throw 'Owned test worker is still active; preserve its evidence and recovery directory.' }
+    # EndInvoke can dispose the session and then report unsafe child cleanup.
+    # It must not be hidden by an earlier ordinary body assertion.
+    if ($null -ne $session -and $null -ne $session.PSObject.Properties['Finalization'] -and
+        $null -ne $session.Finalization.PrimaryError -and
+        (Test-QualificationCleanupUnverified -Exception $session.Finalization.PrimaryError)) {
+        throw 'Owned session finalization reports unverified child cleanup; preserve its recovery directory.'
+    }
+    if ($null -ne $session) {
+        if (-not $session.Transport.State.ContainsKey('Terminal')) {
+            throw 'Owned terminal cleanup evidence is missing; preserve its recovery directory.'
+        }
+        # Inspect transport evidence even when an earlier assertion prevented
+        # the local terminal variable from being assigned.
+        $actualTerminalJson=$session.Transport.State.Terminal
+        if ($actualTerminalJson -isnot [string] -or $actualTerminalJson.Length -gt 65536) {
+            throw 'Owned terminal cleanup evidence is invalid; preserve its recovery directory.'
+        }
+        $actualTerminal=Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject $actualTerminalJson -AsHashtable -Depth 12 -NoEnumerate
+        if ($actualTerminal -isnot [Collections.IDictionary] -or
+            -not $actualTerminal.Contains('recordType') -or
+            $actualTerminal.recordType -isnot [string] -or
+            $actualTerminal.recordType -cne 'win-pcinfo.terminal' -or
+            -not $actualTerminal.Contains('outcome') -or
+            $actualTerminal.outcome -isnot [string] -or
+            $actualTerminal.outcome -cnotin @('Completed','CompletedWithGaps','NotStarted','Cancelled','TimedOut','IntegrityFailed','CleanupIncomplete') -or
+            -not $actualTerminal.Contains('cleanup') -or
+            $actualTerminal.cleanup -isnot [Collections.IDictionary] -or
+            -not $actualTerminal.cleanup.Contains('verified') -or
+            $actualTerminal.cleanup.verified -isnot [bool]) {
+            throw 'Owned terminal cleanup evidence is invalid; preserve its recovery directory.'
+        }
+        if (-not $actualTerminal.cleanup.verified) {
+            $knownSyntheticRelease=$FailureKind -eq 'Cleanup' -and
+                $actualTerminal.Contains('recordType') -and $actualTerminal.recordType -ceq 'win-pcinfo.terminal' -and
+                $actualTerminal.Contains('outcome') -and $actualTerminal.outcome -ceq 'CleanupIncomplete'
+            foreach ($proof in @('SyntheticLockReleased','SyntheticPrivilegeAbsent','SyntheticSystemAbsent','SyntheticStandardAbsent')) {
+                $knownSyntheticRelease=$knownSyntheticRelease -and
+                    $session.Transport.State.ContainsKey($proof) -and
+                    $session.Transport.State[$proof] -is [bool] -and $session.Transport.State[$proof]
+            }
+            if (-not $knownSyntheticRelease) {
+                throw 'Owned terminal cleanup remains unverified; preserve its recovery directory.'
+            }
+        }
+    }
     $resolved = [IO.Path]::GetFullPath($testRoot)
     $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
     if (-not $resolved.StartsWith($ownedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected synthetic cleanup target.' }
