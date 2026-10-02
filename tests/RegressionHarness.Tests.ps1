@@ -51,7 +51,12 @@ Complete-QualificationHarness -Cleanup @({throw 'Synthetic owned worker remains 
     }, $true)
     . ([scriptblock]::Create($sampler.Extent.Text))
     $testRoot = $root
-    $quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=42L; workspaceSamplingLosses=0L }
+    $qualityWatch = [Diagnostics.Stopwatch]::StartNew()
+    $RequireQualityBudgets = $false
+    $quality = [ordered]@{
+        sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=42L; workspaceSamplingLosses=0L
+        sampleCount=0L; maximumSampleGapMilliseconds=0L; firstSampleMilliseconds=-1L; lastSampleMilliseconds=0L
+    }
     function Get-ChildItem { param($LiteralPath, [switch]$File, [switch]$Recurse) throw $samplerFault }
     foreach ($samplerFault in @(
         [IO.DirectoryNotFoundException]::new('Synthetic owned directory removal'),

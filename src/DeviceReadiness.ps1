@@ -969,7 +969,7 @@ function Test-AssessmentReportBytesEqual {
 
     # Comparing admitted buffers in the runtime avoids allocating boxed
     # PowerShell values for every byte of a maximum-size report.
-    [System.Linq.Enumerable]::SequenceEqual[byte]($Left, $Right)
+    [System.Linq.Enumerable]::SequenceEqual($Left, $Right)
 }
 
 function Test-AssessmentReportContract {
