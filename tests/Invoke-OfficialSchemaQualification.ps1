@@ -21,9 +21,9 @@ $clock = [Diagnostics.Stopwatch]::StartNew()
 # requires an applicability review, not an automatic claim from old counts.
 $schemaPins = [ordered]@{
     'assessment-record.schema.json' = 'c550ad7fcb86bb6d476f4da18c431b1c432f833ab5bbe34bfb5d4f1e5d327351'
-    'assessment-contract-set.schema.json' = '84cbb34cf7db8f56f39ec5bb3db57f9cd7d57867f1160dfce654375645e392ff'
+    'assessment-contract-set.schema.json' = 'fd223a75c163e89aaf59925ba4b083e575aa0367b39d3271f2f1ebc80fa7d2ec'
     'protected-package-envelope.schema.json' = '24976ea517f92c7338c77c9c30ba5ede082ea07c5dfffc89cb6f00d377c5cc85'
-    'assessment-package-manifest.schema.json' = 'febfeb65bbc5909e00abecc4601cd98d9c262aecef8c6d496fe42b9af6ff72ec'
+    'assessment-package-manifest.schema.json' = '03ce38534dff04fb2d4dac449d651c8d75b2518b58a588bbbdc8f3b59ff28e9a'
 }
 foreach ($name in $schemaPins.Keys) {
     $schemaText = [IO.File]::ReadAllText((Join-Path (Split-Path -Parent $PSScriptRoot) "schemas/$name")).Replace("`r`n", "`n").Replace("`r", "`n")

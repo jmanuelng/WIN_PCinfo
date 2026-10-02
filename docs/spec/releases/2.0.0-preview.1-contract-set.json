@@ -1,6 +1,6 @@
 {
   "kind": "win-pcinfo.assessment-contract-set",
-  "contractVersion": "1.13.0",
+  "contractVersion": "1.14.0",
   "release": "2.0.0-preview.1",
   "schemaDraft": "2020-12",
   "requiredFeatures": [

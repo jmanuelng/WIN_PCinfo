@@ -18,14 +18,14 @@ if (-not (Test-Json -Json $contractSetJson -SchemaFile $contractSetSchemaPath)) 
 }
 $contractSet = $contractSetJson | ConvertFrom-Json -Depth 30
 Assert-Equal '2020-12' $contractSet.schemaDraft 'the Contract Set identifies the exact schema draft'
-Assert-Equal '1.13.0' $contractSet.contractVersion `
-    'the additive typed network interface context contract has an explicit version'
+Assert-Equal '1.14.0' $contractSet.contractVersion `
+    'the additive printer-driver environment and model contract has an explicit version'
 Assert-Equal 2097152 $contractSet.limits.maximumDocumentUtf8Bytes `
     'the combined profile has a finite release-owned 2 MiB document ceiling'
 Assert-Equal 6144 $contractSet.limits.maximumArrayItems `
     'the bounded per-scope software inventory fits the deliberate finite array ceiling'
-Assert-Equal 262 @($contractSet.fieldDefinitions).Count `
-    'historical fields remain while bounded update, remote-management, SMB, legacy-auth, platform-protection, and app-control fields are admitted'
+Assert-Equal 264 @($contractSet.fieldDefinitions).Count `
+    'historical fields remain while both bounded printer-driver environment and model fields are admitted'
 Assert-Equal 104 @($contractSet.scopeDefinitions).Count `
     'historical through update, remote-management, SMB, legacy-auth, BitLocker, VBS, WDAC, and AppLocker scopes remain distinct'
 $certificateFields = @($contractSet.fieldDefinitions | Where-Object fieldId -like 'field:certificate.*')
@@ -199,8 +199,12 @@ Assert-Equal 'field:policy.applocker.csp.rule-collection|field:policy.applocker.
 foreach($scope in @(
     $bitLockerScope,$bitLockerProtectorScope,$vbsScope,$wdacScope,$appLockerGpScope,$appLockerCspScope
 )){
-    Assert-Equal 'collector:windows.effective-policy' $scope.collectorIds[0] `
-        'new platform-protection and application-control scopes compose through the existing effective-policy collector'
+    $expectedCollector=if ($scope.scopeId -eq 'scope:policy.applocker.csp-channel') {
+        'collector:windows.mdm-bridge.device-manageability'
+    } else { 'collector:windows.effective-policy' }
+    Assert-Equal 1 @($scope.collectorIds).Count 'each platform or application-control scope has one declared channel-specific collector'
+    Assert-Equal $expectedCollector $scope.collectorIds[0] `
+        'AppLocker CSP stays in the SYSTEM MDM Bridge channel while the other protection scopes retain effective-policy collection'
     if('profile:device-firmware-identity-administrator-and-policy-readiness' -notin @($scope.profileIds)){
         throw 'Every new policy scope must belong to the additive combined evidence profile.'
     }
@@ -249,6 +253,13 @@ $positiveJson = [System.IO.File]::ReadAllText($positiveFixturePath)
 Assert-Equal $true (Test-Json -Json $positiveJson -SchemaFile $assessmentRecordSchemaPath) `
     'the public positive fixture validates using the actual release schema'
 
+foreach ($count in @(263,265)) {
+    $changed=$contractSetJson | ConvertFrom-Json -Depth 30
+    $changed.fieldDefinitions=if ($count -eq 263) { @($changed.fieldDefinitions | Select-Object -First 263) } else { @($changed.fieldDefinitions)+@($changed.fieldDefinitions[0]) }
+    Assert-Equal $false (Test-Json -Json ($changed | ConvertTo-Json -Depth 30) -SchemaFile $contractSetSchemaPath -ErrorAction SilentlyContinue) `
+        'the release schema rejects loss or widening of its exact admitted field inventory'
+}
+
 # This small official-dialect probe uses `prefixItems`, whose array semantics
 # belong to Draft 2020-12. It proves the exact trusted Test-Json path used by
 # this repository applies the declared dialect; it is intentionally not a claim
@@ -259,4 +270,4 @@ Assert-Equal $true (Test-Json -Json '[1]' -Schema $draft202012Probe) `
 Assert-Equal $false (Test-Json -Json '[2]' -Schema $draft202012Probe -ErrorAction SilentlyContinue) `
     'Draft 2020-12 prefixItems rejects a conflicting first item'
 
-Write-Output 'PASS: Contract Set 1.13 binds historical through platform-protection, AppLocker, and Microsoft Connectivity scopes to Draft 2020-12 contracts.'
+Write-Output 'PASS: Contract Set 1.14 retains bounded printer-driver fields and binds all release scopes to Draft 2020-12 contracts.'

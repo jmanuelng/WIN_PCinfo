@@ -8,6 +8,31 @@ $candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+
+function Assert-DeviceReadinessPublicOutput {
+    param([Parameter(Mandatory)] [string] $StandardOutput)
+
+    # Only these two release-owned public guidance fields may contain this
+    # reviewed caution. The same words elsewhere still trigger the leak check.
+    $records = @($StandardOutput -split "`r?`n" | Where-Object { $_ } |
+        ForEach-Object { $_ | ConvertFrom-Json -Depth 30 })
+    foreach ($summary in @($records | Where-Object recordType -eq 'win-pcinfo.preparation-summary')) {
+        foreach ($recommendation in @($summary.plan.softwareInventory.recommendations)) {
+            if ($recommendation.definitionId -in @(
+                    'recommendation:software.machine-migration-review/1.0.0',
+                    'recommendation:software.assessment-user-migration-review/1.0.0'
+                ) -and $recommendation.caution -ceq
+                'An inventory registration does not establish compatibility, entitlement or deployment success.') {
+                $recommendation.caution = ''
+            }
+        }
+    }
+    $remainingOutput = $records | ConvertTo-Json -Compress -Depth 30
+    if ($remainingOutput -match '(?i)Fabrikam|Model-4[89]|Synthetic Processor|product.?key|entitlement|purchase') {
+        throw 'Restricted synthetic device-identifying values entered public progress or validation output.'
+    }
+}
+
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
 $validationRoot = Join-Path (Split-Path -Parent $candidatePath) '.device-readiness-validation'
@@ -76,9 +101,39 @@ Assert-Equal $false $completion[0].resultSharingGuidance.privateTransfer.allowed
     'a zero-recipient package does not claim portable recipient access'
 Assert-Equal $false ([System.IO.Directory]::Exists($validationRoot)) `
     'the generated application leaves no Device Readiness validation root'
-if ($result.StandardOutput -match '(?i)Fabrikam|Model-4[89]|Synthetic Processor|product.?key|entitlement|purchase') {
-    throw 'Restricted synthetic device-identifying values entered public progress or validation output.'
+Assert-DeviceReadinessPublicOutput -StandardOutput $result.StandardOutput
+foreach ($restrictedValue in @(
+    'Fabrikam', 'Model-48', 'Synthetic Processor',
+    'product key: AAAAA-BBBBB-CCCCC-DDDDD-EEEEE',
+    'entitlement: synthetic-license-owner', 'purchase: synthetic-order',
+    'An inventory registration does not establish compatibility, entitlement or deployment success.'
+)) {
+    $leakedRecords = @($result.Records | ConvertTo-Json -Depth 30 | ConvertFrom-Json -Depth 30)
+    $leakedValidation = @($leakedRecords | Where-Object {
+        $_.recordType -eq 'win-pcinfo.device-readiness-validation'
+    })[0]
+    $leakedValidation | Add-Member -NotePropertyName restrictedEvidence -NotePropertyValue $restrictedValue
+    $leakedOutput = ($leakedRecords | ForEach-Object { $_ | ConvertTo-Json -Compress -Depth 30 }) -join "`n"
+    $leakRejected = $false
+    try { Assert-DeviceReadinessPublicOutput -StandardOutput $leakedOutput }
+    catch {
+        if ($_.Exception.Message -ne
+            'Restricted synthetic device-identifying values entered public progress or validation output.') { throw }
+        $leakRejected = $true
+    }
+    Assert-Equal $true $leakRejected 'public guidance never admits restricted values in another field'
 }
+$alteredGuidance = $result.StandardOutput.Replace(
+    'An inventory registration does not establish compatibility, entitlement or deployment success.',
+    'Entitlement belongs to synthetic-license-owner.')
+$alteredGuidanceRejected = $false
+try { Assert-DeviceReadinessPublicOutput -StandardOutput $alteredGuidance }
+catch {
+    if ($_.Exception.Message -ne
+        'Restricted synthetic device-identifying values entered public progress or validation output.') { throw }
+    $alteredGuidanceRejected = $true
+}
+Assert-Equal $true $alteredGuidanceRejected 'only the exact reviewed public caution is allowlisted'
 if ($result.StandardError) { throw "Complete wrote stderr: $($result.StandardError)" }
 
 Write-Output 'PASS: the generated application completes the Device and Windows readiness slice.'

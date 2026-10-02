@@ -2326,12 +2326,12 @@ function Get-DeviceReadinessSliceSelection {
 
 function Get-CombinedAssessmentContractSetVersion {
     param($ConnectivityCollector,$CertificateCollector,$SoftwareCollector,$NetworkCollector,$ResourceCollector,$EffectivePolicyCollector,$AdministratorCollector,$IdentityCollector)
-    if($null -ne $ConnectivityCollector){'1.13.0'}
-    elseif($null -ne $CertificateCollector){'1.13.0'}
-    elseif($null -ne $SoftwareCollector){'1.13.0'}
-    elseif($null -ne $NetworkCollector){'1.13.0'}
-    elseif($null -ne $ResourceCollector){'1.13.0'}
-    elseif($null -ne $EffectivePolicyCollector){'1.13.0'}
+    if($null -ne $ConnectivityCollector){'1.14.0'}
+    elseif($null -ne $CertificateCollector){'1.14.0'}
+    elseif($null -ne $SoftwareCollector){'1.14.0'}
+    elseif($null -ne $NetworkCollector){'1.14.0'}
+    elseif($null -ne $ResourceCollector){'1.14.0'}
+    elseif($null -ne $EffectivePolicyCollector){'1.14.0'}
     elseif($null -ne $AdministratorCollector){'1.3.0'}
     elseif($null -ne $IdentityCollector){'1.2.0'}else{'1.1.0'}
 }
