@@ -84,6 +84,7 @@ else {
 }
 $results = [Collections.Generic.List[object]]::new()
 $failedCase=$null
+$qualificationCaseError=$null
 try {
     foreach ($case in $cases) {
         if ($CaseFilter -and $case.id -notlike $CaseFilter) { continue }
@@ -91,9 +92,7 @@ try {
         $resultPath = Join-Path ([IO.Path]::GetFullPath($ResultDirectory)) "$($case.id).json"
         $watch = [Diagnostics.Stopwatch]::StartNew()
         $arguments = @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'), '-QualificationPath', $resultPath) + $case.arguments
-        & $hostPath @arguments
-        Assert-QualificationCleanupReady
-        if ($LASTEXITCODE -ne 0) { throw "Assessment qualification failed: $($case.id)" }
+        Invoke-QualificationTestProcess -HostPath $hostPath -Arguments $arguments
         $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
         $results.Add([ordered]@{ id=$case.id; elapsedMilliseconds=$watch.ElapsedMilliseconds; evidence=$result })
         Write-Output "PASS: $Mode/$($case.id) in $($watch.ElapsedMilliseconds) ms."
@@ -101,7 +100,10 @@ try {
     }
     if ($results.Count -eq 0) { throw 'Qualification selection matched no cases.' }
 }
+catch { $qualificationCaseError=$_ }
 finally {
+    Complete-QualificationHarness -BodyError $qualificationCaseError -RetainEvidence {
     $summaryPath = Join-Path ([IO.Path]::GetFullPath($ResultDirectory)) "$Mode-summary.json"
     [IO.File]::WriteAllText($summaryPath, ([ordered]@{ provenance=$provenance; failedCase=$failedCase; results=$results.ToArray() } | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
+    }
 }

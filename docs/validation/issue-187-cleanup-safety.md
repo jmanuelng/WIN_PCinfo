@@ -38,6 +38,33 @@ than masking them. Cleanup evidence is updated only after cleanup succeeds.
 WPF exceptions recover the exact session captured by ViewReady before cleanup.
 Qualification provenance includes the new helper identity.
 
+## Independent review and corrections
+
+### Standards
+
+The first frozen review (`fb2e570`) found one P1: a failed stop-marker write
+could let the suite continue. The runner now preserves unsafe state from caught
+exceptions independently of file persistence, and recognizes a marker-directory
+collision as blocked. A native child emits a fixed identifier-free unsafe-cleanup
+signal; its caller propagates that signal as exception data before handling an exit
+code. Wrappers preserve unsafe child workspaces even without a readable marker.
+The case controller also retains an original failure alongside summary-write
+failure. The marker remains a durable safeguard where persistence is available.
+
+### Spec
+
+The first frozen review found the same P1 and one P2: the helper scope hid the
+caller's HTML variable, recording zero bytes. The harness now captures that exact
+variable in its original scope and measures it within protected retention.
+
+Both review findings have independent RED/GREEN regressions: marker write denial
+initially allowed the second file to execute; native cleanup state initially lost
+its unsafe flag; and report-size evidence initially recorded 0 instead of the
+known 16-byte fixture. Corrected focused checks pass, including explicit recovery
+retention and native-process propagation without any marker file or directory.
+Final independent re-review is pending. Findings in the initial review: Standards
+1 (worst P1), Spec 2 (worst P1); neither axis is combined with the other.
+
 ## Qualification boundary
 
 These are synthetic harness checks on the build host. Independent Standards and

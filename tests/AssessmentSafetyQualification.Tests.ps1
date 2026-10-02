@@ -24,6 +24,7 @@ finally {
         }
     }
     } -Cleanup @({
+    if ($null -ne $bodyError -and (Test-QualificationCleanupUnverified -Exception $bodyError.Exception)) { throw 'Owned child cleanup remains unverified; preserve its qualification workspace.' }
     Assert-QualificationCleanupReady
     $resolved = [IO.Path]::GetFullPath($root)
     if ([IO.Path]::GetDirectoryName($resolved) -ne [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))) { throw 'Assessment safety cleanup escaped its parent.' }

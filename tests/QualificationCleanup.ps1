@@ -5,16 +5,46 @@ function Get-QualificationCleanupBlockerPath {
 }
 
 function Assert-QualificationCleanupReady {
-    if ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) {
+    $blocker=Get-QualificationCleanupBlockerPath
+    if ([IO.File]::Exists($blocker) -or [IO.Directory]::Exists($blocker)) {
         throw 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: verify the preserved owned state before starting another test.'
     }
+}
+
+function Test-QualificationCleanupUnverified {
+    param([AllowNull()] [Exception] $Exception)
+    if ($null -eq $Exception) { return $false }
+    if ($Exception.Data['OwnedCleanupUnverified'] -eq $true) { return $true }
+    if ($Exception -is [AggregateException]) {
+        foreach ($inner in $Exception.InnerExceptions) {
+            if (Test-QualificationCleanupUnverified -Exception $inner) { return $true }
+        }
+    }
+    if ($null -ne $Exception.InnerException) {
+        return (Test-QualificationCleanupUnverified -Exception $Exception.InnerException)
+    }
+    return $false
+}
+
+function Invoke-QualificationTestProcess {
+    param([Parameter(Mandatory)] [string] $HostPath, [Parameter(Mandatory)] [string[]] $Arguments)
+    $caseOutput=@(& $HostPath @Arguments 2>&1)
+    $caseExitCode=$LASTEXITCODE
+    foreach ($line in $caseOutput) { Write-Output $line }
+    if (@($caseOutput | Where-Object { $_.ToString() -eq 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED' }).Count) {
+        $exception=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: native child cleanup remains unverified.')
+        $exception.Data['OwnedCleanupUnverified']=$true
+        throw $exception
+    }
+    if ($caseExitCode -ne 0) { throw "Assessment qualification child failed with exit code $caseExitCode." }
+    Assert-QualificationCleanupReady
 }
 
 function Complete-QualificationHarness {
     param(
         [AllowNull()] [Management.Automation.ErrorRecord] $BodyError,
         [scriptblock] $RetainEvidence,
-        [Parameter(Mandatory)] [scriptblock[]] $Cleanup,
+        [scriptblock[]] $Cleanup = @(),
         [scriptblock] $RetainCleanupEvidence
     )
     $failures=[Collections.Generic.List[Exception]]::new()
@@ -23,7 +53,7 @@ function Complete-QualificationHarness {
         try { . $RetainEvidence }
         catch { $failures.Add([InvalidOperationException]::new('Qualification evidence retention failed.', $_.Exception)) }
     }
-    $cleanupFailed=$false
+    $cleanupFailed=($null -ne $BodyError -and (Test-QualificationCleanupUnverified -Exception $BodyError.Exception))
     foreach ($action in $Cleanup) {
         try { & $action }
         catch {
@@ -32,6 +62,9 @@ function Complete-QualificationHarness {
         }
     }
     if ($cleanupFailed) {
+        # A native parent can observe this stable signal even if persisting the
+        # blocker fails. It must propagate the unsafe state with the exception.
+        Write-Output 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'
         # Keep a durable, identifier-free inter-process stop signal. The owned
         # workspace is preserved by its cleanup action when a worker survives.
         try {

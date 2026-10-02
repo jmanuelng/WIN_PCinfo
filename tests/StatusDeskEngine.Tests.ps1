@@ -792,6 +792,7 @@ catch {
     }
 }
 finally {
+    $qualificationHtml = Get-Variable -Name html -Scope Local -ErrorAction SilentlyContinue
     Complete-QualificationHarness -BodyError $qualificationBodyError -RetainEvidence {
     if ($QualificationPath) {
         Measure-QualificationWorkload
@@ -802,7 +803,7 @@ finally {
         if ($null -ne $session -and $session.Transport.State.ContainsKey('PackagePath') -and [IO.File]::Exists($session.Transport.State.PackagePath)) {
             $quality.packageBytes = (Get-Item -LiteralPath $session.Transport.State.PackagePath).Length
         }
-        if (Get-Variable -Name html -Scope Local -ErrorAction SilentlyContinue) { $quality.htmlBytes = [Text.Encoding]::UTF8.GetByteCount($html) }
+        if ($null -ne $qualificationHtml) { $quality.htmlBytes = [Text.Encoding]::UTF8.GetByteCount([string]$qualificationHtml.Value) }
         if ($null -eq $projection) { $projection = [ordered]@{ candidateSha256=(Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant(); coverage=@() } }
         $projection['arguments'] = $qualificationArguments
         $projection['bodyAssertions'] = if ($qualificationFailed) { 'Fail' } else { 'Pass' }

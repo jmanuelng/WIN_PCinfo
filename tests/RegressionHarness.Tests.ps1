@@ -34,6 +34,16 @@ throw 'Synthetic unverified owned cleanup'
     Assert-Equal 1 $blockedSummary.Count 'unexecuted files are explicitly blocked rather than passed'
     [IO.File]::Delete((Join-Path $root '.test-output/qualification-cleanup-blocked.json'))
 
+    [IO.File]::WriteAllText((Join-Path $testDirectory 'A.Tests.ps1'), @'
+$blocker=Get-QualificationCleanupBlockerPath
+$null=[IO.Directory]::CreateDirectory($blocker)
+Complete-QualificationHarness -Cleanup @({throw 'Synthetic owned worker remains active'})
+'@)
+    $output = & (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -File (Join-Path $testDirectory 'Run-Tests.ps1') 2>&1
+    Assert-Equal $true ($LASTEXITCODE -ne 0) 'a stop-marker retention failure fails the suite'
+    Assert-Equal $false (($output -join "`n").Contains('SYNTHETIC_SECOND_FILE_EXECUTED')) 'stop-marker write denial cannot permit subsequent files'
+    [IO.Directory]::Delete((Join-Path $root '.test-output/qualification-cleanup-blocked.json'))
+
     $samplerPath = Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'
     $samplerAst = [Management.Automation.Language.Parser]::ParseFile($samplerPath, [ref]$null, [ref]$null)
     $sampler = $samplerAst.Find({ param($node)

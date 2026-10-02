@@ -38,15 +38,18 @@ try {
         Write-Output "RUN: $($testFile.Name)"
         $fileWatch = [Diagnostics.Stopwatch]::StartNew()
         $fileResult = 'Pass'
+        $cleanupBlocked = $false
         try { & $testFile.FullName }
         catch {
             $fileResult = 'Fail'
+            $cleanupBlocked = Test-QualificationCleanupUnverified -Exception $_.Exception
             Write-Output "FAIL: $($testFile.Name): $($_.Exception.Message)"
         }
         $suiteResults.Add([ordered]@{ file=$testFile.Name; result=$fileResult;
             elapsedMilliseconds=$fileWatch.ElapsedMilliseconds;
             sha256=(Get-FileHash -LiteralPath $testFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant() })
-        $cleanupBlocked=[IO.File]::Exists((Get-QualificationCleanupBlockerPath))
+        $blocker=Get-QualificationCleanupBlockerPath
+        $cleanupBlocked=$cleanupBlocked -or [IO.File]::Exists($blocker) -or [IO.Directory]::Exists($blocker)
         if ($cleanupBlocked) {
             foreach ($unexecuted in $testFiles | Select-Object -Skip $suiteResults.Count) {
                 $suiteResults.Add([ordered]@{file=$unexecuted.Name; result='Blocked'; elapsedMilliseconds=0;

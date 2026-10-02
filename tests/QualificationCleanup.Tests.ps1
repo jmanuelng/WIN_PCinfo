@@ -103,7 +103,7 @@ Test-StatusDeskRetentionFailure -Fault Sampling
 Test-StatusDeskRetentionFailure -Fault Serialization
 Test-StatusDeskRetentionFailure -Fault Worker
 function Test-WrapperRetentionFailure {
-    param([string] $File)
+    param([string] $File, [switch] $UnsafeChild)
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $root=Join-Path $repositoryRoot ('.test-output/wrapper-negative-'+[guid]::NewGuid().ToString('N'))
     $resultRoot=$root; $null=[IO.Directory]::CreateDirectory($root)
@@ -115,9 +115,10 @@ function Test-WrapperRetentionFailure {
     $env:WINPCINFO_TEST_EVIDENCE=$blockedDestination
     $bodyError=$null; $errorRecord=$null
     try {
-        try { . (Get-HarnessFinalization -File $File -Body "throw 'Synthetic wrapper body failure'") }
+        $body=if ($UnsafeChild) { '$failure=[InvalidOperationException]::new("Synthetic wrapper body failure"); $failure.Data["OwnedCleanupUnverified"]=$true; throw $failure' } else { "throw 'Synthetic wrapper body failure'" }
+        try { . (Get-HarnessFinalization -File $File -Body $body) }
         catch { $errorRecord=$_ }
-        Assert-Equal $false ([IO.Directory]::Exists($root)) "$File retention failure still removes the owned workspace"
+        Assert-Equal ([bool]$UnsafeChild) ([IO.Directory]::Exists($root)) "$File preserves unsafe child state and otherwise removes its owned workspace"
         Assert-Equal $true ($null -ne $errorRecord) "$File cannot pass after retention failure"
         Assert-Equal $true ($errorRecord.Exception.ToString().Contains('Synthetic wrapper body failure')) "$File preserves its body failure"
         Assert-Equal $true ($errorRecord.Exception.ToString().Contains('evidence retention failed')) "$File preserves its retention failure"
@@ -125,8 +126,65 @@ function Test-WrapperRetentionFailure {
     finally {
         $env:WINPCINFO_TEST_EVIDENCE=$previousEvidence
         if ([IO.Directory]::Exists($root)) { [IO.Directory]::Delete($root,$true) }
+        if ($UnsafeChild) {
+            if ([IO.Directory]::Exists($root)) { throw 'Controlled wrapper cleanup remains unverified.' }
+            [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+        }
     }
 }
 Test-WrapperRetentionFailure -File 'AssessmentSafetyQualification.Tests.ps1'
 Test-WrapperRetentionFailure -File 'OfficialSchemaQualification.Tests.ps1'
+Test-WrapperRetentionFailure -File 'AssessmentSafetyQualification.Tests.ps1' -UnsafeChild
+Test-WrapperRetentionFailure -File 'OfficialSchemaQualification.Tests.ps1' -UnsafeChild
+
+function Test-StatusDeskCleanupProjection {
+    param([switch] $Recovery)
+    $repositoryRoot=Split-Path -Parent $PSScriptRoot
+    $testRoot=Join-Path $repositoryRoot ('.test-output/projection-'+[guid]::NewGuid().ToString('N'))
+    $null=[IO.Directory]::CreateDirectory($testRoot)
+    $QualificationPath=$testRoot+'.json'
+    $qualificationFailed=$false; $qualificationBodyError=$null
+    $projection=[ordered]@{coverage=@()}; $qualificationArguments=[ordered]@{}
+    $qualityWatch=[Diagnostics.Stopwatch]::StartNew(); $quality=[ordered]@{htmlBytes=0L}
+    $Wpf=$false; $session=$null; $runLock=$null; $runLockOwned=$false; $RecoveryDestination=''
+    if ($Recovery) { $RecoveryDestination=$testRoot }
+    function Measure-QualificationWorkload {}
+    try {
+        . (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body '$html="Synthetic report"')
+        $evidence=Get-Content -LiteralPath $QualificationPath -Raw | ConvertFrom-Json
+        Assert-Equal 16 $evidence.quality.htmlBytes 'retained qualification records the exact nonzero report size'
+        Assert-Equal $(if ($Recovery) {'RetainedForRecoveryTest'} else {'VerifiedAbsent'}) $evidence.testCleanup 'cleanup evidence preserves its exact recovery or absence disposition'
+        Assert-Equal ([bool]$Recovery) ([IO.Directory]::Exists($testRoot)) 'only the explicit recovery case retains its owned workspace'
+    }
+    finally {
+        if ([IO.Directory]::Exists($testRoot)) { [IO.Directory]::Delete($testRoot,$true) }
+        [IO.File]::Delete($QualificationPath)
+    }
+}
+Test-StatusDeskCleanupProjection
+Test-StatusDeskCleanupProjection -Recovery
+
+function Test-NativeCleanupFailure {
+    $nativeRoot=Join-Path (Split-Path $PSScriptRoot) ('.test-output/native-cleanup-'+[guid]::NewGuid().ToString('N'))
+    $nativeTests=Join-Path $nativeRoot 'tests'; $null=[IO.Directory]::CreateDirectory($nativeTests)
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'QualificationCleanup.ps1') -Destination $nativeTests
+    $childPath=Join-Path $nativeTests 'child.ps1'
+    [IO.File]::WriteAllText($childPath, @'
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
+# A file in place of the parent makes marker retention fail without leaving a
+# marker file or marker directory. No application or worker process is started.
+[IO.File]::WriteAllText((Split-Path (Get-QualificationCleanupBlockerPath)),'synthetic parent collision')
+Complete-QualificationHarness -Cleanup @({throw 'Synthetic native cleanup failure'})
+'@)
+    try {
+        $failure=$null
+        try { Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-File',$childPath) | Out-Null }
+        catch { $failure=$_ }
+        Assert-Equal $true ($null -ne $failure) 'a native cleanup failure cannot become a passing case'
+        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'native cleanup state propagates even when no stop marker can be retained'
+    }
+    finally { if ([IO.Directory]::Exists($nativeRoot)) { [IO.Directory]::Delete($nativeRoot,$true) } }
+}
+Test-NativeCleanupFailure
 Write-Output 'PASS: evidence retention failure cannot bypass owned qualification cleanup.'
