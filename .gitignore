@@ -13,6 +13,9 @@
 .env.*
 *.log
 
+# Maintainer-approved local staging and restricted evidence. Never force-add.
+/.private/
+
 # Reproducible v2 build and test output. These contain no source of truth and
 # are recreated by build/Build.ps1 and tests/Run-Tests.ps1.
 /artifacts/
