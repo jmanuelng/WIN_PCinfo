@@ -9,11 +9,7 @@
   },
   "scripts": {
     "build": "pwsh -NoLogo -NoProfile -File ./build/Build.ps1",
-    "test": "pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1",
-    "sandcastle": "tsx .sandcastle/main.mts --max-parallel 2",
-    "sandcastle:canary": "tsx .sandcastle/main.mts --max-iterations 1 --max-parallel 1",
-    "sandcastle:preflight": "tsx .sandcastle/preflight.mts",
-    "sandcastle:test": "node --import tsx --test .sandcastle/workflow.test.mts"
+    "test": "pwsh -NoLogo -NoProfile -File ./tests/Run-Tests.ps1"
   },
   "repository": {
     "type": "git",
@@ -26,9 +22,5 @@
   "bugs": {
     "url": "https://github.com/jmanuelng/WIN_PCinfo/issues"
   },
-  "homepage": "https://github.com/jmanuelng/WIN_PCinfo#readme",
-  "devDependencies": {
-    "@ai-hero/sandcastle": "^0.12.0",
-    "tsx": "^4.23.12"
-  }
+  "homepage": "https://github.com/jmanuelng/WIN_PCinfo#readme"
 }
