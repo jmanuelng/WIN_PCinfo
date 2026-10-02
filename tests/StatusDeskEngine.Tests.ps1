@@ -515,7 +515,7 @@ $qualificationBodyError = $null
 $assessmentQuality = $null
 try {
 if ($RequireQualityBudgets) {
-    if ($RecoveryDestination -or $InterruptHandoffPath -or $QualificationPlanFault -eq 'PrivilegePostStartLoss') {
+    if ($RecoveryDestination -or $InterruptHandoffPath -or $QualificationPlanFault -in @('PrivilegePostStartLoss','PrivilegePreStartTimeout','PrivilegePreStartCancel')) {
         throw 'This witness/recovery configuration is outside the closed disk write inventory; quality remains NotQualified.'
     }
     $diskInstrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $testRoot -CandidatePath $candidate -HarnessPath $PSCommandPath
