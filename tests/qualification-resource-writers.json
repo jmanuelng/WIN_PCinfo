@@ -1,0 +1,94 @@
+{
+  "kind": "ControlledAssessmentClosedDiskWriterInventory",
+  "version": "1.1.0",
+  "candidateSha256": "24ab45dda69ee2a7cfd45985b27e39031e7f8c6f94cab5e0b2a54a830b0a9512",
+  "harnessSha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9",
+  "scope": "OrdinaryControlledAssessmentAndWpfReportViewingOnly",
+  "writers": [
+    "Write-RunRecoveryJournal",
+    "Write-RegisteredEvidenceArtifact",
+    "Write-ProtectedPackageEnvelope",
+    "Write-RecipientProfileDocument",
+    "Export-RestrictedAssessmentReport"
+  ],
+  "emptyCreators": [
+    "New-RegisteredEvidenceArtifact",
+    "New-EvidenceWorkspaceOwnedWriteStream"
+  ],
+  "excluded": "Maintainer signing, publication, qualification, Azure and explicit product validation-fixture writers are outside this ordinary assessment path. Interruption witness and post-start-loss witness configurations are inadmissible.",
+  "inputs": [
+    {
+      "path": "tests/AssessmentQualificationSupport.ps1",
+      "sha256": "bbae974a87ccb584aae134733c98046ce7593d0c35382082ab7276bb17a4d05d"
+    },
+    {
+      "path": "tests/SoftwareReportAssertions.ps1",
+      "sha256": "b226279db7cc6b85acb15b971bc0b8443ede77f902398c782bd1e14f2180a34e"
+    },
+    {
+      "path": "tests/TestHarness.ps1",
+      "sha256": "9177eeff21505b06d70ecac0aa667b637b10bc9c0eaf3158353e2806be835d2c"
+    },
+    {
+      "path": "tests/AdditionalScopeSourceAdapters.ps1",
+      "sha256": "8a59bbe1f1bfc5a42ca49515796bb68caf8b87eb31da183b47c8a70193e7fd7e"
+    },
+    {
+      "path": "tests/CertificateSourceAdapters.ps1",
+      "sha256": "549cbd2b13bd873d5a1f95cd2daab473cb9cc3f1ce40f58004b6ca1e2efcf2f4"
+    },
+    {
+      "path": "tests/ConnectivitySourceAdapters.ps1",
+      "sha256": "77f69ebab1d5c87578490d935fcc8e87deea43102c8fa0d2c268dc5bd9d4aad5"
+    },
+    {
+      "path": "tests/IdentitySourceAdapters.ps1",
+      "sha256": "c55f36ca005ef4a9ddd3b6d6dd878a3b61c218d589221bee11200c4297db0f03"
+    },
+    {
+      "path": "tests/NetworkSourceAdapters.ps1",
+      "sha256": "642b21e4bee4f81318558db2f60aa305db6cfd46dcbc3c1e50b4cf734cd53bde"
+    },
+    {
+      "path": "tests/PlatformSourceAdapters.ps1",
+      "sha256": "9ce27ad690e86fad643ce5e090360789fa6baf47f54604e8e4774ed6f3a2e88f"
+    },
+    {
+      "path": "tests/PolicySourceAdapters.ps1",
+      "sha256": "457cfdbdac562c444a9354088693d6fd7f41cf1a78f8a3b253d99defa14707d6"
+    },
+    {
+      "path": "tests/ReadinessSourceAdapters.ps1",
+      "sha256": "72163046cab3d4db47083fa055e9a914996a5d62a982740f09eb148829eb0c51"
+    },
+    {
+      "path": "tests/RemoteSourceAdapters.ps1",
+      "sha256": "91223c24fdf31aa54609cce0d3fea5cdbb6ccac39ac0b87b78442c0368d00c97"
+    },
+    {
+      "path": "tests/ResourceSourceAdapters.ps1",
+      "sha256": "d28081e26e3bb69e27703208528ac521b0f7d987e7652fc78ed1a6228601a66e"
+    },
+    {
+      "path": "tests/ResourceSourceBoundary.ps1",
+      "sha256": "0c66caf6149586511f4233b4b4529292afa3afb69dfe80fb5d016b52fd86f9d9"
+    },
+    {
+      "path": "tests/SecuritySourceAdapters.ps1",
+      "sha256": "362bac97a219119b9e5f7e05daf8762ac5556d58dfca90e2f5963ebadc188b20"
+    },
+    {
+      "path": "tests/SoftwareSourceAdapters.ps1",
+      "sha256": "e0a21ff890517c44f0abfd7162d422675a40c69a1730ef2b6e9059d2aefe6985"
+    },
+    {
+      "path": "tests/SoftwareSourceBoundary.ps1",
+      "sha256": "084e4f27a1abeaa3540a1e3ebb5b1dfd0ac4fcdafc0ae289d9beb65822a69676"
+    },
+    {
+      "path": "tests/QualificationDiskBounds.ps1",
+      "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+    }
+  ],
+  "sourceIdentityKind": "CanonicalUtf8LfSha256"
+}

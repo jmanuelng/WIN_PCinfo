@@ -1674,6 +1674,10 @@ function Enter-AssessmentCollectionStage {
 function Enter-AssessmentCollectionStageIfActive {
     param([Parameter(Mandatory)] [string] $Stage)
     if ((Get-AssessmentCancellationToken).IsCancellationRequested) { return $false }
+    # Prior preparation/collector validators leave inactive transient graphs.
+    # Reclaim them at the existing bounded stage boundary before allocating
+    # the next source; Enter checks cancellation again after the collection.
+    [GC]::Collect(2, [GCCollectionMode]::Aggressive, $true, $true)
     Enter-AssessmentCollectionStage -Stage $Stage
     $true
 }

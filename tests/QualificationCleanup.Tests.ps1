@@ -29,6 +29,8 @@ function Test-StatusDeskRetentionFailure {
     $null=[IO.Directory]::CreateDirectory($QualificationPath)
     $qualificationFailed=$false; $projection=[ordered]@{coverage=@()}
     $qualificationBodyError=$null
+    $RequireQualityBudgets=$false; $assessmentQuality=$null
+    $memoryCalibrationAccepted=$false; $diskInstrumentationAccepted=$false; $memoryCalibrationSha256=''
     $qualificationArguments=[ordered]@{}; $qualityWatch=[Diagnostics.Stopwatch]::StartNew()
     $quality=[ordered]@{}; $Wpf=$false; $RecoveryDestination=''
     $runLock=[Threading.Mutex]::new($false); $runLockOwned=$runLock.WaitOne(0)
@@ -146,6 +148,8 @@ function Test-StatusDeskCleanupProjection {
     $neighbor=$testRoot+'.neighbor'; $null=[IO.Directory]::CreateDirectory($neighbor)
     $neighborFile=Join-Path $neighbor 'unrelated.txt'; [IO.File]::WriteAllText($neighborFile,'unrelated synthetic content')
     $qualificationFailed=$false; $qualificationBodyError=$null
+    $RequireQualityBudgets=$false; $assessmentQuality=$null
+    $memoryCalibrationAccepted=$false; $diskInstrumentationAccepted=$false; $memoryCalibrationSha256=''
     $projection=[ordered]@{coverage=@()}; $qualificationArguments=[ordered]@{}
     $qualityWatch=[Diagnostics.Stopwatch]::StartNew(); $quality=[ordered]@{htmlBytes=0L}
     $Wpf=$false; $session=$null; $runLock=$null; $runLockOwned=$false; $RecoveryDestination=''

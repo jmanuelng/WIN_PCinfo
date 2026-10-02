@@ -12,7 +12,7 @@ foreach ($case in @(
     Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-STA','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),'-Wpf','-ActiveAction',$case.Action,'-ActiveWorker',$case.Worker,'-RequireRecoveryJournal')
     if ($LASTEXITCODE -ne 0) { throw "Active $($case.Action) failed for $($case.Worker)." }
 }
-foreach ($failure in @('Integrity','Cleanup')) {
+foreach ($failure in @('PreStartIntegrity','Integrity','Cleanup')) {
     Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-STA','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),'-Wpf','-FailureKind',$failure)
     if ($LASTEXITCODE -ne 0) { throw "Generated $failure precedence failed." }
 }

@@ -3,6 +3,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity')]
     [string] $QualificationCancelAfter = '',
     [string] $QualificationPath = '',
+    [switch] $RequireQualityBudgets,
     [string] $QualificationSourceCase = '',
     [ValidateSet('','PrivilegeTimeout','PrivilegeLoss','PrivilegePostStartLoss','SystemCancel','SystemTimeout','SystemLoss')] [string] $QualificationPlanFault = '',
     [ValidateSet('','en-US','es-MX','tr-TR','ja-JP','ar-SA')] [string] $QualificationCulture = '',
@@ -31,7 +32,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
     [switch] $RecoveryAuthorized, [string] $InterruptHandoffPath = '',
-    [ValidateSet('None','Integrity','Cleanup')] [string] $FailureKind = 'None')
+    [ValidateSet('None','Integrity','PreStartIntegrity','Cleanup')] [string] $FailureKind = 'None')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
@@ -46,15 +47,42 @@ foreach ($entry in $PSBoundParameters.GetEnumerator()) {
         $qualificationArguments[$entry.Key] = if ($entry.Value -is [Management.Automation.SwitchParameter]) { [bool]$entry.Value } else { $entry.Value }
     }
 }
+if ($RequireQualityBudgets -and -not $QualificationPath) { throw 'Quality budget enforcement requires retained qualification evidence.' }
+$memoryCalibrationAccepted=$false
+$diskInstrumentationAccepted=$false
+$diskInstrumentation=$null
+$memoryCalibrationPath=Join-Path $repositoryRoot '.test-output/qualification-native-memory-calibration.json'
+$memoryCalibrationSha256=''
 $qualificationFailed = $false
 $projection = $null
 $qualityWatch = [Diagnostics.Stopwatch]::StartNew()
-$quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=0L; workspaceSamplingLosses=0L; packageBytes=0L; htmlBytes=0L }
+$quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=0L; workspaceSamplingLosses=0L; nativeCounterFailures=0L; nativeCounterReads=0L; processPeakPrivateBytes=0L; packageBytes=0L; htmlBytes=0L; sampleCount=0L; maximumSampleGapMilliseconds=0L; firstSampleMilliseconds=-1L; lastSampleMilliseconds=0L }
 function Measure-QualificationWorkload {
+    $now = $qualityWatch.ElapsedMilliseconds
+    if ($quality.sampleCount -gt 0) {
+        $quality.maximumSampleGapMilliseconds = [Math]::Max($quality.maximumSampleGapMilliseconds,
+            $now - $quality.lastSampleMilliseconds)
+    }
+    if ($quality.sampleCount -eq 0) { $quality.firstSampleMilliseconds = $now }
+    $quality.lastSampleMilliseconds = $now
+    $quality.sampleCount++
     $process = [Diagnostics.Process]::GetCurrentProcess()
     try {
         $quality.sampledPrivateBytes = [Math]::Max($quality.sampledPrivateBytes, $process.PrivateMemorySize64)
-        $quality.sampledWorkingSetBytes = [Math]::Max($quality.sampledWorkingSetBytes, $process.WorkingSet64)
+        # The Windows lifetime peak includes transient spikes between samples.
+        $quality.sampledWorkingSetBytes = [Math]::Max($quality.sampledWorkingSetBytes,
+            [Math]::Max($process.WorkingSet64, $process.PeakWorkingSet64))
+        $quality['processPeakWorkingSetBytes'] = $process.PeakWorkingSet64
+        if ($RequireQualityBudgets) {
+            try {
+                $native=Get-QualificationMemorySnapshot
+                $quality.nativeCounterReads++
+                $quality.processPeakPrivateBytes=$native.PeakPrivateBytes
+                $quality.sampledPrivateBytes=[Math]::Max($quality.sampledPrivateBytes,$native.PeakPrivateBytes)
+                $quality.sampledWorkingSetBytes=[Math]::Max($quality.sampledWorkingSetBytes,$native.PeakWorkingSetBytes)
+                $quality.processPeakWorkingSetBytes=$native.PeakWorkingSetBytes
+            } catch { $quality.nativeCounterFailures++ }
+        }
     }
     finally { $process.Dispose() }
     if ([IO.Directory]::Exists($testRoot)) {
@@ -71,12 +99,31 @@ function Measure-QualificationWorkload {
     }
 }
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+if ($RequireQualityBudgets) {
+    . (Join-Path $PSScriptRoot 'QualificationResourceBounds.ps1')
+    . (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1')
+    Initialize-QualificationNativeMemory
+    $memoryCalibrationAccepted=Test-QualificationMemoryCalibration -Path $memoryCalibrationPath
+    if ($memoryCalibrationAccepted) { $memoryCalibrationSha256=(Get-FileHash -LiteralPath $memoryCalibrationPath).Hash.ToLowerInvariant() }
+}
+
 $candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+if ($RequireQualityBudgets) {
+    # A delivered assessment does not execute its build pipeline. Run the exact
+    # same deterministic build in a separate process; retain the original
+    # mixed-process failures rather than subtracting estimated overhead.
+    Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @(
+        '-NoLogo','-NoProfile','-File',(Join-Path $repositoryRoot 'build/Build.ps1'),'-OutputPath',$candidate
+    ) | Out-Null
+} else { & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null }
 $regions = [regex]::Matches([IO.File]::ReadAllText($candidate),
     '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach ($region in $regions) { . ([scriptblock]::Create($region.Groups[2].Value)) }
 $moduleText = ($regions | ForEach-Object { $_.Groups[2].Value }) -join "`n"
+# Match collections retain the complete input after module extraction.
+$regions = $null
+$region = $null
+[GC]::Collect(2, [GCCollectionMode]::Aggressive, $true, $true)
 # Controlled adapters substitute every OS collector boundary, never the engine,
 # canonical validation, rules, report, encryption or reopening. This test invokes
 # the ordinary non-fixture scheduler; no fixture or adapter CLI is shipped.
@@ -241,15 +288,45 @@ if ($RequireRecoveryJournal) {
         '$script:StatusDeskTransport.State.JournalObserved=(Test-Path -LiteralPath $Parameters.Request.outputDestination) -and @(Get-ChildItem -LiteralPath $Parameters.Request.outputDestination -Filter WINPCInfo-Recovery-v1-* -Directory).Count -eq 1; $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
 }
 if ($InterruptHandoffPath) {
-    $handoffLiteral = "'" + $InterruptHandoffPath.Replace("'", "''") + "'"
-    $moduleText = $moduleText.Replace('Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
-        "[IO.File]::WriteAllText($handoffLiteral, 'registered-before-supervised-worker'); Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan")
+    # Only the controlled worker can witness creation of its nested child.
+    # Rebind this synthetic fixture policy to its instrumented source.
+    . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+    $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionWorkerSource -Replacement Get-RecoveryOriginalPrivilegeWorkerSource
+    $moduleText=Rename-QualificationFunction -Source $moduleText -Name Get-PrivilegedCollectionPlanPolicy -Replacement Get-RecoveryOriginalPrivilegePolicy
     $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
-        '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
+        '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Timeout')
+    $instrumentation=@'
+function Get-PrivilegedCollectionWorkerSource {
+    $source=Get-RecoveryOriginalPrivilegeWorkerSource
+    $anchor='$null = [System.Diagnostics.Process]::Start($childStartInfo)'
+    if(([regex]::Matches($source,[regex]::Escape($anchor))).Count -ne 1){throw 'Controlled recovery child boundary changed.'}
+    $source.Replace($anchor, '$recoveryChild = [System.Diagnostics.Process]::Start($childStartInfo); [IO.File]::WriteAllText(''__RECOVERY_WITNESS__'', ($PID.ToString() + '':'' + $recoveryChild.Id.ToString()))')
 }
-if ($FailureKind -eq 'Integrity') {
+function Get-PrivilegedCollectionPlanPolicy {
+    $policy=Get-RecoveryOriginalPrivilegePolicy
+    $source=(Get-PrivilegedCollectionWorkerSource).Replace("`r`n","`n").Replace("`r","`n")
+    $policy.worker.payloadSha256=Get-PrivilegedCollectionPlanSha256 -Bytes ([Text.Encoding]::UTF8.GetBytes($source))
+    $policy
+}
+'@
+    $moduleText += "`n" + $instrumentation.Replace('__RECOVERY_WITNESS__', $InterruptHandoffPath.Replace("'", "''"))
+}
+if ($FailureKind -eq 'PreStartIntegrity') {
     $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
         '-LocalPackageProtector $LocalPackageProtector -ValidationScenario AlteredPlan')
+    $moduleText = $moduleText.Replace('$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }',
+        '$script:StatusDeskTransport.State.QualificationIntegrityStage=''PrivilegePlanAdmission''; $script:StatusDeskTransport.State.QualificationIntegrityExecutionStarted=[bool]$result.executionStarted; $script:StatusDeskTransport.State.QualificationIntegrityOperationCount=@($result.operations).Count; $script:StatusDeskTransport.State.QualificationIntegrityReason=$result.reasonCode; $script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }')
+}
+elseif ($FailureKind -eq 'Integrity') {
+    # Corrupt only the final canonical bytes after every source was collected
+    # and validated. This proves the post-start integrity precedence rather
+    # than asking a rejected pre-start privilege plan to claim collection.
+    $integrityMarker = '$finalValidation = Test-AssessmentContract -Utf8Bytes $recordBytes'
+    if ([regex]::Matches($moduleText, [regex]::Escape($integrityMarker)).Count -ne 1) {
+        throw 'The post-start canonical integrity seam is not uniquely identified.'
+    }
+    $moduleText = $moduleText.Replace($integrityMarker,
+        '$script:StatusDeskTransport.State.QualificationIntegrityStage=''FinalCanonicalValidation''; $script:StatusDeskTransport.State.QualificationIntegrityExecutionStarted=[bool]$collectionStarted; $script:StatusDeskTransport.State.QualificationIntegritySourceAccepted=[bool]$sourceValidation.accepted; $recordBytes[0]=0; ' + $integrityMarker)
 }
 elseif ($FailureKind -eq 'Cleanup') {
     $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty }',
@@ -356,7 +433,21 @@ $session = $null
 $runLock = $null
 $runLockOwned = $false
 $qualificationBodyError = $null
+$assessmentQuality = $null
 try {
+if ($RequireQualityBudgets) {
+    if ($RecoveryDestination -or $InterruptHandoffPath -or $QualificationPlanFault -eq 'PrivilegePostStartLoss') {
+        throw 'This witness/recovery configuration is outside the closed disk write inventory; quality remains NotQualified.'
+    }
+    $diskInstrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $testRoot -CandidatePath $candidate -HarnessPath $PSCommandPath
+    $script:QualificationDiskLedger=$diskInstrumentation.Ledger
+    $moduleText=$diskInstrumentation.ModuleText
+    . ([scriptblock]::Create($diskInstrumentation.ControllerDefinitions))
+    . ([scriptblock]::Create($diskInstrumentation.ControllerStart))
+    $diskInstrumentationAccepted=$true
+    # The inventory parser and generated replacement strings are setup only.
+    [GC]::Collect(2,[GCCollectionMode]::Aggressive,$true,$true)
+}
     if ($HoldRunLock) {
         $runLock = [Threading.Mutex]::new($false, [string](Get-AssessmentRunLifecyclePolicy).activeRunLock.name)
         $runLockOwned = $runLock.WaitOne(0)
@@ -369,7 +460,7 @@ try {
     if ($Wpf) {
         Add-Type -AssemblyName PresentationFramework
         $null = [System.Windows.Window]
-        $uiState = @{ Session=$null; Window=$null; Clicked=$false; ReportClicked=$false; ReportObserved=$false; Failure=''; ActionSent=$false; ResponsiveTicks=0; Acknowledged=$false; AcknowledgmentMilliseconds=-1; PeakPrivateBytes=0L; PeakWorkingSetBytes=0L }
+        $uiState = @{ Session=$null; Window=$null; Clicked=$false; ReportClicked=$false; ReportObserved=$false; Failure=''; ActionSent=$false; ResponsiveTicks=0; Acknowledged=$false; AcknowledgmentMilliseconds=-1; PeakPrivateBytes=0L; PeakWorkingSetBytes=0L; PrivateSampleCount=0L; FirstPrivateSampleMilliseconds=-1L; LastPrivateSampleMilliseconds=0L; MaximumPrivateSampleGapMilliseconds=0L }
         $driver = [System.Windows.Threading.DispatcherTimer]::new()
         $driver.Interval = [TimeSpan]::FromMilliseconds(100)
         $reportCloser = [System.Windows.Threading.DispatcherTimer]::new()
@@ -390,9 +481,16 @@ try {
                 $uiState.Window.Close()
             }
         }.GetNewClosure())
+        $measureWorkload = ${function:Measure-QualificationWorkload}.GetNewClosure()
         $driver.Add_Tick({
+            if ($QualificationPath -and ($qualityWatch.ElapsedMilliseconds - $quality.lastSampleMilliseconds) -ge 1000) { & $measureWorkload }
             $window=$uiState.Window
             if ($null -eq $window) { return }
+            $privateSampleTime=$qualityWatch.ElapsedMilliseconds
+            if ($uiState.PrivateSampleCount -eq 0) { $uiState.FirstPrivateSampleMilliseconds=$privateSampleTime }
+            else { $uiState.MaximumPrivateSampleGapMilliseconds=[Math]::Max($uiState.MaximumPrivateSampleGapMilliseconds,$privateSampleTime-$uiState.LastPrivateSampleMilliseconds) }
+            $uiState.LastPrivateSampleMilliseconds=$privateSampleTime
+            $uiState.PrivateSampleCount++
             $ownProcess=[Diagnostics.Process]::GetCurrentProcess()
             try {
                 $uiState.PeakPrivateBytes=[Math]::Max($uiState.PeakPrivateBytes,$ownProcess.PrivateMemorySize64)
@@ -437,7 +535,7 @@ try {
         Assert-Equal $true $uiState.Clicked 'actual STA WPF approval control starts the same worker'
         if ($FailureKind -ne 'None') {
             Assert-Equal $false $uiState.ReportClicked 'failure disables the actual report control'
-            Assert-Equal $(if($FailureKind -eq 'Integrity'){'IntegrityFailed'}else{'CleanupIncomplete'}) $uiState.Window.FindName('Status').Text 'GUI displays the authoritative failure precedence'
+            Assert-Equal $(switch ($FailureKind) { 'Integrity' {'IntegrityFailed'}; 'PreStartIntegrity' {'NotStarted'}; 'Cleanup' {'CleanupIncomplete'} }) $uiState.Window.FindName('Status').Text 'GUI displays the authoritative failure precedence'
         }
         elseif ($ActiveAction -eq 'None') { Assert-Equal $true $uiState.ReportObserved ('actual Open report opens the protected HTML window: ' + $uiState.Failure) }
         else {
@@ -470,6 +568,32 @@ try {
     while (-not (Complete-StatusDeskSession $session) -and $watch.Elapsed.TotalSeconds -lt 120) {
         if ($QualificationPath) { Measure-QualificationWorkload }
         Start-Sleep -Milliseconds 25
+    }
+    Measure-QualificationWorkload
+    if ($Wpf) {
+        $quality.sampledPrivateBytes = [Math]::Max($quality.sampledPrivateBytes, $uiState.PeakPrivateBytes)
+        $quality.sampledWorkingSetBytes = [Math]::Max($quality.sampledWorkingSetBytes, $uiState.PeakWorkingSetBytes)
+    }
+    $assessmentQuality = [ordered]@{}
+    foreach ($qualityEntry in $quality.GetEnumerator()) { $assessmentQuality[$qualityEntry.Key] = $qualityEntry.Value }
+    if ($Wpf) {
+        $assessmentQuality['privateSampleCount']=$uiState.PrivateSampleCount
+        $assessmentQuality['firstPrivateSampleMilliseconds']=$uiState.FirstPrivateSampleMilliseconds
+        $assessmentQuality['lastPrivateSampleMilliseconds']=$uiState.LastPrivateSampleMilliseconds
+        $assessmentQuality['maximumPrivateSampleGapMilliseconds']=$uiState.MaximumPrivateSampleGapMilliseconds
+    }
+    if ($RequireQualityBudgets -and $diskInstrumentationAccepted) {
+        $assessmentQuality['cumulativeWorkspaceWriteUpperBoundBytes']=$script:QualificationDiskLedger.TotalBytes
+        $assessmentQuality['workspaceInventoryValid']=[bool]$script:QualificationDiskLedger.Valid
+        $writeCounts=[ordered]@{}
+        foreach ($kind in $script:QualificationDiskLedger.Counts.Keys) {
+            $entry=$script:QualificationDiskLedger.Counts[$kind]
+            $writeCounts[$kind]=[ordered]@{writes=$entry.writes;bytes=$entry.bytes}
+        }
+        $assessmentQuality['workspaceWriteCounts']=$writeCounts
+        # The assessment endpoint is frozen. Subsequent independent driver
+        # exports/reopening assertions use the original product writers.
+        . ([scriptblock]::Create($diskInstrumentation.ControllerOriginalDefinitions))
     }
     Assert-Equal $true $session.Completed 'ordinary collector chain reaches bounded completion'
     if ($IdentitySourceScenario -and $session.Transport.State.ContainsKey('IdentitySourceFailure')) { throw ($session.Transport.State.IdentitySourceFailure + ' ' + $session.Transport.State.IdentityPrivilegeReason) }
@@ -576,11 +700,29 @@ try {
     }
     if ($ConnectivitySourceScenario -and $session.Transport.State.ContainsKey('ConnectivityFailure')) { throw $session.Transport.State.ConnectivityFailure }
     if ($FailureKind -ne 'None') {
-        $expectedOutcome=if($FailureKind -eq 'Integrity'){'IntegrityFailed'}else{'CleanupIncomplete'}
+        $expectedOutcome=switch ($FailureKind) { 'Integrity' {'IntegrityFailed'}; 'PreStartIntegrity' {'NotStarted'}; 'Cleanup' {'CleanupIncomplete'} }
         Assert-Equal $expectedOutcome $terminal.outcome 'structured terminal preserves integrity/cleanup precedence'
-        Assert-Equal $(if($FailureKind -eq 'Integrity'){50}else{60}) $session.ExitCode 'exit status preserves integrity/cleanup precedence'
-        $completion=$session.Transport.State.Completion | ConvertFrom-Json
-        Assert-Equal $expectedOutcome $completion.assessment.outcome 'completion record agrees with GUI and exit'
+        Assert-Equal $(switch ($FailureKind) { 'Integrity' {50}; 'PreStartIntegrity' {20}; 'Cleanup' {60} }) $session.ExitCode 'exit status preserves integrity/cleanup precedence'
+        if ($session.Transport.State.Completion) {
+            $completion=$session.Transport.State.Completion | ConvertFrom-Json
+            Assert-Equal $expectedOutcome $completion.assessment.outcome 'completion record agrees with GUI and exit'
+        }
+        else { Assert-Equal 'PreStartIntegrity' $FailureKind 'only a pre-start failure may have no assessment completion' }
+        if ($FailureKind -in @('Integrity','PreStartIntegrity')) {
+            Assert-Equal $(if ($FailureKind -eq 'Integrity') {'FinalCanonicalValidation'} else {'PrivilegePlanAdmission'}) $session.Transport.State.QualificationIntegrityStage 'the injected integrity fault has an explicit actual stage'
+            Assert-Equal ($FailureKind -eq 'Integrity') $session.Transport.State.QualificationIntegrityExecutionStarted 'the observed fault stage preserves actual execution-started truth'
+            Assert-Equal ($FailureKind -eq 'Integrity') $terminal.collectionStarted 'the authoritative terminal agrees with the observed collection stage'
+            if ($FailureKind -eq 'Integrity') {
+                Assert-Equal $true $session.Transport.State.QualificationIntegritySourceAccepted 'post-start corruption follows valid source collection'
+                Assert-Equal 'DEVICE_READINESS.CONTRACT_INVALID' $terminal.reasonCode 'final canonical corruption is rejected before report/package creation'
+            }
+            else {
+                Assert-Equal 'PRIVILEGE.PLAN_INTEGRITY_INVALID' $session.Transport.State.QualificationIntegrityReason 'the original altered plan is refused at admission'
+                Assert-Equal 0 $session.Transport.State.QualificationIntegrityOperationCount 'pre-start admission failure produces no operation envelope'
+                Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'pre-start integrity failure starts no SYSTEM collection'
+            }
+            Assert-Equal $true $terminal.cleanup.verified 'integrity rejection verifies owned cleanup at its actual stage'
+        }
         Assert-Equal '' $session.Transport.State.PackagePath 'failure exposes no unverified report action'
         if ($FailureKind -eq 'Cleanup') {
             Assert-Equal $false $terminal.cleanup.verified 'surviving locked residue is not cleanup success'
@@ -810,6 +952,29 @@ finally {
         $projection['testCleanup'] = 'Pending'
         $projection['elapsedMilliseconds'] = $qualityWatch.ElapsedMilliseconds
         $projection['quality'] = $quality
+        $projection['assessmentQuality'] = $assessmentQuality
+        $projection['measurementAttribution'] = [ordered]@{
+            process = 'ControlledGeneratedStatusDeskAndTestDriver'
+            assessmentInterval = 'ProcessLifetimeThroughCompletedSessionAndWpfViewingBeforePostAssessmentAssertions'
+            includesModuleLoadingAndTestDriver = $true
+            includesInProcessBuild = (-not $RequireQualityBudgets)
+            includesPostAssessmentAssertions = $true
+            workingSetMethod = 'WindowsProcessLifetimePeakAndPeriodicSamples'
+            privateMemoryMethod = if ($RequireQualityBudgets) { 'NativeWindowsLifetimePrivateCommitPeakAndPeriodicSamples' } else { 'PeriodicSamplesWithRecordedCountAndMaximumGap' }
+            workspaceMethod = if ($diskInstrumentationAccepted) { 'CumulativeBeforeMutationWriteReservationsNoDeletionSubtractionAndDiagnosticPeriodicSamples' } else { 'PeriodicOwnedDirectoryEnumerationWithRecordedLosses' }
+            requestedPrivateSamplingCadenceMilliseconds = if ($Wpf) { 100 } else { 25 }
+            requestedWorkspaceSamplingCadenceMilliseconds = if ($Wpf) { 1000 } else { 25 }
+            deliveredGuiMeasurement = 'NotQualified'
+            ownedChildTree = 'NotMeasured'
+            samplingCalibration = if ($memoryCalibrationAccepted -and $diskInstrumentationAccepted) { 'NativeLifetimePeakCalibrationAndClosedWriterInventory' } else { 'NotEstablished' }
+            memoryCalibrationSha256 = $memoryCalibrationSha256
+            workspaceInventorySha256 = if ($diskInstrumentationAccepted) { $diskInstrumentation.inventorySha256 } else { '' }
+            workspaceInstrumentationSha256 = if ($diskInstrumentationAccepted) { $diskInstrumentation.instrumentationSha256 } else { '' }
+            workspaceSourceIdentityKind = if ($diskInstrumentationAccepted) { $diskInstrumentation.sourceIdentityKind } else { '' }
+            workspaceActualSourceInputs = if ($diskInstrumentationAccepted) { $diskInstrumentation.actualSourceInputs } else { @() }
+            privateStartupIntervalCoverage = if ($memoryCalibrationAccepted) { 'NativeProcessLifetimePeakIncludesStartup' } else { 'NotEstablished' }
+            eligibleClientLiveMeasurement = 'NotStarted'
+        }
         if ($null -ne $session) {
             $timing = [ordered]@{}
             foreach ($name in @('FirstProgressMilliseconds','MaximumProgressGapMilliseconds','TerminalMilliseconds','CancellationRequestedMilliseconds')) {
@@ -818,7 +983,24 @@ finally {
             if ($Wpf) { $timing['acknowledgmentMilliseconds'] = $uiState.AcknowledgmentMilliseconds }
             $projection['timing'] = $timing
         }
+        if ($RequireQualityBudgets) {
+            $budgetFailures = [Collections.Generic.List[string]]::new()
+            if ($quality.sampledPrivateBytes -gt 768MB) { $budgetFailures.Add('PrivateMemory') }
+            if ($quality.sampledWorkingSetBytes -gt 512MB) { $budgetFailures.Add('WorkingSet') }
+            if ($quality.sampledWorkspaceBytes -gt 256MB) { $budgetFailures.Add('Workspace') }
+            if ($quality.packageBytes -gt 100MB) { $budgetFailures.Add('Package') }
+            if ($quality.htmlBytes -gt 25MB) { $budgetFailures.Add('Html') }
+            if ($null -eq $session -or $session.Transport.State.FirstProgressMilliseconds -lt 0 -or
+                $session.Transport.State.FirstProgressMilliseconds -gt 5000) { $budgetFailures.Add('FirstProgress') }
+            if ($null -eq $session -or $session.Transport.State.MaximumProgressGapMilliseconds -gt 10000) { $budgetFailures.Add('Heartbeat') }
+            $projection['qualityBudgetVerdict'] = if ($budgetFailures.Count) { 'Fail' }
+                elseif ($qualificationFailed -or $null -eq $assessmentQuality) { 'NotQualified' }
+                else { 'Pass' }
+            $projection['qualityBudgetFailures'] = @($budgetFailures)
+        }
         [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+        # Full post-assertion driver failures stay recorded. The separately
+        # attributed controlled assessment is enforced after verified cleanup.
     }
     } -Cleanup @(
     { if ($null -ne $session -and $session.Transport.State.ContainsKey('SyntheticLock')) { $session.Transport.State.SyntheticLock.Dispose() } },
@@ -853,7 +1035,50 @@ finally {
     ) -RetainCleanupEvidence {
     if ($QualificationPath) {
         $projection['testCleanup'] = if ($RecoveryDestination) { 'RetainedForRecoveryTest' } else { 'VerifiedAbsent' }
+        if ($null -ne $assessmentQuality) {
+            # Artifact sizes are the exact completed assessment bytes, not the
+            # zero placeholders captured before independent reopening assertions.
+            $assessmentQuality.packageBytes = $quality.packageBytes
+            $assessmentQuality.htmlBytes = $quality.htmlBytes
+        }
+        if ($RequireQualityBudgets) {
+            $assessmentFailures = [Collections.Generic.List[string]]::new()
+            $qualified = -not $qualificationFailed -and $null -ne $assessmentQuality -and
+                $null -ne $session -and $session.Completed -and $null -eq $session.Worker -and
+                $null -eq $session.Runspace -and $null -eq $session.Pending -and
+                $projection.Contains('cleanupVerified') -and $projection.cleanupVerified -and
+                $projection.testCleanup -eq 'VerifiedAbsent'
+            if ($null -ne $assessmentQuality -and $null -ne $session) {
+                if ($assessmentQuality.sampledPrivateBytes -gt 768MB) { $assessmentFailures.Add('PrivateMemory') }
+                if ($assessmentQuality.sampledWorkingSetBytes -gt 512MB) { $assessmentFailures.Add('WorkingSet') }
+                if ($assessmentQuality.sampledWorkspaceBytes -gt 256MB -or
+                    ($diskInstrumentationAccepted -and $assessmentQuality.cumulativeWorkspaceWriteUpperBoundBytes -gt 256MB)) { $assessmentFailures.Add('Workspace') }
+                if ($assessmentQuality.packageBytes -gt 100MB) { $assessmentFailures.Add('Package') }
+                if ($assessmentQuality.htmlBytes -gt 25MB) { $assessmentFailures.Add('Html') }
+                if ($assessmentQuality.nativeCounterReads -eq 0 -or $assessmentQuality.nativeCounterFailures -gt 0 -or
+                    -not $memoryCalibrationAccepted -or -not $diskInstrumentationAccepted -or -not $assessmentQuality.workspaceInventoryValid) { $qualified = $false }
+                if ($session.Transport.State.FirstProgressMilliseconds -lt 0 -or
+                    $session.Transport.State.FirstProgressMilliseconds -gt 5000) { $assessmentFailures.Add('FirstProgress') }
+                if ($session.Transport.State.MaximumProgressGapMilliseconds -gt 10000) { $assessmentFailures.Add('Heartbeat') }
+                if ($session.Transport.State.TerminalMilliseconds -gt 1800000) { $assessmentFailures.Add('NormalDuration') }
+                if ($session.Transport.State.CancellationRequestedMilliseconds -ge 0 -and
+                    ($session.Transport.State.TerminalMilliseconds - $session.Transport.State.CancellationRequestedMilliseconds) -gt 120000) { $assessmentFailures.Add('CancellationCleanup') }
+                if ($Wpf -and $ActiveAction -ne 'None' -and
+                    ($uiState.AcknowledgmentMilliseconds -lt 0 -or $uiState.AcknowledgmentMilliseconds -gt 2000)) { $assessmentFailures.Add('CancellationAcknowledgment') }
+            }
+            # Native lifetime peaks cover transient/startup memory; the closed
+            # writer inventory reserves every possible owned byte increase and
+            # never subtracts deletions. Periodic gaps/losses stay diagnostic.
+            $qualified = $qualified -and $memoryCalibrationAccepted -and $diskInstrumentationAccepted
+            $projection['controlledAssessmentBudgetVerdict'] = if ($assessmentFailures.Count) { 'Fail' }
+                elseif (-not $qualified) { 'NotQualified' } else { 'Pass' }
+            $projection['controlledAssessmentBudgetFailures'] = @($assessmentFailures)
+            $projection['controlledAssessmentScope'] = 'ControlledSourceGeneratedStatusDeskRegressionOnly'
+        }
         [IO.File]::WriteAllText([IO.Path]::GetFullPath($QualificationPath), ($projection | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+        if ($RequireQualityBudgets -and $projection.controlledAssessmentBudgetVerdict -ne 'Pass') {
+            throw ('Controlled assessment quality budgets ' + $projection.controlledAssessmentBudgetVerdict + ': ' + ($assessmentFailures -join ', '))
+        }
     }
     }
 }

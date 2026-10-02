@@ -1,0 +1,117 @@
+[CmdletBinding()]
+param()
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationResourceBounds.ps1')
+. (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1')
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'src/StatusDesk.ps1')
+$repositoryRoot=Split-Path -Parent $PSScriptRoot
+$root=Join-Path $repositoryRoot ('.test-output/resource-bounds-'+[guid]::NewGuid().ToString('N'))
+$null=[IO.Directory]::CreateDirectory($root)
+$calibrationPath=Join-Path $root 'calibration.json'
+$bodyError=$null
+try {
+    Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @(
+        '-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'QualificationResourceBounds.ps1'),
+        '-Calibrate','-OutputPath',$calibrationPath)
+    Assert-Equal $true (Test-QualificationMemoryCalibration -Path $calibrationPath) 'target-runtime native calibration is admitted'
+    $original=[IO.File]::ReadAllText($calibrationPath)
+    foreach($fault in @('AcceptedString','ReleaseString','Module','Runtime','Future','Stale','Allocation','MissedPeak','NotReleased','WrongKind','MissingBracket','CounterString','NegativeCounter','FractionCounter','Structure','Pointer','DecreasingPrivatePeak','DecreasingWorkingPeak','DotNetPrivateBelow','DotNetPrivateAbove','DotNetWorkingBelow','DotNetWorkingAbove','Malformed')){
+        $record=$original|ConvertFrom-Json
+        switch($fault){
+            'AcceptedString'{$record.accepted='true'}
+            'ReleaseString'{$record.allocationReleased='true'}
+            'Module'{$record.moduleSha256=('0'*64)}
+            'Runtime'{$record.runtimeSha256=('0'*64)}
+            'Future'{$record.calibratedAtUtc=[datetime]::UtcNow.AddMinutes(1).ToString('o')}
+            'Stale'{$record.calibratedAtUtc=[datetime]::UtcNow.AddHours(-25).ToString('o')}
+            'Allocation'{$record.allocationBytes=1}
+            'MissedPeak'{$record.after.PeakPrivateBytes=0}
+            'NotReleased'{$record.allocationReleased=$false}
+            'WrongKind'{$record.kind='DifferentCalibration'}
+            'MissingBracket'{$record.PSObject.Properties.Remove('bracket')}
+            'CounterString'{$record.after.PeakPrivateBytes=$record.after.PeakPrivateBytes.ToString()}
+            'NegativeCounter'{$record.before.PrivateBytes=-1}
+            'FractionCounter'{$record.before.PrivateBytes=0.5}
+            'Structure'{$record.before.StructureBytes=1}
+            'Pointer'{$record.during.PointerBytes=1}
+            'DecreasingPrivatePeak'{$record.during.PeakPrivateBytes=$record.after.PeakPrivateBytes+1}
+            'DecreasingWorkingPeak'{$record.during.PeakWorkingSetBytes=$record.after.PeakWorkingSetBytes+1}
+            'DotNetPrivateBelow'{$record.dotNetPeakPrivateBytes=$record.after.PeakPrivateBytes-1}
+            'DotNetPrivateAbove'{$record.dotNetPeakPrivateBytes=$record.after.PeakPrivateBytes+1GB}
+            'DotNetWorkingBelow'{$record.dotNetPeakWorkingSetBytes=$record.after.PeakWorkingSetBytes-1}
+            'DotNetWorkingAbove'{$record.dotNetPeakWorkingSetBytes=$record.after.PeakWorkingSetBytes+1GB}
+        }
+        $text=if($fault-eq'Malformed'){'{'}else{$record|ConvertTo-Json -Depth 6}
+        [IO.File]::WriteAllText($calibrationPath,$text)
+        Assert-Equal $false (Test-QualificationMemoryCalibration -Path $calibrationPath) "$fault cannot admit resource qualification"
+    }
+    [IO.File]::WriteAllText($calibrationPath,$original)
+    Initialize-QualificationNativeMemory
+    $rejected=$false
+    try{$null=[WinPCInfo.Qualification.NativeMemory]::Read([IntPtr]::Zero)}catch{$rejected=$true}
+    Assert-Equal $true $rejected 'native memory reads reject an absent process handle'
+    $snapshot=Get-QualificationMemorySnapshot
+    Assert-Equal ([IntPtr]::Size) $snapshot.PointerBytes 'native memory layout matches the target process architecture'
+    Assert-Equal $true ($snapshot.PeakPrivateBytes-ge$snapshot.PrivateBytes) 'lifetime private peak covers current private memory'
+    Assert-Equal $true ($snapshot.PeakWorkingSetBytes-ge$snapshot.WorkingSetBytes) 'lifetime working-set peak covers current resident memory'
+
+    $lfSource=Join-Path $root 'source-lf.ps1'
+    $crlfSource=Join-Path $root 'source-crlf.ps1'
+    $lf=[string][char]10; $cr=[string][char]13
+    [IO.File]::WriteAllText($lfSource,"function Example { 'same' }"+$lf,[Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($crlfSource,"function Example { 'same' }"+$cr+$lf,[Text.UTF8Encoding]::new($true))
+    Assert-Equal (Get-QualificationScriptIdentity -LiteralPath $lfSource) (Get-QualificationScriptIdentity -LiteralPath $crlfSource) 'Git line-ending/BOM normalization preserves the pinned logical source identity'
+    [IO.File]::WriteAllText($crlfSource,"function Example { 'different' }"+$cr+$lf,[Text.UTF8Encoding]::new($false))
+    Assert-Equal $false ((Get-QualificationScriptIdentity -LiteralPath $lfSource)-eq(Get-QualificationScriptIdentity -LiteralPath $crlfSource)) 'a source value change cannot reuse the canonical inventory identity'
+    $candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
+    $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),
+        '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
+    $moduleText=($regions|ForEach-Object{$_.Groups[2].Value})-join[Environment]::NewLine
+    $owned=Join-Path $root 'owned'
+    $instrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $owned -CandidatePath $candidate -HarnessPath (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1')
+    Assert-Equal ((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1') -Algorithm SHA256).Hash.ToLowerInvariant()) $instrumentation.instrumentationSha256 'reservation formulas retain their exact instrumentation identity'
+    $brokenRoot=Join-Path $root 'broken-source'
+    $rejected=$false
+    try{$null=New-QualificationDiskInstrumentation -ModuleText 'function unrelated {}' -Root $brokenRoot -CandidatePath $candidate -HarnessPath (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1')}catch{$rejected=$true}
+    Assert-Equal $true $rejected 'changed writer derivation is refused'
+    Assert-Equal $false ([IO.Directory]::Exists($brokenRoot)) 'failed derivation creates no unregistered owned directory'
+    $script:QualificationDiskLedger=$instrumentation.Ledger
+    $file=Join-Path $owned 'synthetic'
+    Add-QualificationDiskReservation -Path $file -Bytes 100 -Kind FirstWrite
+    [IO.File]::WriteAllBytes($file,[byte[]]::new(100))
+    [IO.File]::Delete($file)
+    Add-QualificationDiskReservation -Path $file -Bytes 60 -Kind Rewrite
+    Assert-Equal 160L $script:QualificationDiskLedger.TotalBytes 'deletion and same-path rewrite never reduce the simultaneous-use upper bound'
+    Assert-QualificationDiskReservation -Path $file
+    $rejected=$false
+    try{Assert-QualificationDiskReservation -Path (Join-Path $owned 'unaccounted')}catch{$rejected=$true}
+    Assert-Equal $true $rejected 'unaccounted native file creation fails before mutation'
+    Assert-Equal $false $script:QualificationDiskLedger.Valid 'an unaccounted writer invalidates qualification'
+    $rejected=$false
+    try{Add-QualificationDiskReservation -Path (Join-Path ($owned+'-sibling') 'foreign') -Bytes 1 -Kind Escape}catch{$rejected=$true}
+    Assert-Equal $true $rejected 'a sibling prefix cannot escape the owned directory boundary'
+    $rejected=$false
+    try{Add-QualificationDiskReservation -Path $file -Bytes -1 -Kind InvalidGrowth}catch{$rejected=$true}
+    Assert-Equal $true $rejected 'negative growth cannot reduce the conservative upper bound'
+    $drift=Join-Path $root 'different-candidate.ps1'
+    [IO.File]::WriteAllText($drift,'synthetic different source')
+    $rejected=$false
+    try{$null=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root (Join-Path $root 'drift') -CandidatePath $drift -HarnessPath (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1')}catch{$rejected=$true}
+    Assert-Equal $true $rejected 'different candidate bytes cannot reuse the reviewed writer inventory'
+}
+catch{$bodyError=$_}
+finally {
+    Complete-QualificationHarness -BodyError $bodyError -Cleanup @(
+        {
+            if($null-ne$bodyError-and(Test-QualificationCleanupUnverified -Exception $bodyError.Exception)){throw 'Preserve resource calibration evidence until owned cleanup is verified.'}
+            $boundary=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
+            $resolved=[IO.Path]::GetFullPath($root)
+            if(-not$resolved.StartsWith($boundary,[StringComparison]::OrdinalIgnoreCase)){throw 'Resource fixture cleanup escaped its owned parent.'}
+            if([IO.Directory]::Exists($resolved)){Remove-Item -LiteralPath $resolved -Recurse -Force}
+            if([IO.Directory]::Exists($resolved)){throw 'Owned resource fixture directory absence remains unverified.'}
+        }
+    )
+}
+Write-Output 'PASS: native lifetime calibration fails closed on invalid evidence; complete cumulative writer reservations preserve rewrites and reject escapes, unaccounted writers and candidate drift.'

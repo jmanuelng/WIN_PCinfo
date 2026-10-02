@@ -967,11 +967,9 @@ function Test-AssessmentReportBytesEqual {
         [Parameter(Mandatory)] [byte[]] $Right
     )
 
-    if ($Left.Length -ne $Right.Length) { return $false }
-    for ($index = 0; $index -lt $Left.Length; $index++) {
-        if ($Left[$index] -ne $Right[$index]) { return $false }
-    }
-    $true
+    # Comparing admitted buffers in the runtime avoids allocating boxed
+    # PowerShell values for every byte of a maximum-size report.
+    [System.Linq.Enumerable]::SequenceEqual[byte]($Left, $Right)
 }
 
 function Test-AssessmentReportContract {
@@ -1160,6 +1158,29 @@ function Get-AssessmentReportFindingAnchors {
     $anchors
 }
 
+function Convert-AssessmentReportAnchorIds {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()] [string] $Html,
+        [Parameter(Mandatory)] [Collections.Generic.Dictionary[string,string]] $Anchors,
+        [switch] $IncludeFragmentLinks
+    )
+    # Canonical evidence IDs and compact destinations are disjoint. Without
+    # this invariant a one-pass transform could differ from sequential replaces.
+    foreach ($destination in $Anchors.Values) {
+        if ($Anchors.ContainsKey($destination)) { throw 'Report anchor source and destination names overlap.' }
+    }
+    $pattern = if ($IncludeFragmentLinks) { '(id="|href="#)([^"]*)"' } else { '(id=")([^"]*)"' }
+    # Values are already HTML encoded. Keep exact case/encoded identity and
+    # leave unknown markup untouched; each match emits exactly one replacement.
+    $replace = {
+        param($match)
+        $key = $match.Groups[2].Value
+        if ($Anchors.ContainsKey($key)) { $match.Groups[1].Value + $Anchors[$key] + '"' }
+        else { $match.Value }
+    }.GetNewClosure()
+    [regex]::Replace($Html, $pattern, [Text.RegularExpressions.MatchEvaluator]$replace)
+}
+
 function New-DeviceReadinessReportBytes {
     param(
         [Parameter(Mandatory)] $Record,
@@ -1178,6 +1199,21 @@ function New-DeviceReadinessReportBytes {
 
     if (($DerivationKind -ne 'Original') -ne (-not [string]::IsNullOrEmpty($SourceReportSha256))) {
         throw 'A derived report requires its source report digest; an original report cannot claim a source report.'
+    }
+
+    # Preserve canonical observation order while resolving each subject once.
+    # Repeated whole-record pipelines per registration inflated the maximum
+    # report's temporary allocations. Empty declared subjects stay empty.
+    $observationsBySubject = @{}
+    foreach ($subject in @($Record.subjects)) {
+        $observationsBySubject[[string] $subject.subjectId] = [Collections.Generic.List[object]]::new()
+    }
+    foreach ($observation in @($Record.observations)) {
+        $subjectId = [string] $observation.subjectId
+        if (-not $observationsBySubject.ContainsKey($subjectId)) {
+            $observationsBySubject[$subjectId] = [Collections.Generic.List[object]]::new()
+        }
+        $observationsBySubject[$subjectId].Add($observation)
     }
 
     $finding = @($Record.findings | Where-Object findingId -like 'finding:device-readiness:*')[0]
@@ -1364,7 +1400,7 @@ $identityGuidance
         $principalSubjects=@($Record.subjects|Where-Object kind -eq 'SecurityPrincipal')
         $principalRows=@($principalSubjects|ForEach-Object {
             $memberSubjectId=[string]$_.subjectId;$memberValues=@{}
-            foreach($item in @($Record.observations|Where-Object subjectId -eq $memberSubjectId)){
+            foreach($item in @($observationsBySubject[$memberSubjectId].ToArray())){
                 $memberValues[[string]$item.fieldId]=if($item.valueState -eq 'ObservedValue'){
                     New-AssessmentObservationReportValue -Observation $item -Anchors $observationAnchors
                 }else{'Not resolved'}
@@ -1398,7 +1434,7 @@ $identityGuidance
         $layerById=@{};foreach($layer in $EffectivePolicyPolicy.layers){$layerById[[string]$layer.layerId]=$layer}
         $policySubjects=@($Record.subjects|Where-Object kind -eq 'PolicyObject')
         $policyRows=@($policySubjects|ForEach-Object {
-            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $subjectId=[string]$_.subjectId;$items=@($observationsBySubject[$subjectId].ToArray())
             $byField=@{};foreach($item in $items){if($item.valueState -eq 'ObservedValue'){$byField[[string]$item.fieldId]=[Net.WebUtility]::HtmlEncode([string]$item.value)}}
             $settingIds=@($items|Where-Object {$_.fieldId -eq 'field:policy.applied.setting-id' -and $_.valueState -eq 'ObservedValue'}|ForEach-Object {[Net.WebUtility]::HtmlEncode([string]$_.value)})
             $precedence=@($items|Where-Object {$_.fieldId -eq 'field:policy.applied.precedence' -and $_.valueState -eq 'ObservedValue'}|ForEach-Object {[Net.WebUtility]::HtmlEncode([string]$_.value)})
@@ -1422,7 +1458,7 @@ $identityGuidance
             '<li>'+[Net.WebUtility]::HtmlEncode([string]$auditIds[$index].value)+': success='+$success+', failure='+$failure+'</li>'
         })
         $rightRows=@($Record.subjects|Where-Object {$_.subjectId -like 'subject:policy-principal:*'}|ForEach-Object {
-            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $subjectId=[string]$_.subjectId;$items=@($observationsBySubject[$subjectId].ToArray())
             $right=@($items|Where-Object fieldId -eq 'field:policy.user-right.catalog-id')[0]
             $sid=@($items|Where-Object fieldId -eq 'field:policy.user-right.direct-principal-sid')[0]
             '<li>'+[Net.WebUtility]::HtmlEncode([string]$right.value)+': '+[Net.WebUtility]::HtmlEncode([string]$sid.value)+' (direct assignment)</li>'
@@ -1468,7 +1504,7 @@ $identityGuidance
         $deviceCoverage=Get-ResourceDependencyLayerState -ScopeStates $Record.coverage -ScopeIds @($ResourceDependenciesPolicy.layers[1].scopeIds)
         $resourceSubjects=@($Record.subjects|Where-Object {$_.subjectId -like 'subject:mapped-drive:*' -or $_.subjectId -like 'subject:unc-resource:*' -or $_.subjectId -like 'subject:printer:*' -or $_.subjectId -like 'subject:printer-driver:*' -or $_.subjectId -like 'subject:peripheral:*'})
         $rows=@($resourceSubjects|ForEach-Object {
-            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $subjectId=[string]$_.subjectId;$items=@($observationsBySubject[$subjectId].ToArray())
             $origin=@($Record.provenance|Where-Object provenanceId -eq $items[0].provenanceId)[0]
             $lines=@($items|ForEach-Object {
                 $display=if($_.valueState -eq 'ObservedValue'){[string]$_.value}else{[string]$_.valueState}
@@ -1562,14 +1598,21 @@ $identityGuidance
         $suffixRows = [Collections.Generic.List[string]]::new()
         $registrations=@($softwareSubjects|ForEach-Object {
             $subjectId=[string]$_.subjectId
-            $items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $items=@($observationsBySubject[$subjectId].ToArray())
             $source=([string]$items[0].fieldId).Split('.')[1]
             # Group only finite source/context/type metadata. Never coalesce
             # identities, names, publishers or arbitrary provider versions.
             $metadata=@($items|Where-Object { $_.fieldId.Split('.')[-1] -in @('registration-context','registry-view','installer-state','package-type','architecture') })
             $groupValues=@($source)+@($metadata|ForEach-Object { [string]$_.fieldId;[string]$_.valueState;[string]$_.value })
             $groupKey=($groupValues|ForEach-Object {$_.Length.ToString()+':'+$_}) -join ''
-            [pscustomobject]@{subjectId=$subjectId;items=$items;source=$source;metadata=$metadata;groupKey=$groupKey}
+            $itemsByField = @{}
+            foreach ($item in $items) {
+                # Keep the original first matching observation and case behavior.
+                if (-not $itemsByField.ContainsKey([string] $item.fieldId)) {
+                    $itemsByField[[string] $item.fieldId] = $item
+                }
+            }
+            [pscustomobject]@{subjectId=$subjectId;items=$items;itemsByField=$itemsByField;source=$source;metadata=$metadata;groupKey=$groupKey}
         })
         $tables=@($registrations|Group-Object groupKey -CaseSensitive|ForEach-Object {
             $group=$_
@@ -1591,12 +1634,12 @@ $identityGuidance
                 '<th scope="col">'+[Net.WebUtility]::HtmlEncode($_.Split('.')[-1])+'</th>'
             })
             $rows=@($group.Group|ForEach-Object {
-            $subjectId=[string]$_.subjectId;$items=@($_.items)
+            $subjectId=[string]$_.subjectId;$items=@($_.items);$itemsByField=$_.itemsByField
             # PackageFullName remains in the canonical protected record. The
             # report uses the stable family identity instead, preserving room
             # for a bounded recognition explanation at the 128-entry ceiling.
             $cells=@($fieldIds|ForEach-Object {
-                $fieldId=$_;$observation=@($items|Where-Object fieldId -eq $fieldId)
+                $fieldId=$_;$observation=@(if($itemsByField.ContainsKey($fieldId)){$itemsByField[$fieldId]})
                 $value=if($observation.Count -eq 0){'Not observed'}
                     elseif($observation[0].valueState -eq 'ObservedValue'){[string]$observation[0].value}
                     else{[string]$observation[0].valueState}
@@ -1695,7 +1738,7 @@ $(if ($suffixRows.Count) { '<details><summary>Exact shared software text suffixe
         })
         $certificateSubjects=@($Record.subjects|Where-Object kind -eq Certificate)
         $certificateRows=@($certificateSubjects|ForEach-Object {
-            $subjectId=[string]$_.subjectId;$items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $subjectId=[string]$_.subjectId;$items=@($observationsBySubject[$subjectId].ToArray())
             $lines=@($items|Where-Object valueState -eq ObservedValue|ForEach-Object {
                 '<strong>'+[Net.WebUtility]::HtmlEncode([string]$_.fieldId)+':</strong> '+(New-AssessmentObservationReportValue -Observation $_ -Anchors $observationAnchors)
             });'<li>'+($lines -join '<br>')+'</li>'
@@ -1723,7 +1766,7 @@ $(if ($suffixRows.Count) { '<details><summary>Exact shared software text suffixe
         })
         $resultRows=@($Record.subjects|Where-Object subjectId -like 'subject:connectivity-endpoint:*'|ForEach-Object {
             $subjectId=[string]$_.subjectId
-            $items=@($Record.observations|Where-Object subjectId -eq $subjectId)
+            $items=@($observationsBySubject[$subjectId].ToArray())
             '<li>'+(@($items|ForEach-Object {
                 [Net.WebUtility]::HtmlEncode([string]$_.fieldId)+': '+
                 (New-AssessmentObservationReportValue -Observation $_ -Anchors $observationAnchors)
@@ -1758,6 +1801,9 @@ $(if ($suffixRows.Count) { '<details><summary>Exact shared software text suffixe
         ''
     }
     else { '' }
+    # Subject rendering is complete; reclaim its inactive pipeline allocations
+    # before serializing the exact rendering inputs and assembling the HTML.
+    [GC]::Collect(2, [GCCollectionMode]::Aggressive, $true, $true)
     $definitionLookup = Get-AssessmentReportDefinitionLookup `
         -FirmwarePolicy $FirmwarePolicy `
         -IdentityEnrollmentPolicy $IdentityEnrollmentPolicy `
@@ -2059,9 +2105,11 @@ $crossDomainSection
 "@
     # Link existing resource evidence and provide the remaining exact referenced
     # observations once. No value-based matching can conflate identical values.
+    $encodedObservationAnchors = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
     foreach ($id in $observationAnchors.Keys) {
-        $html = $html.Replace('id="' + [Net.WebUtility]::HtmlEncode($id) + '"', 'id="' + $observationAnchors[$id] + '"')
+        $encodedObservationAnchors.Add([Net.WebUtility]::HtmlEncode($id), [string]$observationAnchors[$id])
     }
+    $html = Convert-AssessmentReportAnchorIds -Html $html -Anchors $encodedObservationAnchors
     $unrendered = @($Record.observations | Where-Object {
         $observationAnchors.ContainsKey([string]$_.observationId) -and
         -not $html.Contains('id="' + $observationAnchors[[string]$_.observationId] + '"')
@@ -2076,12 +2124,13 @@ $crossDomainSection
     $html = $html.Replace('</main>', '<details><summary>Additional referenced observations</summary><div class="evidence-table" tabindex="0" role="region" aria-label="Referenced evidence"><table><thead><tr><th scope="col">Field</th><th scope="col">Subject</th><th scope="col">Observed value or state</th></tr></thead><tbody>' +
         ($referenceRows -join '') + '</tbody></table></div></details></main>')
     $recommendationIndex = 0
+    $recommendationAnchors = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
     foreach ($recommendation in $Record.recommendations) {
         $id = [Net.WebUtility]::HtmlEncode([string]$recommendation.recommendationId)
-        $html = $html.Replace('id="' + $id + '"', 'id="r' + $recommendationIndex + '"').Replace(
-            'href="#' + $id + '"', 'href="#r' + $recommendationIndex + '"')
+        $null = $recommendationAnchors.TryAdd($id, ('r' + $recommendationIndex))
         $recommendationIndex++
     }
+    $html = Convert-AssessmentReportAnchorIds -Html $html -Anchors $recommendationAnchors -IncludeFragmentLinks
     # Omit only HTML end tags whose following token implicitly closes them.
     # Encoded observation text cannot match these markup-only patterns.
     foreach($pattern in @(
@@ -2094,7 +2143,9 @@ $crossDomainSection
         '</dd>(?=\s*(?:<d[td]\b|</dl>))',
         '</p>(?=\s*(?:<(?:p|h[1-6]|ul|ol|dl|div|details|section|aside|nav|table)\b|</(?:body|div|section|header|main)>))'
     )){$html=[regex]::Replace($html,$pattern,'')}
-    [System.Text.UTF8Encoding]::new($false).GetBytes($html.Replace("`r`n", "`n"))
+    # Return the bounded buffer as one value. Enumerating each byte through
+    # PowerShell created a boxed pipeline object per byte and a second buffer.
+    ,([System.Text.UTF8Encoding]::new($false).GetBytes($html.Replace("`r`n", "`n")))
 }
 
 function New-DeviceReadinessTerminalRecord {
@@ -2978,6 +3029,8 @@ function Invoke-DeviceReadinessSlice {
                 )
                 $sourceValidation = Test-AssessmentContract -Utf8Bytes $candidateBytes `
                     -ConvertFromJsonCommand $ConvertFromJsonCommand -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($candidateBytes)
+                    $candidateBytes = $null
                 if ([bool]$sourceValidation.accepted) {
                     $record = Complete-ValidatedDeviceReadinessAssessmentRecord `
                         -ValidatedRecord $record -Policy $policy -ContractValidation $sourceValidation
@@ -2997,6 +3050,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $firmwareSourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($firmwareSourceBytes)
+                    $firmwareSourceBytes = $null
                     if ([bool]$firmwareSourceValidation.accepted) {
                         $record = Complete-ValidatedFirmwareReadinessAssessmentRecord `
                             -Record $record -Policy $firmwarePolicy `
@@ -3015,6 +3070,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $identitySourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($identitySourceBytes)
+                    $identitySourceBytes = $null
                     if([bool]$identitySourceValidation.accepted){
                         $record=Complete-ValidatedIdentityEnrollmentAssessmentRecord `
                             -Record $record -Policy $identityPolicy `
@@ -3034,6 +3091,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $administratorSourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($administratorSourceBytes)
+                    $administratorSourceBytes = $null
                     if([bool]$administratorSourceValidation.accepted){
                         $sliceStage='ADMIN_RULE'
                         $record=Complete-ValidatedAdministratorExposureAssessmentRecord `
@@ -3054,6 +3113,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $effectivePolicySourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($effectivePolicySourceBytes)
+                    $effectivePolicySourceBytes = $null
                     if([bool]$effectivePolicySourceValidation.accepted){
                         $sliceStage='EFFECTIVE_POLICY_RULES'
                         $record=Complete-ValidatedEffectivePolicyAssessmentRecord `
@@ -3073,6 +3134,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $resourceSourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($resourceSourceBytes)
+                    $resourceSourceBytes = $null
                     if([bool]$resourceSourceValidation.accepted){
                         $sliceStage='RESOURCE_DEPENDENCIES_RULES'
                         $record=Complete-ValidatedResourceDependenciesAssessmentRecord `
@@ -3092,6 +3155,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $networkSourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($networkSourceBytes)
+                    $networkSourceBytes = $null
                     if([bool]$networkSourceValidation.accepted){
                         $sliceStage='NETWORK_TOPOLOGY_RULES'
                         $record=Complete-ValidatedNetworkTopologyAssessmentRecord `
@@ -3111,6 +3176,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $softwareSourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($softwareSourceBytes)
+                    $softwareSourceBytes = $null
                     $softwareContractReason=[string]$softwareSourceValidation.reasonCode
                     if([bool]$softwareSourceValidation.accepted){
                         $sliceStage='SOFTWARE_INVENTORY_RULES'
@@ -3135,6 +3202,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $certificateSourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($certificateSourceBytes)
+                    $certificateSourceBytes = $null
                     if([bool]$certificateSourceValidation.accepted){
                         $sliceStage='CERTIFICATE_TRUST_RULES'
                         $record=Complete-ValidatedCertificateTrustAssessmentRecord `
@@ -3154,6 +3223,8 @@ function Invoke-DeviceReadinessSlice {
                         -Utf8Bytes $connectivitySourceBytes `
                         -ConvertFromJsonCommand $ConvertFromJsonCommand `
                         -TestJsonCommand $TestJsonCommand
+                    [Security.Cryptography.CryptographicOperations]::ZeroMemory($connectivitySourceBytes)
+                    $connectivitySourceBytes = $null
                     if([bool]$connectivitySourceValidation.accepted){
                         $sliceStage='MICROSOFT_CONNECTIVITY_RULES'
                         $record=Complete-ValidatedMicrosoftConnectivityAssessmentRecord `
