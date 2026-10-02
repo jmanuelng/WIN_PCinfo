@@ -1,0 +1,93 @@
+{
+  "issue": 190,
+  "sourceCommit": "7009de092af9877bf56241332ad9fc2f332c6b2d",
+  "productSourceCommit": "faa8f7062ba2945925b62a6243de590e96eb741a",
+  "reviewBase": "a208d2ff71c4aa5a026bfa49a0b7643a02382328",
+  "capturedAtUtc": "2026-10-02T03:54:31.425907+00:00",
+  "candidateSha256": "6082704dbfaa8aa5432acd7db1ab41fd7799c8416cccf034fedfa01124a2d259",
+  "candidateBytes": 3319524,
+  "originalNativeReproduction": {
+    "expected": "Failed",
+    "observed": "TlsAuthenticationFailed",
+    "status": "FailRetained"
+  },
+  "strongerCertificateObservationReproduction": {
+    "expectedChain": "Invalid",
+    "observedChain": "Unavailable",
+    "status": "FailRetained"
+  },
+  "nativeObserved": {
+    "tlsState": "Failed",
+    "tlsChainState": "Invalid",
+    "httpState": "CertificateChainInvalid",
+    "httpSuccessStatusAbsent": true,
+    "exactSyntheticCertificateObservedInBothPhases": true,
+    "genericTlsAuthenticationMapping": "TlsAuthenticationFailed",
+    "genericTransportMapping": "Failed",
+    "namedKeyNonExportable": true,
+    "exactNamedKeyAbsenceVerified": true,
+    "ownedWorkerShutdownBoundMilliseconds": 3000,
+    "certificateInstalledOrTrusted": false,
+    "privateKeyExported": false
+  },
+  "summary": {
+    "pass": 6,
+    "fail": 0
+  },
+  "generatedConnectivityScenarios": 14,
+  "localOnlyCollapseRequests": 0,
+  "localOnlyRequestCapableAdapterAttempts": 0,
+  "tests": [
+    {
+      "test": "MicrosoftConnectivityNative",
+      "status": "Pass",
+      "elapsedMilliseconds": 6672,
+      "reason": null,
+      "testUtf8LfSha256": "04bcc1795524c7841e39fbf3c5fb8782bc197d1a3bf16e33dfae8affba9eaf61",
+      "logSha256": "b853e6a4a867f17cb32cb0aa4e72a7c0863d6def1057c8598f026b102cf36f92"
+    },
+    {
+      "test": "MicrosoftConnectivityPolicy",
+      "status": "Pass",
+      "elapsedMilliseconds": 757,
+      "reason": null,
+      "testUtf8LfSha256": "5b23a2bbabcb1a755c1af22f16674f9aca696ecf310cc5475e115420836a4342",
+      "logSha256": "abcfc17ce996fc21a29a097e10ddbce41d78ef39168045a05d77477af19dfef8"
+    },
+    {
+      "test": "MicrosoftConnectivity",
+      "status": "Pass",
+      "elapsedMilliseconds": 952,
+      "reason": null,
+      "testUtf8LfSha256": "852c04e026139953128527c97fd3f41e187289ffd117e7c40fcf43edcf108c79",
+      "logSha256": "557ecfff3db73df8390ea69eda6b3ae4a0107427ab542dab92f6429b58fdcaeb"
+    },
+    {
+      "test": "MicrosoftConnectivityContract",
+      "status": "Pass",
+      "elapsedMilliseconds": 62175,
+      "reason": null,
+      "testUtf8LfSha256": "17b47f6f825e0c5fb782ae1b9788682757fd3188c56d11b7790042805a945845",
+      "logSha256": "87f12c22d7d7684ac255ff96f17a4314c73ebc7c962e5ffb0f89c8d3c7daa6ac"
+    },
+    {
+      "test": "MicrosoftConnectivityApplication",
+      "status": "Pass",
+      "elapsedMilliseconds": 274202,
+      "reason": null,
+      "testUtf8LfSha256": "be7ed01dfbab9723f0f3a320abca26f0549c9c0a5d7a88e5fdd78871781661c5",
+      "logSha256": "d75585d9c991ac0f9894d1d979a821ed81db4d48dee6c649e4fc2e4b253eadca"
+    },
+    {
+      "test": "LocalOnlyRequestBoundary",
+      "status": "Pass",
+      "elapsedMilliseconds": 875,
+      "reason": null,
+      "testUtf8LfSha256": "a2ecee996860f22e78d7e050b20cffcf2515028403af9f9db160a39e6a3578a7",
+      "logSha256": "47716cc95eb40d7dbfdf1af54ed5280c0cc60929bca3f38b141d7d2148ec6e4a"
+    }
+  ],
+  "fullIntegratedGate": "PendingAfterRepairFrontier",
+  "historicalGate": "FailedUnchanged",
+  "githubActionsMinutes": 0
+}

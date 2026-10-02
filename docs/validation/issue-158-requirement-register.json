@@ -69,6 +69,16 @@
       "trust": "Unsigned precursor; no signing approval",
       "identityEvidence": "issue-189-denied-system-results.json",
       "meaning": "Same product bytes asAFK188; changed policy test inputs and all44 affected generated cases pass; no current full integrated qualification"
+    },
+    {
+      "id": "C158-AFK190",
+      "sourceRevision": "7009de092af9877bf56241332ad9fc2f332c6b2d",
+      "productSourceRevision": "faa8f7062ba2945925b62a6243de590e96eb741a",
+      "sha256": "6082704dbfaa8aa5432acd7db1ab41fd7799c8416cccf034fedfa01124a2d259",
+      "bytes": 3319524,
+      "trust": "Unsigned precursor; no signing approval",
+      "identityEvidence": "issue-190-native-results.json",
+      "meaning": "Same product bytes as AFK188; corrected native validation fixture and six affected checks pass; no full integrated qualification"
     }
   ],
   "statusSemantics": "Implementation and validation are independent. Pass is scoped to the stated method. Blocked plus NotStarted means unperformed, never failed product evidence disguised as environment. NotApplicable requires an explicit scenario/deferment reason. Integrated failure prevents automated #158 acceptance even where a row has a passing scoped check. No record is a support claim.",
@@ -3061,9 +3071,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -3192,9 +3203,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -3262,9 +3274,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -3332,9 +3345,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -4622,9 +4636,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -4692,9 +4707,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -4824,9 +4840,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -8345,9 +8362,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -8523,9 +8541,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -8614,9 +8633,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -9926,9 +9946,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -10157,9 +10178,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -10396,9 +10418,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -10543,9 +10566,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -10675,9 +10699,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -10883,9 +10908,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -12713,9 +12739,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -12789,9 +12816,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -14709,9 +14737,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -15359,9 +15388,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -15897,9 +15927,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -16083,9 +16114,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -16427,9 +16459,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -18380,9 +18413,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -18688,9 +18722,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -19004,9 +19039,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -19473,9 +19509,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -19781,9 +19818,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -20186,9 +20224,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -20810,9 +20849,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -21067,9 +21107,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "T28",
@@ -21615,9 +21656,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -21940,9 +21982,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -22727,9 +22770,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -23047,9 +23091,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -23357,9 +23402,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -23671,9 +23717,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -23987,9 +24034,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -24299,9 +24347,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -24613,9 +24662,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -24951,9 +25001,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -25291,9 +25342,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -25617,9 +25669,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -25939,9 +25992,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -26261,9 +26315,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -26680,9 +26735,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -27317,9 +27373,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -27637,9 +27694,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -27970,9 +28028,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -28319,9 +28378,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -28738,9 +28798,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -29061,9 +29122,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -29392,9 +29454,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -29721,9 +29784,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -30078,9 +30142,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -30376,9 +30441,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         },
         {
           "id": "F158-7",
@@ -31852,9 +31918,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -31928,9 +31995,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -32002,9 +32070,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -32409,9 +32478,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -32754,9 +32824,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -34742,9 +34813,10 @@
         {
           "id": "F158-6",
           "owner": "root / fresh #150 HTTP typed-state/test correction",
-          "state": "Open",
+          "state": "CorrectedAffectedChecksPass",
           "evidence": "issue-158-integrated-checkpoint.md",
-          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion"
+          "retest": "Owning correction must execute the full unchanged-intent native file, including dependent blocks not reached after the assertion",
+          "latestRetestCheckpoint": "AFK190"
         }
       ],
       "nextOwner": "#158 then #161",
@@ -37042,13 +37114,23 @@
       "evidence": "issue-189-denied-system-results.json",
       "observed": "Canonical denied-versus-absent regression and all44 generated policy cases pass with report/package/privacy/cleanup assertions; no production behavior changed; Standards0/Spec0. Historical full gate remains failed.",
       "fullGate": "NotStartedAfterRepairFrontier"
+    },
+    {
+      "id": "AFK190",
+      "issue": 190,
+      "sourceRevision": "7009de092af9877bf56241332ad9fc2f332c6b2d",
+      "candidate": "C158-AFK190",
+      "state": "CorrectedAffectedChecksPass",
+      "evidence": "issue-190-native-results.json",
+      "observed": "Actual synthetic certificate observed and rejected; exact owned key absence verified; six affected connectivity/admission checks pass, including14 generated scenarios and zero LocalOnly adapter requests. Standards0/Spec0. No production change; historical full gate remains failed.",
+      "fullGate": "NotStartedAfterRepairFrontier"
     }
   ],
   "currentCandidateInvalidation": {
-    "candidate": "C158-AFK189",
+    "candidate": "C158-AFK190",
     "appliesTo": "All309 requirement rows and every candidate-bound live/release result",
     "state": "FullQualificationPending",
     "meaning": "Earlier per-row candidate, automated and defect retest fields retain their historical provenance. New repair checkpoints qualify only stated seams. No old candidate pass qualifies this changed candidate; no live or release status is promoted.",
-    "nextAction": "Finish190-192 and run the complete integrated gate on frozen current source and test inputs."
+    "nextAction": "Finish191-192 and run the complete integrated gate on frozen current source and test inputs."
   }
 }
