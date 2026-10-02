@@ -21,7 +21,7 @@ $provenance = [ordered]@{
     windowsVersion = [Environment]::OSVersion.Version.ToString()
     runtime = [ordered]@{ file=[IO.Path]::GetFileName($hostPath); sha256=(Get-FileHash -LiteralPath $hostPath -Algorithm SHA256).Hash.ToLowerInvariant() }
     softwareWorkerRuntime = [ordered]@{ file='powershell.exe'; version=(Get-Item -LiteralPath $windowsPowerShellPath).VersionInfo.FileVersion; sha256=(Get-FileHash -LiteralPath $windowsPowerShellPath -Algorithm SHA256).Hash.ToLowerInvariant() }
-    inputs = @(foreach ($file in @('Invoke-AssessmentSafetyQualification.ps1','StatusDeskEngine.Tests.ps1',
+    inputs = @(foreach ($file in @('Invoke-AssessmentSafetyQualification.ps1','StatusDeskEngine.Tests.ps1','QualificationWorkspaceSampling.ps1',
         'AssessmentQualificationSupport.ps1','AdditionalScopeSourceAdapters.ps1','TestHarness.ps1','QualificationCleanup.ps1',
         'ReadinessSourceAdapters.ps1','IdentitySourceAdapters.ps1','PolicySourceAdapters.ps1','SecuritySourceAdapters.ps1',
         'PlatformSourceAdapters.ps1','RemoteSourceAdapters.ps1','SoftwareSourceAdapters.ps1','ResourceSourceAdapters.ps1',

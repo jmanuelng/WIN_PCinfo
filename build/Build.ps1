@@ -48,6 +48,7 @@ $sourcePaths = @(
     'src/AzureValidationArmTransport.ps1'
     'src/AzureValidationRemoteAbsence.ps1'
     'src/AzureValidationTerraform.ps1'
+    'src/AzureValidationTerraformInitialization.ps1'
     'src/AzureValidationRound.ps1'
     'src/ReleaseGates.ps1'
     'src/SigningBoundary.ps1'

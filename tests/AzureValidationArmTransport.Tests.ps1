@@ -71,18 +71,20 @@ function New-ArmFixture {
         $state.Requests.Add($request)
         if ($state.ThrowPrivate) { throw 'private synthetic token must never appear' }
         if ($request.Uri.StartsWith('http://169.254.169.254/')) {
-            $payload = [Convert]::ToBase64String((ConvertTo-ArmTestBytes ($state.Claims | ConvertTo-Json -Compress))).TrimEnd('=').Replace('+','-').Replace('/','_')
+            $payload = [Convert]::ToBase64String([Text.UTF8Encoding]::new($false).GetBytes(($state.Claims | ConvertTo-Json -Compress))).TrimEnd('=').Replace('+','-').Replace('/','_')
             $token = @{ token_type='Bearer'; resource='https://management.azure.com/';
                 access_token="e30.$payload.c3ludGhldGlj"; expires_on=[string]$state.Claims.exp }
             foreach ($key in $state.TokenChanges.Keys) { $token[$key] = $state.TokenChanges[$key] }
             $text = if ($null -eq $state.TokenText) { $token | ConvertTo-Json -Compress } else { $state.TokenText }
-            return New-ArmTestResponse -Text $text -Uri $request.Uri
+            return [pscustomobject]@{StatusCode=200;Uri=$request.Uri;Body=[Text.UTF8Encoding]::new($false).GetBytes($text)}
         }
         if ($null -ne $state.CancelDuringArmSource) {
             $state.CancelDuringArmSource.Cancel()
             throw 'private synthetic transport failure after cancellation'
         }
-        $response = if ($state.Responses.Count -gt 0) { $state.Responses.Dequeue() } else { New-ArmTestResponse }
+        $response = if ($state.Responses.Count -gt 0) { $state.Responses.Dequeue() } else {
+            [pscustomobject]@{StatusCode=200;Uri=$request.Uri;Body=[Text.UTF8Encoding]::new($false).GetBytes('{"value":[]}')}
+        }
         if ([string]::IsNullOrEmpty($response.Uri)) { $response.Uri = $request.Uri }
         if ($state.AdvanceAfterArm) { $state.CurrentTime = $state.CurrentTime.AddMinutes(20) }
         if ($state.Multiple) { $response; $response; return }

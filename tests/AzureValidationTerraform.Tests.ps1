@@ -15,13 +15,27 @@ function Assert-TerraformBoundary {
     $script:Assertions++
     if (-not $Condition) { throw $Message }
 }
+Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+namespace WinPCInfo.TerraformLeaseTests {
+ public sealed class Stream : MemoryStream {
+  public bool Attempted, ThrowOnDispose;
+  public Stream(byte[] bytes) : base(bytes,false) {}
+  protected override void Dispose(bool disposing) {
+   Attempted=true; base.Dispose(disposing);
+   if(ThrowOnDispose) throw new IOException("private pin cleanup detail");
+  }
+ }
+}
+'@
 function New-TerraformFixture {
     $root='C:\synthetic-private-tools'
     $pins=[ordered]@{}
     $state=[pscustomobject]@{
         Bytes=@{};Streams=[Collections.Generic.List[IO.Stream]]::new()
         Requests=[Collections.Generic.List[object]]::new()
-        Now=[DateTimeOffset]::Parse('2030-01-01T00:00:00Z')
+        Now=[DateTimeOffset]::Parse('2030-01-01T00:00:00Z');ThrowOnDispose=$false;AdvanceAfterProcess=$false
         Reply=[pscustomobject]@{
             Started=$true;ExitCode=0;FailureStage='None';CompleteOwnedTreeAbsent=$true
             StandardOutput=[Text.Encoding]::UTF8.GetBytes('{"terraform_version":"1.12.2","platform":"windows_amd64","provider_selections":{}}')
@@ -39,11 +53,11 @@ function New-TerraformFixture {
     $state.Reply.StandardOutputBytes=[long]$state.Reply.StandardOutput.Length
     $open={
         param($path)
-        $stream=[IO.MemoryStream]::new([byte[]]$state.Bytes[$path],$false)
+        $stream=[WinPCInfo.TerraformLeaseTests.Stream]::new([byte[]]$state.Bytes[$path]);$stream.ThrowOnDispose=$state.ThrowOnDispose
         $state.Streams.Add($stream)
         $stream
     }.GetNewClosure()
-    $run={param($request) $state.Requests.Add($request);$state.Reply}.GetNewClosure()
+    $run={param($request) $state.Requests.Add($request);if($state.AdvanceAfterProcess){$state.Now=$state.Now.AddMinutes(6)};$state.Reply}.GetNewClosure()
     $clock={$state.Now}.GetNewClosure()
     $args=@{Pins=$pins;DeadlineUtc=$state.Now.AddMinutes(5);OpenPinnedFile=$open;RunProcess=$run;UtcNow=$clock}
     $channel=New-AzureValidationTerraformChannel @args
@@ -66,6 +80,73 @@ function Assert-TerraformRefusal {
     try { $null=& $Action } catch { $caught=$_.Exception }
     Assert-TerraformBoundary ($null -ne $caught -and $caught.Message -ceq $Reason) 'CLI boundary did not retain the expected closed refusal.'
     Assert-TerraformBoundary (($caught.Data['OwnedCleanupUnverified'] -eq $true) -eq $CleanupUnverified) 'CLI ambiguity did not retain the expected scheduling stop signal.'
+}
+foreach($phase in @('Success','BodyFailure','Interruption','UnsafeProcess')) {
+    $f=New-TerraformFixture;$f.State.ThrowOnDispose=$true
+    if($phase -ceq 'BodyFailure'){$f.State.Reply.ExitCode=1}
+    elseif($phase -ceq 'Interruption'){$f.State.AdvanceAfterProcess=$true}
+    elseif($phase -ceq 'UnsafeProcess'){$f.State.Reply.CompleteOwnedTreeAbsent=$false}
+    $caught=$null;try{$null=Get-AzureValidationTerraformVersion -Channel $f.Channel}catch{$caught=$_.Exception}
+    Assert-TerraformBoundary ($null -ne $caught -and $caught.Message -ceq 'VALIDATION.CLEANUP_UNVERIFIED' -and $caught.Data['OwnedCleanupUnverified'] -eq $true -and $caught.Data['OwnedLeaseCleanupUnverified'] -eq $true) 'Pin disposal failure lost its owned cleanup stop signal.'
+    Assert-TerraformBoundary (@($f.State.Streams|Where-Object { -not $_.Attempted }).Count -eq 0) 'One disposal failure skipped other leases.'
+    Assert-TerraformBoundary (-not $caught.ToString().Contains('private pin cleanup detail')) 'Pin disposal exception exposed private details.'
+}
+# Acquisition can fail after native handles have already been opened.
+# Its cleanup stop signal must survive normalization before any dispatch.
+foreach($primary in @('VALIDATION.TOOLING_UNRESOLVED','VALIDATION.ROUND_INTERRUPTED','VALIDATION.CLEANUP_UNVERIFIED','private rejected primary')){
+    $f=New-TerraformFixture
+    $openFailure=[InvalidOperationException]::new('VALIDATION.CLEANUP_UNVERIFIED')
+    $openFailure.Data['OwnedCleanupUnverified']=$true
+    $openFailure.Data['OwnedLeaseCleanupUnverified']=$true
+    $openFailure.Data['PrimaryReasonCode']=$primary
+    $throwingOpen={param($path) throw $openFailure}.GetNewClosure()
+    $parameters=@{Pins=$f.Pins;DeadlineUtc=$f.Channel.DeadlineUtc;UtcNow=$f.Channel.Clock;OpenPinnedFile=$throwingOpen;RunProcess=$f.Channel.RunProcess}
+    $acquisitionChannel=New-AzureValidationTerraformChannel @parameters
+    $caught=$null;try{$null=Get-AzureValidationTerraformVersion -Channel $acquisitionChannel}catch{$caught=$_.Exception}
+    Assert-TerraformBoundary ($null -ne $caught -and $caught.Message -ceq 'VALIDATION.CLEANUP_UNVERIFIED' -and $caught.Data['OwnedCleanupUnverified'] -eq $true -and $caught.Data['OwnedLeaseCleanupUnverified'] -eq $true) 'Acquisition cleanup fault was downgraded to an ordinary tooling refusal.'
+    if($primary -ceq 'private rejected primary'){
+        Assert-TerraformBoundary (-not $caught.Data.Contains('PrimaryReasonCode') -and -not $caught.ToString().Contains($primary)) 'Acquisition cleanup fault exposed an unclosed private primary reason.'
+    }else{
+        Assert-TerraformBoundary ($caught.Data['PrimaryReasonCode'] -ceq $primary) 'Acquisition cleanup fault lost its closed primary reason.'
+    }
+    Assert-TerraformBoundary ($f.State.Requests.Count -eq 0 -and $f.State.Streams.Count -eq 0) 'Acquisition cleanup fault dispatched a process.'
+}
+foreach($withLeaseFlag in @($false,$true)){
+    $f=New-TerraformFixture
+    $inner=[InvalidOperationException]::new('VALIDATION.CLEANUP_UNVERIFIED')
+    $inner.Data['OwnedCleanupUnverified']=$true
+    if($withLeaseFlag){$inner.Data['OwnedLeaseCleanupUnverified']=$true}
+    $inner.Data['PrimaryReasonCode']='VALIDATION.TOOLING_UNRESOLVED'
+    $wrapped=[Management.Automation.MethodInvocationException]::new('private wrapper details',$inner)
+    $throwingOpen={param($path) throw $wrapped}.GetNewClosure()
+    $parameters=@{Pins=$f.Pins;DeadlineUtc=$f.Channel.DeadlineUtc;UtcNow=$f.Channel.Clock;OpenPinnedFile=$throwingOpen;RunProcess=$f.Channel.RunProcess}
+    $wrappedChannel=New-AzureValidationTerraformChannel @parameters
+    $caught=$null;try{$null=Get-AzureValidationTerraformVersion -Channel $wrappedChannel}catch{$caught=$_.Exception}
+    Assert-TerraformBoundary ($null -ne $caught -and $caught.Message -ceq 'VALIDATION.CLEANUP_UNVERIFIED' -and $caught.Data['OwnedCleanupUnverified'] -eq $true) 'CLR wrapper hid the acquisition owned-cleanup stop signal.'
+    Assert-TerraformBoundary (($caught.Data['OwnedLeaseCleanupUnverified'] -eq $true) -eq $withLeaseFlag -and $caught.Data['PrimaryReasonCode'] -ceq 'VALIDATION.TOOLING_UNRESOLVED') 'CLR wrapper hid the acquisition lease/primary metadata.'
+    Assert-TerraformBoundary (-not $caught.ToString().Contains('private wrapper details') -and $f.State.Requests.Count -eq 0) 'CLR wrapper details escaped or an unsafe acquisition dispatched.'
+}
+foreach($primary in @('VALIDATION.TOOLING_UNRESOLVED','VALIDATION.ROUND_INTERRUPTED')){
+    foreach($wrap in @($false,$true)){
+        $f=New-TerraformFixture;$f.State.ThrowOnDispose=$true
+        $acquisition=[pscustomobject]@{OpenCalls=0;ValidOpen=$f.Channel.OpenPinnedFile}
+        $inner=[InvalidOperationException]::new('VALIDATION.CLEANUP_UNVERIFIED')
+        $inner.Data['OwnedCleanupUnverified']=$true;$inner.Data['OwnedLeaseCleanupUnverified']=$true
+        $inner.Data['PrimaryReasonCode']=$primary
+        $openFailure=$inner
+        if($wrap){$openFailure=[Management.Automation.MethodInvocationException]::new('private combined acquisition detail',$inner)}
+        $combinedOpen={
+            param($path)
+            if(++$acquisition.OpenCalls -eq 1){return & $acquisition.ValidOpen $path}
+            throw $openFailure
+        }.GetNewClosure()
+        $parameters=@{Pins=$f.Pins;DeadlineUtc=$f.Channel.DeadlineUtc;UtcNow=$f.Channel.Clock;OpenPinnedFile=$combinedOpen;RunProcess=$f.Channel.RunProcess}
+        $combinedChannel=New-AzureValidationTerraformChannel @parameters
+        $caught=$null;try{$null=Get-AzureValidationTerraformVersion -Channel $combinedChannel}catch{$caught=$_.Exception}
+        Assert-TerraformBoundary ($null -ne $caught -and $caught.Message -ceq 'VALIDATION.CLEANUP_UNVERIFIED' -and $caught.Data['PrimaryReasonCode'] -ceq $primary) 'Combined acquisition/release failure replaced the original primary reason.'
+        Assert-TerraformBoundary ($caught.Data['OwnedCleanupUnverified'] -eq $true -and $caught.Data['OwnedLeaseCleanupUnverified'] -eq $true -and @($f.State.Streams|Where-Object { -not $_.Attempted }).Count -eq 0) 'Combined acquisition/release failure skipped a lease or lost the cleanup stop signal.'
+        Assert-TerraformBoundary ($f.State.Requests.Count -eq 0 -and -not $caught.ToString().Contains('private combined acquisition detail') -and -not $caught.ToString().Contains('private pin cleanup detail')) 'Combined acquisition/release failure dispatched or leaked private details.'
+    }
 }
 # Losing the process result cannot prove the owned tree absent.
 $f=New-TerraformFixture
@@ -139,7 +220,14 @@ namespace WinPCInfo.TerraformBoundaryTests {
 # final native dispatch type is substituted in the saved real gateway body;
 # deadline checks and pre-start proof execute unchanged, without OS processes.
 $script:NativeBridge=[scriptblock]::Create($script:NativeBridge.ToString().Replace(
-    '[WinPCInfo.ProcessSupervisor.NativeRunner]', '[WinPCInfo.TerraformBoundaryTests.NativeRunner]'))
+    '[WinPCInfo.ProcessSupervisor.NativeRunner]', '[WinPCInfo.TerraformBoundaryTests.NativeRunner]').
+    Replace('Assert-AzureTerraformNativeController','Assert-TestTerraformUnprivilegedController').
+    Replace('Assert-AzureTerraformDrivePath','Assert-TestTerraformGlobalDrive'))
+# The deadline fixture supplies injected admitted-controller/global-drive
+# policy outcomes; actual path policy is tested separately through native API
+# substitutes. No real process or privileged controller is admitted here.
+function Assert-TestTerraformUnprivilegedController {}
+function Assert-TestTerraformGlobalDrive {param($Path)}
 function Initialize-ProcessSupervisorNativeType { Start-Sleep -Milliseconds 200 }
 function Invoke-AzureTerraformNativeProcess { param($Request) & $script:NativeBridge -Request $Request }
 $f=New-TerraformFixture

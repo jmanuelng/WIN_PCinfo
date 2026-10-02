@@ -56,6 +56,8 @@ $memoryCalibrationSha256=''
 $qualificationFailed = $false
 $projection = $null
 $qualityWatch = [Diagnostics.Stopwatch]::StartNew()
+$qualificationWorkspaceDirectoryIdentities=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+. (Join-Path $PSScriptRoot 'QualificationWorkspaceSampling.ps1')
 $quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=0L; workspaceSamplingLosses=0L; nativeCounterFailures=0L; nativeCounterReads=0L; processPeakPrivateBytes=0L; packageBytes=0L; htmlBytes=0L; sampleCount=0L; maximumSampleGapMilliseconds=0L; firstSampleMilliseconds=-1L; lastSampleMilliseconds=0L }
 function Measure-QualificationWorkload {
     $now = $qualityWatch.ElapsedMilliseconds
@@ -88,13 +90,21 @@ function Measure-QualificationWorkload {
     if ([IO.Directory]::Exists($testRoot)) {
         try {
             $bytes = 0L
-            foreach ($file in @(Get-ChildItem -LiteralPath $testRoot -File -Recurse)) { $bytes += $file.Length }
+            $sampleFiles=@(Get-ChildItem -LiteralPath $testRoot -File -Recurse)
+            Register-QualificationWorkspaceDirectoryIdentities -Root $testRoot -Files $sampleFiles -Known $qualificationWorkspaceDirectoryIdentities
+            foreach ($file in $sampleFiles) { $bytes += $file.Length }
             $quality.sampledWorkspaceBytes = [Math]::Max($quality.sampledWorkspaceBytes, $bytes)
         }
         catch [IO.DirectoryNotFoundException], [IO.FileNotFoundException], [Management.Automation.ItemNotFoundException] {
             # Owned cleanup can remove a path during enumeration. Preserve the
             # observed maximum and disclose the lost sample; other errors fail.
             $quality.workspaceSamplingLosses++
+        }
+        catch [UnauthorizedAccessException] {
+            if($_.TargetObject -is [string] -and
+               (Test-QualificationWorkspaceDirectoryDisappeared -Failure $_ -Root $testRoot -Known $qualificationWorkspaceDirectoryIdentities)){
+                $quality.workspaceSamplingLosses++
+            }else{throw}
         }
     }
 }
