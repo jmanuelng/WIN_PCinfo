@@ -280,4 +280,60 @@ exit 1
     }
 }
 Test-RecoveryChildFailureAfterHandoff
+
+function Test-RecoveryExitedChildWithIncompleteOutput {
+    $repositoryRoot=Split-Path -Parent $PSScriptRoot
+    $root=Join-Path $repositoryRoot ('.test-output/recovery-pipe-'+[guid]::NewGuid().ToString('N'))
+    $testRoot=Join-Path $root 'assessment'; $null=[IO.Directory]::CreateDirectory($testRoot)
+    $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'StatusDeskRecovery.Tests.ps1'),[ref]$null,[ref]$null)
+    $mainTry=@($ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.TryStatementAst] })[-1]
+    $early=@($mainTry.Body.Statements | Where-Object { $_ -is [Management.Automation.Language.IfStatementAst] -and $_.Clauses[0].Item1.Extent.Text -match '^\$child.HasExited$' })
+    if ($early.Count -ne 1) { throw 'Recovery exited-child boundary is not unique.' }
+    $boundary=(Get-HarnessFinalization -File 'StatusDeskRecovery.Tests.ps1' -Body $early[0].Extent.Text).ToString()
+    $source=@'
+$ErrorActionPreference='Stop'
+. '__HELPER__'
+function Get-QualificationCleanupBlockerPath { '__BLOCKER__' }
+$testRoot='__ROOT__'; $allowedRoot='__ALLOWED__'
+$recoveryBodyError=$null; $recoveryCleanup=@{childOutputVerified=$false;descendantsAbsent=$false}; $interrupted=$false
+$ownedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new()
+$child=[pscustomobject]@{HasExited=$true;ExitCode=1}
+$child | Add-Member ScriptMethod WaitForExit {param($Milliseconds) $true}
+$child | Add-Member ScriptMethod Dispose {}
+$pending=[Threading.Tasks.TaskCompletionSource[string]]::new()
+$childOutput=$pending.Task; $childError=[Threading.Tasks.Task]::FromResult[string]('')
+$handoffPath=Join-Path $testRoot 'handoff'; [IO.File]::WriteAllText($handoffPath,'synthetic')
+try {
+__BOUNDARY__
+} catch {
+    if (-not (Test-QualificationCleanupUnverified -Exception $_.Exception)) { throw }
+    if (-not [IO.Directory]::Exists($testRoot)) { throw 'Incomplete output lost its owned recovery state.' }
+    Write-Output 'SYNTHETIC_INCOMPLETE_PIPE_BLOCKED'
+}
+'@
+    foreach ($replacement in @{
+        '__HELPER__'=(Join-Path $PSScriptRoot 'QualificationCleanup.ps1').Replace("'","''")
+        '__BLOCKER__'=(Join-Path $root 'blocked.json').Replace("'","''")
+        '__ROOT__'=$testRoot.Replace("'","''")
+        '__ALLOWED__'=([IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar).Replace("'","''")
+        '__BOUNDARY__'=$boundary
+    }.GetEnumerator()) { $source=$source.Replace($replacement.Key,$replacement.Value) }
+    $reproPath=Join-Path $root 'repro.ps1'; [IO.File]::WriteAllText($reproPath,$source)
+    $start=[Diagnostics.ProcessStartInfo]::new(); $start.FileName=Join-Path $PSHOME 'pwsh.exe'
+    $start.UseShellExecute=$false; $start.CreateNoWindow=$true; $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
+    foreach ($argument in @('-NoLogo','-NoProfile','-File',$reproPath)) { $start.ArgumentList.Add($argument) }
+    $repro=[Diagnostics.Process]::Start($start)
+    $output=$repro.StandardOutput.ReadToEndAsync(); $errorOutput=$repro.StandardError.ReadToEndAsync()
+    try {
+        Assert-Equal $true $repro.WaitForExit(8000) 'exited child with incomplete output reaches bounded cleanup instead of hanging before finally'
+        Assert-Equal 0 $repro.ExitCode ('incomplete-output boundary completes honestly: '+$errorOutput.GetAwaiter().GetResult())
+        Assert-Equal $true ($output.GetAwaiter().GetResult().Contains('SYNTHETIC_INCOMPLETE_PIPE_BLOCKED')) 'bounded output loss blocks further execution'
+    }
+    finally {
+        if (-not $repro.HasExited) { $repro.Kill($true); if (-not $repro.WaitForExit(5000)) { throw 'Owned pipe regression remains active.' } }
+        $repro.Dispose()
+        if ([IO.Directory]::Exists($root)) { [IO.Directory]::Delete($root,$true) }
+    }
+}
+Test-RecoveryExitedChildWithIncompleteOutput
 Write-Output 'PASS: evidence retention failure cannot bypass owned qualification cleanup.'

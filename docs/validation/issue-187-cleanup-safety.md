@@ -92,6 +92,16 @@ writes a handoff, emits the unsafe signal and exits without a marker; this repla
 was RED (recovery state deleted) before correction and is GREEN afterward.
 Neighboring-directory preservation is also verified with a fixed sentinel.
 
+At `a14be6d`, Spec reported zero findings. Standards found one P1: the early
+exited-child branch still read output without waiting for pipe completion. That
+inspection now happens entirely inside bounded finalization. A supervised
+regression replays the actual early branch and finalizer with an exited child and
+an incomplete output task. Before correction it exceeded the eight-second test
+deadline and the exact owned regression process was stopped. After correction it
+reaches the five-second output bound, preserves recovery state and reports the
+unsafe disposition. The complete focused regression remains unattended and
+requires no application, collector, administrator or SYSTEM worker.
+
 ## Qualification boundary
 
 These are synthetic harness checks on the build host. Independent Standards and

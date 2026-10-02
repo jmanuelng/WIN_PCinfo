@@ -37,9 +37,9 @@ try {
     $watch = [Diagnostics.Stopwatch]::StartNew()
     while (-not [IO.File]::Exists($handoffPath) -and -not $child.HasExited -and $watch.Elapsed.TotalSeconds -lt 45) { Start-Sleep -Milliseconds 25 }
     if ($child.HasExited) {
-        $earlyOutput=$childOutput.GetAwaiter().GetResult(); $earlyError=$childError.GetAwaiter().GetResult()
-        Assert-QualificationTestProcessResult -Output @($earlyOutput,$earlyError) -ExitCode $child.ExitCode
-        throw ('Controlled child did not reach its worker: ' + $earlyError + $earlyOutput)
+        # Parent exit alone does not close inherited output pipes. Inspect their
+        # completion only within the bounded owned finalization below.
+        throw 'Controlled child exited before owned worker observation.'
     }
     Assert-Equal $true ([IO.File]::Exists($handoffPath)) 'ordinary generated run reached the controlled supervised worker'
     # Observe only descendants of this exact owned test process. Keep process
