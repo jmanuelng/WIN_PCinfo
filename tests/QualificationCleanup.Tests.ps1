@@ -143,6 +143,8 @@ function Test-StatusDeskCleanupProjection {
     $testRoot=Join-Path $repositoryRoot ('.test-output/projection-'+[guid]::NewGuid().ToString('N'))
     $null=[IO.Directory]::CreateDirectory($testRoot)
     $QualificationPath=$testRoot+'.json'
+    $neighbor=$testRoot+'.neighbor'; $null=[IO.Directory]::CreateDirectory($neighbor)
+    $neighborFile=Join-Path $neighbor 'unrelated.txt'; [IO.File]::WriteAllText($neighborFile,'unrelated synthetic content')
     $qualificationFailed=$false; $qualificationBodyError=$null
     $projection=[ordered]@{coverage=@()}; $qualificationArguments=[ordered]@{}
     $qualityWatch=[Diagnostics.Stopwatch]::StartNew(); $quality=[ordered]@{htmlBytes=0L}
@@ -155,10 +157,12 @@ function Test-StatusDeskCleanupProjection {
         Assert-Equal 16 $evidence.quality.htmlBytes 'retained qualification records the exact nonzero report size'
         Assert-Equal $(if ($Recovery) {'RetainedForRecoveryTest'} else {'VerifiedAbsent'}) $evidence.testCleanup 'cleanup evidence preserves its exact recovery or absence disposition'
         Assert-Equal ([bool]$Recovery) ([IO.Directory]::Exists($testRoot)) 'only the explicit recovery case retains its owned workspace'
+        Assert-Equal 'unrelated synthetic content' ([IO.File]::ReadAllText($neighborFile)) 'owned cleanup leaves an unrelated neighboring directory intact'
     }
     finally {
         if ([IO.Directory]::Exists($testRoot)) { [IO.Directory]::Delete($testRoot,$true) }
         [IO.File]::Delete($QualificationPath)
+        [IO.Directory]::Delete($neighbor,$true)
     }
 }
 Test-StatusDeskCleanupProjection
@@ -218,6 +222,7 @@ function Test-RecoveryParentCleanupFailure {
     $testRoot=Join-Path $repositoryRoot ('.test-output/recovery-parent-'+[guid]::NewGuid().ToString('N'))
     $null=[IO.Directory]::CreateDirectory($testRoot)
     $child=$null; $ownedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new(); $recoveryBodyError=$null
+    $recoveryCleanup=@{childOutputVerified=$false;descendantsAbsent=$false}; $interrupted=$false
     $failure=$null
     try {
         try {
@@ -235,4 +240,44 @@ function Test-RecoveryParentCleanupFailure {
     }
 }
 Test-RecoveryParentCleanupFailure
+
+function Test-RecoveryChildFailureAfterHandoff {
+    $repositoryRoot=Split-Path -Parent $PSScriptRoot
+    $allowedRoot=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
+    $testRoot=Join-Path $repositoryRoot ('.test-output/recovery-handoff-'+[guid]::NewGuid().ToString('N'))
+    $null=[IO.Directory]::CreateDirectory($testRoot)
+    $handoffPath=Join-Path $testRoot 'synthetic-handoff'
+    $childPath=Join-Path $testRoot 'child.ps1'
+    [IO.File]::WriteAllText($childPath, @'
+param([string] $HandoffPath)
+[IO.File]::WriteAllText($HandoffPath,'synthetic handoff')
+Write-Output 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'
+exit 1
+'@)
+    $start=[Diagnostics.ProcessStartInfo]::new(); $start.FileName=Join-Path $PSHOME 'pwsh.exe'
+    $start.UseShellExecute=$false; $start.CreateNoWindow=$true
+    $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
+    foreach ($argument in @('-NoLogo','-NoProfile','-File',$childPath,'-HandoffPath',$handoffPath)) { $start.ArgumentList.Add($argument) }
+    $child=[Diagnostics.Process]::Start($start)
+    $childOutput=$child.StandardOutput.ReadToEndAsync(); $childError=$child.StandardError.ReadToEndAsync()
+    $ownedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new(); $recoveryBodyError=$null
+    $recoveryCleanup=@{childOutputVerified=$false;descendantsAbsent=$false}; $interrupted=$false
+    try {
+        Assert-Equal $true $child.WaitForExit(5000) 'controlled child completes without a live application'
+        Assert-Equal $true ([IO.File]::Exists($handoffPath)) 'controlled child creates its handoff before failing'
+        $failure=$null
+        try { . (Get-HarnessFinalization -File 'StatusDeskRecovery.Tests.ps1' -Body "throw 'Synthetic recovery discovery failure'") }
+        catch { $failure=$_ }
+        Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'post-handoff unsafe cleanup retains recovery state'
+        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'post-handoff unsafe signal blocks subsequent execution'
+    }
+    finally {
+        # Finalization may already have disposed the exact child handle.
+        $child.Dispose()
+        if ([IO.Directory]::Exists($testRoot)) { [IO.Directory]::Delete($testRoot,$true) }
+        if ([IO.Directory]::Exists($testRoot)) { throw 'Controlled handoff fixture cleanup remains unverified.' }
+        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+    }
+}
+Test-RecoveryChildFailureAfterHandoff
 Write-Output 'PASS: evidence retention failure cannot bypass owned qualification cleanup.'

@@ -12,6 +12,8 @@ $destination = Join-Path $testRoot 'assessment'
 $handoffPath = Join-Path $testRoot 'worker-ready'
 $child = $null
 $recoveryBodyError = $null
+$recoveryCleanup = @{ childOutputVerified=$false; descendantsAbsent=$false }
+$interrupted = $false
 $ownedProcesses = [Collections.Generic.List[Diagnostics.Process]]::new()
 function Assert-GeneratedRecovery {
     param([string] $Reason, [switch] $Authorized)
@@ -34,7 +36,7 @@ try {
     $childError = $child.StandardError.ReadToEndAsync()
     $watch = [Diagnostics.Stopwatch]::StartNew()
     while (-not [IO.File]::Exists($handoffPath) -and -not $child.HasExited -and $watch.Elapsed.TotalSeconds -lt 45) { Start-Sleep -Milliseconds 25 }
-    if (-not [IO.File]::Exists($handoffPath) -and $child.HasExited) {
+    if ($child.HasExited) {
         $earlyOutput=$childOutput.GetAwaiter().GetResult(); $earlyError=$childError.GetAwaiter().GetResult()
         Assert-QualificationTestProcessResult -Output @($earlyOutput,$earlyError) -ExitCode $child.ExitCode
         throw ('Controlled child did not reach its worker: ' + $earlyError + $earlyOutput)
@@ -58,6 +60,7 @@ try {
         if ($ownedProcesses.Count -lt 2) { Start-Sleep -Milliseconds 25 }
     }
     Assert-Equal $true ($ownedProcesses.Count -ge 2) 'actual controlled privilege worker and nested child executed before interruption'
+    $interrupted = $true
     $child.Kill() # Deliberately kill only the app; product Job ownership must stop its tree.
     Assert-Equal $true $child.WaitForExit(5000) 'interrupted application process is absent'
     foreach ($process in $ownedProcesses) { Assert-Equal $true $process.WaitForExit(5000) 'parent loss closes the owned Job and leaves no supervised child' }
@@ -84,13 +87,24 @@ catch { $recoveryBodyError=$_ }
 finally {
     Complete-QualificationHarness -BodyError $recoveryBodyError -Cleanup @(
         {
-            if ($null -ne $child -and -not $child.HasExited) { $child.Kill($true) }
-            if ($null -ne $child -and -not $child.WaitForExit(5000)) { throw 'Owned recovery application remains active.' }
+            if ($null -ne $child) {
+                if (-not $child.HasExited) { $interrupted=$true; $child.Kill($true) }
+                if (-not $child.WaitForExit(5000)) { throw 'Owned recovery application remains active.' }
+                if (-not $childOutput.Wait(5000) -or -not $childError.Wait(5000)) { throw 'Owned child output did not close within its finalization bound.' }
+                $finalOutput=@($childOutput.GetAwaiter().GetResult(),$childError.GetAwaiter().GetResult())
+                Assert-QualificationCleanupSignal -Output $finalOutput
+                if (-not $interrupted) { Assert-QualificationTestProcessResult -Output $finalOutput -ExitCode $child.ExitCode }
+            }
+            $recoveryCleanup.childOutputVerified=$true
+        },
+        {
             foreach ($process in $ownedProcesses) {
                 if (-not $process.WaitForExit(5000)) { throw 'Owned recovery descendant remains active.' }
             }
+            $recoveryCleanup.descendantsAbsent=$true
         },
         {
+            if (-not $recoveryCleanup.childOutputVerified -or -not $recoveryCleanup.descendantsAbsent) { throw 'Preserve recovery state until child output and descendant absence are verified.' }
             if ($null -ne $recoveryBodyError -and (Test-QualificationCleanupUnverified -Exception $recoveryBodyError.Exception)) { throw 'Preserve unverified child recovery state.' }
             if ($null -ne $child -and -not $child.HasExited) { throw 'Preserve active application recovery state.' }
             foreach ($process in $ownedProcesses) {

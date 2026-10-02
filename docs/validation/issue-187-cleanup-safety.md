@@ -82,6 +82,16 @@ seconds respectively, without executing an application candidate.
 Final independent re-review is pending. Findings in the initial review: Standards
 1 (worst P1), Spec 2 (worst P1); neither axis is combined with the other.
 
+The third frozen review (`d451de0`) found one P1 on each axis: the separately
+supervised recovery child could create its handoff and then emit unsafe cleanup,
+without its parent inspecting that output. Finalization now inspects completed
+output on every child path before deletion, bounds pipe completion, distinguishes
+intentional interruption from unexpected exit, and preserves state until child
+output and descendant absence are verified. A real controlled PowerShell child
+writes a handoff, emits the unsafe signal and exits without a marker; this replay
+was RED (recovery state deleted) before correction and is GREEN afterward.
+Neighboring-directory preservation is also verified with a fixed sentinel.
+
 ## Qualification boundary
 
 These are synthetic harness checks on the build host. Independent Standards and

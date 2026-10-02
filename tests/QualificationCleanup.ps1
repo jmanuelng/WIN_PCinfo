@@ -26,13 +26,18 @@ function Test-QualificationCleanupUnverified {
     return $false
 }
 
-function Assert-QualificationTestProcessResult {
-    param([AllowEmptyCollection()] [object[]] $Output, [int] $ExitCode)
+function Assert-QualificationCleanupSignal {
+    param([AllowEmptyCollection()] [object[]] $Output)
     if (@($Output | ForEach-Object { $_.ToString() -split '\r?\n' } | Where-Object { $_ -eq 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED' }).Count) {
         $exception=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: native child cleanup remains unverified.')
         $exception.Data['OwnedCleanupUnverified']=$true
         throw $exception
     }
+}
+
+function Assert-QualificationTestProcessResult {
+    param([AllowEmptyCollection()] [object[]] $Output, [int] $ExitCode)
+    Assert-QualificationCleanupSignal -Output $Output
     if ($ExitCode -ne 0) { throw "Assessment qualification child failed with exit code $ExitCode." }
     Assert-QualificationCleanupReady
 }
