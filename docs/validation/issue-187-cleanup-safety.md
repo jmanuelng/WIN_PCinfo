@@ -79,7 +79,7 @@ finalization is separately replayed with an unsafe child error and preserves its
 workspace and original error. Both focused commands pass, in about ten and three
 seconds respectively, without executing an application candidate.
 
-Final independent re-review is pending. Findings in the initial review: Standards
+Findings in the initial review: Standards
 1 (worst P1), Spec 2 (worst P1); neither axis is combined with the other.
 
 The third frozen review (`d451de0`) found one P1 on each axis: the separately
@@ -101,6 +101,28 @@ deadline and the exact owned regression process was stopped. After correction it
 reaches the five-second output bound, preserves recovery state and reports the
 unsafe disposition. The complete focused regression remains unattended and
 requires no application, collector, administrator or SYSTEM worker.
+
+## Final independent reviews
+
+### Standards
+
+No findings at `621d307e90ef51223520ff1e5783d31f91249d3d` against the repair base.
+The native callers, supervised recovery output checks and bounded early-exit
+finalization preserve the documented safety contracts. The incomplete-output
+regression exercises the actual branch and finalizer. No meaningful baseline
+smells remain. The reviewer performed source review and no application execution.
+
+### Spec
+
+No findings at the same frozen revision and base. Early exit reaches bounded
+finalization; incomplete output retains recovery state and propagates unsafe
+cleanup. All prior native-wrapper and post-handoff corrections remain intact.
+Both focused harness tests pass. The reviewer performed no generated application
+execution or mutation.
+
+Final findings: Standards 0, Spec 0. The bounded #187 repair releases the safety
+hold on serial synthetic generated-application tests. It does not promote the
+historical failed gate or complete current application qualification.
 
 ## Qualification boundary
 
