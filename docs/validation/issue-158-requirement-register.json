@@ -79,6 +79,16 @@
       "trust": "Unsigned precursor; no signing approval",
       "identityEvidence": "issue-190-native-results.json",
       "meaning": "Same product bytes as AFK188; corrected native validation fixture and six affected checks pass; no full integrated qualification"
+    },
+    {
+      "id": "C158-AFK191192",
+      "sourceRevision": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+      "productSourceRevision": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+      "sha256": "24ab45dda69ee2a7cfd45985b27e39031e7f8c6f94cab5e0b2a54a830b0a9512",
+      "bytes": 3337563,
+      "trust": "Unsigned precursor; no signing approval",
+      "identityEvidence": "issue-191-controlled-results.json",
+      "meaning": "Changed product and qualification inputs; 13 scoped controlled cases pass with lifetime-native peaks and closed write bounds. Current full 189-file gate running; delivered/live/aggregate/signing acceptance pending."
     }
   ],
   "statusSemantics": "Implementation and validation are independent. Pass is scoped to the stated method. Blocked plus NotStarted means unperformed, never failed product evidence disguised as environment. NotApplicable requires an explicit scenario/deferment reason. Integrated failure prevents automated #158 acceptance even where a row has a passing scoped check. No record is a support claim.",
@@ -37124,13 +37134,38 @@
       "evidence": "issue-190-native-results.json",
       "observed": "Actual synthetic certificate observed and rejected; exact owned key absence verified; six affected connectivity/admission checks pass, including14 generated scenarios and zero LocalOnly adapter requests. Standards0/Spec0. No production change; historical full gate remains failed.",
       "fullGate": "NotStartedAfterRepairFrontier"
+    },
+    {
+      "id": "AFK191",
+      "issue": 191,
+      "sourceRevision": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+      "candidate": "C158-AFK191192",
+      "state": "ControlledAffectedChecksPassPendingFullGateAndReview",
+      "evidence": "issue-191-controlled-results.json",
+      "observed": "Controlled-source generated Status desk regression only. Process lifetime includes startup, module loading and driver before completed session and WPF viewing. Post-assessment assertions have separately retained full-driver verdicts. No actual delivered GUI, aggregate child-tree or eligible-client qualification.",
+      "fullGate": "Running189Files",
+      "standardsReview": "Pending",
+      "specReview": "Pending"
+    },
+    {
+      "id": "AFK192",
+      "issue": 192,
+      "sourceRevision": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+      "candidate": "C158-AFK191192",
+      "state": "ControlledAffectedChecksPassPendingFullGateAndReview",
+      "evidence": "issue-192-recovery-results.json",
+      "observed": "Controlled-source WPF/engine and real owned synthetic process interruption; no live application acceptance or Local Only observer qualification.",
+      "fullGate": "Running189Files",
+      "standardsReview": "Pending",
+      "specReview": "Pending"
     }
   ],
   "currentCandidateInvalidation": {
-    "candidate": "C158-AFK190",
+    "candidate": "C158-AFK191192",
+    "sourceRevision": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
     "appliesTo": "All309 requirement rows and every candidate-bound live/release result",
     "state": "FullQualificationPending",
-    "meaning": "Earlier per-row candidate, automated and defect retest fields retain their historical provenance. New repair checkpoints qualify only stated seams. No old candidate pass qualifies this changed candidate; no live or release status is promoted.",
-    "nextAction": "Finish191-192 and run the complete integrated gate on frozen current source and test inputs."
+    "meaning": "Original per-row candidates, original Fail observations and historical automated/live fields are retained without modification. Scoped controlled-source passes qualify only their stated seams. No historical result qualifies changed bytes. No live or release status is promoted.",
+    "nextAction": "Complete frozen-source 189-file integrated gate, resolve any current failures, and obtain fixed-commit independent Standards and Spec review."
   }
 }

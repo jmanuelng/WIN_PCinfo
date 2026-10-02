@@ -186,7 +186,7 @@ runs, Distinct, EscapedOverflow, accepted and denied FullReport, and six separat
 active WPF actions. Maximum working sets are 525,078,528, 520,441,856 and
 520,343,552 bytes; all native reads and cleanup checks pass. This campaign retains
 the earlier calibration identity. Re-measurement under the stricter typed
-calibration admission is in progress; final integrated qualification is pending.
+calibration admission passes; final integrated qualification is pending.
 
 ## Checkout-stable inventory identities
 
@@ -201,6 +201,9 @@ after it; candidate drift, unknown writer and derivation failures still reject.
 
 The stricter typed-calibration thirteen-case campaign also passes, including
 three maximum WPF measurements of 520,957,952, 523,423,744 and 523,591,680 bytes
-working set. The current final inventory-attribution campaign is being repeated
-before freezing source for the full gate. Earlier identities and failures are
-retained rather than overwritten.
+working set. The final checkout-stable inventory campaign also passes all thirteen cases.
+Its three maximum WPF working sets are 521,572,352, 520,581,120 and 526,221,312
+bytes. Native reads succeed, cleanup is verified, and exact tested-byte identities
+are retained. The complete 189-file gate is running against frozen source; formal
+independent review follows. Earlier identities and failures remain retained.
+The sanitized case record is [issue-191-controlled-results.json](issue-191-controlled-results.json).
