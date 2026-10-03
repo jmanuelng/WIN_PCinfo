@@ -1,0 +1,128 @@
+{
+  "kind": "ControlledAssessmentClosedDiskWriterInventory",
+  "version": "1.2.0",
+  "candidateSha256": "249255a7508071f46affa96813227662b9d4670bddbb037f970bad194b162e74",
+  "harnessSha256": "6cf5d3a1f24dcc9b83bb27e59112d698a4b4fc1c878c038a8c638649d007afa4",
+  "scope": "OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses",
+  "writers": [
+    "Write-RunRecoveryJournal",
+    "Write-RegisteredEvidenceArtifact",
+    "Write-ProtectedPackageEnvelope",
+    "Write-RecipientProfileDocument",
+    "Export-RestrictedAssessmentReport"
+  ],
+  "emptyCreators": [
+    "New-RegisteredEvidenceArtifact",
+    "New-EvidenceWorkspaceOwnedWriteStream"
+  ],
+  "excluded": "Maintainer signing, publication, qualification, Azure and explicit product validation-fixture writers are outside this ordinary assessment path. RecoveryDestination and InterruptHandoffPath configurations remain inadmissible; only the three closed finite privileged fault witnesses below are admitted.",
+  "inputs": [
+    {
+      "path": "tests/AssessmentQualificationSupport.ps1",
+      "sha256": "a6458dd7e59c15b4e7bf47a50eec008767d207bf31e5715ed5f369732d19167d"
+    },
+    {
+      "path": "tests/SoftwareReportAssertions.ps1",
+      "sha256": "b226279db7cc6b85acb15b971bc0b8443ede77f902398c782bd1e14f2180a34e"
+    },
+    {
+      "path": "tests/TestHarness.ps1",
+      "sha256": "9177eeff21505b06d70ecac0aa667b637b10bc9c0eaf3158353e2806be835d2c"
+    },
+    {
+      "path": "tests/AdditionalScopeSourceAdapters.ps1",
+      "sha256": "8a59bbe1f1bfc5a42ca49515796bb68caf8b87eb31da183b47c8a70193e7fd7e"
+    },
+    {
+      "path": "tests/CertificateSourceAdapters.ps1",
+      "sha256": "549cbd2b13bd873d5a1f95cd2daab473cb9cc3f1ce40f58004b6ca1e2efcf2f4"
+    },
+    {
+      "path": "tests/ConnectivitySourceAdapters.ps1",
+      "sha256": "77f69ebab1d5c87578490d935fcc8e87deea43102c8fa0d2c268dc5bd9d4aad5"
+    },
+    {
+      "path": "tests/IdentitySourceAdapters.ps1",
+      "sha256": "c55f36ca005ef4a9ddd3b6d6dd878a3b61c218d589221bee11200c4297db0f03"
+    },
+    {
+      "path": "tests/NetworkSourceAdapters.ps1",
+      "sha256": "642b21e4bee4f81318558db2f60aa305db6cfd46dcbc3c1e50b4cf734cd53bde"
+    },
+    {
+      "path": "tests/PlatformSourceAdapters.ps1",
+      "sha256": "9ce27ad690e86fad643ce5e090360789fa6baf47f54604e8e4774ed6f3a2e88f"
+    },
+    {
+      "path": "tests/PolicySourceAdapters.ps1",
+      "sha256": "457cfdbdac562c444a9354088693d6fd7f41cf1a78f8a3b253d99defa14707d6"
+    },
+    {
+      "path": "tests/ReadinessSourceAdapters.ps1",
+      "sha256": "72163046cab3d4db47083fa055e9a914996a5d62a982740f09eb148829eb0c51"
+    },
+    {
+      "path": "tests/RemoteSourceAdapters.ps1",
+      "sha256": "91223c24fdf31aa54609cce0d3fea5cdbb6ccac39ac0b87b78442c0368d00c97"
+    },
+    {
+      "path": "tests/ResourceSourceAdapters.ps1",
+      "sha256": "d28081e26e3bb69e27703208528ac521b0f7d987e7652fc78ed1a6228601a66e"
+    },
+    {
+      "path": "tests/ResourceSourceBoundary.ps1",
+      "sha256": "0c66caf6149586511f4233b4b4529292afa3afb69dfe80fb5d016b52fd86f9d9"
+    },
+    {
+      "path": "tests/SecuritySourceAdapters.ps1",
+      "sha256": "362bac97a219119b9e5f7e05daf8762ac5556d58dfca90e2f5963ebadc188b20"
+    },
+    {
+      "path": "tests/SoftwareSourceAdapters.ps1",
+      "sha256": "e0a21ff890517c44f0abfd7162d422675a40c69a1730ef2b6e9059d2aefe6985"
+    },
+    {
+      "path": "tests/SoftwareSourceBoundary.ps1",
+      "sha256": "084e4f27a1abeaa3540a1e3ebb5b1dfd0ac4fcdafc0ae289d9beb65822a69676"
+    },
+    {
+      "path": "tests/QualificationDiskBounds.ps1",
+      "sha256": "859ffff7b97c96f4e85ab5af4de20b9888364ad858b7d7d6707edbdc83db92a1"
+    },
+    {
+      "path": "tests/QualificationWorkspaceSampling.ps1",
+      "sha256": "c6c86a50524bde4ab943d795be31a78e9c2fc70be374e391797f927505824431"
+    },
+    {
+      "path": "tests/QualificationRecoveryFixtureProof.ps1",
+      "sha256": "9826aedb2a0d70821e35f834e544cf29adb0bea1133d59d9ca8f35d0445b8f77"
+    }
+  ],
+  "sourceIdentityKind": "CanonicalUtf8LfSha256",
+  "privilegedFaultWitnesses": [
+    {
+      "fault": "PrivilegePreStartCancel",
+      "relativePath": "synthetic-pre-start-hello.txt",
+      "content": "SyntheticBeforeWorkerHello",
+      "encodingBound": "Utf8IncludingOptionalThreeByteBom",
+      "maximumLaunches": 1,
+      "reservationBytes": 29
+    },
+    {
+      "fault": "PrivilegePreStartTimeout",
+      "relativePath": "synthetic-pre-start-hello.txt",
+      "content": "SyntheticBeforeWorkerHello",
+      "encodingBound": "Utf8IncludingOptionalThreeByteBom",
+      "maximumLaunches": 1,
+      "reservationBytes": 29
+    },
+    {
+      "fault": "PrivilegePostStartLoss",
+      "relativePath": "synthetic-post-start.txt",
+      "content": "SyntheticFirmwareReturned",
+      "encodingBound": "Utf8IncludingOptionalThreeByteBom",
+      "maximumLaunches": 1,
+      "reservationBytes": 28
+    }
+  ]
+}

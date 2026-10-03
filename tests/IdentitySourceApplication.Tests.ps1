@@ -13,7 +13,7 @@ $candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $hostPath=Resolve-WinPCInfoRuntime -ApplicationPath $candidate
 foreach ($case in $Scenario) {
     $watch=[Diagnostics.Stopwatch]::StartNew()
-    & $hostPath -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1') -IdentitySourceScenario $case
+    Invoke-QualificationTestProcess -HostPath $hostPath -Arguments @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),'-IdentitySourceScenario',$case)
     if ($LASTEXITCODE -ne 0) { throw "Generated identity source scenario $case failed." }
     Write-Output ('PASS: identity source {0}; elapsed seconds {1:N1}.' -f $case,$watch.Elapsed.TotalSeconds)
 }

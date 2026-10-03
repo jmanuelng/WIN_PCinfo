@@ -234,11 +234,13 @@ function Test-CertificateTrustPayload {
         foreach($state in @($Payload.scopeStates)){
             if(-not (Test-CertificateTrustObjectShape $state @('scopeId','state','reasonCode')) -or
                 [string]$state.scopeId -notin @($Policy.purposes.scopeId) -or
-                [string]$state.state -notin @('Complete','Partial','NotApplicable','Unavailable','Constrained','Denied','Malformed','TimedOut','Failed') -or
+                [string]$state.state -notin @('Complete','Partial','NotApplicable','Unavailable','Constrained','Denied','Malformed','TimedOut','Cancelled','Failed') -or
                 ($state.state -eq 'Complete' -and $state.reasonCode) -or
                 ($state.state -ne 'Complete' -and (-not (Test-CertificateTrustText $state.reasonCode 96) -or [string]$state.reasonCode -cnotmatch '^[A-Z][A-Z0-9_]*(?:\.[A-Z][A-Z0-9_]*)+$'))){return $false}
         }
         foreach($candidate in @($Payload.candidates)){
+            # PowerShell string casts of JSON-recognized dates use invariant
+            # text; a caller's calendar must not reject or reinterpret it.
             $parsedNotBefore=[DateTimeOffset]::MinValue
             $parsedNotAfter=[DateTimeOffset]::MinValue
             $purpose=@($Policy.purposes|Where-Object purposeId -eq $candidate.purposeId)[0]
@@ -252,8 +254,8 @@ function Test-CertificateTrustPayload {
                 [string]$candidate.storeLocation -notin @('CurrentUser','LocalMachine') -or
                 [string]$candidate.storeName -notin @('My','TrustedPublisher') -or
                 "$($candidate.storeLocation)/$($candidate.storeName)" -notin @($purpose.stores) -or
-                -not [DateTimeOffset]::TryParse([string]$candidate.notBefore,[ref]$parsedNotBefore) -or
-                -not [DateTimeOffset]::TryParse([string]$candidate.notAfter,[ref]$parsedNotAfter) -or
+                -not [DateTimeOffset]::TryParse([string]$candidate.notBefore,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$parsedNotBefore) -or
+                -not [DateTimeOffset]::TryParse([string]$candidate.notAfter,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$parsedNotAfter) -or
                 $parsedNotAfter -lt $parsedNotBefore -or
                 [string]$candidate.validityState -notin @('Valid','Expired','NotYetValid','Unknown') -or
                 [string]$candidate.chainState -notin @('Complete','Incomplete','NotEvaluated') -or
@@ -422,7 +424,19 @@ function Invoke-CertificateTrustCollection {
             try{$processSid=[string]$identity.User.Value;$administrator=[Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)}finally{$identity.Dispose()}
             if($processSid -ne $AssessmentUserSid -or $administrator){$payload=New-CertificateTrustGapPayload $Policy Denied 'CERTIFICATE.ASSESSMENT_USER_CONTEXT_REQUIRED' $(if($processSid -ne $AssessmentUserSid){'AlternateAdministrator'}else{'SameUser'}) Administrator}else{
                 $snapshot=Invoke-BoundedCertificateTrustSnapshot -Policy $Policy -AssessmentUserSid $AssessmentUserSid;$started=$snapshot.startedAt;$completed=$snapshot.completedAt
-                if($snapshot.succeeded){$payload=$snapshot.payload}else{$timedOut=$snapshot.reasonCode -eq 'PROCESS.DEADLINE_EXCEEDED';$payload=New-CertificateTrustGapPayload $Policy $(if($timedOut){'TimedOut'}else{'Failed'}) $(if($timedOut){'CERTIFICATE.DEADLINE_EXCEEDED'}else{'CERTIFICATE.SOURCE_FAILED'}) 'SameUser' 'StandardUser'}
+                if($snapshot.succeeded){$payload=$snapshot.payload}else{
+                    $state = switch ($snapshot.reasonCode) {
+                        'PROCESS.DEADLINE_EXCEEDED' { 'TimedOut' }
+                        { $_ -in @('PROCESS.CANCELLED_COOPERATIVELY','PROCESS.CANCELLED_HARD') } { 'Cancelled' }
+                        default { 'Failed' }
+                    }
+                    $reason = switch ($state) {
+                        TimedOut { 'CERTIFICATE.DEADLINE_EXCEEDED' }
+                        Cancelled { 'CERTIFICATE.COLLECTION_CANCELLED' }
+                        default { 'CERTIFICATE.SOURCE_FAILED' }
+                    }
+                    $payload=New-CertificateTrustGapPayload $Policy $state $reason 'SameUser' 'StandardUser'
+                }
             }
         }
     }else{$payload=New-CertificateTrustSyntheticPayload $ValidationScenario $Policy}
@@ -481,7 +495,7 @@ function Add-CertificateTrustEvidenceRecord {
             # canonical evidence field a String on every supported PowerShell
             # runtime while retaining an unambiguous point in time.
             $value=if($mapping[0] -in @('notBefore','notAfter')){
-                'UTC '+([DateTimeOffset]::Parse([string]$candidate.($mapping[0]))).UtcDateTime.ToString('yyyy-MM-dd HH:mm:ss')
+                'UTC '+([DateTimeOffset]::Parse([string]$candidate.($mapping[0]),[Globalization.CultureInfo]::InvariantCulture)).UtcDateTime.ToString('yyyy-MM-dd HH:mm:ss',[Globalization.CultureInfo]::InvariantCulture)
             }else{$candidate.($mapping[0])}
             Add-CertificateObservation $candidate.scopeId "$index-$($mapping[1])" "field:certificate.$($mapping[1])" $subjectId $value
         }

@@ -1,4 +1,6 @@
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
+Assert-QualificationCleanupReady
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'build/RuntimeHost.ps1')
 
 function Assert-Equal {

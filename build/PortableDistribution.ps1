@@ -158,7 +158,9 @@ function New-PortableDependencyInventory {
         [Parameter(Mandatory)] [string] $BuildToolDigest,
         [Parameter(Mandatory)] [string] $HelperDigest,
         [Parameter(Mandatory)] [string] $EntryDigest,
-        [Parameter(Mandatory)] [string] $CanonicalizationDigest
+        [Parameter(Mandatory)] [string] $CanonicalizationDigest,
+        [Parameter(Mandatory)] [string] $ArchiveToolDigest,
+        [Parameter(Mandatory)] [string] $PackagingToolDigest
     )
 
     [pscustomobject][ordered]@{
@@ -212,7 +214,7 @@ function New-PortableDependencyInventory {
                 role = 'build-tool'
                 product = 'build/Build.ps1'
                 version = '1.0.0'
-                bundled = $true
+                bundled = $false
                 digest = $BuildToolDigest
                 license = 'MIT'
                 provenance = 'repository-build/Build.ps1'
@@ -222,10 +224,30 @@ function New-PortableDependencyInventory {
                 role = 'build-tool'
                 product = 'build/TextCanonicalization.ps1'
                 version = '1.0.0'
-                bundled = $true
+                bundled = $false
                 digest = $CanonicalizationDigest
                 license = 'MIT'
                 provenance = 'repository-build/TextCanonicalization.ps1'
+            }
+            [pscustomobject][ordered]@{
+                id = 'win-pcinfo-deterministic-archive'
+                role = 'build-tool'
+                product = 'build/DeterministicArchive.ps1'
+                version = '1.0.0'
+                bundled = $false
+                digest = $ArchiveToolDigest
+                license = 'MIT'
+                provenance = 'repository-build/DeterministicArchive.ps1'
+            }
+            [pscustomobject][ordered]@{
+                id = 'win-pcinfo-portable-packaging'
+                role = 'build-tool'
+                product = 'build/PortableDistribution.ps1'
+                version = '1.0.0'
+                bundled = $false
+                digest = $PackagingToolDigest
+                license = 'MIT'
+                provenance = 'repository-build/PortableDistribution.ps1'
             }
             [pscustomobject][ordered]@{
                 id = 'win-pcinfo-windows-powershell-helper'
@@ -251,17 +273,42 @@ function New-PortableDependencyInventory {
     }
 }
 
+function Get-PortableSpdxDocumentNamespace {
+    param(
+        [Parameter(Mandatory)] [pscustomobject] $Document,
+        [Parameter(Mandatory)] [string] $SourceRevisionDigest
+    )
+
+    # Namespace identity covers the complete metadata payload, excluding only
+    # its own URI. The application authenticates this document; no application
+    # checksum is placed inside it.
+    $metadata = [ordered]@{}
+    foreach ($property in $Document.PSObject.Properties) {
+        if ($property.Name -cne 'documentNamespace') {
+            $metadata[$property.Name] = $property.Value
+        }
+    }
+    [byte[]] $payload = ConvertTo-DeterministicJsonBytes -Value ([pscustomobject] $metadata)
+    [byte[]] $seed = [Text.Encoding]::UTF8.GetBytes($SourceRevisionDigest + [char]10)
+    $identity = Get-PortableDistributionSha256 -Bytes ([byte[]] ($seed + $payload))
+    "https://github.com/jmanuelng/WIN_PCinfo/spdx/2.0.0-preview.1/$identity"
+}
+
 function New-PortableSpdxDocument {
     param([Parameter(Mandatory)] [string] $SourceRevisionDigest)
 
-    [pscustomobject][ordered]@{
+    $document = [pscustomobject][ordered]@{
         spdxVersion = 'SPDX-2.3'
         dataLicense = 'CC0-1.0'
         SPDXID = 'SPDXRef-DOCUMENT'
         name = 'WIN-PCInfo-2.0.0-preview.1'
-        documentNamespace = "https://github.com/jmanuelng/WIN_PCinfo/spdx/2.0.0-preview.1/$SourceRevisionDigest"
+        documentNamespace = ''
+        comment = 'Metadata-only product and external-runtime inventory. Exact packaged file identities are authenticated separately by package-manifest.json and checksums.sha256.'
         creationInfo = [pscustomobject][ordered]@{
-            created = '1980-01-01T00:00:00Z'
+            # Original metadata-template authoring time, fixed in source.
+            # Rebuilds preserve this time; ZIP entry timestamps use their own epoch.
+            # A newly authored metadata revision updates this timestamp in source.
+            created = '2026-10-02T12:14:09Z'
             creators = @('Tool: win-pcinfo-build-1.0.0')
         }
         packages = @(
@@ -270,7 +317,7 @@ function New-PortableSpdxDocument {
                 SPDXID = 'SPDXRef-Package-WIN-PCInfo'
                 versionInfo = '2.0.0-preview.1'
                 downloadLocation = 'NOASSERTION'
-                filesAnalyzed = $true
+                filesAnalyzed = $false
                 licenseConcluded = 'MIT'
                 licenseDeclared = 'MIT'
                 copyrightText = 'NOASSERTION'
@@ -299,6 +346,8 @@ function New-PortableSpdxDocument {
             }
         )
     }
+    $document.documentNamespace = Get-PortableSpdxDocumentNamespace -Document $document -SourceRevisionDigest $SourceRevisionDigest
+    $document
 }
 
 function Get-PortableGoverningResources {
@@ -379,9 +428,15 @@ function Get-PortableGoverningResources {
         [System.Text.UTF8Encoding]::new($false).GetBytes($sourceRevisionSeed)
     )
 
-    $inventory = New-PortableDependencyInventory -BuildToolDigest $BuildToolDigest `
-        -HelperDigest $helperDigest -EntryDigest (Get-PortableDistributionSha256 -Bytes $entryBytes) `
-        -CanonicalizationDigest $canonicalizationDigest
+    $inventoryParameters = @{
+        BuildToolDigest = $BuildToolDigest
+        HelperDigest = $helperDigest
+        EntryDigest = Get-PortableDistributionSha256 -Bytes $entryBytes
+        CanonicalizationDigest = $canonicalizationDigest
+        ArchiveToolDigest = Get-PortableDistributionSha256 -Bytes (Get-Utf8LfBytes -LiteralPath (Join-Path $RepositoryRoot 'build/DeterministicArchive.ps1'))
+        PackagingToolDigest = Get-PortableDistributionSha256 -Bytes (Get-Utf8LfBytes -LiteralPath (Join-Path $RepositoryRoot 'build/PortableDistribution.ps1'))
+    }
+    $inventory = New-PortableDependencyInventory @inventoryParameters
     $inventoryBytes = ConvertTo-DeterministicJsonBytes -Value $inventory
     $null = $resources.Add((New-PortableFileRecord -Path 'dependency-inventory.json' -Class 'definition' -Bytes $inventoryBytes))
 

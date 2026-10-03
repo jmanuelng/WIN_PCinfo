@@ -70,6 +70,8 @@ function Start-StatusDeskSession {
         [Parameter(Mandatory)] [hashtable] $LaunchParameters
     )
     $transport = New-StatusDeskTransport
+    Send-StatusDeskRecord -Transport $transport -Record (New-ProgressRecord -Sequence 0 `
+        -Phase RunControl -State Started -MessageId controller.starting-worker -CompletedUnits 0 -TotalUnits 1)
     $runspace = [RunspaceFactory]::CreateRunspace()
     $runspace.ApartmentState = 'MTA'
     $runspace.ThreadOptions = 'ReuseThread'
@@ -587,13 +589,6 @@ function Invoke-StatusDesk {
     })
     $timer.Add_Tick({
         $controls.Elapsed.Text='Elapsed ' + $watch.Elapsed.ToString('hh\:mm\:ss')
-        if (-not $session.Pending.IsCompleted -and
-            $session.Transport.Clock.ElapsedMilliseconds - $session.Transport.State.LastProgressMilliseconds -ge 2500) {
-            # This heartbeat proves the controller is responsive while waiting;
-            # it never asserts that a blocked source made collection progress.
-            Send-StatusDeskRecord -Transport $session.Transport -Record (New-ProgressRecord -Sequence 0 `
-                -Phase RunControl -State Heartbeat -MessageId controller.waiting-for-worker -CompletedUnits 0 -TotalUnits 1)
-        }
         if ($session.Transport.State.Preparation -and -not $state.Preparation) {
             $state.Preparation=$session.Transport.State.Preparation
             $summary=$state.Preparation | ConvertFrom-Json
@@ -696,17 +691,57 @@ function Set-StatusDeskDecision {
 
 function Complete-StatusDeskSession {
     param([Parameter(Mandatory)] $Session)
-    if (-not $Session.Pending.IsCompleted) { return $false }
-    if (-not $Session.Completed) {
+    if ($Session.Completed) { return $true }
+    if (-not $Session.Pending.IsCompleted) {
+        if (-not $Session.Transport.State.Terminal -and
+            $Session.Transport.Clock.ElapsedMilliseconds - $Session.Transport.State.LastProgressMilliseconds -ge 2500) {
+            # Polling proves this controller is responsive while waiting. It
+            # never asserts that a blocked worker made collection progress.
+            Send-StatusDeskRecord -Transport $Session.Transport -Record (New-ProgressRecord -Sequence 0 `
+                -Phase RunControl -State Heartbeat -MessageId controller.waiting-for-worker -CompletedUnits 0 -TotalUnits 1)
+        }
+        return $false
+    }
+    $finalizationProperty = $Session.PSObject.Properties['Finalization']
+    if ($null -eq $finalizationProperty) {
+        $Session | Add-Member -MemberType NoteProperty -Name Finalization -Value @{
+            InvocationConsumed=$false; PrimaryError=$null; WorkerDisposed=$false; RunspaceDisposed=$false
+        }
+    }
+    $finalization = $Session.Finalization
+    if (-not $finalization.InvocationConsumed) {
+        # EndInvoke consumes its asynchronous result even when it throws. Never
+        # repeat it while retrying disposal of the same exact-owned handles.
+        $finalization.InvocationConsumed = $true
         try {
             $result = @($Session.Worker.EndInvoke($Session.Pending))
             if ($result.Count -gt 0) { $Session.ExitCode = [int] $result[-1] }
         }
-        finally {
-            $Session.Worker.Dispose()
-            $Session.Runspace.Dispose()
-            $Session.Completed = $true
-        }
+        catch { $finalization.PrimaryError = $_.Exception }
     }
+    $failures = [Collections.Generic.List[Exception]]::new()
+    if ($null -ne $finalization.PrimaryError) { $failures.Add($finalization.PrimaryError) }
+    if (-not $finalization.WorkerDisposed) {
+        try { $Session.Worker.Dispose(); $finalization.WorkerDisposed = $true }
+        catch { $failures.Add($_.Exception) }
+    }
+    if (-not $finalization.RunspaceDisposed) {
+        try { $Session.Runspace.Dispose(); $finalization.RunspaceDisposed = $true }
+        catch { $failures.Add($_.Exception) }
+    }
+    if ($finalization.WorkerDisposed -and $finalization.RunspaceDisposed) {
+        # Release the completed definition graph after both exact-owned handles
+        # were disposed. Keep authoritative terminal/package state in Transport.
+        $Session.Worker = $null
+        $Session.Runspace = $null
+        $Session.Pending = $null
+        $Session.Completed = $true
+    }
+    if (-not $Session.Completed) {
+        $failure = [AggregateException]::new('Status desk worker finalization failed.', $failures.ToArray())
+        $failure.Data['OwnedCleanupUnverified'] = $true
+        throw $failure
+    }
+    if ($null -ne $finalization.PrimaryError) { throw $finalization.PrimaryError }
     $true
 }

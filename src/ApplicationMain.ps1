@@ -1222,6 +1222,8 @@ if ($Mode -eq 'Gui') {
     $regions = [regex]::Matches($MyInvocation.MyCommand.ScriptBlock.ToString(),
         '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
     $moduleText = ($regions | ForEach-Object { $_.Groups[2].Value }) -join "`n"
+    # Match collections retain the complete input after module extraction.
+    $regions = $null
     $applicationExitCode = Invoke-StatusDesk -ModuleText $moduleText -LaunchParameters @{
         Request=$request; RuntimeFacts=$runtimeFacts; ArtifactTrustValid=$artifactTrustValid
         ValidationContext=$validationContext

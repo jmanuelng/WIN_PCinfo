@@ -1,0 +1,1695 @@
+{
+  "issue": 191,
+  "sourceCommit": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+  "productSourceCommit": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+  "capturedAtUtc": "2026-10-02T12:02:56.728326+00:00",
+  "candidateSha256": "24ab45dda69ee2a7cfd45985b27e39031e7f8c6f94cab5e0b2a54a830b0a9512",
+  "candidateBytes": 3337563,
+  "trust": "Unsigned engineering precursor; no signing approval",
+  "scope": "Controlled-source generated Status desk regression only. Process lifetime includes startup, module loading and driver before completed session and WPF viewing. Post-assessment assertions have separately retained full-driver verdicts. No actual delivered GUI, aggregate child-tree or eligible-client qualification.",
+  "limitsUnchanged": {
+    "firstProgressMilliseconds": 5000,
+    "heartbeatGapMilliseconds": 10000,
+    "cancellationAcknowledgmentMilliseconds": 2000,
+    "cleanupMilliseconds": 120000,
+    "normalRunMilliseconds": 1800000,
+    "absoluteRunMilliseconds": 3600000,
+    "privateBytes": 805306368,
+    "workingSetBytes": 536870912,
+    "workspaceBytes": 268435456,
+    "packageBytes": 104857600,
+    "htmlBytes": 26214400,
+    "stricterPackagePolicyStillGoverns": true
+  },
+  "measurementMethod": {
+    "memory": "Calibrated native Windows process-lifetime private commit and working-set peaks; exact held handle; periodic samples retained as diagnostics, never sole lifetime coverage",
+    "workspace": "Complete source-pinned cumulative before-mutation reservations, including replacement overlap and protected framing; never subtract deletion",
+    "sourceIdentities": "Canonical UTF8/LF inventory pins plus actual raw tested-byte SHA256 for all 19 harness/adapter/instrumentation inputs",
+    "endpoint": "Completed assessment/session and WPF viewing, before independent export/reopen assertions",
+    "unknownWriterOrFailedNativeRead": "NotQualified"
+  },
+  "summary": {
+    "controlledCases": 13,
+    "controlledPass": 13,
+    "controlledFail": 0,
+    "cleanupVerified": 13,
+    "maximumWorkingSetBytes": 526221312,
+    "maximumPrivateBytes": 381493248,
+    "maximumCumulativeWorkspaceWriteBytes": 2047117
+  },
+  "negativeScenarioMeaning": "EscapedOverflow Pass proves correct IntegrityFailed/50, no usable package and verified cleanup; it is not a successful assessment.",
+  "checks": {
+    "schemaWholeVsBounded": 63,
+    "schemaAdversarial": 29,
+    "publicSchemaBoundaries": 6,
+    "nativeMalformedCalibrationNegatives": 23,
+    "nativeValidCalibrationBaseline": 1,
+    "anchorLegacyDifferential": 24,
+    "closedInventoryCheckoutRepresentations": [
+      "LF",
+      "CRLF",
+      "UTF8 BOM"
+    ],
+    "focusedContractFiles": 7,
+    "focusedCheckState": "Pass"
+  },
+  "retainedFailureWitnesses": [
+    {
+      "log": "calibration-admission-red.log",
+      "sha256": "c0dc58bd25f4579ccdb4ead1f3038130cad0d087a9e32beedce253e4c6e8de33",
+      "status": "FailRetained",
+      "meaning": "Wrong calibration kind was admitted before typed evidence reconstruction."
+    },
+    {
+      "log": "canonical-inventory-red.log",
+      "sha256": "b283dd8620ef2c4e2a815958ddc43d14daecc01160f83af07f6af0db5eb84ca2",
+      "status": "FailRetained",
+      "meaning": "Missing canonical identity helper prevented checkout-stable inventory admission."
+    },
+    {
+      "log": "cleanup-final-integration-red.log",
+      "sha256": "68b0578f556ce9ab391e1fc5fa96a24d2eae61942cc44284ddbf9df5d37e6e54",
+      "status": "FailRetained",
+      "meaning": "Changed harness setup exposed missing fake-context readiness variables; fixture cleanup evidence retained."
+    }
+  ],
+  "cases": [
+    {
+      "case": "Cancel-NativeCooperative",
+      "rawEvidenceSha256": "9d6a0f08a0164456ad9faea139c4ac2b866dece249102bd94a1cc53792440dd4",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 38504,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 349220864,
+        "processPeakWorkingSetBytes": 525541376,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 598972,
+        "packageBytes": 493206,
+        "htmlBytes": 98167,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 29,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 29,
+        "maximumSampleGapMilliseconds": 1975,
+        "firstSampleMilliseconds": 7352,
+        "lastSampleMilliseconds": 37139,
+        "privateSampleCount": 223,
+        "maximumPrivateSampleGapMilliseconds": 1128
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 11,
+        "MaximumProgressGapMilliseconds": 2602,
+        "TerminalMilliseconds": 29011,
+        "CancellationRequestedMilliseconds": 19308,
+        "acknowledgmentMilliseconds": 5
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Fail",
+      "fullDriverBudgetFailures": [
+        "WorkingSet"
+      ],
+      "fullDriverPeakWorkingSetBytes": 548687872,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "Cancel-Privilege",
+      "rawEvidenceSha256": "c38e1ef0bbd15563c331f7672f90be54213ea0e1773283b33d0a94b3643f990b",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 12205,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 336183296,
+        "processPeakWorkingSetBytes": 439644160,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 2518,
+        "packageBytes": 0,
+        "htmlBytes": 0,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 6,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 6,
+        "maximumSampleGapMilliseconds": 1053,
+        "firstSampleMilliseconds": 7458,
+        "lastSampleMilliseconds": 12161,
+        "privateSampleCount": 35,
+        "maximumPrivateSampleGapMilliseconds": 735
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 1633,
+        "TerminalMilliseconds": 5012,
+        "CancellationRequestedMilliseconds": 3771,
+        "acknowledgmentMilliseconds": 6
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Pass",
+      "fullDriverBudgetFailures": [],
+      "fullDriverPeakWorkingSetBytes": 439644160,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "Cancel-System",
+      "rawEvidenceSha256": "ff60a7efa234c80007de36d0d0403567e0b05e52405dc0e988234145b45b10ca",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 14226,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 334446592,
+        "processPeakWorkingSetBytes": 441454592,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 2521,
+        "packageBytes": 0,
+        "htmlBytes": 0,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 8,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 8,
+        "maximumSampleGapMilliseconds": 1072,
+        "firstSampleMilliseconds": 7191,
+        "lastSampleMilliseconds": 14185,
+        "privateSampleCount": 56,
+        "maximumPrivateSampleGapMilliseconds": 746
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2508,
+        "TerminalMilliseconds": 7333,
+        "CancellationRequestedMilliseconds": 5507,
+        "acknowledgmentMilliseconds": 4
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Pass",
+      "fullDriverBudgetFailures": [],
+      "fullDriverPeakWorkingSetBytes": 442179584,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "Close-NativeHard",
+      "rawEvidenceSha256": "b73fbfce4181737a882146af6b2bcc7630806ef664ed742fcd53e922a0d1cf7d",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 37852,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 348545024,
+        "processPeakWorkingSetBytes": 526196736,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 497849,
+        "packageBytes": 493206,
+        "htmlBytes": 98167,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 29,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 29,
+        "maximumSampleGapMilliseconds": 1155,
+        "firstSampleMilliseconds": 7288,
+        "lastSampleMilliseconds": 36333,
+        "privateSampleCount": 224,
+        "maximumPrivateSampleGapMilliseconds": 726
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2603,
+        "TerminalMilliseconds": 29476,
+        "CancellationRequestedMilliseconds": 19220,
+        "acknowledgmentMilliseconds": 6
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Pass",
+      "fullDriverBudgetFailures": [],
+      "fullDriverPeakWorkingSetBytes": 526196736,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "Close-Privilege",
+      "rawEvidenceSha256": "b27a24a962d491fd91c0a7541c76ace54b455bf48f6840e6dc5b1c9ff097f2f8",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 11314,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 336478208,
+        "processPeakWorkingSetBytes": 429645824,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 2521,
+        "packageBytes": 0,
+        "htmlBytes": 0,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 5,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 5,
+        "maximumSampleGapMilliseconds": 1134,
+        "firstSampleMilliseconds": 7519,
+        "lastSampleMilliseconds": 11251,
+        "privateSampleCount": 32,
+        "maximumPrivateSampleGapMilliseconds": 143
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 1587,
+        "TerminalMilliseconds": 4125,
+        "CancellationRequestedMilliseconds": 2959,
+        "acknowledgmentMilliseconds": 8
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Pass",
+      "fullDriverBudgetFailures": [],
+      "fullDriverPeakWorkingSetBytes": 429645824,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "Close-System",
+      "rawEvidenceSha256": "a52226e4e116ad8157a002a4aac5e32c8c94b3ff99aac151daa40110b1ad50c1",
+      "outcome": "Cancelled",
+      "exitCode": 30,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 14010,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 325349376,
+        "processPeakWorkingSetBytes": 440479744,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 2518,
+        "packageBytes": 0,
+        "htmlBytes": 0,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 8,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 8,
+        "maximumSampleGapMilliseconds": 1100,
+        "firstSampleMilliseconds": 7563,
+        "lastSampleMilliseconds": 13970,
+        "privateSampleCount": 56,
+        "maximumPrivateSampleGapMilliseconds": 139
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2529,
+        "TerminalMilliseconds": 6736,
+        "CancellationRequestedMilliseconds": 4908,
+        "acknowledgmentMilliseconds": 5
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Pass",
+      "fullDriverBudgetFailures": [],
+      "fullDriverPeakWorkingSetBytes": 441655296,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "full-report-denied",
+      "rawEvidenceSha256": "bda39107c93b29683914255f1e38fd70d9d4380e93c736267db3dbca59ead26b",
+      "outcome": "CompletedWithGaps",
+      "exitCode": 10,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 24311,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 321474560,
+        "processPeakWorkingSetBytes": 428036096,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 386949,
+        "packageBytes": 382306,
+        "htmlBytes": 89775,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 182,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 182,
+        "maximumSampleGapMilliseconds": 237,
+        "firstSampleMilliseconds": 8583,
+        "lastSampleMilliseconds": 20053
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 11,
+        "MaximumProgressGapMilliseconds": 2531,
+        "TerminalMilliseconds": 13039,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Fail",
+      "fullDriverBudgetFailures": [
+        "WorkingSet"
+      ],
+      "fullDriverPeakWorkingSetBytes": 583749632,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "full-report-maximum",
+      "rawEvidenceSha256": "ae3b307d0625e817387676c16c6e25cdf7de3433092c9a016199ce023890c1d1",
+      "outcome": "CompletedWithGaps",
+      "exitCode": 10,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 110239,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 341155840,
+        "processPeakWorkingSetBytes": 473587712,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 1807352,
+        "packageBytes": 1802705,
+        "htmlBytes": 236813,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 569,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 569,
+        "maximumSampleGapMilliseconds": 381,
+        "firstSampleMilliseconds": 7869,
+        "lastSampleMilliseconds": 72693
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2741,
+        "TerminalMilliseconds": 65627,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Fail",
+      "fullDriverBudgetFailures": [
+        "WorkingSet"
+      ],
+      "fullDriverPeakWorkingSetBytes": 780365824,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "maximum-repeat-1",
+      "rawEvidenceSha256": "2ed45f42c02c764b18c443fe3cb645e8c84de4f5e1f6dc8a33ce705299083267",
+      "outcome": "CompletedWithGaps",
+      "exitCode": 10,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 110148,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 354045952,
+        "processPeakWorkingSetBytes": 521572352,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 2047110,
+        "packageBytes": 1802705,
+        "htmlBytes": 236813,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 65,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 65,
+        "maximumSampleGapMilliseconds": 8757,
+        "firstSampleMilliseconds": 7598,
+        "lastSampleMilliseconds": 83639,
+        "privateSampleCount": 336,
+        "maximumPrivateSampleGapMilliseconds": 8093
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2851,
+        "TerminalMilliseconds": 68302,
+        "CancellationRequestedMilliseconds": -1,
+        "acknowledgmentMilliseconds": -1
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Fail",
+      "fullDriverBudgetFailures": [
+        "WorkingSet"
+      ],
+      "fullDriverPeakWorkingSetBytes": 715255808,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "maximum-repeat-2",
+      "rawEvidenceSha256": "be8428b873835ded7e28824235a1ffa0c617be2984ef81654568af78527e86ec",
+      "outcome": "CompletedWithGaps",
+      "exitCode": 10,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 109991,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 354344960,
+        "processPeakWorkingSetBytes": 520581120,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 2047117,
+        "packageBytes": 1802705,
+        "htmlBytes": 236813,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 63,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 63,
+        "maximumSampleGapMilliseconds": 9079,
+        "firstSampleMilliseconds": 7506,
+        "lastSampleMilliseconds": 83161,
+        "privateSampleCount": 337,
+        "maximumPrivateSampleGapMilliseconds": 8121
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2849,
+        "TerminalMilliseconds": 67875,
+        "CancellationRequestedMilliseconds": -1,
+        "acknowledgmentMilliseconds": -1
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Fail",
+      "fullDriverBudgetFailures": [
+        "WorkingSet"
+      ],
+      "fullDriverPeakWorkingSetBytes": 706551808,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "maximum-repeat-3",
+      "rawEvidenceSha256": "d7788f1eb5a5e0745409b136bfac53d2bfb48068b9402b76e51c62421cba4a4b",
+      "outcome": "CompletedWithGaps",
+      "exitCode": 10,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 111108,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 358285312,
+        "processPeakWorkingSetBytes": 526221312,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 2047110,
+        "packageBytes": 1802705,
+        "htmlBytes": 236813,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 65,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 65,
+        "maximumSampleGapMilliseconds": 8371,
+        "firstSampleMilliseconds": 7975,
+        "lastSampleMilliseconds": 84383,
+        "privateSampleCount": 345,
+        "maximumPrivateSampleGapMilliseconds": 8142
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2779,
+        "TerminalMilliseconds": 68610,
+        "CancellationRequestedMilliseconds": -1,
+        "acknowledgmentMilliseconds": -1
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Fail",
+      "fullDriverBudgetFailures": [
+        "WorkingSet"
+      ],
+      "fullDriverPeakWorkingSetBytes": 707760128,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "software-distinct",
+      "rawEvidenceSha256": "e68c187ed665a8c8ec2df09ce033165d4f51fb9f8643bf7b4c8a0bf2e0204a91",
+      "outcome": "CompletedWithGaps",
+      "exitCode": 10,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 99016,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 342876160,
+        "processPeakWorkingSetBytes": 476717056,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 1817264,
+        "packageBytes": 1812617,
+        "htmlBytes": 246333,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 543,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 543,
+        "maximumSampleGapMilliseconds": 381,
+        "firstSampleMilliseconds": 8550,
+        "lastSampleMilliseconds": 73365
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 11,
+        "MaximumProgressGapMilliseconds": 2834,
+        "TerminalMilliseconds": 66396,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Fail",
+      "fullDriverBudgetFailures": [
+        "WorkingSet"
+      ],
+      "fullDriverPeakWorkingSetBytes": 615297024,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    },
+    {
+      "case": "software-escaped-overflow",
+      "rawEvidenceSha256": "461f76923b4940335f637af69e97dc5f9f376d6a80f2aa86ca06102aaf57b4a8",
+      "outcome": "IntegrityFailed",
+      "exitCode": 50,
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "cleanupVerified": true,
+      "elapsedMilliseconds": 48649,
+      "assessmentQuality": {
+        "processPeakPrivateBytes": 381493248,
+        "processPeakWorkingSetBytes": 514187264,
+        "cumulativeWorkspaceWriteUpperBoundBytes": 2518,
+        "packageBytes": 0,
+        "htmlBytes": 0,
+        "nativeCounterFailures": 0,
+        "nativeCounterReads": 400,
+        "workspaceInventoryValid": true,
+        "workspaceSamplingLosses": 0,
+        "sampleCount": 400,
+        "maximumSampleGapMilliseconds": 465,
+        "firstSampleMilliseconds": 8393,
+        "lastSampleMilliseconds": 48616
+      },
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2715,
+        "TerminalMilliseconds": 41754,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "controlledAssessmentBudgetVerdict": "Pass",
+      "controlledAssessmentBudgetFailures": [],
+      "fullDriverBudgetVerdict": "Pass",
+      "fullDriverBudgetFailures": [],
+      "fullDriverPeakWorkingSetBytes": 514187264,
+      "measurementIdentities": {
+        "memoryCalibrationSha256": "05530c1e51ad8560608f123dac8f2d7b0b9361f5437c69f16c1f602ddba17bff",
+        "workspaceInventorySha256": "ac59d27edd79d4d9a6e3ff809a86d0c5531f589a785c3d650b83de339fd7de23",
+        "workspaceInstrumentationSha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589",
+        "workspaceSourceIdentityKind": "CanonicalUtf8LfSha256",
+        "workspaceActualSourceInputs": [
+          {
+            "path": "tests/StatusDeskEngine.Tests.ps1",
+            "sha256": "4fe06f99b963b797adc9bdd65bfa8723671847514c4282eb51d29697f8cb5ba9"
+          },
+          {
+            "path": "tests/AssessmentQualificationSupport.ps1",
+            "sha256": "1f84f5f793775ce41fd2ad067bf0bb672ee845e23468e543325f2ced99f0fa86"
+          },
+          {
+            "path": "tests/SoftwareReportAssertions.ps1",
+            "sha256": "51e064f45ee985f86ace0f3b17267eceb6977517eb0240e3607f57ac29ee94ba"
+          },
+          {
+            "path": "tests/TestHarness.ps1",
+            "sha256": "edeb6ba8db32f097161e18702362385768117ee87fc2eb64538905b0dd6e67d6"
+          },
+          {
+            "path": "tests/AdditionalScopeSourceAdapters.ps1",
+            "sha256": "bc28381b79b16251421ed4ff69d111677836a51f5a4c3435096e29728cf0790e"
+          },
+          {
+            "path": "tests/CertificateSourceAdapters.ps1",
+            "sha256": "7e45e18fa76d8f8137b439b43c13d18826cf424b06b511c242c27d052c389da4"
+          },
+          {
+            "path": "tests/ConnectivitySourceAdapters.ps1",
+            "sha256": "69a03f600fb87446a1160948b4c73adcaa7b7a5149e4ff86086bb95aea8fd772"
+          },
+          {
+            "path": "tests/IdentitySourceAdapters.ps1",
+            "sha256": "e6f39f9a6eae07b291edb05d1cd62e8e83987ccf91753ca81b2a191d9d7e5973"
+          },
+          {
+            "path": "tests/NetworkSourceAdapters.ps1",
+            "sha256": "86c1700d4756ee1c8945ed1a934a601ed76d3b73e92a42b1666737e3f06593e4"
+          },
+          {
+            "path": "tests/PlatformSourceAdapters.ps1",
+            "sha256": "e9e6c3f8e1a96968bc30a14073041879abe4e2e29680df9f697b9f958de9ec10"
+          },
+          {
+            "path": "tests/PolicySourceAdapters.ps1",
+            "sha256": "355938871573c3f3081a522d914c35188221d5341c28b2cf03d28123c580d9d7"
+          },
+          {
+            "path": "tests/ReadinessSourceAdapters.ps1",
+            "sha256": "50025883a6615cb64d9975224c3a4dda6869f9111fc9cff9c0e6902161080ac7"
+          },
+          {
+            "path": "tests/RemoteSourceAdapters.ps1",
+            "sha256": "211cd4d9fe16c79640a23340f07d29f880ce769d3c27d97524576234468147f0"
+          },
+          {
+            "path": "tests/ResourceSourceAdapters.ps1",
+            "sha256": "7cfc072a9a5f9c87c08b5a8c207ad3d35366b119b9d87a6618af541026286d67"
+          },
+          {
+            "path": "tests/ResourceSourceBoundary.ps1",
+            "sha256": "1cba390ffc3a2aaa416b72d80b171657733f35c86907ef88bf94a96532f9c3f8"
+          },
+          {
+            "path": "tests/SecuritySourceAdapters.ps1",
+            "sha256": "08871bbeba3d640ceb73c4ee0597f15bf8f41c90908d5ccf282426d27d049db6"
+          },
+          {
+            "path": "tests/SoftwareSourceAdapters.ps1",
+            "sha256": "c7015e76f705c4754cea97c78e865e317dd0e3cf92b1cc8f8d0c6722ba059922"
+          },
+          {
+            "path": "tests/SoftwareSourceBoundary.ps1",
+            "sha256": "8ee11520b4fa5d76de0849152697e3258c84c978b05bfdc42e33e66780454ef7"
+          },
+          {
+            "path": "tests/QualificationDiskBounds.ps1",
+            "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+          }
+        ]
+      }
+    }
+  ],
+  "historicalFailedQuality": "Original F158-2 failures and all failed diagnostic invocations retained; none relabeled or erased. Full-driver Fail remains Fail independently of controlled endpoint Pass.",
+  "pending": [
+    "Actual delivered-app GUI measurement",
+    "Aggregate owned-child-tree measurement",
+    "Three clean eligible Windows-client full-profile measurements",
+    "Exact candidate signing/trust acceptance",
+    "Full integrated gate and formal independent review"
+  ],
+  "fullIntegratedGate": {
+    "state": "Running",
+    "expectedFiles": 189,
+    "sourceRevision": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+    "formalStandardsReview": "PendingAfterFullGate",
+    "formalSpecReview": "PendingAfterFullGate"
+  },
+  "githubActionsMinutes": 0
+}

@@ -28,6 +28,7 @@ function Test-CanonicalRecord($Record){
 }
 
 function New-AdministratorReadyRecord {
+    param($SystemResult = $null)
     $deviceCollector=Invoke-ApprovedCollectorProcess -OperationId $devicePolicy.collector.operationId `
         -DeviceReadinessScenario Complete
     $record=New-DeviceReadinessAssessmentRecord -RunId "run:policy:$([guid]::NewGuid().ToString('N'))" `
@@ -45,10 +46,13 @@ function New-AdministratorReadyRecord {
     $record=Complete-ValidatedFirmwareReadinessAssessmentRecord -Record $record -Policy $firmwarePolicy `
         -ContractValidation (Test-CanonicalRecord $record)
     $identity=Invoke-IdentityEnrollmentCollection -Policy $identityPolicy -ValidationScenario Mixed
-    $system=New-SystemCollectorResult -Policy $systemPolicy -Plan ([pscustomobject]@{recordType='synthetic-system-plan'}) `
-        -PlanDigest 'synthetic-system-plan-digest' -State Completed -ReasonCode 'SYSTEM.COLLECTION_COMPLETED' `
-        -CoverageState Complete -ObservedExecutionContext Synthetic -LocalSystemIdentityVerified $false `
-        -CleanupVerified $true -TaskAbsent $true -PipeAbsent $true -WorkerTreeAbsent $true -ProviderAvailable $true
+    $system=$SystemResult
+    if ($null -eq $system) {
+        $system=New-SystemCollectorResult -Policy $systemPolicy -Plan ([pscustomobject]@{recordType='synthetic-system-plan'}) `
+            -PlanDigest 'synthetic-system-plan-digest' -State Completed -ReasonCode 'SYSTEM.COLLECTION_COMPLETED' `
+            -CoverageState Complete -ObservedExecutionContext Synthetic -LocalSystemIdentityVerified $false `
+            -CleanupVerified $true -TaskAbsent $true -PipeAbsent $true -WorkerTreeAbsent $true -ProviderAvailable $true
+    }
     $record=Add-IdentityEnrollmentEvidenceRecord -Record $record -CollectorResult $identity -SystemResult $system -Policy $identityPolicy
     $record=Complete-ValidatedIdentityEnrollmentAssessmentRecord -Record $record -Policy $identityPolicy `
         -ContractValidation (Test-CanonicalRecord $record)
@@ -313,5 +317,54 @@ $appLockerIncompleteRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Re
 Assert-Equal 'Indeterminate' (@($appLockerIncompleteRecord.findings|Where-Object `
     ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome) `
     'incomplete AppLocker channel coverage cannot guess a winning deployment channel'
+
+$deniedSystem=New-SystemCollectorResult -Policy $systemPolicy `
+    -Plan ([pscustomobject]@{recordType='synthetic-system-plan'}) `
+    -PlanDigest 'synthetic-system-plan-digest' -State Unavailable -ReasonCode 'SYSTEM.ACTIVATION_DENIED' `
+    -CoverageState Denied -ObservedExecutionContext Synthetic -LocalSystemIdentityVerified $false `
+    -CleanupVerified $true -TaskAbsent $true -PipeAbsent $true -WorkerTreeAbsent $true
+$deniedSystemRecord=New-AdministratorReadyRecord -SystemResult $deniedSystem
+$deniedSystemCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario DeniedSystem
+$deniedSystemRecord=Add-EffectivePolicyEvidenceRecord -Record $deniedSystemRecord `
+    -CollectorResult $deniedSystemCollector -Policy $effectivePolicy -SystemResult $deniedSystem
+$deniedSystemRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $deniedSystemRecord `
+    -Policy $effectivePolicy -ContractValidation (Test-CanonicalRecord $deniedSystemRecord)
+Assert-Equal 'CONTRACT.ACCEPTED' (Test-CanonicalRecord $deniedSystemRecord).reasonCode `
+    'a denied SYSTEM attempt and successful administrator evidence remain independently canonical'
+$deniedCsp=@($deniedSystemRecord.coverage | Where-Object scopeId -eq 'scope:policy.applocker.csp-channel')[0]
+Assert-Equal 'Denied' $deniedCsp.state 'SYSTEM denial remains a denied AppLocker CSP scope'
+Assert-Equal 0 @($deniedCsp.observationIds).Count 'denied CSP evidence cannot fabricate an observed absence'
+Assert-Equal 0 @($deniedSystemRecord.observations | Where-Object fieldId -like 'field:policy.applocker.csp.*').Count `
+    'denied SYSTEM collection emits no CSP control observations'
+$deniedSecurityFinding=@($deniedSystemRecord.findings | Where-Object `
+    ruleId -eq 'rule:policy.security-control-coverage/1.0.0')[0]
+Assert-Equal 'Indeterminate' $deniedSecurityFinding.outcome `
+    'unavailable required AppLocker CSP evidence cannot imply complete security-control coverage'
+Assert-Equal 'FINDING.SECURITY_CONTROL_INCOMPLETE' $deniedSecurityFinding.reasonCode `
+    'the finding records the actual incomplete security evidence reason'
+foreach ($ruleId in @('rule:policy.applied-policy-coverage/1.0.0','rule:policy.local-security-policy-coverage/1.0.0')) {
+    Assert-Equal 'Informational' (@($deniedSystemRecord.findings | Where-Object ruleId -eq $ruleId)[0].outcome) `
+        'denied SYSTEM evidence does not erase successful independent administrator evidence'
+}
+Assert-Equal $true $deniedSystem.standardUserWorkMayContinue `
+    'verified denial cleanup permits safe standard-user continuation'
+Assert-Equal 'Indeterminate' (@($deniedSystemRecord.findings | Where-Object `
+    ruleId -eq 'rule:policy.policy-csp-gpo-conflict/1.0.0')[0].outcome) `
+    'denied SYSTEM evidence cannot establish a winning local or tenant policy channel'
+
+$absentCspRecord=New-AdministratorReadyRecord
+$absentCspCollector=Invoke-EffectivePolicyCollection -Policy $effectivePolicy -ValidationScenario AppLockerGpOnly
+$absentCspRecord=Add-EffectivePolicyEvidenceRecord -Record $absentCspRecord `
+    -CollectorResult $absentCspCollector -Policy $effectivePolicy
+$absentCspRecord=Complete-ValidatedEffectivePolicyAssessmentRecord -Record $absentCspRecord `
+    -Policy $effectivePolicy -ContractValidation (Test-CanonicalRecord $absentCspRecord)
+Assert-Equal 'Complete' (@($absentCspRecord.coverage | Where-Object scopeId -eq 'scope:policy.applocker.csp-channel')[0].state) `
+    'a completed empty CSP query is distinct from denied SYSTEM collection'
+Assert-Equal 'ObservedAbsent|ObservedAbsent' (@($absentCspRecord.observations | Where-Object `
+    fieldId -like 'field:policy.applocker.csp.*').valueState -join '|') `
+    'complete CSP absence carries explicit canonical absence observations'
+Assert-Equal 'Informational' (@($absentCspRecord.findings | Where-Object `
+    ruleId -eq 'rule:policy.security-control-coverage/1.0.0')[0].outcome) `
+    'completed absence qualifies only informational evidence coverage, never control health'
 
 Write-Output 'PASS: Effective Policy composes canonical three-layer evidence, closed coverage, and bounded findings.'

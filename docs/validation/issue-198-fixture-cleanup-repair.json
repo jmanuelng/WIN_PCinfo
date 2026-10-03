@@ -1,0 +1,439 @@
+{
+  "recordType": "win-pcinfo.bounded-fixture-cleanup-repair",
+  "issue": 198,
+  "scope": "ControlledQualificationFixtureSafetyOnlyNotApplicationReleaseAcceptance",
+  "recordedAtUtc": "2026-10-03T01:18:20.560592+00:00",
+  "baseline": "417eefc79a87cf4ccec721f7a579c8aedfe3059b",
+  "primarySha256": "a3a44df8d7c58b20d289834d51b208c191626c575a994dda74ac9db8d839e93e",
+  "primaryChanged": false,
+  "originalFaultRegressions": {
+    "actualOriginalFinalizers": 4,
+    "result": "FailAsExpected",
+    "adjacentParentAndForeignMarkerFaults": "FailAsExpected",
+    "arrayContainerAdmission": "FailAsExpected",
+    "missingNestedHandleAndWitness": "FailAsExpected"
+  },
+  "currentActualASTReplays": {
+    "recordType": "win-pcinfo.actual-fixture-finalizer-replays",
+    "result": "Pass",
+    "scope": "Actual AST finalizers/controller assertion suffix under injected process/output faults only",
+    "nativeProcessesStarted": 0,
+    "productionControllerExecuted": false,
+    "cases": [
+      {
+        "case": "MetadataKillFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "MetadataWaitTimeout",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "MetadataChildDisposeFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "MetadataHeldDisposeFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "MetadataBodyFailure",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": true
+      },
+      {
+        "case": "MetadataSafe",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "HandoffKillFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "HandoffWaitTimeout",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "HandoffDisposeFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "HandoffPendingOutput",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "HandoffBodyFailure",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": true
+      },
+      {
+        "case": "HandoffSafeForeignMarker",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "PipeKillFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "PipeWaitTimeout",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "PipePendingError",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "PipeSafe",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "HandoffKillAfterExit",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "PipeKillAfterExit",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "TreeParentStopFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "TreeParentWaitTimeout",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "TreeNestedStopFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "TreeOutputPending",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "TreeNestedDisposeFailure",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "TreeBodyFailure",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": true
+      },
+      {
+        "case": "TreeSafe",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "TreeMissingNestedAndWitness",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "TreeMissingNestedWithWitness",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerTrue",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerFalse",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerNull",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerString",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerInteger",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerArray",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerMissingVerified",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerMissingCleanup",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerMissingResult",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerResultSingleton",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerCleanupSingleton",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerResultMixed",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerCleanupMixed",
+        "result": "Pass",
+        "expectedUnsafe": true,
+        "actualUnsafe": true,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      },
+      {
+        "case": "ControllerOrderedMap",
+        "result": "Pass",
+        "expectedUnsafe": false,
+        "actualUnsafe": false,
+        "nativeProcessesStarted": 0,
+        "bodyFailureRetained": false
+      }
+    ],
+    "inputs": [
+      {
+        "file": "RecoveryProcessOwnership.Tests.ps1",
+        "sha256": "af77607b566a91eea20b08f7defffd78373a4117c49c79c0988298f244c0a005"
+      },
+      {
+        "file": "PrivilegedExecutionPhase.Tests.ps1",
+        "sha256": "4675f8532f9df2cf6466c8d827e947511ad5988b3be3fae91db3c8f75ea4bad2"
+      },
+      {
+        "file": "QualificationCleanup.Tests.ps1",
+        "sha256": "0520d980aa6516ee5e0f337d7eb067c60cb02c3efff8f1c679b5ce898cc9748b"
+      },
+      {
+        "file": "QualificationCleanup.ps1",
+        "sha256": "b572b156e412aedff1fb7dd06b9cd2456df61db3d7d07f7cb5a489020aed6f4a"
+      }
+    ]
+  },
+  "currentStrictCleanupRecordCases": {
+    "cases": 14,
+    "result": "Pass",
+    "actualPrivilegedControllerExecuted": false
+  },
+  "actualForeignHoldCallers": {
+    "cases": 6,
+    "result": "Pass",
+    "markerBytesPreserved": true
+  },
+  "affectedIntegratedFiles": {
+    "expectedFiles": 4,
+    "results": [
+      {
+        "file": "QualificationFixtureFinalizers.Tests.ps1",
+        "result": "Pass",
+        "elapsedMilliseconds": 537,
+        "sha256": "a3ba7d934a17c730ebd85f21e5ed43a00fc94ffebc1628c6b3dca6ac1c721161"
+      },
+      {
+        "file": "RecoveryProcessOwnership.Tests.ps1",
+        "result": "Pass",
+        "elapsedMilliseconds": 724,
+        "sha256": "af77607b566a91eea20b08f7defffd78373a4117c49c79c0988298f244c0a005"
+      },
+      {
+        "file": "PrivilegedExecutionPhase.Tests.ps1",
+        "result": "Pass",
+        "elapsedMilliseconds": 17021,
+        "sha256": "4675f8532f9df2cf6466c8d827e947511ad5988b3be3fae91db3c8f75ea4bad2"
+      },
+      {
+        "file": "QualificationCleanup.Tests.ps1",
+        "result": "Pass",
+        "elapsedMilliseconds": 11928,
+        "sha256": "0520d980aa6516ee5e0f337d7eb067c60cb02c3efff8f1c679b5ce898cc9748b"
+      }
+    ]
+  },
+  "independentStaticReview": {
+    "standardsP1P2": 0,
+    "specP1P2": 0,
+    "pinsMatchedBeforeAfter": true
+  },
+  "priorNativeAttempt": {
+    "passFiles": 3,
+    "failFiles": 1,
+    "disposition": "OrdinaryRetentionFailureMissingReplayParameterDefault",
+    "retained": true
+  },
+  "historicalCompleteGate": {
+    "expectedFiles": 201,
+    "pass": 66,
+    "fail": 1,
+    "blocked": 134,
+    "disposition": "ExplicitRootReviewHold",
+    "retained": true,
+    "qualified": false
+  },
+  "currentFullSourceGate": {
+    "expectedFiles": 202,
+    "state": "RequiredNotYetRun",
+    "qualified": false
+  },
+  "clientAcceptance": "Pending",
+  "signingAcceptance": "Pending",
+  "azureLiveExecution": false,
+  "githubActionsMinutesUsed": 0
+}

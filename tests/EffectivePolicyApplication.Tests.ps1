@@ -17,7 +17,7 @@ $cases=@(
     @{scenario='MissingRsop';exit=10;outcome='CompletedWithGaps';applied='Unsupported';configured='Complete';control='Complete';count=0;appliedFinding='Indeterminate';localFinding='Informational';orderFinding='Indeterminate';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
     @{scenario='StaleRegistry';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Partial';control='Complete';count=2;appliedFinding='Informational';localFinding='Indeterminate';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
     @{scenario='DeniedAdministrator';exit=10;outcome='CompletedWithGaps';applied='Denied';configured='Denied';control='Denied';count=0;appliedFinding='Indeterminate';localFinding='Indeterminate';orderFinding='Indeterminate';securityFinding='Indeterminate';constraintFinding='Indeterminate';providers=0;firewalls=3;asr=0},
-    @{scenario='DeniedSystem';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
+    @{scenario='DeniedSystem';exit=10;outcome='CompletedWithGaps';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Indeterminate';constraintFinding='Informational';providers=1;firewalls=3;asr=0;appLockerCsp=0},
     @{scenario='NonEnglish';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
     @{scenario='AppliedOrderConflict';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='NeedsAttention';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
     @{scenario='AccountLockout';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
@@ -79,6 +79,7 @@ foreach($case in $cases){
     }
 }
 
+$applicationEvidence=[Collections.Generic.List[object]]::new()
 foreach($case in $cases){
     $fixtureName=($case.scenario.ToLowerInvariant())
     $fixture=Join-Path $PSScriptRoot "fixtures/effective-policy-$fixtureName.json"
@@ -154,6 +155,29 @@ foreach($case in $cases){
         throw "$($case.scenario) leaked Restricted policy evidence into public output."
     }
     if($result.StandardError){throw "$($case.scenario) wrote stderr: $($result.StandardError)"}
+    $applicationEvidence.Add([pscustomobject][ordered]@{
+        scenario=$case.scenario
+        status='Pass'
+        expectedSecurityControlFinding=$case.securityFinding
+        observedSecurityControlFinding=$validation[0].securityControlFinding
+        terminal=$terminal[0].outcome
+        exitCode=$result.ExitCode
+        appliedPolicyCoverage=$validation[0].appliedPolicyCoverage
+        configuredSignalCoverage=$validation[0].configuredSignalCoverage
+        currentControlCoverage=$validation[0].currentControlCoverage
+        mdmPolicyCspFinding=$validation[0].mdmPolicyCspFinding
+        policyCspGpoConflictFinding=$validation[0].policyCspGpoConflictFinding
+        appLockerCspCollectionCount=$validation[0].appLockerCspCollectionCount
+        assessmentRecordValidated=$validation[0].assessmentRecordValidated
+        beginnerReportVerified=$validation[0].beginnerReportVerified
+        protectedPackageVerified=$validation[0].protectedPackageVerified
+        validationCleanupVerified=$validation[0].validationCleanupVerified
+    })
+    if ($env:WINPCINFO_TEST_EVIDENCE) {
+        $applicationEvidence | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 -LiteralPath (
+            Join-Path $env:WINPCINFO_TEST_EVIDENCE 'effective-policy-application-results.json')
+    }
+    Write-Output "PASS: EffectivePolicy $($case.scenario), $($terminal[0].outcome), verified package and cleanup."
 }
 
 Write-Output 'PASS: the generated application exercises three-layer policy evidence, findings, privacy, packaging, and cleanup.'

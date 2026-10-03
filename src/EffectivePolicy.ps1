@@ -941,7 +941,7 @@ function Test-EffectivePolicyCollectorPayload {
         if((@($Payload.windowsUpdateSignals.catalogId)-join '|') -ne ($updateIds-join '|')){return $false}
         foreach($signal in $Payload.windowsUpdateSignals){
             if(-not (Test-ExactProperties $signal @('catalogId','state','value','sourceAttribution')) -or
-                [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed') -or
+                [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','TimedOut','Failed') -or
                 [string]$signal.sourceAttribution -ne 'Unproven' -or
                 ($signal.state -ne 'Complete' -and $null -ne $signal.value)){return $false}
             if([string]$signal.state -eq 'Complete' -and $null -ne $signal.value){
@@ -954,7 +954,7 @@ function Test-EffectivePolicyCollectorPayload {
         if((@($Payload.legacyAuthenticationSignals.catalogId)-join '|') -ne ($legacyIds-join '|')){return $false}
         foreach($signal in $Payload.legacyAuthenticationSignals){
             if(-not (Test-ExactProperties $signal @('catalogId','state','value','sourceAttribution')) -or
-                [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','Failed') -or
+                [string]$signal.state -notin @('Complete','Unavailable','Unsupported','Denied','Malformed','TimedOut','Failed') -or
                 [string]$signal.sourceAttribution -ne 'Unproven' -or
                 ($signal.state -ne 'Complete' -and $null -ne $signal.value)){return $false}
             if([string]$signal.state -eq 'Complete' -and $null -ne $signal.value -and -not (Test-BoundedUnsignedInteger $signal.value $(if($signal.catalogId -eq 'legacy-auth:lm-compatibility-level'){[uint64]5}else{[uint64]4294967295}))){return $false}

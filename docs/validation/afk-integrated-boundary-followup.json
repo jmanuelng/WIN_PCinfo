@@ -1,0 +1,201 @@
+{
+  "issues": [
+    155,
+    191,
+    195
+  ],
+  "recordedAtUtc": "2026-10-02T16:04:27.397394+00:00",
+  "state": "FocusedRepairsPassAndPartialBoundariesIntegrated;ExactCandidateQualityAndFullGatePending",
+  "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+  "candidateBytes": 3392596,
+  "originalFrozenGate": {
+    "candidateSha256": "24ab45dda69ee2a7cfd45985b27e39031e7f8c6f94cab5e0b2a54a830b0a9512",
+    "expectedFiles": 189,
+    "passFiles": 184,
+    "failedFiles": [
+      "PortableDistributionApplication.Tests.ps1",
+      "RegressionHarness.Tests.ps1",
+      "RemoteSourceApplication.Tests.ps1",
+      "StatusDeskActiveActions.Tests.ps1",
+      "WindowsPowerShellHost.Tests.ps1"
+    ],
+    "originalVerdict": "FailRetained",
+    "testCleanupVerifiedCases": 193,
+    "explicitRetainedRecoveryCases": 4
+  },
+  "focusedChecksPass": [
+    "PortableMetadata",
+    "ComprehensiveReport",
+    "RegressionHarness",
+    "PortableDistribution",
+    "BuildDeterminism",
+    "PersonalSigningPreparation",
+    "SigningBoundary",
+    "WindowsPowerShellHost",
+    "PortableDistributionApplication",
+    "AzureValidationArmTransport",
+    "AzureValidationRemoteAbsence",
+    "AzureValidationArmHttp",
+    "AzureValidationTerraform",
+    "AzureValidationRound"
+  ],
+  "metadataRegression": {
+    "validOriginalSourceRed": "filesAnalyzed was True but expected False",
+    "fixturePreconditionFailures": "Uncast JSON byte output and unavailable helper were corrected; initial failed attempts do not prove product defects"
+  },
+  "diagnosticRepeatedCases": [
+    {
+      "name": "certificate-repeat-1",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2621,
+        "TerminalMilliseconds": 16401,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "recordSha256": "2f0b33f3b7c4641d2e944dff821970943c636a227f9c4e4be16367f200f10733"
+    },
+    {
+      "name": "certificate-repeat-2",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 9,
+        "MaximumProgressGapMilliseconds": 2623,
+        "TerminalMilliseconds": 15916,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "recordSha256": "a8f4fc764ca26e75914a3e0c7aa57373f59f1c4780017d3fef2cc1266ec427bf"
+    },
+    {
+      "name": "certificate-repeat-3",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2549,
+        "TerminalMilliseconds": 15976,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "recordSha256": "7d645c4ec481b92cc2229fa2f733772ea0316bc6117276e758dc9d7c94d43566"
+    },
+    {
+      "name": "certificate-repeat-4",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 10,
+        "MaximumProgressGapMilliseconds": 2609,
+        "TerminalMilliseconds": 15786,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "recordSha256": "7c17290d59d0b58d51805f7e38b8df4d32fad61ff76d4e5c7f154be9ff1874b3"
+    },
+    {
+      "name": "certificate-repeat-5",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 9,
+        "MaximumProgressGapMilliseconds": 2538,
+        "TerminalMilliseconds": 15743,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "recordSha256": "c5b70fef8810a7d3060213a3cb0971dad31ae56778ed7e9672552ebbcca38118"
+    },
+    {
+      "name": "certificate-repeat-6",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 9,
+        "MaximumProgressGapMilliseconds": 2627,
+        "TerminalMilliseconds": 15964,
+        "CancellationRequestedMilliseconds": -1
+      },
+      "recordSha256": "be997c7e74e2b8be045b7cc3b9115b133f218d992217e631a5bb0edf6ce4f67f"
+    },
+    {
+      "name": "heartbeat-repeat-1",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 14,
+        "MaximumProgressGapMilliseconds": 2634,
+        "TerminalMilliseconds": 30755,
+        "CancellationRequestedMilliseconds": 19284,
+        "acknowledgmentMilliseconds": 6
+      },
+      "recordSha256": "36984f86212bf1ad61ac32a5a6ed0ebc43945a63f9e366e7afb473c75804ff0a"
+    },
+    {
+      "name": "heartbeat-repeat-2",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 14,
+        "MaximumProgressGapMilliseconds": 2608,
+        "TerminalMilliseconds": 30158,
+        "CancellationRequestedMilliseconds": 18521,
+        "acknowledgmentMilliseconds": 6
+      },
+      "recordSha256": "89c75bcb24ced0226e6f5afd2dab85b273438048c1dcd0c98031ebd8f62d1f3e"
+    },
+    {
+      "name": "heartbeat-repeat-3",
+      "bodyAssertions": "Pass",
+      "testCleanup": "VerifiedAbsent",
+      "candidateSha256": "4540309cbfc9ba55d0517b7ca7697ee73b96e6522f959320545ff13dee16939b",
+      "timing": {
+        "FirstProgressMilliseconds": 14,
+        "MaximumProgressGapMilliseconds": 2723,
+        "TerminalMilliseconds": 29867,
+        "CancellationRequestedMilliseconds": 18378,
+        "acknowledgmentMilliseconds": 6
+      },
+      "recordSha256": "e3b4343aaa65855cab89d00ce3beab8abb325b57c09e2c78eeab89973697b199"
+    }
+  ],
+  "unresolvedOriginalFailures": [
+    "CertificateFalse periodic enumeration AccessDenied; seven separate repeats pass without reproducing denial, cause unresolved",
+    "Wpf Close NativeHard 10877ms heartbeat gap; four separate repeats pass without reproducing the gap, cause unresolved"
+  ],
+  "partialAzureBoundaryScope": {
+    "transportAssertions": 108,
+    "absenceAssertions": 64,
+    "httpAssertions": 29,
+    "terraformAssertions": 45,
+    "nativeNetworkRequests": 0,
+    "nativeTerraformRuns": 0,
+    "terraformOperation": "VersionOnly",
+    "factoryIntegration": "Missing;195remainsOpen",
+    "liveAcceptance": "NotStarted;162remainsPending"
+  },
+  "sourceAndTestSha256": {
+    "build/Build.ps1": "b541cbc01ff9f29a88cef73df9b42ef6e99def1188a689628cd7fe1f9150d407",
+    "build/PortableDistribution.ps1": "0f485c0c808301ad259bfcb119b5ad5f03fe6b33b9bf87f740e04977d905b72f",
+    "src/DeviceReadiness.ps1": "defb37745aa41106f79b114f413cbd9c461d0343e163b8c2c065744c487faf13",
+    "tests/RegressionHarness.Tests.ps1": "31f91189c36bf805fc8ac666a191ae40c66302aa54e6c3d21d989f2efe940729",
+    "tests/PortableMetadata.Tests.ps1": "1d4f29a4f150d732537109f6d39df7ccea130e29556ab73d6053b101004809d5",
+    "tests/PortableDistribution.Tests.ps1": "83c30688e546be81c38ac1a877dd85722e540a2f631554888557cf24b5091153",
+    "src/AzureValidationArmTransport.ps1": "86091667a2542de0ae580eaf2d1946fcd7845a1014d690dc1ab7d5a1d32f391e",
+    "src/AzureValidationRemoteAbsence.ps1": "8edce8106a5715e05ed02566020cfc6f99ab5c1cb4fe10f7c5c3d12df7ff9a80",
+    "src/AzureValidationTerraform.ps1": "f637523aed3243a70cad3dbab7f5d117a189f1ad66898a7b2127fd9b0c2d8d6b",
+    "tests/AzureValidationArmTransport.Tests.ps1": "d03c1cb942e5fc614c7c8daf5b61859ee2966082eb11e45749612c142ece4748",
+    "tests/AzureValidationRemoteAbsence.Tests.ps1": "01ce6adfea5d02f32454457de46b36315a956ca8b74d7f31dfc3c93cba57781c",
+    "tests/AzureValidationTerraform.Tests.ps1": "558b954d955e8ba666d2fb00d08da4b160b0c0193b1ba2e35fb7947a7a2ed017",
+    "tests/AzureValidationArmHttp.Tests.ps1": "80c26e4180c841d28dcc31510cd07f2a6d3cf64e42b8ca39ec7f3b533e4b4278"
+  },
+  "githubActionsMinutesUsed": 0,
+  "githubActionsMinutesCeiling": 100,
+  "acceptancePromotion": "None"
+}

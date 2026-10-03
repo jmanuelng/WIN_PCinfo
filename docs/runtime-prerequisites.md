@@ -65,7 +65,7 @@ Clone or download the repository, open it in stable PowerShell 7.6-or-later, and
 pwsh -NoLogo -NoProfile -File ./build/Build.ps1
 ```
 
-The build reads the eleven tracked modules in a fixed order and writes `artifacts/WIN-PCInfo.ps1` as UTF-8 with BOM and CRLF line endings. Its versioned build-evidence object includes the build-tool digest, every source path and digest, and the generated SHA-256 digest. Identical source bytes produce identical application bytes regardless of the chosen output directory.
+The build reads the tracked modules in the fixed order declared by build/Build.ps1 and writes `artifacts/WIN-PCInfo.ps1` as UTF-8 with BOM and CRLF line endings. Its versioned build-evidence object includes the build-tool digest, every source path and digest, and the generated SHA-256 digest. Identical source bytes produce identical application bytes regardless of the chosen output directory.
 
 The generated file is ignored because it is reproducible. Review and edit files under `src/`, then rebuild; never hand-edit the artifact.
 
@@ -113,7 +113,7 @@ Each line on standard output is one JSON contract record. The final record is au
 
 ## Understand a stopped launch
 
-All current paths end as `NotStarted` / `20`. Common stable reasons are:
+A launch refused at admission or declined in preparation ends as `NotStarted` / `20`. After approval, assessment and cleanup follow the [Assessment Run lifecycle](run-lifecycle.md). Common admission reasons are:
 
 | Reason | What it means | Safe next step |
 | --- | --- | --- |

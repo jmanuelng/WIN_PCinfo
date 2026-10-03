@@ -1,0 +1,13 @@
+{
+  "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7",
+  "candidateSha256": "262f069f9d228c1636f84165846b9996bf257993f0900f423e9154166467a86e",
+  "harnessSha256": "2b9673f1eb52611e1efb7607c28ea9840c5cb1be58576b4b25ed9d17e3ed6dfd",
+  "command": "C:/Program Files/PowerShell/7/pwsh.exe -NoLogo -NoProfile -STA -File ./tests/StatusDeskEngine.Tests.ps1 -Wpf -FailureKind Cleanup",
+  "method": "Execute only the existing Cleanup-precedence case not reached after Integrity failed; original full-file failure remains",
+  "startUtc": "2026-09-07T05:04:18.4636659Z",
+  "endUtc": "2026-09-07T05:04:40.1337019Z",
+  "elapsedMilliseconds": 21670,
+  "exitCode": 0,
+  "result": "Pass",
+  "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

@@ -1,0 +1,1679 @@
+[
+  {
+    "id": "Policy-Denied",
+    "family": "Policy",
+    "scenario": "UserNamespace",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledSamPassword",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledSamLockout",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledAudit",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledUserRight",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledSecurityOptionKey",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.applied.*",
+        "state": "Denied",
+        "count": 8
+      },
+      {
+        "pattern": "scope:policy.local-sam.*",
+        "state": "Denied",
+        "count": 2
+      },
+      {
+        "pattern": "scope:policy.local-audit",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.local-user-rights",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.security-option.*",
+        "state": "Denied",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "id": "Security-Denied",
+    "family": "Security",
+    "scenario": "Active",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledMpPreference",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledMpComputerStatus",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledNetFirewallProfile",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledSmartScreenKey",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledSecurityProductList",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.defender.*",
+        "state": "Denied",
+        "count": 3
+      },
+      {
+        "pattern": "scope:policy.firewall.*",
+        "state": "Denied",
+        "count": 3
+      },
+      {
+        "pattern": "scope:policy.smartscreen.*",
+        "state": "Denied",
+        "count": 2
+      },
+      {
+        "pattern": "scope:policy.security-center.*",
+        "state": "Denied",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "Policy-Unsupported",
+    "family": "Policy",
+    "scenario": "UserNamespace",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledSamPassword",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledSamLockout",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledAudit",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledUserRight",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledSecurityOptionKey",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.applied.*",
+        "state": "Unsupported",
+        "count": 8
+      },
+      {
+        "pattern": "scope:policy.local-sam.*",
+        "state": "Unsupported",
+        "count": 2
+      },
+      {
+        "pattern": "scope:policy.local-audit",
+        "state": "Unsupported",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.local-user-rights",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.security-option.*",
+        "state": "Unsupported",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "id": "Security-Unsupported",
+    "family": "Security",
+    "scenario": "Active",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledMpPreference",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledMpComputerStatus",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledNetFirewallProfile",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledSmartScreenKey",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-ControlledSecurityProductList",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.defender.*",
+        "state": "Unsupported",
+        "count": 3
+      },
+      {
+        "pattern": "scope:policy.firewall.*",
+        "state": "Unsupported",
+        "count": 3
+      },
+      {
+        "pattern": "scope:policy.smartscreen.*",
+        "state": "Unsupported",
+        "count": 2
+      },
+      {
+        "pattern": "scope:policy.security-center.*",
+        "state": "Unsupported",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "Policy-Failed",
+    "family": "Policy",
+    "scenario": "UserNamespace",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledSamPassword",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledSamLockout",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledAudit",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledUserRight",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledSecurityOptionKey",
+        "code": "throw [InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.applied.*",
+        "state": "Failed",
+        "count": 8
+      },
+      {
+        "pattern": "scope:policy.local-sam.*",
+        "state": "Failed",
+        "count": 2
+      },
+      {
+        "pattern": "scope:policy.local-audit",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.local-user-rights",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.security-option.*",
+        "state": "Failed",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "id": "Security-Failed",
+    "family": "Security",
+    "scenario": "Active",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledMpPreference",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledMpComputerStatus",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledNetFirewallProfile",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledSmartScreenKey",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledSecurityProductList",
+        "code": "throw [InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.defender.*",
+        "state": "Failed",
+        "count": 3
+      },
+      {
+        "pattern": "scope:policy.firewall.*",
+        "state": "Failed",
+        "count": 3
+      },
+      {
+        "pattern": "scope:policy.smartscreen.*",
+        "state": "Failed",
+        "count": 2
+      },
+      {
+        "pattern": "scope:policy.security-center.*",
+        "state": "Failed",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "Network-Denied",
+    "family": "Network",
+    "scenario": "Complete",
+    "provider": "Get-ControlledNetworkBoundarySource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledInterfaces",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledProfiles",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledRoutes",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledProxy",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledPhonebook",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Get-ControlledConnections",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:network.adapters",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.ip-configuration",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.resolvers",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.connection-profiles",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.routes",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.proxy",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.vpn-components",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.local-connections",
+        "state": "Denied",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.security-components",
+        "state": "Unsupported",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Resource-Denied",
+    "family": "Resource",
+    "scenario": "Complete",
+    "provider": "Get-ResourceDependenciesLiveSource",
+    "functionFaults": [
+      {
+        "name": "Open-ControlledResourceKey",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Read-ControlledPrinterCache",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "Read-ControlledResourceCim",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:resource.*",
+        "state": "Denied",
+        "count": 5
+      }
+    ]
+  },
+  {
+    "id": "Software-Denied",
+    "family": "Software",
+    "scenario": "Complete",
+    "provider": "Get-SoftwareInventoryLiveSource",
+    "functionFaults": [
+      {
+        "name": "Open-ControlledSoftwareHive",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      },
+      {
+        "name": "New-ControlledPackageManager",
+        "code": "throw [UnauthorizedAccessException]::new()"
+      }
+    ],
+    "replacements": [
+      {
+        "before": "if(index>=(contexts==4?1:2))return 259;",
+        "after": "if(index>=0)return 5;"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:software.*",
+        "state": "Denied",
+        "count": 8
+      }
+    ]
+  },
+  {
+    "id": "Network-Failed",
+    "family": "Network",
+    "scenario": "Complete",
+    "provider": "Get-ControlledNetworkBoundarySource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledInterfaces",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledProfiles",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledRoutes",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledProxy",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledPhonebook",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-ControlledConnections",
+        "code": "throw [InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:network.adapters",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.ip-configuration",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.resolvers",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.connection-profiles",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.routes",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.proxy",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.vpn-components",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.local-connections",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.security-components",
+        "state": "Unsupported",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Resource-Failed",
+    "family": "Resource",
+    "scenario": "Complete",
+    "provider": "Get-ResourceDependenciesLiveSource",
+    "functionFaults": [
+      {
+        "name": "Open-ControlledResourceKey",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Read-ControlledPrinterCache",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Read-ControlledResourceCim",
+        "code": "throw [InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:resource.*",
+        "state": "Failed",
+        "count": 5
+      }
+    ]
+  },
+  {
+    "id": "Software-Failed",
+    "family": "Software",
+    "scenario": "Complete",
+    "provider": "Get-SoftwareInventoryLiveSource",
+    "functionFaults": [
+      {
+        "name": "Open-ControlledSoftwareHive",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "New-ControlledPackageManager",
+        "code": "throw [InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [
+      {
+        "before": "if(index>=(contexts==4?1:2))return 259;",
+        "after": "if(index>=0)return 1060;"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:software.*",
+        "state": "Failed",
+        "count": 8
+      }
+    ]
+  },
+  {
+    "id": "Policy-OptionsMalformed",
+    "family": "Policy",
+    "scenario": "UserNamespace",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "InactivityTimeoutSecs {900} DisableCAD {0} LmCompatibilityLevel {5}",
+        "after": "InactivityTimeoutSecs {'bad'} DisableCAD {'bad'} LmCompatibilityLevel {'bad'}"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:policy.security-option.*",
+        "state": "Malformed",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "id": "Policy-RsopBound",
+    "family": "Policy",
+    "scenario": "UserNamespace",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "if ($ClassName -eq 'RSOP_GPO') { return @(1..9 | ForEach-Object { [pscustomobject]@{id=('Synthetic-'+$_);guidName=('00000000-0000-4000-8000-'+$_.ToString('D12'));enabled=$true;accessDenied=$false;filterAllowed=$true} }) }"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.applied.*",
+        "state": "Partial",
+        "count": 8
+      }
+    ]
+  },
+  {
+    "id": "Policy-SettingMalformed",
+    "family": "Policy",
+    "scenario": "UserNamespace",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "if ($Query) { return [pscustomobject]@{CimClass=[pscustomobject]@{CimClassName='RSOP_RegistryPolicySetting'};id='bad';GPOID='missing';precedence=1} }"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.applied.*.precedence",
+        "state": "Malformed",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "Security-ProvidersPartial",
+    "family": "Security",
+    "scenario": "Active",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "Count=1",
+        "after": "Count=5"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:policy.security-center.*",
+        "state": "Partial",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "Security-FirewallAmbiguous",
+    "family": "Security",
+    "scenario": "Active",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "foreach($name in @('Domain','Private','Public'))",
+        "after": "foreach($name in @('Domain','Private','Public','Domain','Private','Public'))"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:policy.firewall.*",
+        "state": "Partial",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "id": "Security-FirewallMalformed",
+    "family": "Security",
+    "scenario": "Active",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "Enabled=1;DefaultInboundAction=2",
+        "after": "Enabled='bad';DefaultInboundAction=2"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:policy.firewall.*",
+        "state": "Malformed",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "id": "Security-PreferenceMalformed",
+    "family": "Security",
+    "scenario": "Active",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "AttackSurfaceReductionRules_Actions=@([byte]1);EnableNetworkProtection=[byte]2",
+        "after": "AttackSurfaceReductionRules_Actions=@('bad');EnableNetworkProtection='bad'"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:policy.defender.asr",
+        "state": "Malformed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.defender.network-protection",
+        "state": "Malformed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Security-SmartScreenPartial",
+    "family": "Security",
+    "scenario": "Active",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "[int]1\n    }",
+        "after": "if ($Name -in @('EnableSmartScreen','ConfigureAppInstallControlEnabled')) { return $null }; [int]1\n    }"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:policy.smartscreen.shell",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.smartscreen.app-install-control",
+        "state": "Unavailable",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Certificate-Unavailable",
+    "family": "Certificate",
+    "scenario": "ValidTrusted",
+    "provider": "Get-ControlledCertificateSource",
+    "functionFaults": [
+      {
+        "name": "Open-ControlledCertificateStore",
+        "code": "throw [InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:certificate.management",
+        "state": "Unavailable",
+        "count": 1
+      },
+      {
+        "pattern": "scope:certificate.authentication",
+        "state": "Unavailable",
+        "count": 1
+      },
+      {
+        "pattern": "scope:certificate.device-identity",
+        "state": "Unavailable",
+        "count": 1
+      },
+      {
+        "pattern": "scope:certificate.code-trust",
+        "state": "Unavailable",
+        "count": 1
+      },
+      {
+        "pattern": "scope:certificate.tls-inspection",
+        "state": "NotApplicable",
+        "count": 1
+      },
+      {
+        "pattern": "scope:certificate.service-connectivity",
+        "state": "NotApplicable",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Firmware-Failed",
+    "family": "Readiness",
+    "scenario": "Complete",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "throw [InvalidOperationException]::new()"
+      },
+      {
+        "name": "Get-Command",
+        "code": "throw [InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:device.firmware-context",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:device.secure-boot",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:device.tpm-readiness",
+        "state": "Failed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Firmware-Unsupported",
+    "family": "Readiness",
+    "scenario": "Complete",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      },
+      {
+        "name": "Get-Command",
+        "code": "throw [PlatformNotSupportedException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:device.firmware-context",
+        "state": "Unsupported",
+        "count": 1
+      },
+      {
+        "pattern": "scope:device.secure-boot",
+        "state": "Unsupported",
+        "count": 1
+      },
+      {
+        "pattern": "scope:device.tpm-readiness",
+        "state": "Unsupported",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Network-Bounds",
+    "family": "Network",
+    "scenario": "Partial",
+    "provider": "Get-ControlledNetworkBoundarySource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledProfiles",
+        "code": "Set-Variable -Name exceeded -Scope 1 -Value $true"
+      },
+      {
+        "name": "Get-ControlledRoutes",
+        "code": "Set-Variable -Name exceeded -Scope 1 -Value $true"
+      },
+      {
+        "name": "Get-ControlledPhonebook",
+        "code": "foreach($i in 1..9){ '[VPN-'+$i+']';'Type=2';'PhoneNumber=vpn.synthetic.invalid';'VpnStrategy=7' }; return"
+      }
+    ],
+    "replacements": [
+      {
+        "before": "GetActiveTcpListeners { @() }",
+        "after": "GetActiveTcpListeners { 1..9 | ForEach-Object { [Net.IPEndPoint]::new([Net.IPAddress]::Loopback,8000+$_) } }"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:network.adapters",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.ip-configuration",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.resolvers",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.connection-profiles",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.routes",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.vpn-components",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:network.local-connections",
+        "state": "Partial",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Software-Bounds",
+    "family": "Software",
+    "scenario": "Complete",
+    "provider": "Get-SoftwareInventoryLiveSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "$maximum=[int]$env:WINPCINFO_SOFTWARE_MAXIMUM",
+        "after": "$maximum=1"
+      },
+      {
+        "before": "if(index>=(contexts==4?1:2))return 259;",
+        "after": "if(index>=3)return 259;"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:software.*",
+        "state": "Partial",
+        "count": 8
+      }
+    ]
+  },
+  {
+    "id": "Software-32BitViews",
+    "family": "Software",
+    "scenario": "Complete",
+    "provider": "Get-SoftwareInventoryLiveSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "[Environment]::Is64BitOperatingSystem",
+        "after": "$false"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:software.registry.*.64",
+        "state": "NotApplicable",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "Resource-DriverPartial",
+    "family": "Resource",
+    "scenario": "Complete",
+    "provider": "Get-ResourceDependenciesLiveSource",
+    "functionFaults": [
+      {
+        "name": "Open-ControlledResourceKey",
+        "code": "if($Path -like '*Version-3\\Driver-*'){return $null}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:resource.printer-drivers",
+        "state": "Partial",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Resource-LocalPrinterComplete",
+    "family": "Resource",
+    "scenario": "Complete",
+    "provider": "Get-ResourceDependenciesLiveSource",
+    "functionFaults": [
+      {
+        "name": "Read-ControlledPrinterCache",
+        "code": "return [pscustomobject]@{Name='Printer-東京';Attributes=64}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:resource.printers",
+        "state": "Complete",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Resource-UncBound",
+    "family": "Resource",
+    "scenario": "Complete",
+    "provider": "Get-ResourceDependenciesLiveSource",
+    "functionFaults": [
+      {
+        "name": "Read-ControlledResourceCim",
+        "code": "if($ClassName -eq 'Win32_NetworkConnection'){Set-Variable -Name connectionBoundExceeded -Scope 1 -Value $true}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:resource.mapped-drives",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:resource.unc-connections",
+        "state": "Partial",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Certificate-EntryPartial",
+    "family": "Certificate",
+    "scenario": "ValidTrusted",
+    "provider": "Get-ControlledCertificateSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledCertificateChain",
+        "code": "throw [IO.InvalidDataException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:certificate.management",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:certificate.authentication",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:certificate.device-identity",
+        "state": "Partial",
+        "count": 1
+      },
+      {
+        "pattern": "scope:certificate.code-trust",
+        "state": "Partial",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Firmware-SecureBootMalformed",
+    "family": "Readiness",
+    "scenario": "Complete",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "$command={ $true }",
+        "after": "$command={ 'not-a-Boolean' }"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:device.secure-boot",
+        "state": "Malformed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "System-FieldMalformed",
+    "family": "Policy",
+    "scenario": "MdmWindows11",
+    "provider": "Get-SystemCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "MDMWinsOverGP=0",
+        "after": "MDMWinsOverGP='bad'"
+      },
+      {
+        "before": "Interactivelogon_DoNotRequireCTRLALTDEL=0;NetworkSecurity_LANManagerAuthenticationLevel=5",
+        "after": "Interactivelogon_DoNotRequireCTRLALTDEL='bad';NetworkSecurity_LANManagerAuthenticationLevel='bad'"
+      },
+      {
+        "before": "{900});Interactivelogon",
+        "after": "{'bad'});Interactivelogon"
+      },
+      {
+        "before": "DeferFeatureUpdatesPeriodInDays=14;DeferQualityUpdatesPeriodInDays=3;DisableDualScan=0",
+        "after": "DeferFeatureUpdatesPeriodInDays='bad';DeferQualityUpdatesPeriodInDays='bad';DisableDualScan='bad'"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:policy.mdm.*",
+        "state": "Unavailable",
+        "count": 7
+      }
+    ]
+  },
+  {
+    "id": "System-ProhibitedSource",
+    "family": "Policy",
+    "scenario": "MdmWindows11",
+    "provider": "Get-SystemCollectionWorkerSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "@{InstanceID='synthetic-provider'",
+        "after": "@{password='Synthetic-154-秘密-İ-🔒';InstanceID='synthetic-provider'"
+      },
+      {
+        "before": "@{InstanceID='LocalPoliciesSecurityOptions'",
+        "after": "@{password='Synthetic-154-秘密-İ-🔒';InstanceID='LocalPoliciesSecurityOptions'"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:device.mdm-policy.system",
+        "state": "Complete",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.mdm.*",
+        "state": "Complete",
+        "count": 7
+      }
+    ]
+  },
+  {
+    "id": "Software-Malformed",
+    "family": "Software",
+    "scenario": "Complete",
+    "provider": "Get-SoftwareInventoryLiveSource",
+    "functionFaults": [],
+    "replacements": [
+      {
+        "before": "DisplayName {'注册应用'}",
+        "after": "DisplayName {('x'*513)}"
+      },
+      {
+        "before": "text=\"MSI 应用\"",
+        "after": "text=new string('x',513)"
+      },
+      {
+        "before": "Name=\"应用 $kind\"",
+        "after": "Name=('x'*513)"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:software.*",
+        "state": "Malformed",
+        "count": 8
+      }
+    ]
+  },
+  {
+    "id": "Platform-Malformed",
+    "family": "Platform",
+    "scenario": "Running",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Assert-ControlledPlatformAvailability",
+        "code": "throw [IO.InvalidDataException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.vbs.runtime",
+        "state": "Malformed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.bitlocker.operating-system-volume",
+        "state": "Malformed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.bitlocker.protectors",
+        "state": "Malformed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.applocker.gp-channel",
+        "state": "Malformed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.wdac.inventory",
+        "state": "Malformed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Device-UnavailableSignal",
+    "family": "Readiness",
+    "scenario": "Complete",
+    "provider": "Get-SyntheticCollectorScriptBytes",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "[Console]::Out.Write('{\"availability\":\"Unavailable\"}'); exit 0"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:device.windows-context",
+        "state": "Unavailable",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Device-Loss",
+    "family": "Readiness",
+    "scenario": "Complete",
+    "provider": "Get-SyntheticCollectorScriptBytes",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "exit 7"
+      }
+    ],
+    "replacements": [],
+    "expected": [],
+    "terminal": "IntegrityFailed",
+    "terminalReason": "DEVICE_READINESS.COLLECTOR_FAILED"
+  },
+  {
+    "id": "Software-ContextUnavailable",
+    "family": "Software",
+    "scenario": "Complete",
+    "provider": "Get-SoftwareInventoryLiveSource",
+    "functionFaults": [],
+    "replacements": [],
+    "moduleReplacements": [
+      {
+        "before": "Invoke-ControlledSoftwareInventoryCollection -Policy $Policy -Live -AssessmentUserSid 'S-1-5-21-100-200-300-1001'",
+        "after": "Invoke-ControlledSoftwareInventoryCollection -Policy $Policy -Live -AssessmentUserSid ''"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:software.*",
+        "state": "Unavailable",
+        "count": 8
+      }
+    ]
+  },
+  {
+    "id": "Resource-ContextUnavailable",
+    "family": "Resource",
+    "scenario": "Complete",
+    "provider": "Get-ResourceDependenciesLiveSource",
+    "functionFaults": [],
+    "replacements": [],
+    "moduleReplacements": [
+      {
+        "before": "Invoke-ControlledResourceDependenciesCollection -Policy $Policy -Live -AssessmentUserSid 'S-1-5-21-100-200-300-1001'",
+        "after": "Invoke-ControlledResourceDependenciesCollection -Policy $Policy -Live -AssessmentUserSid ''"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:resource.*",
+        "state": "Unavailable",
+        "count": 5
+      }
+    ]
+  },
+  {
+    "id": "Network-ContextUnavailable",
+    "family": "Network",
+    "scenario": "Complete",
+    "provider": "Get-ControlledNetworkBoundarySource",
+    "functionFaults": [],
+    "replacements": [],
+    "moduleReplacements": [
+      {
+        "before": "Invoke-ControlledNetworkTopologyCollection -Policy $Policy -Live -AssessmentUserSid $AssessmentUserSid",
+        "after": "Invoke-ControlledNetworkTopologyCollection -Policy $Policy -Live -AssessmentUserSid ''"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:network.*",
+        "state": "Unavailable",
+        "count": 9
+      }
+    ]
+  },
+  {
+    "id": "Certificate-ContextUnavailable",
+    "family": "Certificate",
+    "scenario": "ValidTrusted",
+    "provider": "Get-ControlledCertificateSource",
+    "functionFaults": [],
+    "replacements": [],
+    "moduleReplacements": [
+      {
+        "before": "Invoke-ControlledCertificateTrustCollection -Policy $Policy -Live -AssessmentUserSid 'S-1-5-21-100-200-300-1001'",
+        "after": "Invoke-ControlledCertificateTrustCollection -Policy $Policy -Live -AssessmentUserSid ''"
+      }
+    ],
+    "expected": [
+      {
+        "pattern": "scope:certificate.*",
+        "state": "Unavailable",
+        "count": 6
+      }
+    ]
+  },
+  {
+    "id": "Remote-Failed",
+    "family": "Remote",
+    "scenario": "Configured",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Assert-ControlledRemoteAvailability",
+        "code": "throw [System.InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.windows-update.*",
+        "state": "Failed",
+        "count": 3
+      },
+      {
+        "pattern": "scope:policy.legacy-auth.*",
+        "state": "Failed",
+        "count": 2
+      },
+      {
+        "pattern": "scope:policy.rdp.*",
+        "state": "Failed",
+        "count": 4
+      },
+      {
+        "pattern": "scope:policy.winrm.*",
+        "state": "Failed",
+        "count": 4
+      },
+      {
+        "pattern": "scope:policy.smb.*",
+        "state": "Failed",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "id": "Remote-TimedOut",
+    "family": "Remote",
+    "scenario": "Configured",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Assert-ControlledRemoteAvailability",
+        "code": "throw [System.OperationCanceledException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.windows-update.*",
+        "state": "TimedOut",
+        "count": 3
+      },
+      {
+        "pattern": "scope:policy.legacy-auth.*",
+        "state": "TimedOut",
+        "count": 2
+      },
+      {
+        "pattern": "scope:policy.rdp.*",
+        "state": "TimedOut",
+        "count": 4
+      },
+      {
+        "pattern": "scope:policy.winrm.*",
+        "state": "TimedOut",
+        "count": 4
+      },
+      {
+        "pattern": "scope:policy.smb.*",
+        "state": "TimedOut",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "id": "Platform-Failed",
+    "family": "Platform",
+    "scenario": "Running",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Assert-ControlledPlatformAvailability",
+        "code": "throw [System.InvalidOperationException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.vbs.runtime",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.bitlocker.operating-system-volume",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.bitlocker.protectors",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.applocker.gp-channel",
+        "state": "Failed",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.wdac.inventory",
+        "state": "Failed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Platform-TimedOut",
+    "family": "Platform",
+    "scenario": "Running",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Assert-ControlledPlatformAvailability",
+        "code": "throw [System.OperationCanceledException]::new()"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.vbs.runtime",
+        "state": "TimedOut",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.bitlocker.operating-system-volume",
+        "state": "TimedOut",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.bitlocker.protectors",
+        "state": "TimedOut",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.applocker.gp-channel",
+        "state": "TimedOut",
+        "count": 1
+      },
+      {
+        "pattern": "scope:policy.wdac.inventory",
+        "state": "TimedOut",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Administrator-Malformed",
+    "family": "Identity",
+    "scenario": "AdminEmpty",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledAdministratorSnapshot",
+        "code": "return [pscustomobject]@{State='Malformed';Complete=$false;SourceReturnedEntries=0;DuplicateEntriesRemoved=0;Sids=@()}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:device.local-administrators.direct-membership",
+        "state": "Malformed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Platform-WdacEmpty",
+    "family": "Platform",
+    "scenario": "Running",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Read-CiToolJson",
+        "code": "return '{\"Policies\":[]}'"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.wdac.inventory",
+        "state": "Complete",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Platform-GpBound",
+    "family": "Platform",
+    "scenario": "Running",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledAppLockerPolicy",
+        "code": "return [pscustomobject]@{RuleCollections=@('Exe','Dll','Msi','Script','Appx','Exe' | ForEach-Object {[pscustomobject]@{CollectionType=$_;EnforcementMode='Enabled'}})}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.applocker.gp-channel",
+        "state": "Partial",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Remote-SmbServerPartial",
+    "family": "Remote",
+    "scenario": "Configured",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledSmbServerConfiguration",
+        "code": "return [pscustomobject]@{RequireSecuritySignature=$true;EnableSecuritySignature=$true;RejectUnencryptedAccess=$true;EnableSMB1Protocol=$false}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.smb.server",
+        "state": "Partial",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Remote-SmbServerMalformed",
+    "family": "Remote",
+    "scenario": "Configured",
+    "provider": "Get-PrivilegedCollectionWorkerSource",
+    "functionFaults": [
+      {
+        "name": "Get-ControlledSmbServerConfiguration",
+        "code": "return [pscustomobject]@{RequireSecuritySignature=$true;EnableSecuritySignature=$true;EncryptData='true';RejectUnencryptedAccess=$true;EnableSMB1Protocol=$false}"
+      }
+    ],
+    "replacements": [],
+    "expected": [
+      {
+        "pattern": "scope:policy.smb.server",
+        "state": "Malformed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "Device-ProhibitedSignal",
+    "family": "Readiness",
+    "scenario": "Complete",
+    "provider": "Get-SyntheticCollectorScriptBytes",
+    "functionFaults": [
+      {
+        "name": "Get-CimInstance",
+        "code": "[Console]::Out.Write('{\"password\":\"Synthetic-154-秘密-İ-🔒\"}'); exit 0"
+      }
+    ],
+    "replacements": [],
+    "expected": [],
+    "terminal": "IntegrityFailed",
+    "terminalReason": "DEVICE_READINESS.COLLECTOR_FAILED",
+    "moduleReplacements": [
+      {
+        "before": "Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -CancellationToken $CancellationToken }",
+        "after": "$result=Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.DeviceProhibitedReason=$result.Supervision.reasonCode; $script:StatusDeskTransport.State.DeviceProhibitedPayloadReturned=[bool]$result.PSObject.Properties['PrivatePayload']; $result }"
+      }
+    ]
+  },
+  {
+    "id": "Network-ContextDenied",
+    "family": "Network",
+    "scenario": "Complete",
+    "provider": "Get-NetworkTopologyLiveSource",
+    "functionFaults": [],
+    "replacements": [],
+    "moduleReplacements": [
+      {
+        "after": "",
+        "before": "function Get-NetworkTopologyProcessDisposition { param($ProcessSid,$AssessmentUserSid,$IsAdministrator) }"
+      },
+      {
+        "after": "function Get-NetworkTopologyProcessDisposition {",
+        "before": "function Get-UnusedNetworkTopologyProcessDisposition {"
+      },
+      {
+        "after": "Invoke-ControlledNetworkTopologyCollection -Policy $Policy -Live -AssessmentUserSid $AssessmentUserSid -NetworkBehavior $NetworkBehavior -ProcessContextOverride Administrator",
+        "before": "Invoke-ControlledNetworkTopologyCollection -Policy $Policy -Live -AssessmentUserSid $AssessmentUserSid -NetworkBehavior $NetworkBehavior"
+      }
+    ],
+    "expected": [
+      {
+        "count": 9,
+        "pattern": "scope:network.*",
+        "state": "Denied"
+      }
+    ]
+  }
+]

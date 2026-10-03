@@ -62,11 +62,18 @@ Trust only this dedicated signing certificate's public DER in the initiating
 user's **Root** and **TrustedPublisher** stores on the evaluation machine. Record
 whether each exact entry already existed; only newly added entries are owned for
 rollback. Read both stores back by the exact fingerprint. Do not change execution
-policy, use LocalMachine stores, distribute trust, or add the encryption certificate
-to either trust store. Self-signed test trust and publisher selection follow
+policy, use LocalMachine stores, distribute trust under this personal-session
+procedure, or add the encryption certificate to either trust store. Self-signed test trust and publisher selection follow
 [PowerShell's signing guidance](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_signing).
 If another administrator or SYSTEM cannot validate a required worker under this
 approved scope, record a blocker for #160; do not silently broaden trust.
+
+For selected private testers, a separate concrete maintainer decision under #193
+allows the opt-in [private tester evaluation procedure](private-tester-evaluation.md).
+Only the exact existing public signer is shared; each tester must consent, inventory
+and verify their own CurrentUser entries. No private signing key, machine-wide
+trust, policy change or automatic onboarding is included. This exception does not
+approve signing, individual trust mutation or real assessment by itself.
 
 ## Freeze, sign and verify the portable candidate
 

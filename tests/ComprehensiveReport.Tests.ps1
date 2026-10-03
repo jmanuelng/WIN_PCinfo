@@ -38,6 +38,15 @@ $baseRecord = Complete-ValidatedDeviceReadinessAssessmentRecord `
     -ValidatedRecord $record -Policy $policy -ContractValidation $validation
 
 $originalBytes = New-DeviceReadinessReportBytes -Record $baseRecord
+Assert-Equal $true ($originalBytes -is [byte[]]) 'report renderer returns one byte buffer without enumerating every byte through the pipeline'
+Assert-Equal $true (Test-AssessmentReportBytesEqual -Left $originalBytes -Right ([byte[]]$originalBytes.Clone())) 'deterministic report comparison accepts identical complete buffers'
+foreach ($differentIndex in @(0, [int]($originalBytes.Length / 2), ($originalBytes.Length - 1))) {
+    [byte[]]$changedBytes = $originalBytes.Clone()
+    $changedBytes[$differentIndex] = $changedBytes[$differentIndex] -bxor 1
+    Assert-Equal $false (Test-AssessmentReportBytesEqual -Left $originalBytes -Right $changedBytes) 'report comparison rejects a changed first, middle or final byte'
+}
+Assert-Equal $false (Test-AssessmentReportBytesEqual -Left $originalBytes -Right ([byte[]]@(0))) 'report comparison rejects different byte lengths'
+
 $originalHash = Get-ProtectedPackageSha256 -Bytes $originalBytes
 $originalRecord = $baseRecord | ConvertTo-Json -Depth 30 -Compress
 $derivedBytes = New-DeviceReadinessReportBytes -Record $baseRecord -DerivationKind ReEvaluated -SourceReportSha256 $originalHash

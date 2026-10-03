@@ -1,0 +1,725 @@
+{
+  "kind": "win-pcinfo.issue-154-review-corrections",
+  "completedUtc": "2026-09-07T01:11:01.7015248Z",
+  "method": "Explicit installed pwsh -NoLogo -NoProfile -File for each listed test and arguments; serialized generated tests/builds; stopped the first round at its first failing check.",
+  "summary": {
+    "finalAffectedChecks": 25,
+    "finalPass": 25,
+    "finalFail": 0,
+    "finalElapsedMilliseconds": 565410.0,
+    "formatCases": 470,
+    "protocolCases": 11,
+    "packageRecordNegatives": 16,
+    "officialPass": 573,
+    "officialJustifiedNotApplicable": 177,
+    "officialFail": 0,
+    "officialExternalFetches": 0,
+    "fullRepositorySuite": "NotRun (#158/final)",
+    "fullGenerated343CaseRefresh": "Pending (root after affected review)",
+    "standardsReview": "Pending (root)",
+    "specReview": "Pending (root)",
+    "liveGates": "Pending (#160-#164)"
+  },
+  "firstAffectedRound": {
+    "startRevision": "8a2663ebf58133a2a6fb7d0602ada215b24c748e",
+    "sourceRevision": "f340cc1f797f5d23ecfa3b354b205e000cb3f90c",
+    "productRevision": "23265f720f5722d4f1babb43288d7cd65cac1a1f",
+    "candidateSha256": "3052ec01d9f2c90957c1d9d671b6b0820bf6abec9ef9af888a84b8b080cf4468",
+    "candidateBytes": 3319155,
+    "startedUtc": "2026-09-07T00:52:42.6763308Z",
+    "powerShell": "7.6.5",
+    "dotNet": "10.0.11",
+    "architecture": "X64",
+    "hostSha256": "362a356ce7f0940ec74f73a8fc2c990a2cc24a38a11c90bbd8eca947110ad139",
+    "buildTool": {
+      "path": "build/Build.ps1",
+      "sha256": "63bd3128dcb60de7dea8d828f8c806653a184866c54bf2a5ccaa4235057708d2"
+    },
+    "results": [
+      {
+        "test": "tests/PrivilegedPostStartLossApplication.Tests.ps1",
+        "arguments": [],
+        "testSha256": "ca5dea404a98a56ac433ad0101e2ad5b6d3ad6a7396f0bc2116af10a2f2306af",
+        "exitCode": 0,
+        "elapsedMilliseconds": 11770,
+        "logSha256": "75f5e93bb3b4e107a01fb6c09ae0cf0261ec1fd44f854bc78b914510bb69a624"
+      },
+      {
+        "test": "tests/StatusDeskEngine.Tests.ps1",
+        "arguments": [
+          "-QualificationPlanFault",
+          "PrivilegeLoss"
+        ],
+        "testSha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "exitCode": 0,
+        "elapsedMilliseconds": 9747,
+        "logSha256": "76399a7fe8f31a43b946c0b6f53d8244944703628cdb19c7a81b206b8967fe36"
+      },
+      {
+        "test": "tests/StatusDeskEngine.Tests.ps1",
+        "arguments": [
+          "-QualificationPlanFault",
+          "PrivilegeTimeout"
+        ],
+        "testSha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "exitCode": 0,
+        "elapsedMilliseconds": 28680,
+        "logSha256": "49d9ac679c7eb594b240f28753426223af947b9110d87036f1d808296b1ea9b1"
+      },
+      {
+        "test": "tests/StatusDeskEngine.Tests.ps1",
+        "arguments": [
+          "-CancelDuringPrivilege"
+        ],
+        "testSha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "exitCode": 0,
+        "elapsedMilliseconds": 11956,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "test": "tests/StatusDeskEngine.Tests.ps1",
+        "arguments": [],
+        "testSha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "exitCode": 0,
+        "elapsedMilliseconds": 22864,
+        "logSha256": "09bb1b3cbed45f2d1d1477e50f5913980c340e85dbc22bb846f28c6ef77d94ca"
+      },
+      {
+        "test": "tests/ContractFormats.Tests.ps1",
+        "arguments": [],
+        "testSha256": "fd0c7d97b93d5f9229573fecc3015d780cca984b26c4d335133433f63e271e2e",
+        "exitCode": 0,
+        "elapsedMilliseconds": 19031,
+        "logSha256": "6edcd38e01d50f6d9f790d884bad3ee5de325e785c33ff4c15ea063ebc64cf59"
+      },
+      {
+        "test": "tests/ProtectedPackageRecordSafety.Tests.ps1",
+        "arguments": [],
+        "testSha256": "5992f13c725d748378b200e7f885f4debb5605c54bd5f359d97d4d7e6f645e6a",
+        "exitCode": 0,
+        "elapsedMilliseconds": 8843,
+        "logSha256": "d1b33065e65bfe571da83fcc3f70859e264c1916456c5878d8f23b0d8e6a027b"
+      },
+      {
+        "test": "tests/PrivilegedExecutionPhase.Tests.ps1",
+        "arguments": [],
+        "testSha256": "fff974fcc45e11879c72afea7f730adfbf210b1543d15c8c3197aa4b7127ce2e",
+        "exitCode": 0,
+        "elapsedMilliseconds": 21193,
+        "logSha256": "6e4838a0b3142a933d819dfd1ae989a435691af080bf8e6ef461560fc54cae8b"
+      },
+      {
+        "test": "tests/PrivilegedCollectionPlanPolicy.Tests.ps1",
+        "arguments": [],
+        "testSha256": "099745735767e0e3cbedb2b77e91f88ddb8dc91302a2ea78c28059667a932bd0",
+        "exitCode": 0,
+        "elapsedMilliseconds": 928,
+        "logSha256": "7f74c506abb2c364d13070bc758d0e93b156b08b553c8792037b835ba4aa3af3"
+      },
+      {
+        "test": "tests/PrivilegedCollectionPlan.Tests.ps1",
+        "arguments": [],
+        "testSha256": "30e06d482aac1658282ff8058b457380f99049d6e695df43d392e58f74171b82",
+        "exitCode": 0,
+        "elapsedMilliseconds": 17733,
+        "logSha256": "6d6b007c063798e63862c6a14438729adb43e1106bc3e717dd5020ce6ebcf1c0"
+      },
+      {
+        "test": "tests/PrivilegedCollectionPlanApplication.Tests.ps1",
+        "arguments": [],
+        "testSha256": "7e9d05f3d9c93a5a8e1ecb34093994a270516ab29fcbdb6ff0f75179c6b534a8",
+        "exitCode": 0,
+        "elapsedMilliseconds": 64341,
+        "logSha256": "2332e9c40bb4e7db10b497d60932275d462a0018d30d8840b2b342ea1a7f9a89"
+      },
+      {
+        "test": "tests/PrivilegedSystemPhase.Tests.ps1",
+        "arguments": [],
+        "testSha256": "e2e213bc4efbf5e1ddad15911c2e64810f3cbd2d1e54c6c2ab8951c475a2249f",
+        "exitCode": 0,
+        "elapsedMilliseconds": 16878,
+        "logSha256": "31a59872498d15f7e992731bdfe0ac993898fec832562e3e28f0aeab8d48fb12"
+      },
+      {
+        "test": "tests/FirmwarePrivilegedCollector.Tests.ps1",
+        "arguments": [],
+        "testSha256": "0037f39749ceb7bf22ce43b00e08ed2b8c07375a080b26cda6b77d82eda38cf4",
+        "exitCode": 0,
+        "elapsedMilliseconds": 4279,
+        "logSha256": "9d60a27c9cb093d3af7aaefe0aa9b3dbc79b8219aa45eb8cd9cc4786e1900850"
+      },
+      {
+        "test": "tests/AdministratorExposurePrivilegedCollector.Tests.ps1",
+        "arguments": [],
+        "testSha256": "8a2fbe83eb29b855304e12dd6b0f9bb8c14a173bff201adf7b57a0ff5267b2ff",
+        "exitCode": 0,
+        "elapsedMilliseconds": 15521,
+        "logSha256": "0861d93439a363a27c647d322aea38e17dd3961687f9d5aa8a89df18ee588305"
+      },
+      {
+        "test": "tests/EffectivePolicyPrivilegedCollector.Tests.ps1",
+        "arguments": [],
+        "testSha256": "e36fa55af19fb64dfb16d6ac7f64051c6da62fd5d03c3657fda34926a4a0418a",
+        "exitCode": 0,
+        "elapsedMilliseconds": 61678,
+        "logSha256": "18bbfd11c6537ec7f80a9ac546fc6b5aaeaa9bb8d1c77031359f149029f58140"
+      },
+      {
+        "test": "tests/SystemCollectionPlan.Tests.ps1",
+        "arguments": [],
+        "testSha256": "b3068afb09d576b57587ffeda2556f974113a8fe6aa00c9121992c4a6e47f01a",
+        "exitCode": 1,
+        "elapsedMilliseconds": 14067,
+        "logSha256": "c949e01cb40f5393ac0c993c9be9912d0f8651571289fcefa566edae541ad007"
+      }
+    ],
+    "originalResultSha256": "01f61df06ce36882aae6a6be9b8db18b186a92640da9fb0970812efcee9c0866"
+  },
+  "finalAffectedRound": {
+    "startRevision": "8a2663ebf58133a2a6fb7d0602ada215b24c748e",
+    "sourceRevision": "447c73041f3f5e9ce249856555694447c3519e53",
+    "productRevision": "447c73041f3f5e9ce249856555694447c3519e53",
+    "candidateSha256": "262f069f9d228c1636f84165846b9996bf257993f0900f423e9154166467a86e",
+    "candidateBytes": 3319490,
+    "startedUtc": "2026-09-07T01:00:29.1728077Z",
+    "powerShell": "7.6.5",
+    "dotNet": "10.0.11",
+    "architecture": "X64",
+    "hostSha256": "362a356ce7f0940ec74f73a8fc2c990a2cc24a38a11c90bbd8eca947110ad139",
+    "buildTool": {
+      "path": "build/Build.ps1",
+      "sha256": "63bd3128dcb60de7dea8d828f8c806653a184866c54bf2a5ccaa4235057708d2"
+    },
+    "sourceInputs": [
+      {
+        "path": "src/ApplicationHeader.ps1",
+        "sha256": "0cd6f199daf0f18c604e5328dcbae2f27a03ddad481ca18e74151997673d694f",
+        "byteLength": 15561
+      },
+      {
+        "path": "src/Contracts.ps1",
+        "sha256": "50fc078da2c518f2b81f5e6de116a6bfe05ae0f1b2f26797c9158c53adddaae7",
+        "byteLength": 7999
+      },
+      {
+        "path": "src/StatusDesk.ps1",
+        "sha256": "eac80edca2980885b7feb18da9261044cf735fd3916535b095102deb7bdfbe2c",
+        "byteLength": 51343
+      },
+      {
+        "path": "src/ContractValidator.ps1",
+        "sha256": "996bb1925f367699b92797e87b6fa0acfbc28890558608144156ef1ef54b028f",
+        "byteLength": 42602
+      },
+      {
+        "path": "src/RuntimeCompatibility.ps1",
+        "sha256": "c0a34b0469b5cf2e0365d04cfd5d964f8522ce4468a8b483eaab86e3203b3412",
+        "byteLength": 17491
+      },
+      {
+        "path": "src/Preparation.ps1",
+        "sha256": "d80f099ac9c4260f745e2a6cdd40a02378019a42f26f48b436a07b0e46e9d032",
+        "byteLength": 44710
+      },
+      {
+        "path": "src/ProcessSupervisor.ps1",
+        "sha256": "5d4642c47d53998204cd12ed7a9bc5dab96499e2610eda5a301309e024e11bbf",
+        "byteLength": 88009
+      },
+      {
+        "path": "src/FirmwareReadiness.ps1",
+        "sha256": "0b2729b6934915d3d39ab12d5446bdb60641ce42193fcc38455311e28d3af31c",
+        "byteLength": 23590
+      },
+      {
+        "path": "src/PrivilegedCollectionPlan.ps1",
+        "sha256": "85c6d440d2318b1cadcf7852314f008d13fe5760c62d5c9a7bc3be18bcf8d7b3",
+        "byteLength": 217049
+      },
+      {
+        "path": "src/SystemCollectionPlan.ps1",
+        "sha256": "eb5f91c7aa631a17240327668696fce056c236df56d0391bd627143a74e3b3f8",
+        "byteLength": 139555
+      },
+      {
+        "path": "src/IdentityEnrollment.ps1",
+        "sha256": "b5ca63f8aa3d07555a1d8788615d15039b15eaa6c537585bbf088b5dbe1afd32",
+        "byteLength": 70803
+      },
+      {
+        "path": "src/AdministratorExposure.ps1",
+        "sha256": "41605dfc080d9b023fc054526bcf237524773fe927417efc934df6390b2563ef",
+        "byteLength": 25264
+      },
+      {
+        "path": "src/EffectivePolicy.ps1",
+        "sha256": "63e3f4babe2c8c55df2775cf15ebef3ea90b600cb381961b965af95f4c3827ce",
+        "byteLength": 170288
+      },
+      {
+        "path": "src/ResourceDependencies.ps1",
+        "sha256": "f4a8aea9e5b340cf91ef7a1c919b3be093a1e16fd89df964f770995b9384300b",
+        "byteLength": 76472
+      },
+      {
+        "path": "src/NetworkTopology.ps1",
+        "sha256": "1f4d840d293c8f18476a63aea259bf293ce261aa3773cff4a0f5709406f78974",
+        "byteLength": 75481
+      },
+      {
+        "path": "src/SoftwareInventory.ps1",
+        "sha256": "8c465da3f8bbfa9bbb13b618f52e204f601eea77d8db23fc016419ead3c56e45",
+        "byteLength": 82844
+      },
+      {
+        "path": "src/CertificateTrust.ps1",
+        "sha256": "11d6cd60fd8d69b90a98b18a3652246f628dbdbfb344cabf980207de6f784f8b",
+        "byteLength": 52429
+      },
+      {
+        "path": "src/MicrosoftConnectivity.ps1",
+        "sha256": "c0f939c41d9a50f5259046c378f153d217da4a66cb07ade739915204d849b792",
+        "byteLength": 79080
+      },
+      {
+        "path": "src/SoftwareRecognition.ps1",
+        "sha256": "148e52fcd2c09914cade0d88a07e7d20b96f168ff3098321c7259ca3b554e8ac",
+        "byteLength": 28228
+      },
+      {
+        "path": "src/CrossDomainGuidance.ps1",
+        "sha256": "43287f9a0a6700631cf09aa7e88863e2b1d44678cdd6e01e72c3142a1625c4f6",
+        "byteLength": 28320
+      },
+      {
+        "path": "src/EvidenceWorkspace.ps1",
+        "sha256": "98d805fdba528484c223badf86a7bc1757d97f59f9d76d5d97b965087f2a3469",
+        "byteLength": 86208
+      },
+      {
+        "path": "src/RecipientSharing.ps1",
+        "sha256": "f51852f3878bd6dd8cd5ffc37c8a560ac1936fa541e44454ce14b0f230a4abcc",
+        "byteLength": 74535
+      },
+      {
+        "path": "src/ProtectedPackage.ps1",
+        "sha256": "77acb1fab4ddabef930fa7477bfe2b7169a1644bdf229c0a9e00f4909ab01c13",
+        "byteLength": 66534
+      },
+      {
+        "path": "src/DeviceReadiness.ps1",
+        "sha256": "19ed81fef9938ad2313aa00832f87a8d914f7ac4828b926701df1f4d107565b3",
+        "byteLength": 259293
+      },
+      {
+        "path": "src/RunLifecycle.ps1",
+        "sha256": "8a901afde6ddab7f153aa98b1925fc1551b9bbffef1de2c3a8d4adf2552cf2da",
+        "byteLength": 44522
+      },
+      {
+        "path": "src/LaunchEngine.ps1",
+        "sha256": "0566081917d98424ae57d6d7312a24103e8dba113fd5bafdddbe2c1e267f0334",
+        "byteLength": 2034
+      },
+      {
+        "path": "src/EntryAdapters.ps1",
+        "sha256": "d0f292fb8d2eac7c2fd0845fa379090e47b0f90b2c94555f7c2e3f5e17803df9",
+        "byteLength": 12207
+      },
+      {
+        "path": "src/ProductHelp.ps1",
+        "sha256": "24b43666322fe4aa3a65a16b060fc20cf0580f6fca58a56cf3cd4916b7170697",
+        "byteLength": 3549
+      },
+      {
+        "path": "src/PortableDistribution.ps1",
+        "sha256": "53ce7356dc8f3868f3f302555172c792477e49faeeaa31490f296599268713e1",
+        "byteLength": 7410
+      },
+      {
+        "path": "src/AttestedPreview.ps1",
+        "sha256": "56febb559901124b86f75f967687c5b337e3f661435e064434d03005469a0753",
+        "byteLength": 26031
+      },
+      {
+        "path": "src/AzureValidationAdmission.ps1",
+        "sha256": "4bc27d293d77bc778f07d9caa580a15485ff6c9b70bd79b62948b9dbac06844f",
+        "byteLength": 30434
+      },
+      {
+        "path": "src/AzureValidationRound.ps1",
+        "sha256": "c39abb02252eccb269cd0a2bc4edd2e9bd36978edf3b1a0656b7658db562d6f8",
+        "byteLength": 71540
+      },
+      {
+        "path": "src/ReleaseGates.ps1",
+        "sha256": "331be5c549e8d5ff7a171babfa94120556e62aa5551f9ee4e25bc20ec677406b",
+        "byteLength": 51807
+      },
+      {
+        "path": "src/SigningBoundary.ps1",
+        "sha256": "de9bf13fc1a25d408ad289be661d612ed577240de03d1217c7c9378a4879c9dd",
+        "byteLength": 43649
+      },
+      {
+        "path": "src/PreviewQualification.ps1",
+        "sha256": "01e17f3975d2d3eb33580e837363ec47e71dbe7c9ac9e86e4900bb86f711a423",
+        "byteLength": 39512
+      },
+      {
+        "path": "src/PreviewPublication.ps1",
+        "sha256": "3dc3c3e21fbcaa75da992b2960d1056c3b3aaca81502d879806140b2d3d937ab",
+        "byteLength": 51817
+      },
+      {
+        "path": "src/ApplicationMain.ps1",
+        "sha256": "e7b15a6f79d9947a1464e61cc0f98996587522ca12ffe6aff84d1092f4da236f",
+        "byteLength": 66327
+      }
+    ],
+    "definitionInputs": [
+      {
+        "path": "docs/spec/releases/2.0.0-preview.1.json",
+        "sha256": "0d00048b445d803504813a34fbd3af4693c4d003d1a0e981651e11d4d8281913"
+      },
+      {
+        "path": "docs/spec/capability-ledger.json",
+        "sha256": "41626cc5fe8f14366b26989acec9d24132d42a3c7a3bda0f85799a408ca8e52a"
+      },
+      {
+        "path": "docs/spec/releases/2.0.0-preview.1-preparation-plan.json",
+        "sha256": "2be22cd4fe1b2388e1c83006b357cb4d25892ee17d6895a1b145a203c0a0bb6c"
+      }
+    ],
+    "results": [
+      {
+        "test": "tests/PrivilegedPostStartLossApplication.Tests.ps1",
+        "arguments": [],
+        "testSha256": "ca5dea404a98a56ac433ad0101e2ad5b6d3ad6a7396f0bc2116af10a2f2306af",
+        "exitCode": 0,
+        "elapsedMilliseconds": 12275,
+        "logSha256": "75f5e93bb3b4e107a01fb6c09ae0cf0261ec1fd44f854bc78b914510bb69a624"
+      },
+      {
+        "test": "tests/StatusDeskEngine.Tests.ps1",
+        "arguments": [
+          "-QualificationPlanFault",
+          "PrivilegeLoss"
+        ],
+        "testSha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "exitCode": 0,
+        "elapsedMilliseconds": 9958,
+        "logSha256": "76399a7fe8f31a43b946c0b6f53d8244944703628cdb19c7a81b206b8967fe36"
+      },
+      {
+        "test": "tests/StatusDeskEngine.Tests.ps1",
+        "arguments": [
+          "-QualificationPlanFault",
+          "PrivilegeTimeout"
+        ],
+        "testSha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "exitCode": 0,
+        "elapsedMilliseconds": 28821,
+        "logSha256": "49d9ac679c7eb594b240f28753426223af947b9110d87036f1d808296b1ea9b1"
+      },
+      {
+        "test": "tests/StatusDeskEngine.Tests.ps1",
+        "arguments": [
+          "-CancelDuringPrivilege"
+        ],
+        "testSha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "exitCode": 0,
+        "elapsedMilliseconds": 11550,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "test": "tests/StatusDeskEngine.Tests.ps1",
+        "arguments": [],
+        "testSha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "exitCode": 0,
+        "elapsedMilliseconds": 22485,
+        "logSha256": "09bb1b3cbed45f2d1d1477e50f5913980c340e85dbc22bb846f28c6ef77d94ca"
+      },
+      {
+        "test": "tests/ContractFormats.Tests.ps1",
+        "arguments": [],
+        "testSha256": "fd0c7d97b93d5f9229573fecc3015d780cca984b26c4d335133433f63e271e2e",
+        "exitCode": 0,
+        "elapsedMilliseconds": 19141,
+        "logSha256": "6edcd38e01d50f6d9f790d884bad3ee5de325e785c33ff4c15ea063ebc64cf59"
+      },
+      {
+        "test": "tests/ProtectedPackageRecordSafety.Tests.ps1",
+        "arguments": [],
+        "testSha256": "5992f13c725d748378b200e7f885f4debb5605c54bd5f359d97d4d7e6f645e6a",
+        "exitCode": 0,
+        "elapsedMilliseconds": 9362,
+        "logSha256": "d1b33065e65bfe571da83fcc3f70859e264c1916456c5878d8f23b0d8e6a027b"
+      },
+      {
+        "test": "tests/PrivilegedExecutionPhase.Tests.ps1",
+        "arguments": [],
+        "testSha256": "fff974fcc45e11879c72afea7f730adfbf210b1543d15c8c3197aa4b7127ce2e",
+        "exitCode": 0,
+        "elapsedMilliseconds": 20652,
+        "logSha256": "6e4838a0b3142a933d819dfd1ae989a435691af080bf8e6ef461560fc54cae8b"
+      },
+      {
+        "test": "tests/PrivilegedCollectionPlanPolicy.Tests.ps1",
+        "arguments": [],
+        "testSha256": "099745735767e0e3cbedb2b77e91f88ddb8dc91302a2ea78c28059667a932bd0",
+        "exitCode": 0,
+        "elapsedMilliseconds": 896,
+        "logSha256": "7f74c506abb2c364d13070bc758d0e93b156b08b553c8792037b835ba4aa3af3"
+      },
+      {
+        "test": "tests/PrivilegedCollectionPlan.Tests.ps1",
+        "arguments": [],
+        "testSha256": "30e06d482aac1658282ff8058b457380f99049d6e695df43d392e58f74171b82",
+        "exitCode": 0,
+        "elapsedMilliseconds": 17871,
+        "logSha256": "6d6b007c063798e63862c6a14438729adb43e1106bc3e717dd5020ce6ebcf1c0"
+      },
+      {
+        "test": "tests/PrivilegedCollectionPlanApplication.Tests.ps1",
+        "arguments": [],
+        "testSha256": "7e9d05f3d9c93a5a8e1ecb34093994a270516ab29fcbdb6ff0f75179c6b534a8",
+        "exitCode": 0,
+        "elapsedMilliseconds": 64841,
+        "logSha256": "2332e9c40bb4e7db10b497d60932275d462a0018d30d8840b2b342ea1a7f9a89"
+      },
+      {
+        "test": "tests/PrivilegedSystemPhase.Tests.ps1",
+        "arguments": [],
+        "testSha256": "e2e213bc4efbf5e1ddad15911c2e64810f3cbd2d1e54c6c2ab8951c475a2249f",
+        "exitCode": 0,
+        "elapsedMilliseconds": 16996,
+        "logSha256": "31a59872498d15f7e992731bdfe0ac993898fec832562e3e28f0aeab8d48fb12"
+      },
+      {
+        "test": "tests/FirmwarePrivilegedCollector.Tests.ps1",
+        "arguments": [],
+        "testSha256": "0037f39749ceb7bf22ce43b00e08ed2b8c07375a080b26cda6b77d82eda38cf4",
+        "exitCode": 0,
+        "elapsedMilliseconds": 4221,
+        "logSha256": "9d60a27c9cb093d3af7aaefe0aa9b3dbc79b8219aa45eb8cd9cc4786e1900850"
+      },
+      {
+        "test": "tests/AdministratorExposurePrivilegedCollector.Tests.ps1",
+        "arguments": [],
+        "testSha256": "8a2fbe83eb29b855304e12dd6b0f9bb8c14a173bff201adf7b57a0ff5267b2ff",
+        "exitCode": 0,
+        "elapsedMilliseconds": 15415,
+        "logSha256": "0861d93439a363a27c647d322aea38e17dd3961687f9d5aa8a89df18ee588305"
+      },
+      {
+        "test": "tests/EffectivePolicyPrivilegedCollector.Tests.ps1",
+        "arguments": [],
+        "testSha256": "e36fa55af19fb64dfb16d6ac7f64051c6da62fd5d03c3657fda34926a4a0418a",
+        "exitCode": 0,
+        "elapsedMilliseconds": 61760,
+        "logSha256": "18bbfd11c6537ec7f80a9ac546fc6b5aaeaa9bb8d1c77031359f149029f58140"
+      },
+      {
+        "test": "tests/SystemCollectionPlan.Tests.ps1",
+        "arguments": [],
+        "testSha256": "46881d22389c56929c98c2e24545830652628e0f120f89918580b58957efde41",
+        "exitCode": 0,
+        "elapsedMilliseconds": 19655,
+        "logSha256": "f3d3488af12f90ad831345ddbb879893208019839a47a286ca8823aea5f22b8f"
+      },
+      {
+        "test": "tests/ContractValidator.Tests.ps1",
+        "arguments": [],
+        "testSha256": "4fa6370fcc6054d940f56f2f759caf306940878089b1bec5e875474e695841c6",
+        "exitCode": 0,
+        "elapsedMilliseconds": 53507,
+        "logSha256": "cbb0aa7a2900d370b5bdb3b50a7232a79438fc3773ff5292741e1d7045cf440e"
+      },
+      {
+        "test": "tests/ContractSemanticMatrix.Tests.ps1",
+        "arguments": [],
+        "testSha256": "9f8a49119d26411b09ea778cd5f9b5db74d9fe108df167102609ff4433cc4682",
+        "exitCode": 0,
+        "elapsedMilliseconds": 63762,
+        "logSha256": "918f12bcc2b27ce9bbda6722a9dcffdf3412f95dbee8862002fa45440dd3bcb2"
+      },
+      {
+        "test": "tests/ContractCultureOutput.Tests.ps1",
+        "arguments": [],
+        "testSha256": "d78bc12a82203aa84178265109c2c7c541542bd94731337eb09523664767a365",
+        "exitCode": 0,
+        "elapsedMilliseconds": 32043,
+        "logSha256": "d550baf6417686c43824dcdc37ac7c6af28a73122e27c1e367a534423094e3b9"
+      },
+      {
+        "test": "tests/ProtectedPackageViewing.Tests.ps1",
+        "arguments": [],
+        "testSha256": "b28c9c42093d5369dc723891144cc4a6e43f83334a43690e3c5d26fd2de399ed",
+        "exitCode": 0,
+        "elapsedMilliseconds": 2147,
+        "logSha256": "584f2058a36c85c8ee82fd590efc6f12f427b6726c01cbcdd4d2984ca9af37cb"
+      },
+      {
+        "test": "tests/ProtectedPackageBufferSafety.Tests.ps1",
+        "arguments": [],
+        "testSha256": "883a5c588fa858be4319416d4d76329943c11dc387d2e6ec2300ac0bacb5dc35",
+        "exitCode": 0,
+        "elapsedMilliseconds": 7062,
+        "logSha256": "a830df10fbc4ae3ab749e5e9936eb1a7205e8935c6092e695100c5fc0b9a3650"
+      },
+      {
+        "test": "tests/CertificateCulture.Tests.ps1",
+        "arguments": [],
+        "testSha256": "7a6f9b4e27baf564260f2a5aca694e639cfb4d8886a3f47228d8373874440659",
+        "exitCode": 0,
+        "elapsedMilliseconds": 1467,
+        "logSha256": "e43a4a09a765e5ad9f75a97c8df1837d2a78d443caa7975b651b2610cadddfc2"
+      },
+      {
+        "test": "tests/PrivilegedInlineRepresentation.Tests.ps1",
+        "arguments": [],
+        "testSha256": "be427e83766257e8e1aacf1686d37ee11c0d2ae1ce7eb791acb0a2f964c70cab",
+        "exitCode": 0,
+        "elapsedMilliseconds": 14843,
+        "logSha256": "baa821707d3d8dc02f57e86114af692f9af5700c942bf82a3c817268ec0f2657"
+      },
+      {
+        "test": "tests/OfficialSchemaQualification.Tests.ps1",
+        "arguments": [],
+        "testSha256": "bf5794e764639c049d7a18a577ff5bd6fbbe58a1de52196b7109a9ac8a79a4f5",
+        "exitCode": 0,
+        "elapsedMilliseconds": 1158,
+        "logSha256": "6e549de11990daec80343dd092ffe8ed727dc4f3feeefeb8ae972aeed4e87cf8"
+      },
+      {
+        "test": "tests/BuildDeterminism.Tests.ps1",
+        "arguments": [],
+        "testSha256": "88937e69feabca4377c06780f3dfaae188a443aa8b77c6f26f904b5e9cbccf75",
+        "exitCode": 0,
+        "elapsedMilliseconds": 53522,
+        "logSha256": "28ff07707229e1637b1ca6916d58d2bff34b2dc8c6fdd32df4f808f555d1e416"
+      }
+    ]
+  },
+  "syntax": {
+    "sourceRevision": "447c73041f3f5e9ce249856555694447c3519e53",
+    "checks": [
+      {
+        "path": "src/ContractValidator.ps1",
+        "sha256": "996bb1925f367699b92797e87b6fa0acfbc28890558608144156ef1ef54b028f",
+        "errors": 0
+      },
+      {
+        "path": "src/DeviceReadiness.ps1",
+        "sha256": "19ed81fef9938ad2313aa00832f87a8d914f7ac4828b926701df1f4d107565b3",
+        "errors": 0
+      },
+      {
+        "path": "src/PrivilegedCollectionPlan.ps1",
+        "sha256": "85c6d440d2318b1cadcf7852314f008d13fe5760c62d5c9a7bc3be18bcf8d7b3",
+        "errors": 0
+      },
+      {
+        "path": "src/SystemCollectionPlan.ps1",
+        "sha256": "eb5f91c7aa631a17240327668696fce056c236df56d0391bd627143a74e3b3f8",
+        "errors": 0
+      },
+      {
+        "path": "tests/ContractFormatTestSupport.ps1",
+        "sha256": "498bf6164d15b9e2f14d3acb5a97ad04ce0705e9526e78716e1cd662ce3ec17a",
+        "errors": 0
+      },
+      {
+        "path": "tests/ContractFormats.Tests.ps1",
+        "sha256": "fd0c7d97b93d5f9229573fecc3015d780cca984b26c4d335133433f63e271e2e",
+        "errors": 0
+      },
+      {
+        "path": "tests/PrivilegedExecutionPhase.Tests.ps1",
+        "sha256": "fff974fcc45e11879c72afea7f730adfbf210b1543d15c8c3197aa4b7127ce2e",
+        "errors": 0
+      },
+      {
+        "path": "tests/PrivilegedPostStartLossApplication.Tests.ps1",
+        "sha256": "ca5dea404a98a56ac433ad0101e2ad5b6d3ad6a7396f0bc2116af10a2f2306af",
+        "errors": 0
+      },
+      {
+        "path": "tests/ProtectedPackageRecordSafety.Tests.ps1",
+        "sha256": "5992f13c725d748378b200e7f885f4debb5605c54bd5f359d97d4d7e6f645e6a",
+        "errors": 0
+      },
+      {
+        "path": "tests/StatusDeskEngine.Tests.ps1",
+        "sha256": "3696312d56c840c7cc3ca2d7a0bb3e5029249e923e97b9a566019693bf6680ad",
+        "errors": 0
+      },
+      {
+        "path": "tests/SystemCollectionPlan.Tests.ps1",
+        "sha256": "46881d22389c56929c98c2e24545830652628e0f120f89918580b58957efde41",
+        "errors": 0
+      },
+      {
+        "path": "artifacts/WIN-PCInfo.ps1",
+        "sha256": "262f069f9d228c1636f84165846b9996bf257993f0900f423e9154166467a86e",
+        "errors": 0
+      }
+    ]
+  },
+  "continuity": {
+    "testTree": "924b46fd8b7b82c8cc25922136d94855151f782d",
+    "testInputCount": 493,
+    "testInventorySha256": "488559803f98af5f8be3648c1835d0b53aaa7f016de67a555d5313fbfee28bba",
+    "inventoryMethod": "git ls-files tests order; each line is path, one space, raw file SHA-256, LF; UTF-8 without BOM",
+    "validatorAssemblies": [
+      {
+        "name": "Microsoft.PowerShell.Commands.Utility",
+        "version": "7.6.0.500",
+        "fileVersion": "7.6.5.500",
+        "sha256": "2f6201bb3caf4c08158be733e786dd85b11537694f7e6ab40356fc0727a3596f"
+      },
+      {
+        "name": "JsonSchema.Net",
+        "version": "7.0.0.0",
+        "fileVersion": "7.4.0",
+        "sha256": "879c8631777b621ff25e939f021f06dfb2745c3a98e8cd5a281f6eee9da77aa6"
+      },
+      {
+        "name": "JsonPointer.Net",
+        "version": "5.0.0.0",
+        "fileVersion": "5.3.1",
+        "sha256": "aefde47dbcb4e96a0280630138430e74d518e4eff79967377d05104b4c40707f"
+      },
+      {
+        "name": "Json.More",
+        "version": "2.0.0.0",
+        "fileVersion": "2.1.1",
+        "sha256": "95dd96afb294c5243f369b1f8510d5f70c15715746982470382362c0e88f1d4d"
+      }
+    ],
+    "specSnapshots": [
+      {
+        "snapshot": "issues/154.json",
+        "sha256": "d873b9ac8cb6151c51142f1e848f5504625be4d0695eb10cc8c6eb6d104d89c8"
+      },
+      {
+        "snapshot": "issues/134.json",
+        "sha256": "a421d9f42843434d48af70da1d406fb34b5c389d951aebf0ddb968074578aeec"
+      },
+      {
+        "snapshot": "issues/37.json",
+        "sha256": "3e366c85320c6f66e76b01111dd90a457f1b1fa40d827e6b21d69275a9b3cb1b"
+      },
+      {
+        "snapshot": "issues/158.json",
+        "sha256": "fb4954c16cabb5430c036d8a8fc6d77d72bf61f7c1e9daf5d68fc9660f61696a"
+      }
+    ],
+    "runnerSha256": "a72f732632e195a4500ae671d202e88165b6613dd4e4910c2490967bd50fc2be",
+    "sourceAndDefinitionHashesVerified": true,
+    "sourceHashRepresentation": "Raw checkout bytes, as recorded by Build.ps1 sourceInputs",
+    "definitionHashRepresentation": "Canonical UTF-8/LF, as recorded by Build.ps1 definitionInputs",
+    "verificationCorrection": "The first continuity command incorrectly compared LF-normalized source text with the raw-source hash and stopped at ApplicationHeader.ps1. Inspection confirmed unchanged raw bytes. Corrected representation checks pass without source or test changes."
+  }
+}

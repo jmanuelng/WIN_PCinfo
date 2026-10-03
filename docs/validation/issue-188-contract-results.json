@@ -1,0 +1,157 @@
+{
+  "issue": 188,
+  "capturedAtUtc": "2026-10-02T02:43:57.287385+00:00",
+  "sourceCommit": "faa8f7062ba2945925b62a6243de590e96eb741a",
+  "reviewBase": "f0650379c6bd809878fbf57579d07dddbcf909ae",
+  "candidateSha256": "6082704dbfaa8aa5432acd7db1ab41fd7799c8416cccf034fedfa01124a2d259",
+  "candidateBytes": 3319524,
+  "contractSetVersion": "1.14.0",
+  "fieldDefinitions": 264,
+  "networkBehaviors": [
+    "LocalOnly",
+    "MicrosoftConnectivityEnabled"
+  ],
+  "immutableMutationsPerBehavior": 36,
+  "privacyInjectionRejections": 8,
+  "officialCases": {
+    "pass": 573,
+    "fail": 0,
+    "notApplicable": 177,
+    "externalFetches": 0
+  },
+  "definitionIdentities": [
+    {
+      "path": "docs/spec/releases/2.0.0-preview.1-contract-set.json",
+      "utf8LfSha256": "3f848d457987cf6fe9947935f52ffb0f6c596597c843e1c52929a147de035ed4"
+    },
+    {
+      "path": "schemas/assessment-contract-set.schema.json",
+      "utf8LfSha256": "fd223a75c163e89aaf59925ba4b083e575aa0367b39d3271f2f1ebc80fa7d2ec"
+    },
+    {
+      "path": "schemas/assessment-package-manifest.schema.json",
+      "utf8LfSha256": "03ce38534dff04fb2d4dac449d651c8d75b2518b58a588bbbdc8f3b59ff28e9a"
+    },
+    {
+      "path": "schemas/preparation-plan.schema.json",
+      "utf8LfSha256": "f580989bbd3c5e6e2acf41e48c092dbbb219bfa8cc10f2112e55a5caf1a6e01d"
+    }
+  ],
+  "tests": [
+    {
+      "test": "AssessmentContractSet",
+      "status": "Pass",
+      "elapsedMilliseconds": 907,
+      "reason": null,
+      "testSha256": "910d481c8a109955a149ebf1fe19bb3cddb358d2de23ebc072bb08e7267d8f06",
+      "logSha256": "2ac31dee2c96db83c36f3bfe883e15f6b510960c0322c1568656448e9571a2ba"
+    },
+    {
+      "test": "SchemaContracts",
+      "status": "Pass",
+      "elapsedMilliseconds": 12491,
+      "reason": null,
+      "testSha256": "663d5b7716f157f881a65c646d3068848cb39caba743ecca01014c4c768ae691",
+      "logSha256": "da994d4c9c1fc3d364826658155616bdce2148cb02b3ed581d3dcfd2c718eacd"
+    },
+    {
+      "test": "DeviceReadinessApplication",
+      "status": "Pass",
+      "elapsedMilliseconds": 11699,
+      "reason": null,
+      "testSha256": "f29fd59bf8ee83d77dfa0bb315a666c6964286c80769c14e2dca68962efecdb6",
+      "logSha256": "3f2a231033d5dab869edf5b08abacdf1a8170026917a2034bec2afab96eec078"
+    },
+    {
+      "test": "PreparationSummary",
+      "status": "Pass",
+      "elapsedMilliseconds": 13734,
+      "reason": null,
+      "testSha256": "ca01c7be4eab969af76d12f8109eebbadb7b26ab7062ebdca8f909cd5048cdb2",
+      "logSha256": "f0fde7705fa38b325766edecfa70a77b3ff76f1f61f8c35ab2b887ca31e17d0f"
+    },
+    {
+      "test": "RequestValidation",
+      "status": "Pass",
+      "elapsedMilliseconds": 25706,
+      "reason": null,
+      "testSha256": "53aa4f04e33a469aab51c1a64adb60d49c93be3407fa787e1355808e77af8ca9",
+      "logSha256": "e888abdf5589cccdfcae932f2b8f61fab1df307b428264c24cd038b7688bb64c"
+    },
+    {
+      "test": "ProtectedPackageContracts",
+      "status": "Pass",
+      "elapsedMilliseconds": 1581,
+      "reason": null,
+      "testSha256": "64eb38955d941e8025053fa4990ba5f150297425dcb739b700707848dc3ca6d4",
+      "logSha256": "327fdc4571a999c7fcfc2a923355cccbfa0376d486941761193441bc2720c22d"
+    },
+    {
+      "test": "ProtectedPackageAdmission",
+      "status": "Pass",
+      "elapsedMilliseconds": 1787,
+      "reason": null,
+      "testSha256": "9fe6455c5d97df15fb127631f118c189a8644742bec04840dcdef6b09de3eb64",
+      "logSha256": "0cfe1f8294314358bb87a100b53ec68e7a8f870f6597a840917c7c93a05fe065"
+    },
+    {
+      "test": "ProtectedPackageApplication",
+      "status": "Pass",
+      "elapsedMilliseconds": 40547,
+      "reason": null,
+      "testSha256": "ad2f5e9e7c3d007092e824a47d6e7ec09bc592d8ff2bac99b8111944806a11d1",
+      "logSha256": "ad7f6564cd97f772065367ca916d66a7da19a5051c10822e2e3ad7b546d3b35a"
+    },
+    {
+      "test": "ResourceDependenciesPolicy",
+      "status": "Pass",
+      "elapsedMilliseconds": 769,
+      "reason": null,
+      "testSha256": "3d967a9d047bf6fd2cc06cce19dfc4addcbd0e45f546017dba8bc9b75a743e1e",
+      "logSha256": "46ed5c0cb5c7c17b615fe33542cb0f22cfb11f955c3d7c13fc89d0ee868ef64c"
+    },
+    {
+      "test": "ResourceDependenciesContract",
+      "status": "Pass",
+      "elapsedMilliseconds": 25262,
+      "reason": null,
+      "testSha256": "6396918ff005ed65c41dbdbd2805d965f27e25c2468be2db463e9d883b0c653b",
+      "logSha256": "de0136b3199ddb05e2f1594483ea3acb119c4ce457df8c5fe063b19e480782df"
+    },
+    {
+      "test": "ContractValidator",
+      "status": "Pass",
+      "elapsedMilliseconds": 47044,
+      "reason": null,
+      "testSha256": "4fa6370fcc6054d940f56f2f759caf306940878089b1bec5e875474e695841c6",
+      "logSha256": "cbb0aa7a2900d370b5bdb3b50a7232a79438fc3773ff5292741e1d7045cf440e"
+    },
+    {
+      "test": "RecommendationDefinitions",
+      "status": "Pass",
+      "elapsedMilliseconds": 883,
+      "reason": null,
+      "testSha256": "93b5145f8492e4e819b8f1961337be2a389b002b7c5e2ee2963f9a021879d971",
+      "logSha256": "63c6afc32c9c7524d61c3476ab7c8e6c42b3650b0a1c107d72e43ef04ad58d4b"
+    },
+    {
+      "test": "OfficialSchemaQualification",
+      "status": "Pass",
+      "elapsedMilliseconds": 1053,
+      "reason": null,
+      "testSha256": "21f499fb5654ff59924becaf4f58e6ccb7e935d5c861296f87ce775cd0691cd1",
+      "logSha256": "6e549de11990daec80343dd092ffe8ed727dc4f3feeefeb8ae972aeed4e87cf8"
+    },
+    {
+      "test": "BuildDeterminism",
+      "status": "Pass",
+      "elapsedMilliseconds": null,
+      "reason": null,
+      "testSha256": "4eee043b505035526900158caf66365af3685a43957d59268d7ac8658a840c14",
+      "logSha256": "ff4e9ff1b294d1cbd5077499466b06f30396108bc9150851ed934cd29c7ec84b"
+    }
+  ],
+  "fullIntegratedGate": "PendingAfterRepairFrontier",
+  "historicalGate": "FailedUnchanged",
+  "githubActionsMinutes": 0
+}

@@ -29,45 +29,50 @@ foreach ($requestPath in @($localRequestPath, $connectivityRequestPath)) {
     if (-not (Test-Json -Json $planJson -SchemaFile $planSchemaPath)) {
         throw "The generated $($summary.plan.network.behavior) plan does not satisfy the public plan schema."
     }
-    if ($summary.plan.network.behavior -eq 'LocalOnly') {
-        $mutations = @(
-            { param($value) $value.deviceReadiness.scopeId = 'scope:widened' },
-            { param($value) $value.deviceReadiness.collector.source = 'caller supplied' },
-            { param($value) $value.deviceReadiness.collector.executionContext = 'Administrator' },
-            { param($value) $value.deviceReadiness.collector.privilege = 'ElevationAllowed' },
-            { param($value) $value.deviceReadiness.collector.networkBehavior = 'Internet' },
-            { param($value) $value.deviceReadiness.collector.executable = 'CallerSelected' },
-            { param($value) $value.deviceReadiness.collector.dependencies = @('download') },
-            { param($value) $value.deviceReadiness.collector.deadlineMilliseconds = -1 },
-            { param($value) $value.deviceReadiness.collector.standardOutputMaximumBytes = 999999 },
-            { param($value) $value.deviceReadiness.fieldIds = @('field:widened') },
-            { param($value) $value.deviceReadiness.collector.cleanup = 'BestEffort' }
-            { param($value) $value.deviceReadiness.collector.sourceBounds.activationRows = 17 }
-            { param($value) $value.identityEnrollment.discoveryTasks = @($value.identityEnrollment.discoveryTasks | Select-Object -First 4) }
-            { param($value) $value.networkTopology.localScopes[1].fieldIds = @('field:network.profile.name','field:network.profile.category','field:network.profile.connectivity') }
-            { param($value) $value.networkTopology.localScopes[3].fieldIds = @('field:network.route.address-family','field:network.route.destination-prefix','field:network.route.next-hop','field:network.route.metric') }
-            { param($value) $value.networkTopology.localScopes[4].fieldIds = @('field:network.resolver.address-family','field:network.resolver.addresses') }
-            { param($value) $value.networkTopology.collector.networkBehavior = 'MicrosoftConnectivityEnabled' }
-            { param($value) $value.firmwareReadiness.collector.operationId = 'caller-supplied' }
-            { param($value) $value.firmwareReadiness.collector.source = 'caller supplied' }
-            { param($value) $value.firmwareReadiness.collector.executionContext = 'StandardUser' }
-            { param($value) $value.firmwareReadiness.collector.privilege = 'SelfElevating' }
-            { param($value) $value.firmwareReadiness.collector.networkBehavior = 'Internet' }
-            { param($value) $value.firmwareReadiness.collector.executable = 'CallerSelected' }
-            { param($value) $value.firmwareReadiness.collector.dependencies = @('download') }
-            { param($value) $value.firmwareReadiness.collector.deadlineMilliseconds = -1 }
-            { param($value) $value.firmwareReadiness.collector.resultMaximumUtf8Bytes = 999999 }
-            { param($value) $value.firmwareReadiness.scopes[0].fieldIds = @('field:widened') }
-            { param($value) $value.firmwareReadiness.rules[0].operationId = 'caller-supplied' }
-            { param($value) $value.firmwareReadiness.collector.cleanup = 'BestEffort' }
-        )
-        foreach ($mutation in $mutations) {
-            $changed = $planJson | ConvertFrom-Json -Depth 30
-            & $mutation $changed
-            $changedJson = $changed | ConvertTo-Json -Compress -Depth 30
-            if (Test-Json -Json $changedJson -SchemaFile $planSchemaPath -ErrorAction SilentlyContinue) {
-                throw 'The immutable plan schema accepted an altered release-owned operation.'
-            }
+    $mutations = @(
+        { param($value) $value.deviceReadiness.scopeId = 'scope:widened' },
+        { param($value) $value.deviceReadiness.collector.source = 'caller supplied' },
+        { param($value) $value.deviceReadiness.collector.executionContext = 'Administrator' },
+        { param($value) $value.deviceReadiness.collector.privilege = 'ElevationAllowed' },
+        { param($value) $value.deviceReadiness.collector.networkBehavior = 'Internet' },
+        { param($value) $value.deviceReadiness.collector.executable = 'CallerSelected' },
+        { param($value) $value.deviceReadiness.collector.dependencies = @('download') },
+        { param($value) $value.deviceReadiness.collector.deadlineMilliseconds = -1 },
+        { param($value) $value.deviceReadiness.collector.standardOutputMaximumBytes = 999999 },
+        { param($value) $value.deviceReadiness.fieldIds = @('field:widened') },
+        { param($value) $value.deviceReadiness.collector.cleanup = 'BestEffort' }
+        { param($value) $value.deviceReadiness.collector.sourceBounds.activationRows = 17 }
+        { param($value) $value.identityEnrollment.discoveryTasks = @($value.identityEnrollment.discoveryTasks | Select-Object -First 4) }
+        { param($value) $value.networkTopology.localScopes[1].fieldIds = @('field:network.profile.name','field:network.profile.category','field:network.profile.connectivity') }
+        { param($value) $value.networkTopology.localScopes[3].fieldIds = @('field:network.route.address-family','field:network.route.destination-prefix','field:network.route.next-hop','field:network.route.metric') }
+        { param($value) $value.networkTopology.localScopes[4].fieldIds = @('field:network.resolver.address-family','field:network.resolver.addresses') }
+        { param($value) $value.networkTopology.collector.networkBehavior = 'MicrosoftConnectivityEnabled' }
+        { param($value) $value.firmwareReadiness.collector.operationId = 'caller-supplied' }
+        { param($value) $value.firmwareReadiness.collector.source = 'caller supplied' }
+        { param($value) $value.firmwareReadiness.collector.executionContext = 'StandardUser' }
+        { param($value) $value.firmwareReadiness.collector.privilege = 'SelfElevating' }
+        { param($value) $value.firmwareReadiness.collector.networkBehavior = 'Internet' }
+        { param($value) $value.firmwareReadiness.collector.executable = 'CallerSelected' }
+        { param($value) $value.firmwareReadiness.collector.dependencies = @('download') }
+        { param($value) $value.firmwareReadiness.collector.deadlineMilliseconds = -1 }
+        { param($value) $value.firmwareReadiness.collector.resultMaximumUtf8Bytes = 999999 }
+        { param($value) $value.firmwareReadiness.scopes[0].fieldIds = @('field:widened') }
+        { param($value) $value.firmwareReadiness.rules[0].operationId = 'caller-supplied' }
+        { param($value) $value.firmwareReadiness.collector.cleanup = 'BestEffort' }
+        { param($value) $value.microsoftConnectivity.recommendations[0].caution = 'Caller supplied guidance' }
+        { param($value) $value.certificateTrust.recommendations[0].authoritativeReferences = @() }
+        { param($value) $value.softwareInventory.recommendations[0].responsibleRole = 'CallerSelected' }
+        { param($value) $value.resourceDependencies.recommendations[0].prerequisites = @() }
+        { param($value) $value.networkTopology.recommendations[0].verification = 'Caller supplied verification' }
+        { param($value) $value.resourceDependencies.sourceCatalog[3].approvedProperties = @('Name') }
+        { param($value) $value.effectivePolicy.sourceCatalog[12].interface = 'Caller supplied interface' }
+    )
+    foreach ($mutation in $mutations) {
+        $changed = $planJson | ConvertFrom-Json -Depth 30
+        & $mutation $changed
+        $changedJson = $changed | ConvertTo-Json -Compress -Depth 30
+        if (Test-Json -Json $changedJson -SchemaFile $planSchemaPath -ErrorAction SilentlyContinue) {
+            throw 'The immutable plan schema accepted an altered release-owned operation.'
         }
     }
 

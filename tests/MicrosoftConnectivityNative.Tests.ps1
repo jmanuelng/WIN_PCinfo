@@ -10,6 +10,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 if (-not ('WinPCInfo.Tests.TlsLoopbackServer' -as [type])) {
     Add-Type -Language CSharp -TypeDefinition @'
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -45,30 +46,50 @@ namespace WinPCInfo.Tests {
 
     public sealed class TlsLoopbackServer : IDisposable {
         private readonly TcpListener listener;
+        private readonly CngKey key;
+        private readonly string keyName;
         private readonly RSA rsa;
         private readonly X509Certificate2 certificate;
         private readonly SslStreamCertificateContext certificateContext;
         private readonly Task worker;
+        private TcpClient acceptedClient;
         public int Port { get; }
         public string Error { get; private set; }
+        public string CertificateSha256 => certificate.GetCertHashString(HashAlgorithmName.SHA256).ToLowerInvariant();
+        public bool CleanupVerified { get; private set; }
 
         public TlsLoopbackServer() {
-            rsa = RSA.Create(2048);
-            var request = new CertificateRequest("CN=localhost", rsa,
-                HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-            certificate = request.CreateSelfSigned(
-                DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddMinutes(10));
-            certificateContext = SslStreamCertificateContext.Create(certificate, null);
-            listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            Port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            worker = Task.Run(() => Serve());
+            // Schannel requires a named key. Create one exact test-owned,
+            // non-exportable user key; never install or trust its certificate.
+            keyName = "WIN-PCInfo.NativeTls." + Guid.NewGuid().ToString("N");
+            try {
+                key = CngKey.Create(CngAlgorithm.Rsa, keyName, new CngKeyCreationParameters {
+                    Provider = CngProvider.MicrosoftSoftwareKeyStorageProvider,
+                    KeyUsage = CngKeyUsages.Signing,
+                    ExportPolicy = CngExportPolicies.None,
+                    Parameters = { new CngProperty("Length", BitConverter.GetBytes(2048), CngPropertyOptions.None) }
+                });
+                rsa = new RSACng(key);
+                var request = new CertificateRequest("CN=localhost", rsa,
+                    HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                certificate = request.CreateSelfSigned(
+                    DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddMinutes(10));
+                certificateContext = SslStreamCertificateContext.Create(certificate, null);
+                listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start();
+                Port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                worker = Task.Run(() => Serve());
+            } catch {
+                Dispose();
+                throw;
+            }
         }
 
         private void Serve() {
             try {
                 using (TcpClient client = listener.AcceptTcpClient())
                 using (var stream = new SslStream(client.GetStream(), false)) {
+                    acceptedClient = client;
                     stream.AuthenticateAsServer(new SslServerAuthenticationOptions {
                         ServerCertificateContext = certificateContext,
                         EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
@@ -85,10 +106,34 @@ namespace WinPCInfo.Tests {
         }
 
         public void Dispose() {
-            listener.Stop();
-            try { worker.Wait(3000); } catch { }
-            certificate.Dispose();
-            rsa.Dispose();
+            if (CleanupVerified) return;
+            var failures = new List<Exception>();
+            try { listener?.Stop(); } catch (Exception ex) { failures.Add(ex); }
+            try { acceptedClient?.Dispose(); } catch (Exception ex) { failures.Add(ex); }
+            bool workerAbsent = worker == null;
+            if (worker != null) {
+                try { workerAbsent = worker.Wait(3000); }
+                catch (Exception ex) { workerAbsent = worker.IsCompleted; failures.Add(ex); }
+            }
+            if (workerAbsent) {
+                try { certificate?.Dispose(); } catch (Exception ex) { failures.Add(ex); }
+                try { rsa?.Dispose(); } catch (Exception ex) { failures.Add(ex); }
+                if (key != null) {
+                    try { key.Delete(); } catch (Exception ex) { failures.Add(ex); }
+                    try { key.Dispose(); } catch (Exception ex) { failures.Add(ex); }
+                    try {
+                        if (CngKey.Exists(keyName, CngProvider.MicrosoftSoftwareKeyStorageProvider))
+                            failures.Add(new InvalidOperationException("Owned loopback key absence is unverified."));
+                    } catch (Exception ex) { failures.Add(ex); }
+                }
+            } else failures.Add(new InvalidOperationException("Owned loopback worker absence is unverified."));
+            if (failures.Count > 0) {
+                var error = new InvalidOperationException("Owned loopback cleanup is unverified.",
+                    new AggregateException(failures));
+                error.Data["OwnedCleanupUnverified"] = true;
+                throw error;
+            }
+            CleanupVerified = true;
         }
     }
 }
@@ -148,6 +193,22 @@ Assert-Equal 'WindowsProxy' $proxyFailure.transportMode `
 Assert-Equal 'Used' $proxyFailure.proxyState `
     'failed sends preserve that Windows proxy policy participated'
 
+$authenticationFailure = [Net.Http.HttpRequestException]::new(
+    'synthetic HTTP failure', [Security.Authentication.AuthenticationException]::new('synthetic TLS failure'))
+$typedAuthentication = New-MicrosoftConnectivityHttpFailureResult -Exception $authenticationFailure `
+    -TransportMode Direct -ProxyState Bypassed
+Assert-Equal 'TlsAuthenticationFailed' $typedAuthentication.state `
+    'an HTTP-wrapped TLS authentication failure remains distinct from generic send failure'
+$typedChain = New-MicrosoftConnectivityHttpFailureResult -Exception $authenticationFailure `
+    -ChainState Invalid -TransportMode Direct -ProxyState Bypassed
+Assert-Equal 'CertificateChainInvalid' $typedChain.state `
+    'an actually observed invalid chain preserves its more specific certificate outcome'
+$typedTransport = New-MicrosoftConnectivityHttpFailureResult `
+    -Exception ([InvalidOperationException]::new('synthetic transport failure')) `
+    -TransportMode Direct -ProxyState Bypassed
+Assert-Equal 'Failed' $typedTransport.state `
+    'generic transport failure cannot fabricate certificate or TLS evidence'
+
 $endpointUri = [Uri]::new('https://login.microsoftonline.com/')
 $directSelection = Resolve-MicrosoftConnectivityProxySelection `
     -EndpointUri $endpointUri -ProxyEnabled $false -ProxyServer $null `
@@ -173,31 +234,56 @@ $loopbackEndpoint = [pscustomobject]@{
     dnsName = 'localhost'; uri = $null; port = 0
     http = [pscustomobject]@{ maximumHeaderBytes = 16384 }
 }
-$tlsServer = [WinPCInfo.Tests.TlsLoopbackServer]::new()
+$tlsServer = $null
+$bodyError = $null
 try {
+    $tlsServer = [WinPCInfo.Tests.TlsLoopbackServer]::new()
     $loopbackEndpoint.port = $tlsServer.Port
     $tls = Invoke-MicrosoftConnectivityTlsPhase -Endpoint $loopbackEndpoint `
         -DeadlineMilliseconds 5000 -Policy $policy
     Assert-Equal 'Failed' $tls.state `
         'the production TLS phase preserves platform rejection of a test certificate'
-    Assert-Equal $true ($tls.chainState -in @('Invalid', 'Unavailable')) `
-        'the production TLS phase returns a typed platform result on loopback'
+    Assert-Equal 'Invalid' $tls.chainState `
+        'the loopback TLS phase must observe and reject the actual untrusted certificate'
+    Assert-Equal $tlsServer.CertificateSha256 $tls.leafSha256 `
+        'a transport setup failure cannot substitute for observing the loopback certificate'
 }
-finally { $tlsServer.Dispose() }
+catch { $bodyError = $_ }
+finally {
+    Complete-QualificationHarness -BodyError $bodyError -Cleanup @({
+        if ($null -ne $tlsServer) {
+            $tlsServer.Dispose()
+            Assert-Equal $true $tlsServer.CleanupVerified 'the exact TLS listener, worker and named key are absent'
+        }
+    })
+}
 
-$httpServer = [WinPCInfo.Tests.TlsLoopbackServer]::new()
+$httpServer = $null
+$bodyError = $null
 try {
+    $httpServer = [WinPCInfo.Tests.TlsLoopbackServer]::new()
     $loopbackEndpoint.uri = "https://localhost:$($httpServer.Port)/"
     $http = Invoke-MicrosoftConnectivityHttpPhase -Endpoint $loopbackEndpoint `
         -DeadlineMilliseconds 5000 -Policy $policy -ProxySelection $directSelection
-    Assert-Equal 'Failed' $http.state `
+    Assert-Equal 'CertificateChainInvalid' $http.state `
         'the production HTTP phase preserves platform rejection of a test certificate'
+    Assert-Equal $httpServer.CertificateSha256 $http.leafSha256 `
+        'HTTP chain rejection identifies only the actual observed synthetic certificate'
+    Assert-Equal $true ($null -eq $http.statusCode) 'certificate rejection never reports an HTTP success response'
     Assert-Equal 'Direct' $http.transportMode `
         'the production HTTP phase retains the injected direct route decision'
     Assert-Equal 'Bypassed' $http.proxyState `
         'the production HTTP phase does not silently consult system proxy policy'
 }
-finally { $httpServer.Dispose() }
+catch { $bodyError = $_ }
+finally {
+    Complete-QualificationHarness -BodyError $bodyError -Cleanup @({
+        if ($null -ne $httpServer) {
+            $httpServer.Dispose()
+            Assert-Equal $true $httpServer.CleanupVerified 'the exact HTTP listener, worker and named key are absent'
+        }
+    })
+}
 
 $staticProxy = Resolve-MicrosoftConnectivityProxySelection `
     -EndpointUri $endpointUri -ProxyEnabled $true -ProxyServer '127.0.0.1:1' `

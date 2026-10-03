@@ -1,0 +1,25 @@
+{
+  "sourceRevision": "2a9f71fd7a09045c556eda5430d32f8feb8c56f1",
+  "candidateSha256": "1c2e77746a5714ff01206868e1c39027a83e12ae5b3b86ea60c1387797466a49",
+  "candidateBytes": 3312123,
+  "powerShell": "7.6.5",
+  "dotNet": "10.0.11",
+  "architecture": "X64",
+  "test": "tests/ContractCultureOutput.Tests.ps1",
+  "testSha256": "d78bc12a82203aa84178265109c2c7c541542bd94731337eb09523664767a365",
+  "supportSha256": "bbae974a87ccb584aae134733c98046ce7593d0c35382082ab7276bb17a4d05d",
+  "harnessSha256": "ce4e435a2debdad2297018a1d9e219d0ec7b46e790d8a598b341edbda8f622cd",
+  "elapsedMilliseconds": 32599,
+  "exitCode": 0,
+  "logSha256": "d550baf6417686c43824dcdc37ac7c6af28a73122e27c1e367a534423094e3b9",
+  "cultures": [
+    "en-US",
+    "es-MX",
+    "tr-TR",
+    "ja-JP",
+    "ar-SA"
+  ],
+  "cases": 10,
+  "boundary": "Actual generated automation entry point with redirected UTF-8 stdout/stderr, Unicode positive and prohibited-input negative under each culture. Assertions require one contract result, one terminal, no authorized collection, empty stderr, no ANSI ESC and absence of the declared marker transforms. This is controlled culture execution, not a non-English Windows session.",
+  "originalResultSha256": "d45b85cb70a80263da9c64666be3cb83e95d49aa7418d8675b37fc375a56276d"
+}

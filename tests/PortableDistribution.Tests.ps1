@@ -184,12 +184,28 @@ Assert-Equal $true (@($inventory.dependencies | Where-Object {
         [string]::IsNullOrWhiteSpace($_.provenance)
 }).Count -eq 0) 'every dependency record is frozen with identity, version, digest, license, and provenance'
 
+# Audit the actual transitive source tools loaded by Build.ps1 against this
+# generated package inventory. These sources are not copied into the archive.
+foreach ($toolPath in @('build/Build.ps1', 'build/TextCanonicalization.ps1', 'build/DeterministicArchive.ps1', 'build/PortableDistribution.ps1')) {
+    $records = @($inventory.dependencies | Where-Object { $_.role -eq 'build-tool' -and $_.product -ceq $toolPath })
+    Assert-Equal 1 $records.Count 'each actual build tool has one dependency record'
+    Assert-Equal $false $records[0].bundled 'a provenance-only tool is not claimed as a packaged file'
+    $expectedToolDigest = Get-Sha256Hex -Bytes (Get-Utf8LfBytes -LiteralPath (Join-Path $repositoryRoot $toolPath))
+    Assert-Equal $expectedToolDigest $records[0].digest 'tool inventory pins the exact canonical source actually loaded by this build'
+    Assert-Equal $false (Test-Path -LiteralPath (Join-Path $packageRoot $toolPath)) 'unbundled source is absent from the package'
+}
+foreach ($dependency in @($inventory.dependencies | Where-Object bundled -eq $true)) {
+    $actualFile = Join-Path $packageRoot ([string]$dependency.product)
+    Assert-Equal $true (Test-Path -LiteralPath $actualFile -PathType Leaf) 'every bundled dependency names an actual packaged artifact'
+    Assert-Equal $dependency.digest ((Get-FileHash -LiteralPath $actualFile -Algorithm SHA256).Hash.ToLowerInvariant()) 'a bundled dependency digest matches its exact delivered bytes'
+}
+
 $sbomJson = Get-Content -LiteralPath (Join-Path $packageRoot 'sbom.spdx.json') -Raw
 $sbom = $sbomJson | ConvertFrom-Json -Depth 20
 Assert-Equal 'SPDX-2.3' $sbom.spdxVersion 'the SBOM uses SPDX 2.3'
 Assert-Equal 'CC0-1.0' $sbom.dataLicense 'the SBOM document license is CC0-1.0'
-Assert-Equal $true ($sbomJson -match '"created":"1980-01-01T00:00:00Z"') `
-    'the SBOM timestamp is the frozen precursor date, not the build clock'
+Assert-Equal $true ($sbomJson -match '"created":"2026-10-02T12:14:09Z"') `
+    'the SPDX document preserves its truthful source-controlled metadata authoring time'
 Assert-Equal $true (@($sbom.packages).Count -ge 2) 'the SBOM inventories the product and the external runtime'
 Assert-NoRestrictedMaterial -Text ($sbom | ConvertTo-Json -Compress -Depth 12) 'the SPDX SBOM'
 

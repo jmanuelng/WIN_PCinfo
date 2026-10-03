@@ -1,0 +1,1546 @@
+[
+  {
+    "file": "additionalProperties.json",
+    "group": 0,
+    "description": "additionalProperties being false does not allow other properties",
+    "selected": false,
+    "reason": "This group combines the tested keyword with release-unused patternProperties. Release-used combinations are selected separately.",
+    "cases": 6
+  },
+  {
+    "file": "additionalProperties.json",
+    "group": 1,
+    "description": "non-ASCII pattern with additionalProperties",
+    "selected": false,
+    "reason": "This group combines the tested keyword with release-unused patternProperties. Release-used combinations are selected separately.",
+    "cases": 2
+  },
+  {
+    "file": "additionalProperties.json",
+    "group": 2,
+    "description": "additionalProperties with schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "additionalProperties.json",
+    "group": 3,
+    "description": "additionalProperties can exist by itself",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "additionalProperties.json",
+    "group": 4,
+    "description": "additionalProperties are allowed by default",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "additionalProperties.json",
+    "group": 5,
+    "description": "additionalProperties does not look in applicators",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "additionalProperties.json",
+    "group": 6,
+    "description": "additionalProperties with null valued instance properties",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "additionalProperties.json",
+    "group": 7,
+    "description": "additionalProperties with propertyNames",
+    "selected": false,
+    "reason": "This group combines the tested keyword with release-unused propertyNames. Release-used combinations are selected separately.",
+    "cases": 2
+  },
+  {
+    "file": "additionalProperties.json",
+    "group": 8,
+    "description": "dependentSchemas with additionalProperties",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "allOf.json",
+    "group": 0,
+    "description": "allOf",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "allOf.json",
+    "group": 1,
+    "description": "allOf with base schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "allOf.json",
+    "group": 2,
+    "description": "allOf simple types",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "allOf.json",
+    "group": 3,
+    "description": "allOf with boolean schemas, all true",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "allOf.json",
+    "group": 4,
+    "description": "allOf with boolean schemas, some false",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "allOf.json",
+    "group": 5,
+    "description": "allOf with boolean schemas, all false",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "allOf.json",
+    "group": 6,
+    "description": "allOf with one empty schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "allOf.json",
+    "group": 7,
+    "description": "allOf with two empty schemas",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "allOf.json",
+    "group": 8,
+    "description": "allOf with the first empty schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "allOf.json",
+    "group": 9,
+    "description": "allOf with the last empty schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "allOf.json",
+    "group": 10,
+    "description": "nested allOf, to check validation semantics",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "allOf.json",
+    "group": 11,
+    "description": "allOf combined with anyOf, oneOf",
+    "selected": false,
+    "reason": "This group combines the tested keyword with release-unused oneOf, multipleOf. Release-used combinations are selected separately.",
+    "cases": 8
+  },
+  {
+    "file": "anyOf.json",
+    "group": 0,
+    "description": "anyOf",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "anyOf.json",
+    "group": 1,
+    "description": "anyOf with base schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "anyOf.json",
+    "group": 2,
+    "description": "anyOf with boolean schemas, all true",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "anyOf.json",
+    "group": 3,
+    "description": "anyOf with boolean schemas, some true",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "anyOf.json",
+    "group": 4,
+    "description": "anyOf with boolean schemas, all false",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "anyOf.json",
+    "group": 5,
+    "description": "anyOf complex types",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "anyOf.json",
+    "group": 6,
+    "description": "anyOf with one empty schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "anyOf.json",
+    "group": 7,
+    "description": "nested anyOf, to check validation semantics",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "boolean_schema.json",
+    "group": 0,
+    "description": "boolean schema 'true'",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 9
+  },
+  {
+    "file": "boolean_schema.json",
+    "group": 1,
+    "description": "boolean schema 'false'",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 9
+  },
+  {
+    "file": "const.json",
+    "group": 0,
+    "description": "const validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 1,
+    "description": "const with object",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "const.json",
+    "group": 2,
+    "description": "const with array",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 3,
+    "description": "const with null",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "const.json",
+    "group": 4,
+    "description": "const with false does not match 0",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 5,
+    "description": "const with true does not match 1",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 6,
+    "description": "const with [false] does not match [0]",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 7,
+    "description": "const with [true] does not match [1]",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 8,
+    "description": "const with {\"a\": false} does not match {\"a\": 0}",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 9,
+    "description": "const with {\"a\": true} does not match {\"a\": 1}",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 10,
+    "description": "const with 0 does not match other zero-like types",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 6
+  },
+  {
+    "file": "const.json",
+    "group": 11,
+    "description": "const with 1 does not match true",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "const.json",
+    "group": 12,
+    "description": "const with -2.0 matches integer and float types",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "const.json",
+    "group": 13,
+    "description": "float and integers are equal up to 64-bit representation limits",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "const.json",
+    "group": 14,
+    "description": "nul characters in strings",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "const.json",
+    "group": 15,
+    "description": "characters with the same visual representation but different codepoint",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "const.json",
+    "group": 16,
+    "description": "characters with the same visual representation, but different number of codepoints",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "defs.json",
+    "group": 0,
+    "description": "validate definition against metaschema",
+    "selected": false,
+    "reason": "Metaschema reference validates schema documents, not release instances; local $defs behavior is covered by ref and items groups.",
+    "cases": 2
+  },
+  {
+    "file": "dependentSchemas.json",
+    "group": 0,
+    "description": "single dependency",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 8
+  },
+  {
+    "file": "dependentSchemas.json",
+    "group": 1,
+    "description": "boolean subschemas",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "dependentSchemas.json",
+    "group": 2,
+    "description": "dependencies with escaped characters",
+    "selected": false,
+    "reason": "This group combines the tested keyword with release-unused minProperties. Release-used combinations are selected separately.",
+    "cases": 4
+  },
+  {
+    "file": "dependentSchemas.json",
+    "group": 3,
+    "description": "dependent subschema incompatible with root",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "enum.json",
+    "group": 0,
+    "description": "simple enum validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "enum.json",
+    "group": 1,
+    "description": "heterogeneous enum validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "enum.json",
+    "group": 2,
+    "description": "heterogeneous enum-with-null validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 3,
+    "description": "enums in properties",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 6
+  },
+  {
+    "file": "enum.json",
+    "group": 4,
+    "description": "enum with escaped characters",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 5,
+    "description": "enum with false does not match 0",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 6,
+    "description": "enum with [false] does not match [0]",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 7,
+    "description": "enum with true does not match 1",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 8,
+    "description": "enum with [true] does not match [1]",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 9,
+    "description": "enum with 0 does not match false",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 10,
+    "description": "enum with [0] does not match [false]",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 11,
+    "description": "enum with 1 does not match true",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 12,
+    "description": "enum with [1] does not match [true]",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "enum.json",
+    "group": 13,
+    "description": "nul characters in strings",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "enum.json",
+    "group": 14,
+    "description": "empty enum",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 6
+  },
+  {
+    "file": "enum.json",
+    "group": 15,
+    "description": "characters with the same visual representation, but different number of codepoints",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "format.json",
+    "group": 0,
+    "description": "email format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 1,
+    "description": "idn-email format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 2,
+    "description": "regex format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 3,
+    "description": "ipv4 format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 4,
+    "description": "ipv6 format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 5,
+    "description": "idn-hostname format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 6,
+    "description": "hostname format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 7,
+    "description": "date format",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 8,
+    "description": "date-time format",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 9,
+    "description": "time format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 10,
+    "description": "json-pointer format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 11,
+    "description": "relative-json-pointer format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 12,
+    "description": "iri format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 13,
+    "description": "iri-reference format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 14,
+    "description": "uri format",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 15,
+    "description": "uri-reference format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 16,
+    "description": "uri-template format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 17,
+    "description": "uuid format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "format.json",
+    "group": 18,
+    "description": "duration format",
+    "selected": false,
+    "reason": "Release uses only date, date-time and uri formats.",
+    "cases": 7
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 0,
+    "description": "ignore if without then or else",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 1,
+    "description": "ignore then without if",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 2,
+    "description": "ignore else without if",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 3,
+    "description": "if and then without else",
+    "selected": true,
+    "reason": "Supplemental conditional-branch discriminator with exclusiveMaximum/multipleOf; retain upstream schema unchanged to qualify if/then/else selection.",
+    "cases": 3
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 4,
+    "description": "if and else without then",
+    "selected": true,
+    "reason": "Supplemental conditional-branch discriminator with exclusiveMaximum/multipleOf; retain upstream schema unchanged to qualify if/then/else selection.",
+    "cases": 3
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 5,
+    "description": "validate against correct branch, then vs else",
+    "selected": true,
+    "reason": "Supplemental conditional-branch discriminator with exclusiveMaximum/multipleOf; retain upstream schema unchanged to qualify if/then/else selection.",
+    "cases": 4
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 6,
+    "description": "non-interference across combined schemas",
+    "selected": true,
+    "reason": "Supplemental conditional-branch discriminator with exclusiveMaximum/multipleOf; retain upstream schema unchanged to qualify if/then/else selection.",
+    "cases": 2
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 7,
+    "description": "if with boolean schema true",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 8,
+    "description": "if with boolean schema false",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 9,
+    "description": "if appears at the end when serialized (keyword processing sequence)",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 10,
+    "description": "then: false fails when condition matches",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "if-then-else.json",
+    "group": 11,
+    "description": "else: false fails when condition does not match",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "items.json",
+    "group": 0,
+    "description": "a schema given for items",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "items.json",
+    "group": 1,
+    "description": "items with boolean schema (true)",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "items.json",
+    "group": 2,
+    "description": "items with boolean schema (false)",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "items.json",
+    "group": 3,
+    "description": "items and subitems",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 6
+  },
+  {
+    "file": "items.json",
+    "group": 4,
+    "description": "nested items",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "items.json",
+    "group": 5,
+    "description": "prefixItems with no additional items allowed",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "items.json",
+    "group": 6,
+    "description": "items does not look in applicators, valid case",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "items.json",
+    "group": 7,
+    "description": "prefixItems validation adjusts the starting index for items",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "items.json",
+    "group": 8,
+    "description": "items with heterogeneous array",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "items.json",
+    "group": 9,
+    "description": "items with null instance elements",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "maximum.json",
+    "group": 0,
+    "description": "maximum validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "maximum.json",
+    "group": 1,
+    "description": "maximum validation with unsigned integer",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "maxItems.json",
+    "group": 0,
+    "description": "maxItems validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "maxItems.json",
+    "group": 1,
+    "description": "maxItems validation with a decimal",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "maxLength.json",
+    "group": 0,
+    "description": "maxLength validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "maxLength.json",
+    "group": 1,
+    "description": "maxLength validation with a decimal",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "minimum.json",
+    "group": 0,
+    "description": "minimum validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "minimum.json",
+    "group": 1,
+    "description": "minimum validation with signed integer",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "minItems.json",
+    "group": 0,
+    "description": "minItems validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "minItems.json",
+    "group": 1,
+    "description": "minItems validation with a decimal",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "minLength.json",
+    "group": 0,
+    "description": "minLength validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "minLength.json",
+    "group": 1,
+    "description": "minLength validation with a decimal",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "pattern.json",
+    "group": 0,
+    "description": "pattern validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 8
+  },
+  {
+    "file": "pattern.json",
+    "group": 1,
+    "description": "pattern is not anchored",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "pattern.json",
+    "group": 2,
+    "description": "pattern with Unicode property escape requires unicode mode",
+    "selected": true,
+    "reason": "Supplemental Unicode regex property-escape probe required by qualification; release patterns currently use ASCII character classes.",
+    "cases": 3
+  },
+  {
+    "file": "prefixItems.json",
+    "group": 0,
+    "description": "a schema given for prefixItems",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 6
+  },
+  {
+    "file": "prefixItems.json",
+    "group": 1,
+    "description": "prefixItems with boolean schemas",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "prefixItems.json",
+    "group": 2,
+    "description": "additional items are allowed by default",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "prefixItems.json",
+    "group": 3,
+    "description": "prefixItems with null instance elements",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "properties.json",
+    "group": 0,
+    "description": "object properties validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 6
+  },
+  {
+    "file": "properties.json",
+    "group": 1,
+    "description": "properties, patternProperties, additionalProperties interaction",
+    "selected": false,
+    "reason": "This group combines the tested keyword with release-unused patternProperties. Release-used combinations are selected separately.",
+    "cases": 8
+  },
+  {
+    "file": "properties.json",
+    "group": 2,
+    "description": "properties with boolean schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "properties.json",
+    "group": 3,
+    "description": "properties with escaped characters",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "properties.json",
+    "group": 4,
+    "description": "properties with null valued instance properties",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "properties.json",
+    "group": 5,
+    "description": "properties whose names are Javascript object property names",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "ref.json",
+    "group": 0,
+    "description": "root pointer ref",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 4
+  },
+  {
+    "file": "ref.json",
+    "group": 1,
+    "description": "relative pointer ref to object",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 2,
+    "description": "relative pointer ref to array",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 3,
+    "description": "escaped pointer ref",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 6
+  },
+  {
+    "file": "ref.json",
+    "group": 4,
+    "description": "nested refs",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 5,
+    "description": "ref applies alongside sibling keywords",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "ref.json",
+    "group": 6,
+    "description": "remote ref, containing refs itself",
+    "selected": false,
+    "reason": "Remote metaschema document validation is outside the release instance/local-pointer contract.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 7,
+    "description": "property named $ref that is not a reference",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 8,
+    "description": "property named $ref, containing an actual $ref",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 9,
+    "description": "$ref to boolean schema true",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "ref.json",
+    "group": 10,
+    "description": "$ref to boolean schema false",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "ref.json",
+    "group": 11,
+    "description": "Recursive references between schemas",
+    "selected": false,
+    "reason": "Uses embedded non-fragment identity references beyond release local-pointer resolution; selected groups 15,16,18,20 already probe offline identity ordering.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 12,
+    "description": "refs with quote",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 13,
+    "description": "ref creates new scope when adjacent to keywords",
+    "selected": false,
+    "reason": "Uses unevaluatedProperties, which no release schema uses.",
+    "cases": 1
+  },
+  {
+    "file": "ref.json",
+    "group": 14,
+    "description": "naive replacement of $ref with its destination is not correct",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "ref.json",
+    "group": 15,
+    "description": "refs with relative uris and defs",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "ref.json",
+    "group": 16,
+    "description": "relative refs with absolute uris and defs",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 3
+  },
+  {
+    "file": "ref.json",
+    "group": 17,
+    "description": "$id must be resolved against nearest parent, not just immediate parent",
+    "selected": false,
+    "reason": "Uses not and nested external identity resolution, neither used by release local-pointer schemas.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 18,
+    "description": "order of evaluation: $id and $ref",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 19,
+    "description": "order of evaluation: $id and $anchor and $ref",
+    "selected": false,
+    "reason": "Uses $anchor, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 20,
+    "description": "order of evaluation: $id and $ref on nested schema",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 21,
+    "description": "simple URN base URI with $ref via the URN",
+    "selected": false,
+    "reason": "Uses URN identities/anchors, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 22,
+    "description": "simple URN base URI with JSON pointer",
+    "selected": false,
+    "reason": "Uses URN identities/anchors, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 23,
+    "description": "URN base URI with NSS",
+    "selected": false,
+    "reason": "Uses URN identities/anchors, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 24,
+    "description": "URN base URI with r-component",
+    "selected": false,
+    "reason": "Uses URN identities/anchors, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 25,
+    "description": "URN base URI with q-component",
+    "selected": false,
+    "reason": "Uses URN identities/anchors, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 26,
+    "description": "URN base URI with URN and JSON pointer ref",
+    "selected": false,
+    "reason": "Uses URN identities/anchors, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 27,
+    "description": "URN base URI with URN and anchor ref",
+    "selected": false,
+    "reason": "Uses URN identities/anchors, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 28,
+    "description": "URN ref with nested pointer ref",
+    "selected": false,
+    "reason": "Uses URN identities/anchors, which no release schema uses.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 29,
+    "description": "ref to if",
+    "selected": false,
+    "reason": "Uses embedded non-fragment identity references beyond release local-pointer resolution; selected groups 15,16,18,20 already probe offline identity ordering.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 30,
+    "description": "ref to then",
+    "selected": false,
+    "reason": "Uses embedded non-fragment identity references beyond release local-pointer resolution; selected groups 15,16,18,20 already probe offline identity ordering.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 31,
+    "description": "ref to else",
+    "selected": false,
+    "reason": "Uses embedded non-fragment identity references beyond release local-pointer resolution; selected groups 15,16,18,20 already probe offline identity ordering.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 32,
+    "description": "ref with absolute-path-reference",
+    "selected": false,
+    "reason": "Uses embedded non-fragment identity references beyond release local-pointer resolution; selected groups 15,16,18,20 already probe offline identity ordering.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 33,
+    "description": "$id with file URI still resolves pointers - *nix",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 34,
+    "description": "$id with file URI still resolves pointers - windows",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "ref.json",
+    "group": 35,
+    "description": "empty tokens in $ref json-pointer",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "required.json",
+    "group": 0,
+    "description": "required validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "required.json",
+    "group": 1,
+    "description": "required default validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "required.json",
+    "group": 2,
+    "description": "required with empty array",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 1
+  },
+  {
+    "file": "required.json",
+    "group": 3,
+    "description": "required with escaped characters",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "required.json",
+    "group": 4,
+    "description": "required properties whose names are Javascript object property names",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "type.json",
+    "group": 0,
+    "description": "integer type matches integers",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 9
+  },
+  {
+    "file": "type.json",
+    "group": 1,
+    "description": "number type matches numbers",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 9
+  },
+  {
+    "file": "type.json",
+    "group": 2,
+    "description": "string type matches strings",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 9
+  },
+  {
+    "file": "type.json",
+    "group": 3,
+    "description": "object type matches objects",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "type.json",
+    "group": 4,
+    "description": "array type matches arrays",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "type.json",
+    "group": 5,
+    "description": "boolean type matches booleans",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 10
+  },
+  {
+    "file": "type.json",
+    "group": 6,
+    "description": "null type matches only the null object",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 10
+  },
+  {
+    "file": "type.json",
+    "group": 7,
+    "description": "multiple types can be specified in an array",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 7
+  },
+  {
+    "file": "type.json",
+    "group": 8,
+    "description": "type as array with one item",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 2
+  },
+  {
+    "file": "type.json",
+    "group": 9,
+    "description": "type: array or object",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "type.json",
+    "group": 10,
+    "description": "type: array, object or null",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "uniqueItems.json",
+    "group": 0,
+    "description": "uniqueItems validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 28
+  },
+  {
+    "file": "uniqueItems.json",
+    "group": 1,
+    "description": "uniqueItems with an array of items",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 8
+  },
+  {
+    "file": "uniqueItems.json",
+    "group": 2,
+    "description": "uniqueItems with an array of items and additionalItems=false",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  },
+  {
+    "file": "uniqueItems.json",
+    "group": 3,
+    "description": "uniqueItems=false validation",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 15
+  },
+  {
+    "file": "uniqueItems.json",
+    "group": 4,
+    "description": "uniqueItems=false with an array of items",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 8
+  },
+  {
+    "file": "uniqueItems.json",
+    "group": 5,
+    "description": "uniqueItems=false with an array of items and additionalItems=false",
+    "selected": true,
+    "reason": "Release-used keyword behavior and combinations; all official cases in this group.",
+    "cases": 5
+  }
+]

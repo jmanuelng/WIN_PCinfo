@@ -1,0 +1,72 @@
+{
+  "issue": 192,
+  "sourceCommit": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+  "candidateSha256": "24ab45dda69ee2a7cfd45985b27e39031e7f8c6f94cab5e0b2a54a830b0a9512",
+  "capturedAtUtc": "2026-10-02T12:02:56.728326+00:00",
+  "scope": "Controlled-source WPF/engine and real owned synthetic process interruption; no live application acceptance or Local Only observer qualification.",
+  "faultPrecedence": {
+    "preStartAlteredPlan": {
+      "outcome": "NotStarted",
+      "exitCode": 20,
+      "collectionStarted": false,
+      "operations": 0
+    },
+    "postStartRecordMutation": {
+      "outcome": "IntegrityFailed",
+      "exitCode": 50,
+      "collectionStarted": true,
+      "usablePackage": false,
+      "cleanupVerified": true
+    },
+    "cleanupFailure": "Authoritative CleanupIncomplete/60 overrides the primary result while the primary cause is retained; finalization steps are attempted independently, with safe retry."
+  },
+  "checks": [
+    {
+      "log": "issue-192-active-actions-and-precedence.log",
+      "sha256": "31dff30cabf9dca68d4d721e525d603b7e1bd546bb65c3de87ca2b00d9c1cf32",
+      "status": "Pass",
+      "meaning": "Six separate active WPF Cancel/Close actions and three pre-start/post-start/Cleanup negatives."
+    },
+    {
+      "log": "issue-192-recovery-review-fixes.log",
+      "sha256": "f6bd8bd598b231edd6177b9c89baaf1441ea04378432bab85775936ce19cde05",
+      "status": "Pass",
+      "meaning": "Actual worker and nested child observed before admission; exact image/lifetime/parent handles; interrupted job-bound tree absence, unauthorized/foreign refusal, authenticated stale cleanup and second launch; foreign sentinel preserved."
+    },
+    {
+      "log": "issue-192-parent-only-stop-regression.log",
+      "sha256": "dcabcbdef15fc468b9b98d42656cf7813105996e606d9e9c97bbe649f07e83d8",
+      "status": "Pass",
+      "meaning": "Metadata mismatches/exited lifetime rejected; failed admission stops only held parent, independently held nested child survives then is separately stopped."
+    },
+    {
+      "log": "cleanup-final-integration-green.log",
+      "sha256": "489bbd437367e43aec18fce3dc083f6280af83baffb13e9317d20c3b78be2283",
+      "status": "Pass",
+      "meaning": "Both fake contexts updated; independent fixture cleanup and retention-failure regression pass. Expected unsafe signals do not represent unresolved fixture residue."
+    }
+  ],
+  "originalFailedInterruption": {
+    "status": "FailRetained",
+    "cleanupBlocker": "Resolved only after scoped pre-existing audit reconstruction, independently reviewed completeness and exact absence, followed by authenticated registered cleanup",
+    "originalInvocationQualified": false,
+    "originalEvidencePreservedPrivately": true,
+    "auditPolicyChanged": false,
+    "hostWideTracingStarted": false
+  },
+  "pending": [
+    "Fresh recovery and active-action checks in final full gate",
+    "Formal independent Standards and Spec review",
+    "Actual delivered GUI and eligible-client acceptance",
+    "Local Only observer completeness and owned aggregate measurement"
+  ],
+  "fullIntegratedGate": {
+    "state": "Running",
+    "expectedFiles": 189,
+    "sourceRevision": "00cfcee58c183b5d2fb3566af59bad5495a13e97",
+    "formalStandardsReview": "PendingAfterFullGate",
+    "formalSpecReview": "PendingAfterFullGate"
+  },
+  "githubActionsMinutes": 0,
+  "focusedCheckPhase": "Pre-freeze diagnostic runs; log hashes identify those retained observations. They do not establish exact-current full-gate acceptance. Fresh test-byte/candidate identities and outcomes will be recorded from the running 189-file gate."
+}
