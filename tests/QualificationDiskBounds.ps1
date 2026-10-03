@@ -36,8 +36,106 @@ function Get-QualificationScriptIdentity {
     [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant()
 }
 
+function New-QualificationWitnessDescriptor {
+    param([string] $Fault, [string] $Root, $Manifest)
+    $expected=@(
+        @{fault='PrivilegePreStartCancel';relativePath='synthetic-pre-start-hello.txt';content='SyntheticBeforeWorkerHello'}
+        @{fault='PrivilegePreStartTimeout';relativePath='synthetic-pre-start-hello.txt';content='SyntheticBeforeWorkerHello'}
+        @{fault='PrivilegePostStartLoss';relativePath='synthetic-post-start.txt';content='SyntheticFirmwareReturned'}
+    )
+    if ($Manifest.version -cne '1.2.0' -or
+        $Manifest.scope -cne 'OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses') {
+        throw 'Qualification witness inventory version or scope is not admitted.'
+    }
+    $descriptors=@($Manifest.privilegedFaultWitnesses)
+    if ($descriptors.Count -ne $expected.Count) { throw 'Qualification witness inventory is not closed.' }
+    foreach ($item in $expected) {
+        $matches=@($descriptors | Where-Object fault -CEQ $item.fault)
+        if ($matches.Count -ne 1) { throw 'Qualification witness descriptor is not unique.' }
+        $entry=$matches[0]
+        $bytes=[Text.Encoding]::UTF8.GetByteCount($item.content)+3L
+        if ($entry.relativePath -cne $item.relativePath -or $entry.content -cne $item.content -or
+            $entry.encodingBound -cne 'Utf8IncludingOptionalThreeByteBom' -or
+            ($entry.maximumLaunches -isnot [int] -and $entry.maximumLaunches -isnot [long]) -or
+            $entry.maximumLaunches -ne 1 -or
+            ($entry.reservationBytes -isnot [int] -and $entry.reservationBytes -isnot [long]) -or
+            $entry.reservationBytes -ne $bytes) { throw 'Qualification witness descriptor changed.' }
+    }
+    if (-not $Fault) { return $null }
+    $selected=@($expected | Where-Object fault -CEQ $Fault)
+    if ($selected.Count -ne 1) { throw 'Qualification witness fault is not admitted.' }
+    $path=[IO.Path]::GetFullPath((Join-Path $Root $selected[0].relativePath))
+    [ordered]@{Fault=$Fault;Path=$path;Content=$selected[0].content;
+        ReservationBytes=([Text.Encoding]::UTF8.GetByteCount($selected[0].content)+3L);LaunchAdmissions=0L}
+}
+
+function Invoke-QualificationWitnessAdmission {
+    param([string] $TemplateSource, [string] $LaunchSource, [string] $ConfigurationLiteral)
+    $ledger=$script:QualificationDiskLedger
+    [Threading.Monitor]::Enter($ledger.SyncRoot)
+    try {
+        $witness=$ledger.Witness
+        if ($null -eq $witness -or
+            ($witness.LaunchAdmissions -isnot [int] -and $witness.LaunchAdmissions -isnot [long]) -or
+            $witness.LaunchAdmissions -ne 0 -or -not $ledger.Valid) {
+            throw 'Qualification witness launch is absent, repeated, or invalid.'
+        }
+        $preStart=$witness.Fault -cin @('PrivilegePreStartCancel','PrivilegePreStartTimeout')
+        if (-not $preStart -and $witness.Fault -cne 'PrivilegePostStartLoss') {
+            throw 'Qualification witness launch mode changed.'
+        }
+        $relative=if ($preStart) { 'synthetic-pre-start-hello.txt' } else { 'synthetic-post-start.txt' }
+        $content=if ($preStart) { 'SyntheticBeforeWorkerHello' } else { 'SyntheticFirmwareReturned' }
+        $path=[IO.Path]::GetFullPath((Join-Path $ledger.Root $relative))
+        $bytes=[Text.Encoding]::UTF8.GetByteCount($content)+3L
+        if ($witness.Path -cne $path -or $witness.Content -cne $content -or
+            ($witness.ReservationBytes -isnot [int] -and $witness.ReservationBytes -isnot [long]) -or
+            $witness.ReservationBytes -ne $bytes -or
+            -not $path.StartsWith($ledger.Root,[StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Qualification witness launch descriptor changed.'
+        }
+        $generator=if ($preStart) { 'Get-PreStartOriginalPrivilegeWorkerSource' } else { 'Get-LossOriginalPrivilegeWorkerSource' }
+        $generatorCommand=Get-Command -Name $generator -CommandType Function -ErrorAction Stop
+        $original=& $generatorCommand
+        $write='[IO.File]::WriteAllText('''+$path.Replace("'","''")+''','''+$content+''')'
+        if ($preStart) {
+            $hello='Write-Frame -Stream $pipe -Json $hello -MaximumBytes $maximumBytes -Token $tokenSource.Token'
+            if ([regex]::Matches($original,[regex]::Escape($hello)).Count -ne 1) {
+                throw 'Qualification witness hello anchor changed.'
+            }
+            $expected=$original.Replace($hello,$write+'; [Threading.Thread]::Sleep(30000); '+$hello)
+        } else {
+            $early='if ($configuration.workerFault -eq ''ExitAfterHello'') { exit 71 }'
+            $collected='New-SyntheticFirmwareResult -Scenario ([string]$configuration.firmwareScenario)'
+            foreach ($anchor in @($early,$collected)) {
+                if ([regex]::Matches($original,[regex]::Escape($anchor)).Count -ne 1) {
+                    throw 'Qualification witness post-start anchor changed.'
+                }
+            }
+            $expected=$original.Replace($early,'').Replace($collected,'$null = '+$collected+'; '+$write+'; exit 71')
+        }
+        $lf=[string][char]10; $cr=[string][char]13
+        $expected=$expected.Replace($cr+$lf,$lf).Replace($cr,$lf)
+        $marker='__PRIVILEGED_WORKER_CONFIGURATION__'
+        if ([regex]::Matches($expected,[regex]::Escape($marker)).Count -ne 1 -or
+            -not [StringComparer]::Ordinal.Equals($expected,$TemplateSource) -or
+            -not [StringComparer]::Ordinal.Equals($expected.Replace($marker,$ConfigurationLiteral),$LaunchSource)) {
+            throw 'Qualification witness emitted worker source changed.'
+        }
+        # Reserve before the one admitted launch, even if launch or the write
+        # later fails. Source generation and policy digest calls have no writes.
+        $witness.LaunchAdmissions=1L
+        Add-QualificationDiskReservation -Path $path -Bytes $bytes -Kind PrivilegedFaultWitness
+    } catch {
+        # A product fault reducer may map this exception to expected worker loss.
+        # The independently checked ledger must still disqualify that evidence.
+        $ledger.Valid=$false
+        throw
+    } finally { [Threading.Monitor]::Exit($ledger.SyncRoot) }
+}
+
 function New-QualificationDiskInstrumentation {
-    param([string] $ModuleText,[string] $Root,[string] $CandidatePath,[string] $HarnessPath)
+    param([string] $ModuleText,[string] $Root,[string] $CandidatePath,[string] $HarnessPath, [string] $WitnessFault = '')
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $manifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'qualification-resource-writers.json') -Raw|ConvertFrom-Json
     if($manifest.sourceIdentityKind-cne'CanonicalUtf8LfSha256' -or
@@ -62,7 +160,8 @@ function New-QualificationDiskInstrumentation {
     if([IO.Directory]::Exists($fullRoot) -and ([IO.File]::GetAttributes($fullRoot) -band [IO.FileAttributes]::ReparsePoint)-ne0){
         throw 'Qualification refuses an output root with a reparse point.'
     }
-    $ledger=[hashtable]::Synchronized(@{Root=$fullRoot+[IO.Path]::DirectorySeparatorChar;TotalBytes=0L;Valid=$true;Claims=@{};Counts=@{}})
+    $witness=New-QualificationWitnessDescriptor -Fault $WitnessFault -Root $fullRoot -Manifest $manifest
+    $ledger=[hashtable]::Synchronized(@{Root=$fullRoot+[IO.Path]::DirectorySeparatorChar;TotalBytes=0L;Valid=$true;Claims=@{};Counts=@{};Witness=$witness})
     $tokens=$null;$errors=$null
     $ast=[Management.Automation.Language.Parser]::ParseInput($ModuleText,[ref]$tokens,[ref]$errors)
     if($errors.Count){throw 'Qualification writer source does not parse.'}
@@ -86,7 +185,21 @@ function New-QualificationDiskInstrumentation {
         $ModuleText=$ModuleText.Replace($original,$changed)
         $controllerDefinitions.Add($changed)
     }
-    foreach($name in @('Add-QualificationDiskReservation','Assert-QualificationDiskReservation')){
+    if ($null -ne $witness) {
+        $controllers=@($ast.FindAll({param($node)
+            $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -ceq 'Invoke-ControlledPrivilegedCollectionPlan'
+        },$false))
+        if ($controllers.Count -ne 1) { throw 'Qualification witness controller is not unique.' }
+        $originalController=$controllers[0].Extent.Text
+        $launch='try { $worker = [System.Diagnostics.Process]::Start($startInfo) }'
+        if ([regex]::Matches($originalController,[regex]::Escape($launch)).Count -ne 1) {
+            throw 'Qualification witness process launch anchor changed.'
+        }
+        $admission='Invoke-QualificationWitnessAdmission -TemplateSource $workerSource -LaunchSource $launchWorkerSource -ConfigurationLiteral $configurationLiteral; '
+        $ModuleText=$ModuleText.Replace($originalController,$originalController.Replace($launch,$admission+$launch))
+    }
+    foreach($name in @('Add-QualificationDiskReservation','Assert-QualificationDiskReservation','Invoke-QualificationWitnessAdmission')){
         $definition=(Get-Command $name -CommandType Function).ScriptBlock.Ast.Parent.Extent.Text
         $controllerDefinitions.Add($definition)
         $ModuleText+=[Environment]::NewLine+$definition

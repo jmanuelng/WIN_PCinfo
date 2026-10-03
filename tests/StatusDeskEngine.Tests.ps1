@@ -37,6 +37,18 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
+function ConvertTo-QualificationPlanFault {
+    param([string] $Fault)
+    if (-not $Fault) { return '' }
+    $canonical=@('PrivilegeTimeout','PrivilegePreStartTimeout','PrivilegePreStartCancel',
+        'PrivilegeLoss','PrivilegePostStartLoss','SystemCancel','SystemTimeout','SystemLoss')
+    $matches=@($canonical | Where-Object { $_ -ieq $Fault })
+    if ($matches.Count -ne 1) { throw 'Qualification plan fault is not admitted.' }
+    $matches[0]
+}
+# ValidateSet accepts case variants; every transform and inventory choice must
+# consume the same canonical mode. PSBoundParameters retains the requested args.
+$QualificationPlanFault=ConvertTo-QualificationPlanFault -Fault $QualificationPlanFault
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 if (-not $QualificationPath -and $env:WINPCINFO_TEST_EVIDENCE) {
     $QualificationPath = Join-Path $env:WINPCINFO_TEST_EVIDENCE ('case-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -58,6 +70,7 @@ $projection = $null
 $qualityWatch = [Diagnostics.Stopwatch]::StartNew()
 $qualificationWorkspaceDirectoryIdentities=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
 . (Join-Path $PSScriptRoot 'QualificationWorkspaceSampling.ps1')
+. (Join-Path $PSScriptRoot 'QualificationRecoveryFixtureProof.ps1')
 $quality = [ordered]@{ sampledPrivateBytes=0L; sampledWorkingSetBytes=0L; sampledWorkspaceBytes=0L; workspaceSamplingLosses=0L; nativeCounterFailures=0L; nativeCounterReads=0L; processPeakPrivateBytes=0L; packageBytes=0L; htmlBytes=0L; sampleCount=0L; maximumSampleGapMilliseconds=0L; firstSampleMilliseconds=-1L; lastSampleMilliseconds=0L }
 function Measure-QualificationWorkload {
     $now = $qualityWatch.ElapsedMilliseconds
@@ -493,9 +506,9 @@ function Invoke-ApprovedCollectorProcess {
 $testRoot = Join-Path $repositoryRoot ('.test-output/status-desk-' + [guid]::NewGuid().ToString('N'))
 if ($RecoveryDestination) { $testRoot = [IO.Path]::GetFullPath($RecoveryDestination) }
 $preStartWitness=Join-Path $testRoot 'synthetic-pre-start-hello.txt'
-$moduleText=$moduleText.Replace('__PRE_START_WITNESS__',$preStartWitness.Replace("'","''"))
+$moduleText=$moduleText.Replace('__PRE_START_WITNESS__',$preStartWitness.Replace("'","''''"))
 $postStartWitness=Join-Path $testRoot 'synthetic-post-start.txt'
-$moduleText=$moduleText.Replace('__POST_START_WITNESS__',$postStartWitness.Replace("'","''"))
+$moduleText=$moduleText.Replace('__POST_START_WITNESS__',$postStartWitness.Replace("'","''''"))
 $ownedParent = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
 if (-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Test output must remain in its owned test boundary.' }
 $request = Get-AutomationRequest -LiteralPath (Join-Path $PSScriptRoot 'fixtures/automation-request.json') `
@@ -513,12 +526,19 @@ $runLock = $null
 $runLockOwned = $false
 $qualificationBodyError = $null
 $assessmentQuality = $null
+$recoveryFixtureSnapshot=$null
+$recoveryFixtureInvocationId=[guid]::NewGuid().ToString('N')
+$recoveryFixtureInvocationTimestamp=0L
 try {
+    if ($RecoveryDestination -and $RecoveryExpectedReason -cin @('RECOVERY.DELIBERATE_ACTION_REQUIRED','RECOVERY.OWNERSHIP_UNVERIFIED')) {
+        $recoveryFixtureSnapshot=Get-QualificationRecoveryFixtureSnapshot -Destination $RecoveryDestination -OwnedParent $ownedParent -InvocationId $recoveryFixtureInvocationId
+    }
 if ($RequireQualityBudgets) {
-    if ($RecoveryDestination -or $InterruptHandoffPath -or $QualificationPlanFault -in @('PrivilegePostStartLoss','PrivilegePreStartTimeout','PrivilegePreStartCancel')) {
+    if ($RecoveryDestination -or $InterruptHandoffPath) {
         throw 'This witness/recovery configuration is outside the closed disk write inventory; quality remains NotQualified.'
     }
-    $diskInstrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $testRoot -CandidatePath $candidate -HarnessPath $PSCommandPath
+    $witnessFault=if ($QualificationPlanFault -cin @('PrivilegePostStartLoss','PrivilegePreStartTimeout','PrivilegePreStartCancel')) { $QualificationPlanFault } else { '' }
+    $diskInstrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $testRoot -CandidatePath $candidate -HarnessPath $PSCommandPath -WitnessFault $witnessFault
     $script:QualificationDiskLedger=$diskInstrumentation.Ledger
     $moduleText=$diskInstrumentation.ModuleText
     . ([scriptblock]::Create($diskInstrumentation.ControllerDefinitions))
@@ -536,6 +556,7 @@ if ($RequireQualityBudgets) {
         Request=$request; RuntimeFacts=(Get-ActiveRuntimeFacts -ModuleFacts (Get-BuiltInModuleCompatibilityFacts))
         ArtifactTrustValid=$true; ValidationContext=[pscustomobject]$context
     }
+    $recoveryFixtureInvocationTimestamp=[Diagnostics.Stopwatch]::GetTimestamp()
     if ($Wpf) {
         Add-Type -AssemblyName PresentationFramework
         $null = [System.Windows.Window]
@@ -1189,7 +1210,14 @@ finally {
                     $session.Transport.State.ContainsKey($proof) -and
                     $session.Transport.State[$proof] -is [bool] -and $session.Transport.State[$proof]
             }
-            if (-not $knownSyntheticRelease) {
+            $knownRetainedRecovery=$false
+            if ($RecoveryDestination) {
+                $knownRetainedRecovery=Test-QualificationRetainedRecoveryFixture -Snapshot $recoveryFixtureSnapshot `
+                    -InvocationTimestamp $recoveryFixtureInvocationTimestamp -InvocationId $recoveryFixtureInvocationId `
+                    -Destination $RecoveryDestination -OwnedParent $ownedParent -ExpectedReason $RecoveryExpectedReason `
+                    -Authorized ([bool]$RecoveryAuthorized) -Session $session -Terminal $actualTerminal -BodyError $qualificationBodyError
+            }
+            if (-not $knownSyntheticRelease -and -not $knownRetainedRecovery) {
                 throw 'Owned terminal cleanup remains unverified; preserve its recovery directory.'
             }
         }

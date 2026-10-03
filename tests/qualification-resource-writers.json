@@ -1,9 +1,9 @@
 {
   "kind": "ControlledAssessmentClosedDiskWriterInventory",
-  "version": "1.1.0",
-  "candidateSha256": "a3a44df8d7c58b20d289834d51b208c191626c575a994dda74ac9db8d839e93e",
-  "harnessSha256": "264c6a6c66eba80e8aa684298a61c46c83969b80c409e820dca92740b50f2735",
-  "scope": "OrdinaryControlledAssessmentAndWpfReportViewingOnly",
+  "version": "1.2.0",
+  "candidateSha256": "249255a7508071f46affa96813227662b9d4670bddbb037f970bad194b162e74",
+  "harnessSha256": "c1598f24474cc8528c4d569b8146984c5f33e09bdb275dd432d87fa93a0a42db",
+  "scope": "OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses",
   "writers": [
     "Write-RunRecoveryJournal",
     "Write-RegisteredEvidenceArtifact",
@@ -15,11 +15,11 @@
     "New-RegisteredEvidenceArtifact",
     "New-EvidenceWorkspaceOwnedWriteStream"
   ],
-  "excluded": "Maintainer signing, publication, qualification, Azure and explicit product validation-fixture writers are outside this ordinary assessment path. Interruption witness and post-start-loss witness configurations are inadmissible.",
+  "excluded": "Maintainer signing, publication, qualification, Azure and explicit product validation-fixture writers are outside this ordinary assessment path. RecoveryDestination and InterruptHandoffPath configurations remain inadmissible; only the three closed finite privileged fault witnesses below are admitted.",
   "inputs": [
     {
       "path": "tests/AssessmentQualificationSupport.ps1",
-      "sha256": "bbae974a87ccb584aae134733c98046ce7593d0c35382082ab7276bb17a4d05d"
+      "sha256": "a6458dd7e59c15b4e7bf47a50eec008767d207bf31e5715ed5f369732d19167d"
     },
     {
       "path": "tests/SoftwareReportAssertions.ps1",
@@ -87,12 +87,42 @@
     },
     {
       "path": "tests/QualificationDiskBounds.ps1",
-      "sha256": "4b121afdc10367e6cf997353f74353206fc3063f4561d079429e4e65aaf58589"
+      "sha256": "090f7c0c98f8fc787125a1b0b6f795b8e65187d1a84166617cd80dfcf2384dae"
     },
     {
       "path": "tests/QualificationWorkspaceSampling.ps1",
       "sha256": "c6c86a50524bde4ab943d795be31a78e9c2fc70be374e391797f927505824431"
+    },
+    {
+      "path": "tests/QualificationRecoveryFixtureProof.ps1",
+      "sha256": "9826aedb2a0d70821e35f834e544cf29adb0bea1133d59d9ca8f35d0445b8f77"
     }
   ],
-  "sourceIdentityKind": "CanonicalUtf8LfSha256"
+  "sourceIdentityKind": "CanonicalUtf8LfSha256",
+  "privilegedFaultWitnesses": [
+    {
+      "fault": "PrivilegePreStartCancel",
+      "relativePath": "synthetic-pre-start-hello.txt",
+      "content": "SyntheticBeforeWorkerHello",
+      "encodingBound": "Utf8IncludingOptionalThreeByteBom",
+      "maximumLaunches": 1,
+      "reservationBytes": 29
+    },
+    {
+      "fault": "PrivilegePreStartTimeout",
+      "relativePath": "synthetic-pre-start-hello.txt",
+      "content": "SyntheticBeforeWorkerHello",
+      "encodingBound": "Utf8IncludingOptionalThreeByteBom",
+      "maximumLaunches": 1,
+      "reservationBytes": 29
+    },
+    {
+      "fault": "PrivilegePostStartLoss",
+      "relativePath": "synthetic-post-start.txt",
+      "content": "SyntheticFirmwareReturned",
+      "encodingBound": "Utf8IncludingOptionalThreeByteBom",
+      "maximumLaunches": 1,
+      "reservationBytes": 28
+    }
+  ]
 }

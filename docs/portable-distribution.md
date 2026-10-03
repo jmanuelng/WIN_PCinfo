@@ -67,3 +67,13 @@ Invoking `WIN-PCInfo.ps1` directly with Windows PowerShell still returns `RUNTIM
 - This local unsigned package is not itself an Attested Preview and not a trusted release. The separately governed fallback is documented in [Attested Preview trust bundle](attested-preview.md).
 
 See the [Guided Runway](guided-runway.md) Verify stage and [Runtime prerequisites](runtime-prerequisites.md) for the remaining trust questions.
+
+## Selected private testers
+
+A qualified personally signed evaluation package may be supplied to selected
+testers through the separately approved [private tester evaluation procedure](private-tester-evaluation.md).
+Each tester must explicitly consent to the exact public signer in their own user
+stores and verify both PowerShell signatures and the complete package. The
+unsigned precursor described above is not that delivery. Private evaluation
+still requires actual client and independent-user acceptance; it creates no
+public Preview or Supported claim.

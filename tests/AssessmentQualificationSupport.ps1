@@ -14,6 +14,58 @@ function Rename-QualificationFunction {
     $Source
 }
 
+
+function Rename-QualificationOriginalDefinitions {
+    param([string] $Source, [int] $OriginalDefinitionLength,
+        [Collections.IDictionary] $Renames)
+    if ($OriginalDefinitionLength -lt 0 -or $OriginalDefinitionLength -gt $Source.Length -or
+        $null -eq $Renames -or $Renames.Count -eq 0) {
+        throw 'Controlled original-definition rename inventory is invalid.'
+    }
+    foreach ($entry in $Renames.GetEnumerator()) {
+        if ($entry.Key -isnot [string] -or $entry.Value -isnot [string] -or
+            $entry.Key -notmatch '^[A-Za-z_][A-Za-z0-9_-]*$' -or
+            $entry.Value -notmatch '^[A-Za-z_][A-Za-z0-9_-]*$') {
+            throw 'Controlled original-definition rename is invalid.'
+        }
+    }
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseInput($Source,[ref]$tokens,[ref]$errors)
+    if ($errors.Count) { throw 'Controlled module did not parse.' }
+    # Wrappers keep the original public names. Rename only definitions in the
+    # original prefix, including its nested definitions, using one syntax tree.
+    $definitions=$ast.FindAll({param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Extent.StartOffset -lt $OriginalDefinitionLength -and
+        $Renames.Contains($node.Name)
+    },$true)
+    $found=@{}
+    $edits=[Collections.Generic.List[object]]::new()
+    foreach ($node in $definitions) {
+        if ($node.Extent.EndOffset -gt $OriginalDefinitionLength) {
+            throw 'Controlled definition crosses its original source boundary.'
+        }
+        $offset=$node.Extent.StartOffset+$node.Extent.Text.IndexOf($node.Name,[StringComparison]::Ordinal)
+        if ($offset -lt $node.Extent.StartOffset -or $offset+$node.Name.Length -gt $OriginalDefinitionLength) {
+            throw 'Controlled definition name is outside its original source.'
+        }
+        $found[$node.Name]=$true
+        $edits.Add(@{offset=$offset;length=$node.Name.Length;replacement=$Renames[$node.Name]})
+    }
+    foreach ($name in $Renames.Keys) {
+        if (-not $found.ContainsKey($name)) { throw "Controlled function $name is missing." }
+    }
+    # Scalar edits do not retain the large syntax tree while strings are copied.
+    $node=$null; $definitions=$null; $ast=$null; $tokens=$null; $errors=$null
+    $previousStart=$Source.Length
+    foreach ($edit in @($edits | Sort-Object offset -Descending)) {
+        if ($edit.offset+$edit.length -gt $previousStart) { throw 'Controlled definition edits overlap.' }
+        $Source=$Source.Remove($edit.offset,$edit.length).Insert($edit.offset,$edit.replacement)
+        $previousStart=$edit.offset
+    }
+    $Source
+}
+
 function Edit-QualificationEmbeddedCertificateSource {
     param([string] $ModuleText,
         [ValidateSet('Edit-AdditionalScopeSource','Set-QualificationSourceCulture')] [string] $SourceEditor,
@@ -142,13 +194,16 @@ function Invoke-Bounded__STEM__Snapshot {
 
 function Add-QualificationCulture {
     param([string] $ModuleText, [string] $Culture)
+    $renames=[ordered]@{}
+    $originalDefinitionLength=$ModuleText.Length
     if ($ModuleText.Contains('function Initialize-UnusedIdentityEnrollmentNativeSource')) {
         # The initializer is serialized into each real bounded child process.
         $ModuleText=$ModuleText.Replace('function Initialize-IdentityEnrollmentNativeSource {',
             "function Initialize-IdentityEnrollmentNativeSource {`n[Globalization.CultureInfo]::CurrentCulture='$Culture'; [Globalization.CultureInfo]::CurrentUICulture='$Culture'")
         $ModuleText=$ModuleText.Replace('public string DomainName=null,',
             'public string QualificationCulture=System.Globalization.CultureInfo.CurrentCulture.Name, QualificationUICulture=System.Globalization.CultureInfo.CurrentUICulture.Name; public string DomainName=null,')
-        $ModuleText=Rename-QualificationFunction -Source $ModuleText -Name Invoke-BoundedIdentityNativeSnapshot -Replacement Invoke-CultureOriginalIdentitySnapshot
+        $renames['Invoke-BoundedIdentityNativeSnapshot']='Invoke-CultureOriginalIdentitySnapshot'
+        $originalDefinitionLength=$ModuleText.Length
         $ModuleText+=@'
 
 function Invoke-BoundedIdentityNativeSnapshot {
@@ -195,7 +250,7 @@ function Set-QualificationSourceCulture {
         if ($name -eq 'Get-SystemCollectionWorkerSource' -and $ModuleText -notmatch 'function Get-ControlledOriginalIdentitySystemPolicy') { continue }
         if ($name -eq 'Get-PrivilegedCollectionWorkerSource' -and $ModuleText -notmatch 'payloadSha256\s*=\s*Get-PrivilegedCollectionPlanSha256') { continue }
         if ($name -eq 'Get-SyntheticCollectorScriptBytes' -and $ModuleText -notmatch 'function Get-ControlledOriginalCollectorScriptBytes') { continue }
-        $ModuleText = Rename-QualificationFunction -Source $ModuleText -Name $name -Replacement "QualificationOriginal-$name"
+        $renames[$name]="QualificationOriginal-$name"
         $ModuleText += @'
 
 function __NAME__ {
@@ -207,6 +262,7 @@ function __NAME__ {
 }
 '@.Replace('__NAME__', $name)
     }
+    $ModuleText=Rename-QualificationOriginalDefinitions -Source $ModuleText -OriginalDefinitionLength $originalDefinitionLength -Renames $renames
     if($ModuleText.Contains('$script:StatusDeskTransport.State.CertificateSourceExecuted=$true')) {
         $ModuleText=Edit-QualificationEmbeddedCertificateSource -ModuleText $ModuleText -SourceEditor Set-QualificationSourceCulture
     }
