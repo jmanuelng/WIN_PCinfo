@@ -1,0 +1,1345 @@
+{
+  "kind": "win-pcinfo.afk-functional-source-gate",
+  "version": "1.0.0",
+  "scope": "ControlledSourceFunctionalGateOnly",
+  "sourceRevision": "e0e3aaaf732dbaa1cb7ecd2477254af726f42f72",
+  "mainMergeRevision": "298757a9fd0f948d8c495e99e9b23c170f7359d4",
+  "identicalSourceTree": "f4e1f6fdc391c1b95000399abb8b13e0dcabfb4f",
+  "expectedFiles": 207,
+  "actualNativeExitCode": 0,
+  "results": {
+    "Pass": 207,
+    "Fail": 0,
+    "Blocked": 0
+  },
+  "elapsedMilliseconds": 13366312,
+  "sourcePinsStableAfter": true,
+  "sourceInputCount": 844,
+  "resourceInputCount": 21,
+  "suiteSummarySha256": "4283a9b6e3baa6114e04638bc75e5e590c798c05e19cc7f9c592f221d8a27f88",
+  "reviewedSourceCohortSha256": "f58bee81a5ef60e51cb0002c16379a781c99205432d916518206ac6dc5389e2b",
+  "terminalAuditSha256": "45cf591f1b49ab717951cb5708a45f52d45449c15bbba69032fd9c4ef947b023",
+  "retainedCaseDispositions": {
+    "PassVerifiedAbsent": 218,
+    "PassRetainedForRecoveryTest": 4
+  },
+  "freshOwnedCleanup": {
+    "method": "RootExecutedScopedOsAndFilesystemChecksAfterNativeTerminal",
+    "recordedLifetimesAbsent": 6,
+    "ownedChildrenAbsent": true,
+    "ownedRecoveryRootsAbsent": true,
+    "schedulingBlockerAbsent": true,
+    "privateProofReview": "RootAttested;ProtectedAclNotWeakened"
+  },
+  "candidate": {
+    "state": "UnsignedEngineeringPrecursor;NotAcceptedDelivery",
+    "primarySha256": "249255a7508071f46affa96813227662b9d4670bddbb037f970bad194b162e74",
+    "primaryBytes": 3448017,
+    "archiveSha256": "57823d2f35ca028996bda23f3133b17ee041f2b95a437c1b3b74296e523073d0",
+    "archiveBytes": 5009492,
+    "helperSha256": "91558432aa16a083ba997c2ae2c7bd4b1290743bd2db023bc1fa1d0a5d2d2abc",
+    "helperBytes": 13745
+  },
+  "controlledResourceCampaign": {
+    "actualNativeExitCode": 0,
+    "controlledInvocationsPass": 42,
+    "originalLimitsPreserved": true,
+    "calibratedControlledMaximumWorkingSetBytes": 535629824,
+    "workingSetLimitBytes": 536870912,
+    "fullPostAssessmentDriverNonPassRetained": 9,
+    "aggregateOwnedChildTree": "NotMeasured",
+    "deliveredGuiQualified": false
+  },
+  "currentFullDriverObservation": {
+    "case": "Wpf Close NativeHard RequireRecoveryJournal",
+    "functionalResult": "Pass",
+    "maximumProgressGapMilliseconds": 2630,
+    "requiredMaximumMilliseconds": 10000,
+    "uncalibratedWorkingSetBytes": 537935872,
+    "workingSetLimitBytes": 536870912,
+    "resourceQualification": false
+  },
+  "historicalFailuresRetained": [
+    {
+      "files": 202,
+      "pass": 187,
+      "fail": 2,
+      "blocked": 13,
+      "WpfSystemCancelGapMilliseconds": 10875
+    },
+    {
+      "files": 206,
+      "pass": 205,
+      "fail": 1,
+      "blocked": 0,
+      "WpfNativeHardCloseGapMilliseconds": 10883
+    }
+  ],
+  "independentReview": {
+    "standardsIntegratedFindings": 0,
+    "specIntegratedFindings": 0,
+    "standardsTerminalAuditFindings": 0,
+    "specTerminalAuditFindings": 0
+  },
+  "liveAcceptance": {
+    "WindowsClient": "NotStarted;UserLocalDeviceAvailable",
+    "signing": "ExactFinalCandidateApprovalPending",
+    "testerConsentAndTrust": "IndividualConsentAndActualTrustPending",
+    "privateDelivery": "NotAccepted",
+    "publicRelease": "NotApproved",
+    "applicationAcceptance": false
+  },
+  "githubActions": {
+    "usedMinutes": 0,
+    "authorizedCeilingMinutes": 100
+  },
+  "azure": {
+    "runtimeDependency": false,
+    "provisioningExecuted": false,
+    "spendAuthorized": false
+  },
+  "files": [
+    {
+      "file": "AdministratorExposure.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 216,
+      "sha256": "1371cd06a5201bbe0623e9e1e707d60b0f3b9d09f550c6fe3a0535c0bccec7dd"
+    },
+    {
+      "file": "AdministratorExposureApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 107343,
+      "sha256": "55bbe52f356defff1b4c252a59ef3f58f9288cfbfaed4a32f677e7e47ec9ef21"
+    },
+    {
+      "file": "AdministratorExposureContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 5408,
+      "sha256": "7445697301711f0cf44bd2ca151fd5c1843981dbd643749a4b798bac7704ec57"
+    },
+    {
+      "file": "AdministratorExposurePolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 35,
+      "sha256": "d2987b1f5e800ff400f74db67b1ff59dc703b0f46c0593ab43ea42f01b739bc2"
+    },
+    {
+      "file": "AdministratorExposurePrivilegedCollector.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 11178,
+      "sha256": "8a2fbe83eb29b855304e12dd6b0f9bb8c14a173bff201adf7b57a0ff5267b2ff"
+    },
+    {
+      "file": "ApprovedCollectorCatalog.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 23,
+      "sha256": "84492288c462856b9b53b9ae23fa7059e0529dd3441e8e5a80610bf596393e8e"
+    },
+    {
+      "file": "AssessmentContractSet.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 336,
+      "sha256": "910d481c8a109955a149ebf1fe19bb3cddb358d2de23ebc072bb08e7267d8f06"
+    },
+    {
+      "file": "AssessmentSafetyQualification.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 3540387,
+      "sha256": "d151139c3733e6d9fccf444e842093224f305af4406cbffd3975d2d44aae084f"
+    },
+    {
+      "file": "AttestedPreview.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 7216,
+      "sha256": "4ae8289db928fa089ab9ee9d66557d45f38d286ac8b24fbc4e95a2e1c6f7db2e"
+    },
+    {
+      "file": "AttestedPreviewApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 39788,
+      "sha256": "3968f13da2bb417aae481c45e7d4580455d31a7018ab68a9b46f72c98e2f51a5"
+    },
+    {
+      "file": "AzureValidationAdmission.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 598,
+      "sha256": "fc3693401fcdf9fe385b64a8832559a5081f4e5555951d56df510f4c4070ae76"
+    },
+    {
+      "file": "AzureValidationAdmissionApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 8777,
+      "sha256": "e6fc5459563751b3fa3f33d0db354a36bd3e764c8db260bde42ed65d92f77a7a"
+    },
+    {
+      "file": "AzureValidationAdmissionPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 31,
+      "sha256": "18a8f5f7b026acc4a8350ffa2336a257984cfb8857e0de16af95a08dc6f043c7"
+    },
+    {
+      "file": "AzureValidationArmHttp.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 213,
+      "sha256": "80c26e4180c841d28dcc31510cd07f2a6d3cf64e42b8ca39ec7f3b533e4b4278"
+    },
+    {
+      "file": "AzureValidationArmTransport.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 471,
+      "sha256": "8b3d185b999dacd55b44a646b940f990d774ebff7efae7ba7d3e2af5c947677c"
+    },
+    {
+      "file": "AzureValidationRemoteAbsence.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 300,
+      "sha256": "01ce6adfea5d02f32454457de46b36315a956ca8b74d7f31dfc3c93cba57781c"
+    },
+    {
+      "file": "AzureValidationRound.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 2499,
+      "sha256": "c3d68d4ca8ac6d4f5628eaa580a5b6870c9c9b8ae293605c8aa19e6e6b0db033"
+    },
+    {
+      "file": "AzureValidationRoundApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 25120,
+      "sha256": "462a68095fbe730ef9e4ff8ab4e576354485e48e0aa5ffc421b10b4888d2260e"
+    },
+    {
+      "file": "AzureValidationRoundPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 47,
+      "sha256": "9d8eb745b174faf246dd7bf42023bee52ed28a0ec977662ce05e7ffb1717dcb8"
+    },
+    {
+      "file": "AzureValidationRoundSafety.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 2697,
+      "sha256": "e99344a233bfa20d67b9b24c07fdecb106c1c902407fd95e17d96776c547221a"
+    },
+    {
+      "file": "AzureValidationTerraform.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 550,
+      "sha256": "a6a5428d2bdccc6a6deec4f9c6ce23f61b0f154aa224a62dad6c8791a3007b29"
+    },
+    {
+      "file": "AzureValidationTerraformController.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 100,
+      "sha256": "23e4e7f682262d64f705732d154dc20ec6a99a849115c873c8df12a03d288bf2"
+    },
+    {
+      "file": "AzureValidationTerraformInitialization.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 798,
+      "sha256": "a1129cd836a1303fbb854a2d85de134e782788b71316b80dd6d20d5162b9972e"
+    },
+    {
+      "file": "AzureValidationTerraformNamespace.Native.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 291,
+      "sha256": "81a12d1295b044418a3ac0f590b667d30fee3670bee266723f988a9f6de9cd09"
+    },
+    {
+      "file": "AzureValidationTerraformPathOrdering.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 149,
+      "sha256": "9da9a8ad682b0bb174e54489525540ecf50601edcdc884f882e1ef72f98581f6"
+    },
+    {
+      "file": "BoundedAssessmentSchema.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 46708,
+      "sha256": "f2885795bb82e246870b6a1e03b46fd469c7146e27a52bc0447856bd02cda3e2"
+    },
+    {
+      "file": "BuildDeterminism.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 49129,
+      "sha256": "95d9cb00588997675482a11b4b6fe198a26efa3fd633b9bb4255b350bb2a7e86"
+    },
+    {
+      "file": "CertificateCulture.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 408,
+      "sha256": "14f801ec7ccbcd174a09efe0105d555f28eec4cbe19da11f2a0d7902c818d36e"
+    },
+    {
+      "file": "CertificateSourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 402937,
+      "sha256": "5cb685991cafa52aa08742c45f14039e3cb465a0fe9168321cb59f5968f7b83d"
+    },
+    {
+      "file": "CertificateSourceBounds.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 89,
+      "sha256": "6aba5f903fe73e0104ba7dddd9a7cf4e49775f014671c9536a188eaffd1160fd"
+    },
+    {
+      "file": "CertificateTrust.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 202,
+      "sha256": "01374125f5068d8c6f07d048656a5c5e741e613088f8fb1f757014353a4ffdcc"
+    },
+    {
+      "file": "CertificateTrustAdmission.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 35,
+      "sha256": "8f675dfbfc6c9cf0538e4f86ee1ebfdc7dc48624c0ec29b367eae371e7a49ef3"
+    },
+    {
+      "file": "CertificateTrustApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 186669,
+      "sha256": "b37ae37ae5d77d618e570e0e756921f8966998c3a0e5926f1b6c140b3645c78a"
+    },
+    {
+      "file": "CertificateTrustNativeSource.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 114,
+      "sha256": "b2d707f5b691652861d5376d8fd35316da7a809f804d5a2f28e8c2c70a5665ee"
+    },
+    {
+      "file": "CertificateTrustPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 26,
+      "sha256": "325e83b5bfd753e28cb48f4658e8ca9e70f44a9ef3c3fa18f42493cc3fc08245"
+    },
+    {
+      "file": "CiToolSourceBoundary.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 4617,
+      "sha256": "1c14242eeca926df09406b4a13bda9fca2c8404433e22e722fbdef431c22dad5"
+    },
+    {
+      "file": "CollectionChannelFraming.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 30,
+      "sha256": "51c39844419028a32aa4fb69870838d0440523741b9bbfab94205fe9a9a29776"
+    },
+    {
+      "file": "ComprehensiveReport.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 4352,
+      "sha256": "684419f9831817959c79f127f1d9bd3e4a1428d9f328d68fb429151a8ed74b89"
+    },
+    {
+      "file": "ComprehensiveReportApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 68847,
+      "sha256": "a5b9c1c963649bd24de1d8abd9f1de560e61888730f567c12f33f837035c97ab"
+    },
+    {
+      "file": "ConnectivityContextBoundary.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 149,
+      "sha256": "2a68602461ea7c97d53a3bec84d81a630c48e3db92360ddb4174ae166e4e0e30"
+    },
+    {
+      "file": "ConnectivityHttpBoundary.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 103,
+      "sha256": "5f5cc06b350c7313db099cb1fdcb1991740277445c0e72c9ce7acebd0c08112d"
+    },
+    {
+      "file": "ConnectivitySourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 381459,
+      "sha256": "75c672601d9bdb4466e9671f251da7c65e0c1dff59d8badfd8ec004e53f45e63"
+    },
+    {
+      "file": "ContractCultureOutput.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 25096,
+      "sha256": "06992225378294ddaa2a3804e75ffcaecddf46c5599c24114c4778bf1487d44d"
+    },
+    {
+      "file": "ContractFormats.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 213244,
+      "sha256": "1960f0605fe4cf15fb7c8ebf0355e584f6fd68a33404762139b38f4e072bf18d"
+    },
+    {
+      "file": "ContractSemanticMatrix.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 48821,
+      "sha256": "9f8a49119d26411b09ea778cd5f9b5db74d9fe108df167102609ff4433cc4682"
+    },
+    {
+      "file": "ContractValidator.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 39308,
+      "sha256": "4fa6370fcc6054d940f56f2f759caf306940878089b1bec5e875474e695841c6"
+    },
+    {
+      "file": "CrossDomainGuidance.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 206,
+      "sha256": "0ef91b5ce469145da7044dfe8ae085372781072559887961fd9edf462467f82c"
+    },
+    {
+      "file": "CrossDomainGuidanceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 36334,
+      "sha256": "13c6fbc9c2daa6b9bee5a964984718c1fffafe156e24e524296e8bdede7624ef"
+    },
+    {
+      "file": "DeviceProhibitedMaterial.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 5817,
+      "sha256": "1d0f02e15e721f2f6c0d150bb644e26a056d92322d5981315ca95961d0a99046"
+    },
+    {
+      "file": "DeviceReadinessApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 9503,
+      "sha256": "f29fd59bf8ee83d77dfa0bb315a666c6964286c80769c14e2dca68962efecdb6"
+    },
+    {
+      "file": "DeviceReadinessContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 6010,
+      "sha256": "1a5d1e51625b0e159697623d769c7e82b28af2e0c101ff6847e34cad0b617de9"
+    },
+    {
+      "file": "DeviceReadinessPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 114,
+      "sha256": "2675eabb2171b72656fca4637f7021bbb7c9df20f52396ad7f08b25b5079af69"
+    },
+    {
+      "file": "DeviceReadinessScenarios.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 94143,
+      "sha256": "35933fa3b2307b3987ed4d42c8ae352521b9bbdde50dfeb5280d8947530e01f9"
+    },
+    {
+      "file": "EffectivePolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 1326,
+      "sha256": "7d1eb2e7aac7a526f0411438145946aa960b7a2871f20f389b34dd3ab40170ff"
+    },
+    {
+      "file": "EffectivePolicyApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 530489,
+      "sha256": "5d84e5327252073559c1ed28bc495e4a5f09e341dad6eb2f3531359f0d7d9fc1"
+    },
+    {
+      "file": "EffectivePolicyContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 66938,
+      "sha256": "eccc28d747893b84df27c9646779935ca262d0b41176f77e3d0a00277c538bca"
+    },
+    {
+      "file": "EffectivePolicyPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 92,
+      "sha256": "5afbe42de00ce065454c6441a1a49f716586b7cbb7ee9debbba3d20ca5a1bf22"
+    },
+    {
+      "file": "EffectivePolicyPrivilegedCollector.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 46292,
+      "sha256": "81723b4e0557892c117e7c78a96dc14b13e84b8e17e56eb34c23d14c3674e01b"
+    },
+    {
+      "file": "EvidenceWorkspace.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 282,
+      "sha256": "ac04e82a584eeadd7f3129d8d6c0c537689185323a48d5637aac26eb79f4aeb0"
+    },
+    {
+      "file": "EvidenceWorkspaceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 30489,
+      "sha256": "c368d611b33c3787b8e54f6a6647e14a73a097190fe42f6c23e244074cde96f5"
+    },
+    {
+      "file": "EvidenceWorkspacePolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 34,
+      "sha256": "70f1c0c7b1707c7e55d9c5fad17222f577bbd5988fb430a2a00d98cad11c2f30"
+    },
+    {
+      "file": "EvidenceWorkspaceRecovery.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 1665,
+      "sha256": "04268190732fa6333668218180be9750fd2514e319d8922d7e17a9354d4d5305"
+    },
+    {
+      "file": "FirmwarePrivilegedCollector.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 2176,
+      "sha256": "0037f39749ceb7bf22ce43b00e08ed2b8c07375a080b26cda6b77d82eda38cf4"
+    },
+    {
+      "file": "FirmwareReadinessApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 77869,
+      "sha256": "27bf672c444bc30418403f8662296b75887a275b012f3f58993a41ebe2c20d53"
+    },
+    {
+      "file": "FirmwareReadinessContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 4277,
+      "sha256": "6a48b4eaa52b36b0d50f60e02992d36ab140a942931858add4030b0f54e70853"
+    },
+    {
+      "file": "FirmwareReadinessPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 27,
+      "sha256": "a06c49d648f73f3867f4cb55b34e60f8678bbf19ae9ac6b7b53efa5250999953"
+    },
+    {
+      "file": "FullReportApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 137039,
+      "sha256": "9c4393bfc89698d507c64ac9c60e8707a2f97ba8d70b73067a09f56f9dcca0a6"
+    },
+    {
+      "file": "GuidedRunwayDocumentation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 84,
+      "sha256": "0d3b998a0ace0bc598170fd385ec119c2f65fb586743d5396816286bc2852b8e"
+    },
+    {
+      "file": "GuidedRunwayPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 31,
+      "sha256": "13ea3274b2afec0fba4875414b7383ebefccfe3b471bfa2ba775272494722a35"
+    },
+    {
+      "file": "IdentityEnrollmentApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 133243,
+      "sha256": "e51f53003731bb08c895f450ca62c6a27f6a86ea79564f8e412b9bef62717b20"
+    },
+    {
+      "file": "IdentityEnrollmentContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 196,
+      "sha256": "02e42a19f04e30168b4b107f15567f55915c13686db67f02d757ea96bd577f12"
+    },
+    {
+      "file": "IdentityEnrollmentNativeSource.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 759,
+      "sha256": "d22f78808ed74397fe0f6f29fc35e5729d4d42d818b0ce9bc1fd77e8632243ed"
+    },
+    {
+      "file": "IdentityEnrollmentPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 30,
+      "sha256": "18cfb3918042202a4b837c4b6b04191df575b307b6d69922240d4f89e4fbfd9a"
+    },
+    {
+      "file": "IdentityEnrollmentRecord.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 5195,
+      "sha256": "64b9633b36afa54a338a4631601568c72933ec0ff097aaaf8befac7adf29a282"
+    },
+    {
+      "file": "IdentitySourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 591588,
+      "sha256": "dc2946fc0bc1a81773cfd7c077a1fb4d7b0731b0fde7ee8e847c55c0b2a59070"
+    },
+    {
+      "file": "LaunchContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 7239,
+      "sha256": "d8699b5e5c49746553c929641e76f27fa5e94d063642e881ffd79cd1d723af3e"
+    },
+    {
+      "file": "LocalOnlyRequestBoundary.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 85,
+      "sha256": "a802ddcec910bcf4233f83c66623f7109213fa9e837ba7d0febc267f9a62f779"
+    },
+    {
+      "file": "LocalProtectorPreparation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 2452,
+      "sha256": "662e75f69519f6040bdbb0e451420bd6b4e840243594c9b85bcc1356d4a3e0f0"
+    },
+    {
+      "file": "MicrosoftConnectivity.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 134,
+      "sha256": "096c170edb8395d523f88e900e6e0ad018090c9a1bc5063796a1a80455d6b8c1"
+    },
+    {
+      "file": "MicrosoftConnectivityApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 248612,
+      "sha256": "feb33603d3ffb6e8d8c6720b0a2e9cb88c95a9bd728d708b768f9425398a707e"
+    },
+    {
+      "file": "MicrosoftConnectivityContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 124401,
+      "sha256": "aafae06796f7f87888ed61dc6cf4bdf9101de50ca24d382a39b25361642a6eda"
+    },
+    {
+      "file": "MicrosoftConnectivityNative.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 5502,
+      "sha256": "cdb7aebdbfc25a77352bb9e41f2d03da730767dd29a3e79c398138784459c88e"
+    },
+    {
+      "file": "MicrosoftConnectivityPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 40,
+      "sha256": "d4186dc0ab723949854b7134b5476d2b3d0bceae98d892dba936a05d2ccac24f"
+    },
+    {
+      "file": "NetworkSourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 190692,
+      "sha256": "3287826d5725dce3f1d49bd32bf59d77a055fa358d12d4532d49407fd1f0e0a8"
+    },
+    {
+      "file": "NetworkTopology.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 226,
+      "sha256": "a7895b0a008de8411bf492a9a9465be68bda0da106382c04ec5ce5dc79b30df7"
+    },
+    {
+      "file": "NetworkTopologyApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 208584,
+      "sha256": "712cfe50e859fcd698486c2e4f30b20b455940881819cff06bf006ee6103f6d0"
+    },
+    {
+      "file": "NetworkTopologyContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 63229,
+      "sha256": "5ff534aadca8108aed97e65634519555a84ab5b1f6e9f2b141d0bf4878f8219b"
+    },
+    {
+      "file": "NetworkTopologyNativeSource.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 227,
+      "sha256": "1e228666487fec4286e17d0113e537f9d3667ab09b3bd8191238c122e0567146"
+    },
+    {
+      "file": "NetworkTopologyPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 29,
+      "sha256": "bd99a64caa39899ee27bfa8ab2bf81fbe0993d0ca5efb4e2b22dbac4be41d7d9"
+    },
+    {
+      "file": "OfficialSchemaQualification.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 253,
+      "sha256": "21f499fb5654ff59924becaf4f58e6ccb7e935d5c861296f87ce775cd0691cd1"
+    },
+    {
+      "file": "PersonalSigningPreparation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 3159,
+      "sha256": "cc31b6594c9c015394fbc5560e626fb3f96b29895f2ead88df87e46a7640ff26"
+    },
+    {
+      "file": "PlatformSourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 428257,
+      "sha256": "663234550d977bd0472f24be125451f96ae8ac343c5243c700379972542095c0"
+    },
+    {
+      "file": "PolicySourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 496049,
+      "sha256": "8d2aa73618cd82f82a5d40e0cc976bd78cc3fac3f79b2e5e52458c337d52e188"
+    },
+    {
+      "file": "PolicyUserContextNativeSource.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 2546,
+      "sha256": "e4a8af325677c93222ba5fdff17053aaa0f3a553715c56e9b0beb4be24adba11"
+    },
+    {
+      "file": "PortableDistribution.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 6992,
+      "sha256": "83c30688e546be81c38ac1a877dd85722e540a2f631554888557cf24b5091153"
+    },
+    {
+      "file": "PortableDistributionApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 39485,
+      "sha256": "421f4273ebff94e4665ea2fd75009a0f881df012bcf6e379779fbd3501eae3aa"
+    },
+    {
+      "file": "PortableEntry.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 14090,
+      "sha256": "0d222115ad3b232b2da88da30ca6cfbc59e5d6d7cec317b8d8380df9f7d60d20"
+    },
+    {
+      "file": "PortableMetadata.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 58,
+      "sha256": "1d4f29a4f150d732537109f6d39df7ccea130e29556ab73d6053b101004809d5"
+    },
+    {
+      "file": "PreparationFailure.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 16114,
+      "sha256": "98f86e56816aba2df785cdd58240f17d9a27593b5e3537c89e9cab2bd83bab92"
+    },
+    {
+      "file": "PreparationSummary.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 8956,
+      "sha256": "ca01c7be4eab969af76d12f8109eebbadb7b26ab7062ebdca8f909cd5048cdb2"
+    },
+    {
+      "file": "PreviewPublication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 6000,
+      "sha256": "f5581144632d92b762ec248094c1636a23c11db2b3d40c9e297f282463d33914"
+    },
+    {
+      "file": "PreviewPublicationApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 11398,
+      "sha256": "e3a8484364e31b030a012806f6b21b95d5e7769221b5c12722e6b4bf15e62bfc"
+    },
+    {
+      "file": "PreviewPublicationPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 36,
+      "sha256": "d438c020a95a41786085a3f44c7e9ab4acfed4ec9db1f032bf970fff3e3bb925"
+    },
+    {
+      "file": "PreviewQualification.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 5082,
+      "sha256": "1ba215d332a39125cfda633deec6394e33bb56716162e333ac57966ca4b9c78c"
+    },
+    {
+      "file": "PreviewQualificationApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 14053,
+      "sha256": "c78cbd8df0d08f5d8aef7b0934017a92498433eb4bd8fd601d186b1a66e51f79"
+    },
+    {
+      "file": "PreviewQualificationPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 36,
+      "sha256": "6f0d40f900f7175d14e1d9fde449d0937ff701243d50888e4248d648429f45bf"
+    },
+    {
+      "file": "PrivilegedCollectionPlan.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 13579,
+      "sha256": "30e06d482aac1658282ff8058b457380f99049d6e695df43d392e58f74171b82"
+    },
+    {
+      "file": "PrivilegedCollectionPlanApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 43876,
+      "sha256": "7e9d05f3d9c93a5a8e1ecb34093994a270516ab29fcbdb6ff0f75179c6b534a8"
+    },
+    {
+      "file": "PrivilegedCollectionPlanPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 64,
+      "sha256": "099745735767e0e3cbedb2b77e91f88ddb8dc91302a2ea78c28059667a932bd0"
+    },
+    {
+      "file": "PrivilegedExecutionPhase.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 13720,
+      "sha256": "4675f8532f9df2cf6466c8d827e947511ad5988b3be3fae91db3c8f75ea4bad2"
+    },
+    {
+      "file": "PrivilegedInlineRepresentation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 6820,
+      "sha256": "70a956d9c55563a0c87f2827fa57dbfe0ab33e25fbe71fba921bdee47b850fc7"
+    },
+    {
+      "file": "PrivilegedPostStartLossApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 7422,
+      "sha256": "e05faf2c450b9d05622f07191bea10d6e0cdb4ab94855852d5bde23f5d3f890d"
+    },
+    {
+      "file": "PrivilegedPreStartCancelApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 11462,
+      "sha256": "dbfb3caba58f1498ba6c7b88fcc89a168fae99ceee3a93844f3e2656c0465362"
+    },
+    {
+      "file": "PrivilegedPreStartTimeoutApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 24522,
+      "sha256": "712496afff00c6601b4e22f6d3167aec5390cfa81d7ef966b16854a5cd16b5c1"
+    },
+    {
+      "file": "PrivilegedSystemPhase.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 11471,
+      "sha256": "bd5923858fbbac895f40644ac8b4f0f9d572e85f98aa6a7cf2fa5489fc74509c"
+    },
+    {
+      "file": "ProcessSupervisor.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 3307,
+      "sha256": "835e0ed4facbacfef25d7efe371bddd9f6ca4fff5b9ddac5ccfc66e8540f59e6"
+    },
+    {
+      "file": "ProductHelp.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 48,
+      "sha256": "924abb33e71910b931204a4a13f8b43f141a7bc73189deef4fa6c41749f0e969"
+    },
+    {
+      "file": "ProductHelpApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 24861,
+      "sha256": "d220282cb4c33cb442076edf93c11f617cd7f0a4e3ba5f77de602a38d6dede64"
+    },
+    {
+      "file": "ProtectedPackage.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 5555,
+      "sha256": "d898d27ffffa6b3cc0faa9ffa8f80d94e7e8fd62d54cf66cbdb7d405db41a0bb"
+    },
+    {
+      "file": "ProtectedPackageAdmission.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 3435,
+      "sha256": "9fe6455c5d97df15fb127631f118c189a8644742bec04840dcdef6b09de3eb64"
+    },
+    {
+      "file": "ProtectedPackageApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 33212,
+      "sha256": "ad2f5e9e7c3d007092e824a47d6e7ec09bc592d8ff2bac99b8111944806a11d1"
+    },
+    {
+      "file": "ProtectedPackageBufferSafety.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 7499,
+      "sha256": "792946859b7c087ecc159e5f4fef3f25ec741b42c8f43a616b8faf6c5f11cb94"
+    },
+    {
+      "file": "ProtectedPackageContracts.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 1155,
+      "sha256": "64eb38955d941e8025053fa4990ba5f150297425dcb739b700707848dc3ca6d4"
+    },
+    {
+      "file": "ProtectedPackageFraming.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 3516,
+      "sha256": "17e65867631c8ab2e3845448d74fd05c3abb7b98db83ebfbc86f4c8539a8a454"
+    },
+    {
+      "file": "ProtectedPackageNegative.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 16612,
+      "sha256": "5cd22a00d4dd94ee474365653ccfd6073e3337024a4a223f5db6c50943f9f557"
+    },
+    {
+      "file": "ProtectedPackagePolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 31,
+      "sha256": "2d8e4a9bf368eb6d812aaa5beffb5f38d75df547768f144d43b59749aae1d7e2"
+    },
+    {
+      "file": "ProtectedPackageRecipient.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 8010,
+      "sha256": "f4730dbb807482f7080897b905dbd95675113e5d5b09c9f659315733c5fcf8cb"
+    },
+    {
+      "file": "ProtectedPackageRecordSafety.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 69313,
+      "sha256": "d861023a6f50bcfd86a08a50d4670f9eda2eeb1c3adef495a8d797c08c6caf39"
+    },
+    {
+      "file": "ProtectedPackageViewing.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 4714,
+      "sha256": "b28c9c42093d5369dc723891144cc4a6e43f83334a43690e3c5d26fd2de399ed"
+    },
+    {
+      "file": "ProtectedPackageWriteFailure.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 7852,
+      "sha256": "8416b6231fd456e8544c2c8b3fc5c25ac24ef9c5d172dabbc89f312ab83bfc91"
+    },
+    {
+      "file": "QualificationCleanup.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 12035,
+      "sha256": "0520d980aa6516ee5e0f337d7eb067c60cb02c3efff8f1c679b5ce898cc9748b"
+    },
+    {
+      "file": "QualificationCulturePreparation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 96610,
+      "sha256": "3d696f3e597eff5892d44d0ecd1184ffa978c752b24048b0a9f87d9b4208d3af"
+    },
+    {
+      "file": "QualificationFixtureFinalizers.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 817,
+      "sha256": "13c821ece1daa7a2cb07b8cd5a528902c7da5f4d8c11e387b59dab79c2026438"
+    },
+    {
+      "file": "QualificationFixtureSignalIsolation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 901,
+      "sha256": "c3102496d90d016d87efbd17902a4b12a96753b98776c19d825b3be4642b48e0"
+    },
+    {
+      "file": "QualificationPreparationWait.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 147,
+      "sha256": "2c656c86662d0181e6d84fbe8aae388c2dc00b9c1ed3b03e1b67f3829fdb1930"
+    },
+    {
+      "file": "QualificationRecoveryFixtureProof.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 1022,
+      "sha256": "2f13647bfa81518495ca0d4f6fcb86db415c511eb9168936ec13c36b0063df1a"
+    },
+    {
+      "file": "QualificationResourceBounds.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 1756,
+      "sha256": "189fbd608d739f2b9b6187bd9c928f69d9e0ce3abeed9fc04a08e37ee1305a8a"
+    },
+    {
+      "file": "QualificationWitnessInventory.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 3726,
+      "sha256": "2e29fde9149fe9c4b15d6dc40af6918f0b0a7d5ce3c87bd11ed2f8543c860443"
+    },
+    {
+      "file": "QualificationWorkspaceSampling.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 229,
+      "sha256": "54cfb3aaada10183cf95685ee886de6e7fbc6b75e7c413516bc34bf2795ad206"
+    },
+    {
+      "file": "ReadinessSourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 361003,
+      "sha256": "d3963af0b6a6716c679c0d0cac8d3dc034f1c5f9d8b487f30376e006d7b62233"
+    },
+    {
+      "file": "RecipientProfile.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 645,
+      "sha256": "e00fe3e46807a0f454cf7df8ec8a3c46e8e45f1dfac34a39791f6bf570f9a9b3"
+    },
+    {
+      "file": "RecipientSelection.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 18082,
+      "sha256": "fc2029e28e217283d3f6290638b48b89d87b7a366cd158dfa5057e5230bb02be"
+    },
+    {
+      "file": "RecipientSetupRepeat.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 272,
+      "sha256": "771fb60f7cb983b9ef0d173341ca52bfef2a2896fec6b0b67913724431737a55"
+    },
+    {
+      "file": "RecipientSharingApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 47135,
+      "sha256": "65e7b904d7a3091a3d9bec35bf049a09fe3110a790e84ec36d35737973b5f56a"
+    },
+    {
+      "file": "RecipientSharingPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 36,
+      "sha256": "952621be802c5aa77c313f50052630f21ffd84fac4815b8749c2d10815bb4de8"
+    },
+    {
+      "file": "RecipientViewingApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 12644,
+      "sha256": "7f0da560a0124165183ba8b3821d0b3b447e8d74798b2dccee6abfae1ac89683"
+    },
+    {
+      "file": "RecommendationDefinitions.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 163,
+      "sha256": "93b5145f8492e4e819b8f1961337be2a389b002b7c5e2ee2963f9a021879d971"
+    },
+    {
+      "file": "RecoveryProcessOwnership.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 654,
+      "sha256": "af77607b566a91eea20b08f7defffd78373a4117c49c79c0988298f244c0a005"
+    },
+    {
+      "file": "RegressionHarness.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 1523,
+      "sha256": "31f91189c36bf805fc8ac666a191ae40c66302aa54e6c3d21d989f2efe940729"
+    },
+    {
+      "file": "ReleaseGates.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 312,
+      "sha256": "f421fecfd6d239d48d6f6a2a16d4897e57983437edc4751e9337e9a5c59dddaa"
+    },
+    {
+      "file": "ReleaseGatesApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 11534,
+      "sha256": "d31d177d519839f0394ee1c36a57383bcd78485c2f55b7f90ecfcb9bc434b6a1"
+    },
+    {
+      "file": "ReleaseGatesPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 35,
+      "sha256": "322c1428b08cde30c16862d4e31555b783aa945987369bc2e245ef099fa3991d"
+    },
+    {
+      "file": "RemoteSourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 797447,
+      "sha256": "eae30fe6ef7be43b947ee53019249dfbe007a616fb6252f7d46673b929dedeb5"
+    },
+    {
+      "file": "ReportAnchorTransform.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 125,
+      "sha256": "b06104eaef02d33d3067ec3d4359093851fdb04fdd6538e4ad18faf21902589a"
+    },
+    {
+      "file": "RequestValidation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 19863,
+      "sha256": "53aa4f04e33a469aab51c1a64adb60d49c93be3407fa787e1355808e77af8ca9"
+    },
+    {
+      "file": "ResourceDependencies.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 119,
+      "sha256": "e1de387cea5d96c2f0030cd472e1c4e0a482252edf03f58e6f7d395351d531d1"
+    },
+    {
+      "file": "ResourceDependenciesApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 184547,
+      "sha256": "6aabb468a5fc7e959657f3d1f92ab9581da13b00443965c8e00ffcd235939379"
+    },
+    {
+      "file": "ResourceDependenciesContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 83950,
+      "sha256": "6396918ff005ed65c41dbdbd2805d965f27e25c2468be2db463e9d883b0c653b"
+    },
+    {
+      "file": "ResourceDependenciesNativeSource.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 39,
+      "sha256": "eb935a3e0ad4ddcb500c110b9640094450deb41ffa435de214c386b3474ec80f"
+    },
+    {
+      "file": "ResourceDependenciesPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 39,
+      "sha256": "3d967a9d047bf6fd2cc06cce19dfc4addcbd0e45f546017dba8bc9b75a743e1e"
+    },
+    {
+      "file": "ResourceSourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 341107,
+      "sha256": "ad5f3dc4cf61fbbd0a634300560aeb3a6485a75d40f6550be99b59e0e22359a6"
+    },
+    {
+      "file": "ResourceSourceExecution.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 241,
+      "sha256": "543ea3e5e1c561de64e2b7a888d06ca07ec6ed72042f1bb745f746533df49a0b"
+    },
+    {
+      "file": "RestrictedReportExport.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 5310,
+      "sha256": "ad01fa665c5583f6f7d3ea28879f90c361ca2f73189054f16377beea55f22a47"
+    },
+    {
+      "file": "RunApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 18224,
+      "sha256": "8c6a1f561521f027a495bad657f860e2747c04555e149a317f273747429ad72a"
+    },
+    {
+      "file": "RunLifecycle.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 16563,
+      "sha256": "5ce8cf62482f6e34b2c8f87c0b9a7ffee035b17c7281929558f26695f882fd31"
+    },
+    {
+      "file": "RunLifecyclePolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 35,
+      "sha256": "c27936e5f69865014b613d944924346e2e3241e4d465b1be7506b03be8936d92"
+    },
+    {
+      "file": "RuntimeInventory.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 17347,
+      "sha256": "5480ac7f7c0ae81092c140f6ef3aee77be72dc15742834993d4f332c38f7ebc1"
+    },
+    {
+      "file": "RuntimeMatrix.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 20893,
+      "sha256": "8b30d48b61bb15771d4841f02a9f586c477d686647085ec3971f9858c6bab92e"
+    },
+    {
+      "file": "RuntimeSelection.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 8919,
+      "sha256": "0707a6147c8ec34d5403615e6d7ed237046702d7302831e1b47d92ba8823996d"
+    },
+    {
+      "file": "SchemaContracts.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 8339,
+      "sha256": "663d5b7716f157f881a65c646d3068848cb39caba743ecca01014c4c768ae691"
+    },
+    {
+      "file": "SecuritySourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 497231,
+      "sha256": "51910db63b9911ca96dd3633e8827bf264a4921799f2ea33cee37322ec3ee47d"
+    },
+    {
+      "file": "SigningBoundary.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 922,
+      "sha256": "7b9ac4f57312572cfc4da2e0b169bd322c692df157a386f259abfad48acdcaf2"
+    },
+    {
+      "file": "SigningBoundaryApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 16140,
+      "sha256": "f1acb003b64abb00107891497824c15b7d018a917d35c820c8f6d89821472195"
+    },
+    {
+      "file": "SigningBoundaryPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 34,
+      "sha256": "cc16da41f4a527dfe5531baa717d32c41345e41eb29f898b86fbe6668b736a01"
+    },
+    {
+      "file": "SoftwareInventory.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 271,
+      "sha256": "f0ec8d5c9ca84decea7214e5780996914c007ea80e9f7370f0589b385e836dff"
+    },
+    {
+      "file": "SoftwareInventoryApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 284912,
+      "sha256": "aa319665327290bbc1f29c1a37e301ce738136f1e7305b150cb6a014108eda72"
+    },
+    {
+      "file": "SoftwareInventoryContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 173977,
+      "sha256": "e6361fe36adadaa1711e2dad47122593a921480a30d03fdfe75c9e0435b23a21"
+    },
+    {
+      "file": "SoftwareInventoryNativeSource.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 70,
+      "sha256": "5ff7810a27568d4e9d7341d82f8b14b04769e7081480102945f178b6162f944d"
+    },
+    {
+      "file": "SoftwareInventoryPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 38,
+      "sha256": "2766896b2224e2fd25d15eba2057c6163fc81b64a5393e0e20e9a404d6ae32fc"
+    },
+    {
+      "file": "SoftwareRecognition.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 265,
+      "sha256": "d160c8fb7fcf8597e367107cd71306a40c2ab582b292fc7f93e689d6e20be482"
+    },
+    {
+      "file": "SoftwareRecognitionApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 37201,
+      "sha256": "305436bdb9d7226ebcb6029f4d31419a641d7f3f2c7964684a3fbf3ae2d725a4"
+    },
+    {
+      "file": "SoftwareRecognitionCatalog.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 2168,
+      "sha256": "23e7d51f6083356ac847199268b1458aa54a1a3259b3d64e8f57f1a7d2b0bab7"
+    },
+    {
+      "file": "SoftwareReportApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 250900,
+      "sha256": "4e922671b868bc2efba61294c964c5a0b7238c6886be147fa60f74036055a6b2"
+    },
+    {
+      "file": "SoftwareSourceApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 274523,
+      "sha256": "0d9907f9d42f753075a063ae5fca60c6971e9566e688d58e8f5e56d4984b939a"
+    },
+    {
+      "file": "StatusDesk.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 10227,
+      "sha256": "fbf5af80f40b3112722f64742bc3c6dd6854271947fd11af460fcfa895d2e336"
+    },
+    {
+      "file": "StatusDeskActiveActions.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 176990,
+      "sha256": "639a7f301df1f5c6e7699f86acb339e5ca48a9a90d7a97ff754ef062fe3593b4"
+    },
+    {
+      "file": "StatusDeskCancellation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 49470,
+      "sha256": "af2df23f6b92a71ac328b86c4eba16276bb95147f8104f88f9471977218721c5"
+    },
+    {
+      "file": "StatusDeskChoices.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 14898,
+      "sha256": "a4823060a3cd485787056d8854009344f2d59c6c854ec66eaa363359d8a186b2"
+    },
+    {
+      "file": "StatusDeskCleanupGate.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 45853,
+      "sha256": "a7d1c0bc635462bb764f38815e2195061b3ab23c57fb3ca9c706cae5fd100c3d"
+    },
+    {
+      "file": "StatusDeskEngine.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 41090,
+      "sha256": "b4aab646f92c54bbbbf36dbc9477f037d9f0a3222885847aea88815943ff5269"
+    },
+    {
+      "file": "StatusDeskEntry.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 6600,
+      "sha256": "e5e7ea2d39185fa6bf2ce71767ac103627ff15a85d9930f61c7001d5bbb2eb24"
+    },
+    {
+      "file": "StatusDeskLock.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 6605,
+      "sha256": "a6fe98aaebd316f2ed294daa6da6dafccdb8ca0e4695e1c8bf873ec047851fb6"
+    },
+    {
+      "file": "StatusDeskRecipientSelection.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 6199,
+      "sha256": "5c8cfc14246d30ff6f00b40d142dfa4bc1af771f5b0a716f927779bb0e762428"
+    },
+    {
+      "file": "StatusDeskRecovery.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 37951,
+      "sha256": "8a97e19b5e091b30693fed759c78a52b8e9f09452f782a01c8aeddfde5c074f7"
+    },
+    {
+      "file": "StatusDeskRecoveryCorrection.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 10003,
+      "sha256": "0ef5dbc129c446eeb7a91773146eaa4dd1cd846aa659c7235980563697b3dadc"
+    },
+    {
+      "file": "StatusDeskViewing.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 6580,
+      "sha256": "58c69723c2bdb6611c69fe412a015fd3af99294b4d56c9d596a321aae826f767"
+    },
+    {
+      "file": "StatusDeskWpf.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 25129,
+      "sha256": "bc05905fb2937cb9f542557c1e9b2d91c555107ce32021961e3e7f397a4ee527"
+    },
+    {
+      "file": "SystemAppLockerContract.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 29,
+      "sha256": "0251df55f5ad6c6a5b27b68efe7369b7690aaaf86498e6ad14de9f2bc17e8a65"
+    },
+    {
+      "file": "SystemBrokerAdmission.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 142,
+      "sha256": "20226a25cebb7cdd794c3b9d4542b6c6ba675fba18107d424cea0a13e7099490"
+    },
+    {
+      "file": "SystemBrokerCancellation.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 2547,
+      "sha256": "33ae25bd7eadc8f30fe75fe4b2d5c9ce24f6c6838c4388977942dfe8fbb3ad7c"
+    },
+    {
+      "file": "SystemCollectionPlan.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 12484,
+      "sha256": "027b421ffd92becc3d3863284e0939a00d50b84e3076c2e75c94e7c316e93241"
+    },
+    {
+      "file": "SystemCollectionPlanApplication.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 37684,
+      "sha256": "0317d00a033372bf071c9a7f3d6430e0c6af848bc09f46e67132b09b3e08f8bc"
+    },
+    {
+      "file": "SystemCollectionPlanPolicy.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 68,
+      "sha256": "70282078832970aa7644f97e2fd88d505bc980054e784c823f7dfaad99303c33"
+    },
+    {
+      "file": "SystemTaskAbsence.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 143,
+      "sha256": "56ecdc0421084634ad8e69179820c10a8a09d1afceaf2431261c7cda21d98c02"
+    },
+    {
+      "file": "SystemTaskRecovery.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 3141,
+      "sha256": "492f7a22574bb4d2b2a604bf9d44340a6652937faa766a58d7dba09f2182eac7"
+    },
+    {
+      "file": "SystemWorkerPeer.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 861,
+      "sha256": "f5b2e549422ddb84a2fca33220b09bc7c518184fd5b55b1afa180c8c42e5b765"
+    },
+    {
+      "file": "WindowsPowerShellHost.Tests.ps1",
+      "result": "Pass",
+      "elapsedMilliseconds": 2870,
+      "sha256": "be8d3e35e8854b8fc0c6da37efdba47907469e5d9cdf62cb0e35f477faec3d6f"
+    }
+  ]
+}
