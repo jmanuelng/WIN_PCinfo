@@ -132,6 +132,7 @@ try {
         $script:replayCaseRoot=Join-Path $fixtureRoot $case.name
         $null=[IO.Directory]::CreateDirectory($script:replayCaseRoot)
         $caught=$null;$originalBodyError=$null
+        $replayOutput=[Collections.Generic.List[object]]::new()
         $metadataBodyError=$null;$handoffFixtureBodyError=$null;$pipeFixtureBodyError=$null;$stopBodyError=$null
         $child=New-InjectedProcess;$held=New-InjectedProcess;$parent=New-InjectedProcess;$repro=New-InjectedProcess
         $treeParent=New-InjectedProcess;$nested=New-InjectedProcess;$rootOutput=New-InjectedOutput;$rootError=New-InjectedOutput
@@ -182,10 +183,10 @@ try {
         }
         try {
             switch($case.kind) {
-                'Metadata' {. $metadataFinalizer}
-                'Handoff' {. $handoffFinalizer}
-                'Pipe' {. $pipeFinalizer}
-                'Tree' {. $treeFinalizer}
+                'Metadata' {. $metadataFinalizer | ForEach-Object { $replayOutput.Add($_) }}
+                'Handoff' {. $handoffFinalizer | ForEach-Object { $replayOutput.Add($_) }}
+                'Pipe' {. $pipeFinalizer | ForEach-Object { $replayOutput.Add($_) }}
+                'Tree' {. $treeFinalizer | ForEach-Object { $replayOutput.Add($_) }}
                 'Controller' {
                     $name='success'
                     $result=[pscustomobject]@{state=$(if($case.unsafe){'Unexpected'}else{'Completed'});executionStarted=$true;operations=@(1,2,3);cleanup=[pscustomobject]@{}}
@@ -202,12 +203,17 @@ try {
                     if($case.shape.name-eq'OrderedMap'){$result=[ordered]@{state='Completed';executionStarted=$true;operations=@(1,2,3);cleanup=[ordered]@{verified=$true}}}
                     # Unsafe cleanup must win over the preset wrong behavior
                     # state; replay includes the actual pre-assertion guard.
-                    . $controllerTail
+                    . $controllerTail | ForEach-Object { $replayOutput.Add($_) }
                 }
             }
         }catch{$caught=$_}
         $unsafe=$null-ne$caught-and(Test-QualificationCleanupUnverified -Exception $caught.Exception)
         Assert-Equal $case.unsafe $unsafe ($case.name+' preserves actual shared unsafe disposition')
+        # Consume only this injected invocation's success stream, including the
+        # sentinel emitted before its terminating exception. Real outer cleanup
+        # remains unredirected and the parent native guard remains fail closed.
+        $signals=@($replayOutput | Where-Object { $_.ToString() -ceq 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED' })
+        Assert-Equal $(if($case.unsafe){1}else{0}) $signals.Count ($case.name+' retains the expected injected cleanup signal locally')
         if($case.unsafe){Assert-Equal $true ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'unsafe result retains durable scheduling stop'}
         elseif(-not$case.ContainsKey('foreignMarker')){Assert-Equal $false ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'safe cleanup creates no stop marker'}
         if($null-ne$originalBodyError){
@@ -246,7 +252,7 @@ try {
         if($case.ContainsKey('foreignMarker')){
             Assert-Equal 'synthetic-unrelated-marker' ([IO.File]::ReadAllText((Get-QualificationCleanupBlockerPath))) 'verified fixture cannot clear an unrelated suite marker'
         }
-        $replayResults.Add([ordered]@{case=$case.name;result='Pass';expectedUnsafe=$case.unsafe;actualUnsafe=$unsafe;nativeProcessesStarted=0;bodyFailureRetained=$null-ne$originalBodyError})
+        $replayResults.Add([ordered]@{case=$case.name;result='Pass';expectedUnsafe=$case.unsafe;actualUnsafe=$unsafe;capturedUnsafeSignals=$signals.Count;nativeProcessesStarted=0;bodyFailureRetained=$null-ne$originalBodyError})
     }
     $evidence=[ordered]@{recordType='win-pcinfo.actual-fixture-finalizer-replays';result='Pass';scope='Actual AST finalizers/controller assertion suffix under injected process/output faults only';nativeProcessesStarted=0;productionControllerExecuted=$false;cases=$replayResults.ToArray();inputs=@(
         'RecoveryProcessOwnership.Tests.ps1','PrivilegedExecutionPhase.Tests.ps1','QualificationCleanup.Tests.ps1','QualificationCleanup.ps1'
