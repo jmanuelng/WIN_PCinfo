@@ -167,6 +167,86 @@ foreach ($mutation in $mutations) {
         "fixtures cannot authenticate a mutated $($mutation.Class)"
 }
 
+# The embedded inventory is the approval boundary for this exact candidate.
+# Rewriting adjacent manifests/checksums must not admit a different toolchain.
+# This proves substitution refusal, not approval of arbitrary rebuilt sources.
+$signingControl = Invoke-GeneratedApplication -CandidatePath $candidateA -Arguments @(
+    '-Workflow', 'SignAndVerifyCandidate'
+)
+Assert-Equal 20 $signingControl.ExitCode 'the intact control reaches signing request admission'
+Assert-Equal 'SIGNING.REQUEST_MISSING' $signingControl.Records[-1].reasonCode `
+    'an intact package passes preparation before its absent signing request is refused'
+
+$toolchainMutations = @(
+    @{ Name = 'floating-latest'; Change = { param($Inventory, $Tool) $Tool.version = 'latest' } }
+    @{ Name = 'floating-range'; Change = { param($Inventory, $Tool) $Tool.version = '>=1.0.0' } }
+    @{ Name = 'substituted-digest'; Change = { param($Inventory, $Tool) $Tool.digest = ('0' * 64) } }
+    @{ Name = 'unreviewed-tool'; Change = {
+        param($Inventory, $Tool)
+        $extra = $Tool | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
+        $extra.id = 'unreviewed-synthetic-tool'
+        $extra.product = 'build/Unreviewed.ps1'
+        $Inventory.dependencies = @($Inventory.dependencies) + @($extra)
+    } }
+)
+foreach ($mutation in $toolchainMutations) {
+    $mutationRoot = Join-Path $workRoot ('toolchain-' + $mutation.Name)
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $mutationRoot)
+    $mutatedPackage = Join-Path $mutationRoot ([string] $policy.archiveRootName)
+    $inventoryPath = Join-Path $mutatedPackage 'dependency-inventory.json'
+    $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json -Depth 20
+    $tools = @($inventory.dependencies | Where-Object role -eq 'build-tool')
+    Assert-Equal 4 $tools.Count 'the control inventory contains the four reviewed source tools'
+    & $mutation.Change $inventory $tools[0]
+    [IO.File]::WriteAllText($inventoryPath, ($inventory | ConvertTo-Json -Depth 20),
+        [Text.UTF8Encoding]::new($false))
+    $inventoryDigest = (Get-FileHash -LiteralPath $inventoryPath).Hash.ToLowerInvariant()
+    $manifestPath = Join-Path $mutatedPackage 'package-manifest.json'
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -Depth 20
+    $inventoryRecords = @($manifest.resources | Where-Object path -eq 'dependency-inventory.json')
+    Assert-Equal 1 $inventoryRecords.Count 'the manifest authenticates exactly one dependency inventory'
+    $inventoryRecords[0].sha256 = $inventoryDigest
+    $inventoryRecords[0].byteLength = (Get-Item -LiteralPath $inventoryPath).Length
+    [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 20),
+        [Text.UTF8Encoding]::new($false))
+    $checksumsPath = Join-Path $mutatedPackage 'checksums.sha256'
+    $checksums = @(Get-Content -LiteralPath $checksumsPath | ForEach-Object {
+        Assert-Equal $true ($_ -match '^([0-9a-f]{64})  (.+)$') 'adjacent checksum syntax stays valid'
+        $relativePath = $Matches[2]
+        $digest = (Get-FileHash -LiteralPath (Join-Path $mutatedPackage $relativePath)).Hash.ToLowerInvariant()
+        "$digest  $relativePath"
+    })
+    [IO.File]::WriteAllText($checksumsPath, (($checksums -join "`n") + "`n"),
+        [Text.UTF8Encoding]::new($false))
+    foreach ($resource in @($manifest.resources)) {
+        Assert-Equal $resource.sha256 ((Get-FileHash -LiteralPath (
+            Join-Path $mutatedPackage $resource.path)).Hash.ToLowerInvariant()) `
+            'the rewritten adjacent manifest is honestly consistent with the modified package'
+        Assert-Equal $resource.byteLength (Get-Item -LiteralPath (Join-Path $mutatedPackage $resource.path)).Length `
+            'the rewritten manifest also retains honest resource sizes'
+    }
+    $mutatedCandidate = Join-Path $mutatedPackage 'WIN-PCInfo.ps1'
+    Assert-Equal $build.generatedContentIdentity.sha256 (
+        (Get-FileHash -LiteralPath $mutatedCandidate).Hash.ToLowerInvariant()
+    ) 'toolchain substitution keeps the approved primary bytes unchanged'
+    $signingWorkspace = Join-Path $mutationRoot 'signing-must-not-start'
+    foreach ($workflow in @('Verify', 'SignAndVerifyCandidate')) {
+        $arguments = @('-Workflow', $workflow)
+        if ($workflow -eq 'SignAndVerifyCandidate') {
+            $arguments += @('-SigningSessionRequestPath', (Join-Path $mutationRoot 'absent-request.json'),
+                '-SigningWorkspacePath', $signingWorkspace)
+        }
+        $refused = Invoke-GeneratedApplication -CandidatePath $mutatedCandidate -Arguments $arguments
+        Assert-Equal 20 $refused.ExitCode "$($mutation.Name) refuses $workflow before admission"
+        Assert-Equal 1 $refused.Records.Count 'only the preparation terminal escapes'
+        Assert-Equal 'win-pcinfo.terminal' $refused.Records[0].recordType 'no signing or progress result escapes'
+        Assert-Equal 'NotStarted' $refused.Records[0].outcome 'substitution never starts a workflow'
+        Assert-Equal 'PREPARATION.INTEGRITY_FAILED' $refused.Records[0].reasonCode 'embedded approval defeats rewritten adjacency'
+        Assert-Equal $false $refused.Records[0].collectionStarted 'substitution starts no collection'
+        Assert-Equal $false (Test-Path -LiteralPath $signingWorkspace) 'refusal creates no signing workspace'
+    }
+}
+
 $missingRoot = Join-Path $workRoot 'mutate-missing-schema'
 [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $missingRoot)
 $missingPackage = Join-Path $missingRoot ([string] $policy.archiveRootName)
