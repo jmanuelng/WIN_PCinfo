@@ -538,6 +538,9 @@ if ($RequireQualityBudgets) {
         throw 'This witness/recovery configuration is outside the closed disk write inventory; quality remains NotQualified.'
     }
     $witnessFault=if ($QualificationPlanFault -cin @('PrivilegePostStartLoss','PrivilegePreStartTimeout','PrivilegePreStartCancel')) { $QualificationPlanFault } else { '' }
+    # Release unreachable source-adapter ASTs before the next full-module parse.
+    # Native lifetime peaks still include every preceding setup allocation.
+    [GC]::Collect(2,[GCCollectionMode]::Aggressive,$true,$true)
     $diskInstrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $testRoot -CandidatePath $candidate -HarnessPath $PSCommandPath -WitnessFault $witnessFault
     $script:QualificationDiskLedger=$diskInstrumentation.Ledger
     $moduleText=$diskInstrumentation.ModuleText
@@ -651,7 +654,12 @@ if ($RequireQualityBudgets) {
     }
     else { $session = Start-StatusDeskSession -ModuleText $moduleText -LaunchParameters $launch }
     $watch = [Diagnostics.Stopwatch]::StartNew()
-    while (-not $session.Transport.State.Preparation -and -not $session.Pending.IsCompleted -and $watch.Elapsed.TotalSeconds -lt 30) { Start-Sleep -Milliseconds 25 }
+    while (-not $session.Transport.State.Preparation -and $watch.Elapsed.TotalSeconds -lt 30) {
+        # Match the product timer's controller polling while preparation loads.
+        # Completion can release Pending; stop before consulting it again.
+        if (Complete-StatusDeskSession $session) { break }
+        Start-Sleep -Milliseconds 25
+    }
     Assert-Equal $true ([bool]$session.Transport.State.Preparation) 'actual preparation runs inside the generated worker'
     $preparation = $session.Transport.State.Preparation | ConvertFrom-Json
     Assert-Equal $true $preparation.readyForApproval 'synthetic controlled run has ready local protection'

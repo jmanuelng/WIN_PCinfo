@@ -2,7 +2,7 @@
   "kind": "ControlledAssessmentClosedDiskWriterInventory",
   "version": "1.2.0",
   "candidateSha256": "249255a7508071f46affa96813227662b9d4670bddbb037f970bad194b162e74",
-  "harnessSha256": "c1598f24474cc8528c4d569b8146984c5f33e09bdb275dd432d87fa93a0a42db",
+  "harnessSha256": "6cf5d3a1f24dcc9b83bb27e59112d698a4b4fc1c878c038a8c638649d007afa4",
   "scope": "OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses",
   "writers": [
     "Write-RunRecoveryJournal",
