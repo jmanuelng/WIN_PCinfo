@@ -87,7 +87,7 @@
     },
     {
       "path": "tests/QualificationDiskBounds.ps1",
-      "sha256": "090f7c0c98f8fc787125a1b0b6f795b8e65187d1a84166617cd80dfcf2384dae"
+      "sha256": "859ffff7b97c96f4e85ab5af4de20b9888364ad858b7d7d6707edbdc83db92a1"
     },
     {
       "path": "tests/QualificationWorkspaceSampling.ps1",

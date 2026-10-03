@@ -134,6 +134,20 @@ function Invoke-QualificationWitnessAdmission {
     } finally { [Threading.Monitor]::Exit($ledger.SyncRoot) }
 }
 
+function Get-QualificationFunctionDefinition {
+    param([Parameter(Mandatory)] [string] $Name)
+    $commands=@(Get-Command -Name $Name -CommandType Function -ErrorAction Stop)
+    if($commands.Count-ne1-or$commands[0].Name-cne$Name){throw 'Qualification function identity is not exact.'}
+    $node=$commands[0].ScriptBlock.Ast
+    if($node-is[Management.Automation.Language.FunctionDefinitionAst]-and$node.Name-ceq$Name){
+        return $node.Extent.Text
+    }
+    if($node.Parent-is[Management.Automation.Language.FunctionDefinitionAst]-and$node.Parent.Name-ceq$Name){
+        return $node.Parent.Extent.Text
+    }
+    throw 'Qualification function AST ownership is not admitted.'
+}
+
 function New-QualificationDiskInstrumentation {
     param([string] $ModuleText,[string] $Root,[string] $CandidatePath,[string] $HarnessPath, [string] $WitnessFault = '')
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
@@ -200,13 +214,13 @@ function New-QualificationDiskInstrumentation {
         $ModuleText=$ModuleText.Replace($originalController,$originalController.Replace($launch,$admission+$launch))
     }
     foreach($name in @('Add-QualificationDiskReservation','Assert-QualificationDiskReservation','Invoke-QualificationWitnessAdmission')){
-        $definition=(Get-Command $name -CommandType Function).ScriptBlock.Ast.Parent.Extent.Text
+        $definition=Get-QualificationFunctionDefinition -Name $name
         $controllerDefinitions.Add($definition)
         $ModuleText+=[Environment]::NewLine+$definition
     }
     # A test-only extra argument shares one synchronized ledger between the
     # controller's viewing writer and the ordinary worker's assessment writers.
-    $start=(Get-Command Start-StatusDeskSession -CommandType Function).ScriptBlock.Ast.Parent.Extent.Text
+    $start=Get-QualificationFunctionDefinition -Name 'Start-StatusDeskSession'
     foreach($anchor in @('param($Definitions, $ParameterJson, $Transport)', '.AddArgument($transport)', '. ([scriptblock]::Create($Definitions))')){
         if([regex]::Matches($start,[regex]::Escape($anchor)).Count-ne1){throw 'Qualification shared-ledger launch seam changed.'}
     }

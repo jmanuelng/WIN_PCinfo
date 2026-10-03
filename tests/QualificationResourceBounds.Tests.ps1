@@ -1,19 +1,20 @@
 [CmdletBinding()]
-param()
+param([string]$RepoRoot=(Split-Path -Parent $PSScriptRoot))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-. (Join-Path $PSScriptRoot 'TestHarness.ps1')
-. (Join-Path $PSScriptRoot 'QualificationResourceBounds.ps1')
-. (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1')
-. (Join-Path (Split-Path -Parent $PSScriptRoot) 'src/StatusDesk.ps1')
-$repositoryRoot=Split-Path -Parent $PSScriptRoot
+$testDirectory=Join-Path $RepoRoot 'tests'
+. (Join-Path $testDirectory 'TestHarness.ps1')
+. (Join-Path $testDirectory 'QualificationResourceBounds.ps1')
+. (Join-Path $testDirectory 'QualificationDiskBounds.ps1')
+. (Join-Path $RepoRoot 'src/StatusDesk.ps1')
+$repositoryRoot=$RepoRoot
 $root=Join-Path $repositoryRoot ('.test-output/resource-bounds-'+[guid]::NewGuid().ToString('N'))
 $null=[IO.Directory]::CreateDirectory($root)
 $calibrationPath=Join-Path $root 'calibration.json'
 $bodyError=$null
 try {
     Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @(
-        '-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'QualificationResourceBounds.ps1'),
+        '-NoLogo','-NoProfile','-File',(Join-Path $testDirectory 'QualificationResourceBounds.ps1'),
         '-Calibrate','-OutputPath',$calibrationPath)
     Assert-Equal $true (Test-QualificationMemoryCalibration -Path $calibrationPath) 'target-runtime native calibration is admitted'
     $original=[IO.File]::ReadAllText($calibrationPath)
@@ -70,11 +71,52 @@ try {
         '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
     $moduleText=($regions|ForEach-Object{$_.Groups[2].Value})-join[Environment]::NewLine
     $owned=Join-Path $root 'owned'
-    $instrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $owned -CandidatePath $candidate -HarnessPath (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1')
-    Assert-Equal ((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1') -Algorithm SHA256).Hash.ToLowerInvariant()) $instrumentation.instrumentationSha256 'reservation formulas retain their exact instrumentation identity'
+    $instrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $owned -CandidatePath $candidate -HarnessPath (Join-Path $testDirectory 'StatusDeskEngine.Tests.ps1')
+    Assert-Equal ((Get-FileHash -LiteralPath (Join-Path $testDirectory 'QualificationDiskBounds.ps1') -Algorithm SHA256).Hash.ToLowerInvariant()) $instrumentation.instrumentationSha256 'reservation formulas retain their exact instrumentation identity'
+    # Inspect the actual emitted definitions, then load them in the caller's
+    # real order. Startup must preserve independently installed controller polls.
+    $expectedDefinitions=@('Write-RunRecoveryJournal','Write-RegisteredEvidenceArtifact',
+        'Write-ProtectedPackageEnvelope','Write-RecipientProfileDocument',
+        'Export-RestrictedAssessmentReport','New-EvidenceWorkspaceOwnedWriteStream',
+        'Add-QualificationDiskReservation','Assert-QualificationDiskReservation',
+        'Invoke-QualificationWitnessAdmission')
+    foreach($projection in @(
+        @{text=$instrumentation.ControllerDefinitions;expected=$expectedDefinitions;name='controller writers'}
+        @{text=$instrumentation.ControllerStart;expected=@('Start-StatusDeskSession');name='session startup'}
+    )){
+        $projectionTokens=$null;$projectionErrors=$null
+        $projectionAst=[Management.Automation.Language.Parser]::ParseInput($projection.text,[ref]$projectionTokens,[ref]$projectionErrors)
+        Assert-Equal 0 $projectionErrors.Count ($projection.name+' source parses')
+        $emitted=@($projectionAst.FindAll({param($n)$n-is[Management.Automation.Language.FunctionDefinitionAst]},$false))
+        Assert-Equal $projection.expected.Count $emitted.Count ($projection.name+' emits only its intended function cohort')
+        foreach($name in $projection.expected){
+            Assert-Equal 1 @($emitted|Where-Object Name -CEQ $name).Count ($projection.name+' emits '+$name+' exactly once')
+        }
+    }
+    $controllerProjection=& {
+        param($Definitions,$Start)
+        . ([scriptblock]::Create($Definitions))
+        function Send-StatusDeskRecord { 'inert.sender.sentinel' }
+        function Complete-StatusDeskSession { 'inert.poll.sentinel' }
+        $senderBefore=(Get-Command Send-StatusDeskRecord).ScriptBlock.ToString()
+        $pollBefore=(Get-Command Complete-StatusDeskSession).ScriptBlock.ToString()
+        $writerBefore=(Get-Command Export-RestrictedAssessmentReport).ScriptBlock.ToString()
+        . ([scriptblock]::Create($Start))
+        [pscustomobject]@{
+            SenderPreserved=((Get-Command Send-StatusDeskRecord).ScriptBlock.ToString()-ceq$senderBefore)
+            PollPreserved=((Get-Command Complete-StatusDeskSession).ScriptBlock.ToString()-ceq$pollBefore)
+            WriterPreserved=((Get-Command Export-RestrictedAssessmentReport).ScriptBlock.ToString()-ceq$writerBefore)
+            WriterIsBounded=$writerBefore.Contains('Add-QualificationDiskReservation -Path $partialPath')
+        }
+    } $instrumentation.ControllerDefinitions $instrumentation.ControllerStart
+    Assert-Equal $true $controllerProjection.SenderPreserved 'actual startup import preserves installed progress publication'
+    Assert-Equal $true $controllerProjection.PollPreserved 'actual startup import preserves installed controller polling'
+    Assert-Equal $true $controllerProjection.WriterPreserved 'actual startup import preserves bounded controller writers'
+    Assert-Equal $true $controllerProjection.WriterIsBounded 'the preserved writer contains the actual reservation guard'
+
     $brokenRoot=Join-Path $root 'broken-source'
     $rejected=$false
-    try{$null=New-QualificationDiskInstrumentation -ModuleText 'function unrelated {}' -Root $brokenRoot -CandidatePath $candidate -HarnessPath (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1')}catch{$rejected=$true}
+    try{$null=New-QualificationDiskInstrumentation -ModuleText 'function unrelated {}' -Root $brokenRoot -CandidatePath $candidate -HarnessPath (Join-Path $testDirectory 'StatusDeskEngine.Tests.ps1')}catch{$rejected=$true}
     Assert-Equal $true $rejected 'changed writer derivation is refused'
     Assert-Equal $false ([IO.Directory]::Exists($brokenRoot)) 'failed derivation creates no unregistered owned directory'
     $script:QualificationDiskLedger=$instrumentation.Ledger
@@ -98,7 +140,7 @@ try {
     $drift=Join-Path $root 'different-candidate.ps1'
     [IO.File]::WriteAllText($drift,'synthetic different source')
     $rejected=$false
-    try{$null=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root (Join-Path $root 'drift') -CandidatePath $drift -HarnessPath (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1')}catch{$rejected=$true}
+    try{$null=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root (Join-Path $root 'drift') -CandidatePath $drift -HarnessPath (Join-Path $testDirectory 'StatusDeskEngine.Tests.ps1')}catch{$rejected=$true}
     Assert-Equal $true $rejected 'different candidate bytes cannot reuse the reviewed writer inventory'
 }
 catch{$bodyError=$_}
