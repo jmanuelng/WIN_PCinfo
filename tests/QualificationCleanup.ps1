@@ -51,6 +51,28 @@ function Invoke-QualificationTestProcess {
     Assert-QualificationTestProcessResult -Output $caseOutput -ExitCode $caseExitCode
 }
 
+
+function Assert-QualificationOwnedCleanupResult {
+    param([AllowNull()] [object] $Result)
+    # Inspect actual controller cleanup before behavior assertions can obscure
+    # the unsafe state. Missing fields or a non-Boolean value fail inside the
+    # shared finalizer, retaining its durable and in-process stop signals.
+    Complete-QualificationHarness -Cleanup @({
+        if ($null -eq $Result -or
+            ($Result.PSObject.BaseObject -isnot [Collections.IDictionary] -and
+             $Result.PSObject.BaseObject -isnot [System.Management.Automation.PSCustomObject])) {
+            throw 'Actual owned controller result is not a scalar record.'
+        }
+        $cleanup=$Result.cleanup
+        if ($null -eq $cleanup -or
+            ($cleanup.PSObject.BaseObject -isnot [Collections.IDictionary] -and
+             $cleanup.PSObject.BaseObject -isnot [System.Management.Automation.PSCustomObject]) -or
+            $cleanup.verified -isnot [bool] -or -not $cleanup.verified) {
+            throw 'Actual owned controller cleanup is not strictly verified.'
+        }
+    })
+}
+
 function Complete-QualificationHarness {
     param(
         [AllowNull()] [Management.Automation.ErrorRecord] $BodyError,

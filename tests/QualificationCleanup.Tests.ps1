@@ -17,6 +17,19 @@ function Get-HarnessFinalization {
     [scriptblock]::Create($source.Remove($offset,$statement.Body.Extent.Text.Length).Insert($offset,'{'+$Body+'}'))
 }
 
+function Invoke-ExpectedQualificationHarnessFault {
+    param([Parameter(Mandatory)][scriptblock] $Program,
+          [Parameter(Mandatory)][string] $BlockerPath)
+    $observed=@{failure=$null;blocked=$false}
+    $null = & {
+        function Get-QualificationCleanupBlockerPath { $BlockerPath }
+        try { . $Program } catch { $observed.failure=$_ }
+        try { Assert-QualificationCleanupReady } catch { $observed.blocked=$true }
+    }
+    # The private override has ended before the caller's real outer cleanup.
+    return $observed
+}
+
 function Test-CompletedSessionCleanupFault {
     param([ValidateSet('UnsafeBody','UnsafeTerminal','MissingTerminal','InvalidRecord','MalformedTerminal','StringVerified','ArrayTerminal','NullTerminal','ArrayRecordType','ArrayOutcome','NullOutcome')][string]$Fault='UnsafeBody')
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
@@ -25,6 +38,7 @@ function Test-CompletedSessionCleanupFault {
     $resolvedRoot=[IO.Path]::GetFullPath($testRoot)
     if(-not $resolvedRoot.StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
     $null=[IO.Directory]::CreateDirectory($testRoot)
+    $syntheticBlocker=Join-Path $testRoot 'expected-cleanup-blocked.json'
     $journal=Join-Path $testRoot 'owned-recovery-journal.txt'
     [IO.File]::WriteAllText($journal,'synthetic owned recovery evidence')
     $FailureKind='None'
@@ -56,19 +70,20 @@ function Test-CompletedSessionCleanupFault {
             $body=if($Fault -ceq 'UnsafeBody'){
                 '$failure=[InvalidOperationException]::new("Synthetic completed child cleanup uncertainty");$failure.Data["OwnedCleanupUnverified"]=$true;throw $failure'
             }else{'throw "Synthetic assertion before local terminal parsing"'}
-            . (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body $body)
+            $observation=Invoke-ExpectedQualificationHarnessFault -BlockerPath $syntheticBlocker -Program (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body $body)
+            $caught=$observation.failure
         }catch{$caught=$_}
         Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'a completed runspace cannot erase an unverified child recovery workspace'
         Assert-Equal 'synthetic owned recovery evidence' ([IO.File]::ReadAllText($journal)) 'unsafe body metadata preserves the exact recovery journal'
         Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $caught.Exception) 'completed unsafe child metadata remains a scheduling blocker'
-        Assert-Equal $true ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'completed unsafe body produces a durable scheduling stop'
+        Assert-Equal $true ([IO.File]::Exists($syntheticBlocker)) 'completed unsafe body produces a durable scheduling stop'
     }finally{
         $session.Transport.Cancellation.Dispose();$session.Transport.DecisionReady.Dispose();$session.Transport.Events.Dispose()
         # This replay creates no process and owns exactly this fresh synthetic root.
         if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
         if([IO.Directory]::Exists($testRoot)){[IO.Directory]::Delete($testRoot,$true)}
         if([IO.Directory]::Exists($testRoot)){throw 'Controlled replay directory absence not verified.'}
-        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+        if([IO.File]::Exists($syntheticBlocker)){[IO.File]::Delete($syntheticBlocker)}
     }
 }
 Test-CompletedSessionCleanupFault
@@ -89,6 +104,7 @@ function Test-LateSessionCleanupUncertainty {
     $testRoot=Join-Path $repositoryRoot ('.test-output/late-finalization-'+[guid]::NewGuid().ToString('N'))
     if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
     $null=[IO.Directory]::CreateDirectory($testRoot)
+    $syntheticBlocker=Join-Path $testRoot 'expected-cleanup-blocked.json'
     $journal=Join-Path $testRoot 'owned-recovery-journal.txt'
     [IO.File]::WriteAllText($journal,'synthetic late cleanup recovery')
     $tokens=$null;$parseErrors=$null
@@ -116,7 +132,7 @@ function Test-LateSessionCleanupUncertainty {
     $caught=$null
     try{
         if(-not $pending.AsyncWaitHandle.WaitOne(5000)){throw 'Owned synthetic runspace did not finish within its bound.'}
-        try{. (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body 'throw "Synthetic early ordinary assertion"')}catch{$caught=$_}
+        try{$observation=Invoke-ExpectedQualificationHarnessFault -BlockerPath $syntheticBlocker -Program (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body 'throw "Synthetic early ordinary assertion"'); $caught=$observation.failure}catch{$caught=$_}
         Assert-Equal $true $session.Completed 'actual EndInvoke consumes its result and disposes both exact owned handles'
         Assert-Equal $true $session.Finalization.WorkerDisposed 'late cleanup uncertainty does not skip worker disposal'
         Assert-Equal $true $session.Finalization.RunspaceDisposed 'late cleanup uncertainty does not skip runspace disposal'
@@ -125,14 +141,14 @@ function Test-LateSessionCleanupUncertainty {
         Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $caught.Exception) 'late unsafe result remains explicitly blocked'
         Assert-Equal $true ($caught.Exception.ToString().Contains('Synthetic early ordinary assertion')) 'early body failure remains independently retained'
         Assert-Equal $true ($caught.Exception.ToString().Contains('Synthetic late EndInvoke cleanup uncertainty')) 'late worker failure remains independently retained'
-        Assert-Equal $true ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'late unsafe result emits a durable blocker'
+        Assert-Equal $true ([IO.File]::Exists($syntheticBlocker)) 'late unsafe result emits a durable blocker'
     }finally{
         $worker.Dispose();$runspace.Dispose()
         $session.Transport.Cancellation.Dispose();$session.Transport.DecisionReady.Dispose();$session.Transport.Events.Dispose()
         if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
         if([IO.Directory]::Exists($testRoot)){[IO.Directory]::Delete($testRoot,$true)}
         if([IO.Directory]::Exists($testRoot)){throw 'Controlled replay directory absence not verified.'}
-        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+        if([IO.File]::Exists($syntheticBlocker)){[IO.File]::Delete($syntheticBlocker)}
     }
 }
 Test-LateSessionCleanupUncertainty
@@ -144,6 +160,7 @@ function Test-VerifiedSyntheticCleanupRelease {
     $testRoot=Join-Path $repositoryRoot ('.test-output/known-cleanup-'+[guid]::NewGuid().ToString('N'))
     if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
     $null=[IO.Directory]::CreateDirectory($testRoot)
+    $syntheticBlocker=Join-Path $testRoot 'expected-cleanup-blocked.json'
     $journal=Join-Path $testRoot 'synthetic-owned-evidence.txt'
     [IO.File]::WriteAllText($journal,'synthetic known file lock')
     $syntheticLock=[IO.File]::Open($journal,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
@@ -178,11 +195,12 @@ function Test-VerifiedSyntheticCleanupRelease {
     }else{'$null=0'}
     $caught=$null
     try{
-        try{. (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body $body)}catch{$caught=$_}
+        try{$observation=Invoke-ExpectedQualificationHarnessFault -BlockerPath $syntheticBlocker -Program (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body $body)
+            $caught=$observation.failure}catch{$caught=$_}
         Assert-Equal $false $syntheticLock.CanRead 'the exact fixture FileStream is closed'
         Assert-Equal $unsafe ([IO.Directory]::Exists($testRoot)) 'only exact lock release with every independent native absence proof permits fixture cleanup'
         Assert-Equal (-not $unsafe) ($null -eq $caught) 'missing, false or mistyped proofs and unsafe body metadata block further scheduling'
-        Assert-Equal $unsafe ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'unsafe fixture recovery stays durably blocked'
+        Assert-Equal $unsafe ([IO.File]::Exists($syntheticBlocker)) 'unsafe fixture recovery stays durably blocked'
         if($unsafe){
             Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $caught.Exception) 'unsafe fixture cleanup is explicitly unverified'
             Assert-Equal 'synthetic known file lock' ([IO.File]::ReadAllText($journal)) 'unsafe fixture preserves its exact recovery evidence'
@@ -193,7 +211,7 @@ function Test-VerifiedSyntheticCleanupRelease {
         if(-not [IO.Path]::GetFullPath($testRoot).StartsWith($ownedParent,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected replay cleanup root.'}
         if([IO.Directory]::Exists($testRoot)){[IO.Directory]::Delete($testRoot,$true)}
         if([IO.Directory]::Exists($testRoot)){throw 'Controlled replay directory absence not verified.'}
-        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+        if([IO.File]::Exists($syntheticBlocker)){[IO.File]::Delete($syntheticBlocker)}
     }
 }
 Test-VerifiedSyntheticCleanupRelease
@@ -203,9 +221,12 @@ foreach($fault in @('Privilege','System','Standard','MissingProof','StringProof'
 
 function Test-StatusDeskRetentionFailure {
     param([ValidateSet('Write','Sampling','Serialization','Worker')] [string] $Fault = 'Write')
+    # Match the actual harness's ordinary plan-fault parameter default.
+    $QualificationPlanFault=''
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $testRoot=Join-Path $repositoryRoot ('.test-output/cleanup-negative-'+[guid]::NewGuid().ToString('N'))
     $null=[IO.Directory]::CreateDirectory($testRoot)
+    $syntheticBlocker=Join-Path $testRoot 'expected-cleanup-blocked.json'
     $sentinel=Join-Path $testRoot 'owned.txt'
     [IO.File]::WriteAllText($sentinel,'synthetic owned fixture')
     # Opening a directory as a file gives a real access-denial write failure.
@@ -247,15 +268,15 @@ function Test-StatusDeskRetentionFailure {
     }
     $errorRecord=$null
     try {
-        . (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body "throw 'Synthetic body failure'")
+        $observation=Invoke-ExpectedQualificationHarnessFault -BlockerPath $syntheticBlocker -Program (Get-HarnessFinalization -File 'StatusDeskEngine.Tests.ps1' -Body "throw 'Synthetic body failure'")
+        $errorRecord=$observation.failure
     }
     catch { $errorRecord=$_ }
     try {
         if ($Fault -eq 'Worker') {
             Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'an unverified worker preserves its recovery workspace'
-            Assert-Equal $true ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'unverified cleanup creates a durable stop signal'
-            $blocked=$false
-            try { Assert-QualificationCleanupReady } catch { $blocked=$true }
+            Assert-Equal $true ([IO.File]::Exists($syntheticBlocker)) 'unverified cleanup creates a durable stop signal'
+            $blocked=$observation.blocked
             Assert-Equal $true $blocked 'unverified cleanup blocks further qualification execution'
             Assert-Equal $true ($errorRecord.Exception.ToString().Contains('Synthetic owned worker remains active')) 'cleanup failure survives alongside body and evidence failures'
             Assert-Equal $true ($errorRecord.Exception.ToString().Contains('Synthetic body failure')) 'unverified cleanup preserves the original body failure'
@@ -282,7 +303,7 @@ function Test-StatusDeskRetentionFailure {
             # The controlled worker adapter creates no process. Its owned handles
             # and directory have now been verified absent before removing its flag.
             if ([IO.Directory]::Exists($testRoot)) { throw 'Synthetic worker cleanup remains unverified.' }
-            [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+            if([IO.File]::Exists($syntheticBlocker)){[IO.File]::Delete($syntheticBlocker)}
         }
     }
 }
@@ -296,6 +317,7 @@ function Test-WrapperRetentionFailure {
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $root=Join-Path $repositoryRoot ('.test-output/wrapper-negative-'+[guid]::NewGuid().ToString('N'))
     $resultRoot=$root; $null=[IO.Directory]::CreateDirectory($root)
+    $syntheticBlocker=Join-Path $root 'expected-cleanup-blocked.json'
     $resultPath=Join-Path $root 'synthetic-summary.json'
     [IO.File]::WriteAllText($resultPath,'{"synthetic":true}')
     $blockedDestination=Join-Path $root 'not-a-directory'
@@ -305,7 +327,7 @@ function Test-WrapperRetentionFailure {
     $bodyError=$null; $errorRecord=$null
     try {
         $body=if ($UnsafeChild) { '$failure=[InvalidOperationException]::new("Synthetic wrapper body failure"); $failure.Data["OwnedCleanupUnverified"]=$true; throw $failure' } else { "throw 'Synthetic wrapper body failure'" }
-        try { . (Get-HarnessFinalization -File $File -Body $body) }
+        try { $observation=Invoke-ExpectedQualificationHarnessFault -BlockerPath $syntheticBlocker -Program (Get-HarnessFinalization -File $File -Body $body); $errorRecord=$observation.failure }
         catch { $errorRecord=$_ }
         Assert-Equal ([bool]$UnsafeChild) ([IO.Directory]::Exists($root)) "$File preserves unsafe child state and otherwise removes its owned workspace"
         Assert-Equal $true ($null -ne $errorRecord) "$File cannot pass after retention failure"
@@ -317,7 +339,7 @@ function Test-WrapperRetentionFailure {
         if ([IO.Directory]::Exists($root)) { [IO.Directory]::Delete($root,$true) }
         if ($UnsafeChild) {
             if ([IO.Directory]::Exists($root)) { throw 'Controlled wrapper cleanup remains unverified.' }
-            [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+            if([IO.File]::Exists($syntheticBlocker)){[IO.File]::Delete($syntheticBlocker)}
         }
     }
 }
@@ -328,6 +350,8 @@ Test-WrapperRetentionFailure -File 'OfficialSchemaQualification.Tests.ps1' -Unsa
 
 function Test-StatusDeskCleanupProjection {
     param([switch] $Recovery)
+    # Match the actual harness's ordinary plan-fault parameter default.
+    $QualificationPlanFault=''
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $testRoot=Join-Path $repositoryRoot ('.test-output/projection-'+[guid]::NewGuid().ToString('N'))
     $null=[IO.Directory]::CreateDirectory($testRoot)
@@ -412,12 +436,14 @@ function Test-RecoveryParentCleanupFailure {
     $allowedRoot=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
     $testRoot=Join-Path $repositoryRoot ('.test-output/recovery-parent-'+[guid]::NewGuid().ToString('N'))
     $null=[IO.Directory]::CreateDirectory($testRoot)
+    $syntheticBlocker=Join-Path $testRoot 'expected-cleanup-blocked.json'
     $child=$null; $ownedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new(); $recoveryBodyError=$null
     $recoveryCleanup=@{childOutputVerified=$false;descendantsAbsent=$false}; $interrupted=$false
     $failure=$null
     try {
         try {
-            . (Get-HarnessFinalization -File 'StatusDeskRecovery.Tests.ps1' -Body '$failure=[InvalidOperationException]::new("Synthetic recovery child failure"); $failure.Data["OwnedCleanupUnverified"]=$true; throw $failure')
+            $observation=Invoke-ExpectedQualificationHarnessFault -BlockerPath $syntheticBlocker -Program (Get-HarnessFinalization -File 'StatusDeskRecovery.Tests.ps1' -Body '$failure=[InvalidOperationException]::new("Synthetic recovery child failure"); $failure.Data["OwnedCleanupUnverified"]=$true; throw $failure')
+            $failure=$observation.failure
         }
         catch { $failure=$_ }
         Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'recovery parent preserves unverified child recovery state'
@@ -427,7 +453,7 @@ function Test-RecoveryParentCleanupFailure {
     finally {
         if ([IO.Directory]::Exists($testRoot)) { [IO.Directory]::Delete($testRoot,$true) }
         if ([IO.Directory]::Exists($testRoot)) { throw 'Controlled recovery-parent cleanup remains unverified.' }
-        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+        if([IO.File]::Exists($syntheticBlocker)){[IO.File]::Delete($syntheticBlocker)}
     }
 }
 Test-RecoveryParentCleanupFailure
@@ -449,25 +475,72 @@ exit 1
     $start.UseShellExecute=$false; $start.CreateNoWindow=$true
     $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
     foreach ($argument in @('-NoLogo','-NoProfile','-File',$childPath,'-HandoffPath',$handoffPath)) { $start.ArgumentList.Add($argument) }
-    $child=[Diagnostics.Process]::Start($start)
-    $childOutput=$child.StandardOutput.ReadToEndAsync(); $childError=$child.StandardError.ReadToEndAsync()
+    $child=$null; $childOutput=$null; $childError=$null
+    $handoffFixtureBodyError=$null
+    $handoffFixtureCleanup=@{stopCompleted=$false;childAbsent=$false;outputClosed=$false;errorClosed=$false;handleDisposed=$false}
     $ownedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new(); $recoveryBodyError=$null
     $recoveryCleanup=@{childOutputVerified=$false;descendantsAbsent=$false}; $interrupted=$false
     try {
+        $child=[Diagnostics.Process]::Start($start)
+        $childOutput=$child.StandardOutput.ReadToEndAsync(); $childError=$child.StandardError.ReadToEndAsync()
         Assert-Equal $true $child.WaitForExit(5000) 'controlled child completes without a live application'
+        $handoffFixtureCleanup.childAbsent=$true
         Assert-Equal $true ([IO.File]::Exists($handoffPath)) 'controlled child creates its handoff before failing'
-        $failure=$null
-        try { . (Get-HarnessFinalization -File 'StatusDeskRecovery.Tests.ps1' -Body "throw 'Synthetic recovery discovery failure'") }
-        catch { $failure=$_ }
+        $expectedHandoff=@{failure=$null}
+        # Confine the intentionally unsafe signal to this fixture's owned root.
+        # Real outer cleanup failures still use the suite's global stop marker.
+        $null = & {
+            function Get-QualificationCleanupBlockerPath { Join-Path $testRoot 'expected-cleanup-blocked.json' }
+            try { . (Get-HarnessFinalization -File 'StatusDeskRecovery.Tests.ps1' -Body "throw 'Synthetic recovery discovery failure'") }
+            catch { $expectedHandoff.failure=$_ }
+        }
+        $failure=$expectedHandoff.failure
         Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'post-handoff unsafe cleanup retains recovery state'
         Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'post-handoff unsafe signal blocks subsequent execution'
     }
+    catch {$handoffFixtureBodyError=$_}
     finally {
-        # Finalization may already have disposed the exact child handle.
-        $child.Dispose()
-        if ([IO.Directory]::Exists($testRoot)) { [IO.Directory]::Delete($testRoot,$true) }
-        if ([IO.Directory]::Exists($testRoot)) { throw 'Controlled handoff fixture cleanup remains unverified.' }
-        [IO.File]::Delete((Get-QualificationCleanupBlockerPath))
+        Complete-QualificationHarness -BodyError $handoffFixtureBodyError -Cleanup @(
+            {
+                # The inner finalizer can dispose this handle after the body
+                # has proved exit; retain that actual observation explicitly.
+                if (-not $handoffFixtureCleanup.childAbsent) {
+                    if ($null -eq $child) { throw 'Controlled handoff child admission remains unverified.' }
+                    if (-not $child.HasExited) { $child.Kill($true) }
+                }
+                $handoffFixtureCleanup.stopCompleted=$true
+            },
+            {
+                if (-not $handoffFixtureCleanup.childAbsent) {
+                    if ($null -eq $child -or -not $child.WaitForExit(5000)) { throw 'Controlled handoff child remains active.' }
+                    $handoffFixtureCleanup.childAbsent=$true
+                }
+            },
+            {
+                if ($null -eq $childOutput -or -not $childOutput.Wait(5000)) {
+                    throw 'Controlled handoff child output remains unverified.'
+                }
+                $handoffFixtureCleanup.outputClosed=$true
+            },
+            {
+                if ($null -eq $childError -or -not $childError.Wait(5000)) {
+                    throw 'Controlled handoff child error output remains unverified.'
+                }
+                $handoffFixtureCleanup.errorClosed=$true
+            },
+            {
+                if ($null -ne $child) {$child.Dispose()}
+                $handoffFixtureCleanup.handleDisposed=$true
+            },
+            {
+                if (-not $handoffFixtureCleanup.stopCompleted -or -not $handoffFixtureCleanup.childAbsent -or -not $handoffFixtureCleanup.outputClosed -or
+                    -not $handoffFixtureCleanup.errorClosed -or -not $handoffFixtureCleanup.handleDisposed) {
+                    throw 'Preserve unverified handoff fixture recovery state.'
+                }
+                if ([IO.Directory]::Exists($testRoot)) { [IO.Directory]::Delete($testRoot,$true) }
+                if ([IO.Directory]::Exists($testRoot)) { throw 'Controlled handoff fixture cleanup remains unverified.' }
+            }
+        )
     }
 }
 Test-RecoveryChildFailureAfterHandoff
@@ -513,18 +586,111 @@ __BOUNDARY__
     $start=[Diagnostics.ProcessStartInfo]::new(); $start.FileName=Join-Path $PSHOME 'pwsh.exe'
     $start.UseShellExecute=$false; $start.CreateNoWindow=$true; $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
     foreach ($argument in @('-NoLogo','-NoProfile','-File',$reproPath)) { $start.ArgumentList.Add($argument) }
-    $repro=[Diagnostics.Process]::Start($start)
-    $output=$repro.StandardOutput.ReadToEndAsync(); $errorOutput=$repro.StandardError.ReadToEndAsync()
+    $repro=$null; $output=$null; $errorOutput=$null
+    $pipeFixtureBodyError=$null
+    $pipeFixtureCleanup=@{stopCompleted=$false;childAbsent=$false;outputClosed=$false;errorClosed=$false;handleDisposed=$false}
     try {
+        $repro=[Diagnostics.Process]::Start($start)
+        $output=$repro.StandardOutput.ReadToEndAsync(); $errorOutput=$repro.StandardError.ReadToEndAsync()
         Assert-Equal $true $repro.WaitForExit(8000) 'exited child with incomplete output reaches bounded cleanup instead of hanging before finally'
+        $pipeFixtureCleanup.childAbsent=$true
+        Assert-Equal $true $errorOutput.Wait(5000) 'pipe fixture error output closes before reading its result'
+        Assert-Equal $true $output.Wait(5000) 'pipe fixture standard output closes before reading its result'
         Assert-Equal 0 $repro.ExitCode ('incomplete-output boundary completes honestly: '+$errorOutput.GetAwaiter().GetResult())
         Assert-Equal $true ($output.GetAwaiter().GetResult().Contains('SYNTHETIC_INCOMPLETE_PIPE_BLOCKED')) 'bounded output loss blocks further execution'
     }
+    catch {$pipeFixtureBodyError=$_}
     finally {
-        if (-not $repro.HasExited) { $repro.Kill($true); if (-not $repro.WaitForExit(5000)) { throw 'Owned pipe regression remains active.' } }
-        $repro.Dispose()
-        if ([IO.Directory]::Exists($root)) { [IO.Directory]::Delete($root,$true) }
+        Complete-QualificationHarness -BodyError $pipeFixtureBodyError -Cleanup @(
+            {
+                if (-not $pipeFixtureCleanup.childAbsent) {
+                    if ($null -eq $repro) { throw 'Owned pipe fixture child admission remains unverified.' }
+                    if (-not $repro.HasExited) { $repro.Kill($true) }
+                }
+                $pipeFixtureCleanup.stopCompleted=$true
+            },
+            {
+                if (-not $pipeFixtureCleanup.childAbsent) {
+                    if ($null -eq $repro -or -not $repro.WaitForExit(5000)) { throw 'Owned pipe regression remains active.' }
+                    $pipeFixtureCleanup.childAbsent=$true
+                }
+            },
+            {
+                if ($null -eq $output -or -not $output.Wait(5000)) {
+                    throw 'Owned pipe fixture output remains unverified.'
+                }
+                $pipeFixtureCleanup.outputClosed=$true
+            },
+            {
+                if ($null -eq $errorOutput -or -not $errorOutput.Wait(5000)) {
+                    throw 'Owned pipe fixture error output remains unverified.'
+                }
+                $pipeFixtureCleanup.errorClosed=$true
+            },
+            {
+                if ($null -ne $repro) {$repro.Dispose()}
+                $pipeFixtureCleanup.handleDisposed=$true
+            },
+            {
+                if (-not $pipeFixtureCleanup.stopCompleted -or -not $pipeFixtureCleanup.childAbsent -or -not $pipeFixtureCleanup.outputClosed -or
+                    -not $pipeFixtureCleanup.errorClosed -or -not $pipeFixtureCleanup.handleDisposed) {
+                    throw 'Preserve unverified pipe fixture recovery state.'
+                }
+                if ([IO.Directory]::Exists($root)) { [IO.Directory]::Delete($root,$true) }
+                if ([IO.Directory]::Exists($root)) { throw 'Owned pipe fixture recovery state remains present.' }
+            }
+        )
     }
 }
 Test-RecoveryExitedChildWithIncompleteOutput
 Write-Output 'PASS: evidence retention failure cannot bypass owned qualification cleanup.'
+
+
+function Test-ExpectedFaultMarkersPreserveForeignHold {
+    $repositoryRoot=Split-Path -Parent $PSScriptRoot
+    $allowed=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
+    $sentinelRoot=Join-Path $repositoryRoot ('.test-output/foreign-hold-'+[guid]::NewGuid().ToString('N'))
+    if(-not [IO.Path]::GetFullPath($sentinelRoot).StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected sentinel root.'}
+    $null=[IO.Directory]::CreateDirectory($sentinelRoot)
+    $foreignHold=Join-Path $sentinelRoot 'qualification-cleanup-blocked.json'
+    $sentinelBytes=[Text.UTF8Encoding]::new($false).GetBytes('{"owner":"synthetic-unrelated-review","state":"ReviewHold"}')
+    [IO.File]::WriteAllBytes($foreignHold,$sentinelBytes)
+    $sentinelBodyError=$null
+    try {
+        $null = & {
+            function Get-QualificationCleanupBlockerPath { $foreignHold }
+            $programs=@(
+                { Test-CompletedSessionCleanupFault },
+                { Test-LateSessionCleanupUncertainty },
+                { Test-VerifiedSyntheticCleanupRelease -Fault UnsafeBody },
+                { Test-StatusDeskRetentionFailure -Fault Worker },
+                { Test-WrapperRetentionFailure -File 'AssessmentSafetyQualification.Tests.ps1' -UnsafeChild },
+                { Test-RecoveryParentCleanupFailure }
+            )
+            foreach($program in $programs){
+                & $program
+                Assert-Equal $true ([IO.File]::Exists($foreignHold)) 'actual expected-fault caller preserves a foreign hold'
+                Assert-Equal ([Convert]::ToBase64String($sentinelBytes)) ([Convert]::ToBase64String([IO.File]::ReadAllBytes($foreignHold))) 'foreign hold bytes remain exact'
+                Assert-Equal $foreignHold (Get-QualificationCleanupBlockerPath) 'expected-fault scope restores the caller marker path'
+                $blocked=$false
+                try { Assert-QualificationCleanupReady } catch { $blocked=$_.Exception.Message.StartsWith('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED:') }
+                Assert-Equal $true $blocked 'foreign hold still blocks scheduling after expected-fault replay'
+            }
+        }
+        Write-Output 'PASS: all six actual expected-fault callers preserve an unrelated scheduling hold.'
+    } catch { $sentinelBodyError=$_ }
+    finally {
+        # Only this fresh synthetic sentinel root is owned. The child override
+        # has ended, so an unexpected cleanup failure blocks the real suite.
+        Complete-QualificationHarness -BodyError $sentinelBodyError -Cleanup @({
+            $resolved=[IO.Path]::GetFullPath($sentinelRoot)
+            if(-not $resolved.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected sentinel cleanup root.'}
+            if([IO.Directory]::Exists($resolved)){
+                if(([IO.File]::GetAttributes($resolved)-band[IO.FileAttributes]::ReparsePoint)-ne0){throw 'Sentinel root is a reparse point.'}
+                [IO.Directory]::Delete($resolved,$true)
+            }
+            if([IO.Directory]::Exists($resolved)){throw 'Synthetic sentinel root remains.'}
+        })
+    }
+}
+Test-ExpectedFaultMarkersPreserveForeignHold

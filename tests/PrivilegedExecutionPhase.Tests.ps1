@@ -55,6 +55,7 @@ foreach($name in @($cases.Keys)+@('postStartLoss','wrongFinalPhase','success')) 
     $result=Invoke-PrivilegedCollectionPlan -PreparationPlan $plan -PlanDigest $digest `
         -AssessmentUserContext 'subject:synthetic-user:primary' -LocalPackageProtector 'protector:synthetic-initiator' `
         -ValidationScenario AcceptedElevation -FirmwareScenario Supported
+    Assert-QualificationOwnedCleanupResult -Result $result
     Assert-Equal $(if($name -eq 'success'){'Completed'}else{'IntegrityFailed'}) $result.state "$name retains protocol truth"
     Assert-Equal ($name -in @('postStartLoss','wrongFinalPhase','success')) $result.executionStarted "$name cannot invent or discard an authenticated execution transition"
     Assert-Equal $(if($name -eq 'success'){3}else{0}) @($result.operations).Count "$name cannot manufacture admitted operation envelopes"

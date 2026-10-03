@@ -7,6 +7,7 @@ $ErrorActionPreference='Stop'
 $parent=[Diagnostics.Process]::GetCurrentProcess()
 $child=$null
 $held=$null
+$metadataBodyError=$null
 try {
     $start=[Diagnostics.ProcessStartInfo]::new()
     $start.FileName=Join-Path $PSHOME 'pwsh.exe'
@@ -38,14 +39,23 @@ try {
     Assert-Equal $true $child.WaitForExit(5000) 'the exact benign test child stops'
     Assert-Equal $false (Test-RecoveryProcessObservation -Entry $entry -Process $held -Parent $parent -ExpectedImage $start.FileName -ObservedAtUtc $observed) 'an exited lifetime cannot be admitted as a live descendant'
 }
+catch {$metadataBodyError=$_}
 finally {
-    if($null -ne $child){
-        if(-not $child.HasExited){$child.Kill()}
-        if(-not $child.WaitForExit(5000)){throw 'Exact-owned metadata test child absence remains unverified.'}
-        $child.Dispose()
-    }
-    if($null -ne $held){$held.Dispose()}
-    $parent.Dispose()
+    Complete-QualificationHarness -BodyError $metadataBodyError -Cleanup @(
+        {
+            if($null -ne $child){
+                if(-not $child.HasExited){$child.Kill()}
+            }
+        },
+        {
+            if($null -ne $child -and -not $child.WaitForExit(5000)){
+                throw 'Exact-owned metadata test child absence remains unverified.'
+            }
+        },
+        {if($null -ne $child){$child.Dispose()}},
+        {if($null -ne $held){$held.Dispose()}},
+        {$parent.Dispose()}
+    )
 }
 
 # Exercise the failed-admission finalizer against a real parent with a child
@@ -54,7 +64,8 @@ finally {
 $ownedRoot = Join-Path (Split-Path -Parent $PSScriptRoot) ('.test-output/recovery-stop-' + [guid]::NewGuid().ToString('N'))
 $null=[IO.Directory]::CreateDirectory($ownedRoot)
 $witness=Join-Path $ownedRoot 'nested-ready'
-$root=$null;$nested=$null;$rootOutput=$null;$rootError=$null;$stopBodyError=$null;$stopCleanupVerified=$false
+$root=$null;$nested=$null;$rootOutput=$null;$rootError=$null;$stopBodyError=$null
+$stopFixtureCleanup=@{parentStop=$false;parentAbsent=$false;nestedStop=$false;nestedAbsent=$false;outputClosed=$false;errorClosed=$false;nestedDisposed=$false;parentDisposed=$false}
 try {
     $code=@'
 $start=[Diagnostics.ProcessStartInfo]::new()
@@ -91,28 +102,45 @@ finally {
     Complete-QualificationHarness -BodyError $stopBodyError -Cleanup @(
         {
             if($null-ne$root){Stop-RecoveryApplication -Process $root}
+            $stopFixtureCleanup.parentStop=$true
         },
         {
-            if($null-eq$nested-and [IO.File]::Exists($witness)){throw 'Preserve stopped-parent witness because nested child admission was incomplete.'}
-            if($null-ne$nested){
-                if(-not$nested.HasExited){$nested.Kill()}
-                if(-not$nested.WaitForExit(5000)){throw 'Verified nested fixture child remains active.'}
-            }
-            $script:stopCleanupVerified=$true
+            if($null-ne$root-and-not$root.WaitForExit(5000)){throw 'Exact-owned fixture parent absence remains unverified.'}
+            $stopFixtureCleanup.parentAbsent=$true
         },
         {
-            if($null-ne$root){
-                if(-not$rootOutput.Wait(5000)-or -not$rootError.Wait(5000)){throw 'Exact-owned fixture output remains open.'}
-            }
+            if($null-eq$nested-and($null-ne$root-or [IO.File]::Exists($witness))){throw 'Preserve fixture state because a started parent has no admitted nested child ownership.'}
+            if($null-ne$nested-and-not$nested.HasExited){$nested.Kill()}
+            $stopFixtureCleanup.nestedStop=$true
         },
         {
-            if(-not$stopCleanupVerified){throw 'Preserve incomplete nested-child observation.'}
-            [IO.File]::Delete($witness)
-            [IO.Directory]::Delete($ownedRoot,$false)
+            if($null-eq$nested-and($null-ne$root-or [IO.File]::Exists($witness))){throw 'Nested child absence remains unverified after incomplete admission, even without a witness.'}
+            if($null-ne$nested-and-not$nested.WaitForExit(5000)){throw 'Verified nested fixture child remains active.'}
+            $stopFixtureCleanup.nestedAbsent=$true
+        },
+        {
+            if($null-ne$root-and($null-eq$rootOutput-or-not$rootOutput.Wait(5000))){throw 'Exact-owned fixture standard output remains open.'}
+            $stopFixtureCleanup.outputClosed=$true
+        },
+        {
+            if($null-ne$root-and($null-eq$rootError-or-not$rootError.Wait(5000))){throw 'Exact-owned fixture error output remains open.'}
+            $stopFixtureCleanup.errorClosed=$true
         },
         {
             if($null-ne$nested){$nested.Dispose()}
+            $stopFixtureCleanup.nestedDisposed=$true
+        },
+        {
             if($null-ne$root){$root.Dispose()}
+            $stopFixtureCleanup.parentDisposed=$true
+        },
+        {
+            if(@($stopFixtureCleanup.Values|Where-Object{$_ -isnot [bool]-or-not$_}).Count){
+                throw 'Preserve incomplete parent, nested child, stream or handle cleanup evidence.'
+            }
+            [IO.File]::Delete($witness)
+            [IO.Directory]::Delete($ownedRoot,$false)
+            if([IO.Directory]::Exists($ownedRoot)){throw 'Exact-owned fixture root remains unverified.'}
         }
     )
 }
