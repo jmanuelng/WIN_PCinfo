@@ -139,6 +139,7 @@ try{
         $session.Transport.State.Terminal=$terminal|ConvertTo-Json -Depth 6 -Compress
         if($fault-ceq'MalformedTerminal'){$session.Transport.State.Terminal='{'}
         $FailureKind='None';$QualificationPlanFault='';$qualificationFailed=$false;$qualificationBodyError=$null
+        $ActiveAction='None';$ActiveWorker='Privilege';$CancelDuringPrivilege=$false
         $RequireQualityBudgets=$false;$assessmentQuality=$null
         $quality=[ordered]@{packageBytes=0L;htmlBytes=0L};$qualityWatch=[Diagnostics.Stopwatch]::StartNew()
         $qualificationArguments=[ordered]@{};$projection=[ordered]@{cleanupVerified=$false}
