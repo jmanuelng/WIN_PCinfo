@@ -221,14 +221,22 @@ function New-QualificationDiskInstrumentation {
     # A test-only extra argument shares one synchronized ledger between the
     # controller's viewing writer and the ordinary worker's assessment writers.
     $start=Get-QualificationFunctionDefinition -Name 'Start-StatusDeskSession'
-    foreach($anchor in @('param($Definitions, $ParameterJson, $Transport)', '.AddArgument($transport)', '. ([scriptblock]::Create($Definitions))')){
+    foreach($anchor in @('param($Definitions, $ParameterJson, $Transport)', '.AddArgument($transport)', '. $Definitions')){
         if([regex]::Matches($start,[regex]::Escape($anchor)).Count-ne1){throw 'Qualification shared-ledger launch seam changed.'}
     }
     $start=$start.Replace('param($Definitions, $ParameterJson, $Transport)','param($Definitions, $ParameterJson, $Transport, $DiskLedger)').
         Replace('.AddArgument($transport)','.AddArgument($transport).AddArgument($script:QualificationDiskLedger)').
-        Replace('. ([scriptblock]::Create($Definitions))','$script:QualificationDiskLedger=$DiskLedger; . ([scriptblock]::Create($Definitions))')
+        Replace('. $Definitions','$script:QualificationDiskLedger=$DiskLedger; . $Definitions')
+    # Parse the final controlled worker only after all reservations, witness
+    # admission and helpers have been inserted. The earlier inventory AST is
+    # deliberately not reused: its definitions would bypass instrumentation.
+    # This setup parse remains included in native lifetime resource budgets.
+    $ast=$null; $tokens=$null; $errors=$null
+    $controlledAst=[Management.Automation.Language.Parser]::ParseInput($ModuleText,[ref]$tokens,[ref]$errors)
+    if($errors.Count){throw 'Final controlled qualification definitions do not parse.'}
+    $definitionInitializer=$controlledAst.GetScriptBlock()
     # Derive every writer and launch seam before creating the owned root.
     $null=[IO.Directory]::CreateDirectory($fullRoot)
-    [pscustomobject]@{ModuleText=$ModuleText;ControllerDefinitions=($controllerDefinitions -join [Environment]::NewLine);
+    [pscustomobject]@{ModuleText=$ModuleText;DefinitionInitializer=$definitionInitializer;ControllerDefinitions=($controllerDefinitions -join [Environment]::NewLine);
         ControllerOriginalDefinitions=($originalDefinitions -join [Environment]::NewLine);ControllerStart=$start;Ledger=$ledger;actualSourceInputs=$actualSourceInputs.ToArray();sourceIdentityKind=$manifest.sourceIdentityKind;instrumentationSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1') -Algorithm SHA256).Hash.ToLowerInvariant();inventorySha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'qualification-resource-writers.json')).Hash.ToLowerInvariant()}
 }

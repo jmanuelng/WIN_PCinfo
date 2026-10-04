@@ -1235,14 +1235,18 @@ $validationContext = [pscustomobject][ordered]@{
         $usingMicrosoftConnectivityFixture)
 }
 if ($Mode -eq 'Gui') {
-    # Use this already-loaded application's exact module bytes. No adjacent draft,
-    # unreviewed script, fixture authority or second preparation is admitted.
-    $regions = [regex]::Matches($MyInvocation.MyCommand.ScriptBlock.ToString(),
-        '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
-    $moduleText = ($regions | ForEach-Object { $_.Groups[2].Value }) -join "`n"
-    # Match collections retain the complete input after module extraction.
-    $regions = $null
-    $applicationExitCode = Invoke-StatusDesk -ModuleText $moduleText -LaunchParameters @{
+    # The trust assumption remains this executing candidate's authenticated
+    # bytes. Select its owned top-level initializer directly from the running
+    # AST, so an ambient function with the same name cannot supply definitions.
+    # Missing or ambiguous ownership fails before a GUI worker can be admitted.
+    $initializers = @($MyInvocation.MyCommand.ScriptBlock.Ast.EndBlock.Statements | Where-Object {
+        $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $_.Name -ceq 'Initialize-WinPCInfoDefinitions'
+    })
+    if ($initializers.Count -ne 1) { throw 'The executing application definition initializer is not unique.' }
+    $definitionInitializer = $initializers[0].Body.GetScriptBlock()
+    $initializers = $null
+    $applicationExitCode = Invoke-StatusDesk -DefinitionInitializer $definitionInitializer -LaunchParameters @{
         Request=$request; RuntimeFacts=$runtimeFacts; ArtifactTrustValid=$artifactTrustValid
         ValidationContext=$validationContext
     }

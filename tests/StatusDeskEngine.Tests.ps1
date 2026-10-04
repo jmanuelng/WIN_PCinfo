@@ -582,12 +582,14 @@ if ($RequireQualityBudgets) {
     $diskInstrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $testRoot -CandidatePath $candidate -HarnessPath $PSCommandPath -WitnessFault $witnessFault
     $script:QualificationDiskLedger=$diskInstrumentation.Ledger
     $moduleText=$diskInstrumentation.ModuleText
+    $definitionInitializer=$diskInstrumentation.DefinitionInitializer
     . ([scriptblock]::Create($diskInstrumentation.ControllerDefinitions))
     . ([scriptblock]::Create($diskInstrumentation.ControllerStart))
     $diskInstrumentationAccepted=$true
     # The inventory parser and generated replacement strings are setup only.
     [GC]::Collect(2,[GCCollectionMode]::Aggressive,$true,$true)
 }
+else { $definitionInitializer=[scriptblock]::Create($moduleText) }
     if ($HoldRunLock) {
         $runLock = [Threading.Mutex]::new($false, [string](Get-AssessmentRunLifecyclePolicy).activeRunLock.name)
         $runLockOwned = $runLock.WaitOne(0)
@@ -671,7 +673,7 @@ if ($RequireQualityBudgets) {
             }
         }.GetNewClosure())
         try {
-            $null = Invoke-StatusDesk -ModuleText $moduleText -LaunchParameters $launch -ViewReady {
+            $null = Invoke-StatusDesk -DefinitionInitializer $definitionInitializer -LaunchParameters $launch -ViewReady {
                 param($window, $workerSession)
                 $window.Opacity=0; $window.ShowInTaskbar=$false
                 $uiState.Window=$window; $uiState.Session=$workerSession
@@ -701,7 +703,7 @@ if ($RequireQualityBudgets) {
             Write-Output ('TIMING: action={0}; worker={1}; first={2}ms; maximumGap={3}ms; acknowledgment={4}ms; cancellationToTerminal={5}ms; sampledPrivateMiB={6}; sampledWorkingSetMiB={7}' -f $ActiveAction,$ActiveWorker,$session.Transport.State.FirstProgressMilliseconds,$session.Transport.State.MaximumProgressGapMilliseconds,$uiState.AcknowledgmentMilliseconds,($session.Transport.State.TerminalMilliseconds-$session.Transport.State.CancellationRequestedMilliseconds),[Math]::Round($uiState.PeakPrivateBytes/1MB),[Math]::Round($uiState.PeakWorkingSetBytes/1MB))
         }
     }
-    else { $session = Start-StatusDeskSession -ModuleText $moduleText -LaunchParameters $launch }
+    else { $session = Start-StatusDeskSession -DefinitionInitializer $definitionInitializer -LaunchParameters $launch }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     while (-not $session.Transport.State.Preparation -and $watch.Elapsed.TotalSeconds -lt 30) {
         # Match the product timer's controller polling while preparation loads.

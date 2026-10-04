@@ -65,10 +65,20 @@ function Request-StatusDeskCancellation {
 
 
 function Start-StatusDeskSession {
+    [CmdletBinding(DefaultParameterSetName='Text')]
     param(
-        [Parameter(Mandatory)] [string] $ModuleText,
+        [Parameter(Mandatory, ParameterSetName='Text')] [string] $ModuleText,
+        [Parameter(Mandatory, ParameterSetName='Parsed')] [scriptblock] $DefinitionInitializer,
         [Parameter(Mandatory)] [hashtable] $LaunchParameters
     )
+    # The text compatibility route parses before owning worker resources. The
+    # ordinary GUI supplies its running candidate's already parsed initializer.
+    # Rebind its immutable AST for each fresh worker; a caller-bound block or a
+    # closure would otherwise share the controller's script state and helpers.
+    if ($PSCmdlet.ParameterSetName -eq 'Text') {
+        $DefinitionInitializer = [scriptblock]::Create($ModuleText)
+    }
+    $workerDefinitions = $DefinitionInitializer.Ast.GetScriptBlock()
     $transport = New-StatusDeskTransport
     Send-StatusDeskRecord -Transport $transport -Record (New-ProgressRecord -Sequence 0 `
         -Phase RunControl -State Started -MessageId controller.starting-worker -CompletedUnits 0 -TotalUnits 1)
@@ -82,7 +92,7 @@ function Start-StatusDeskSession {
         param($Definitions, $ParameterJson, $Transport)
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
-        . ([scriptblock]::Create($Definitions))
+        . $Definitions
         $script:StatusDeskTransport = $Transport
         try {
             $parameterObject = Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject $ParameterJson -Depth 40
@@ -107,7 +117,7 @@ function Start-StatusDeskSession {
             })
             $exitCode
         }
-    }.ToString()).AddArgument($ModuleText).AddArgument(
+    }.ToString()).AddArgument($workerDefinitions).AddArgument(
         (Microsoft.PowerShell.Utility\ConvertTo-Json -InputObject $LaunchParameters -Compress -Depth 40)
     ).AddArgument($transport)
     [pscustomobject]@{
@@ -445,14 +455,20 @@ function Stop-StatusDeskForCleanupFailure {
 }
 
 function Invoke-StatusDesk {
-    param([Parameter(Mandatory)] [string] $ModuleText, [Parameter(Mandatory)] [hashtable] $LaunchParameters,
+    [CmdletBinding(DefaultParameterSetName='Text')]
+    param([Parameter(Mandatory, ParameterSetName='Text')] [string] $ModuleText,
+        [Parameter(Mandatory, ParameterSetName='Parsed')] [scriptblock] $DefinitionInitializer,
+        [Parameter(Mandatory)] [hashtable] $LaunchParameters,
         [Parameter()] [scriptblock] $ViewReady)
+    if ($PSCmdlet.ParameterSetName -eq 'Text') {
+        $DefinitionInitializer = [scriptblock]::Create($ModuleText)
+    }
     $window = New-StatusDeskWindow
     $controls = @{}
     foreach ($name in @('ScopeFact','AuthorityFact','NetworkFact','OutputFact','Elapsed','Status',
         'Details','Timeline','Approve','Decline','Cancel','OpenReport','SaveHtml','OpenExisting',
         'SelectRecipient','SetupRecipient','RecoverViews','Recover','Close','ChangeChoices','Retry','Help','About')) { $controls[$name] = $window.FindName($name) }
-    $session = Start-StatusDeskSession -ModuleText $ModuleText -LaunchParameters $LaunchParameters
+    $session = Start-StatusDeskSession -DefinitionInitializer $DefinitionInitializer -LaunchParameters $LaunchParameters
     $state = @{ Preparation=''; Closing=$false; TerminalShown=$false; ViewingCleanupFailed=$false; RecoveryRequested=$false
         NextSelection=$null; NextChoices=$null; RetryRequested=$false; PackagePath=''; ProtectionRoute='Local' }
     $workflowAllowed=$LaunchParameters.ArtifactTrustValid -and -not $LaunchParameters.ValidationContext.IsFixture -and
@@ -669,13 +685,13 @@ function Invoke-StatusDesk {
             $nextLaunch.Request.outputDestination=$state.NextChoices.outputDestination
         }
         if($null -ne $state.NextSelection){$nextLaunch.Request.recipientSelection=$state.NextSelection}
-        return Invoke-StatusDesk -ModuleText $ModuleText -LaunchParameters $nextLaunch -ViewReady $ViewReady
+        return Invoke-StatusDesk -DefinitionInitializer $DefinitionInitializer -LaunchParameters $nextLaunch -ViewReady $ViewReady
     }
     if ($state.RecoveryRequested) {
         $nextLaunch = $LaunchParameters.Clone()
         $nextLaunch.Request = $LaunchParameters.Request | ConvertTo-Json -Depth 40 | ConvertFrom-Json -Depth 40
         $nextLaunch.Request.automationChoices.allowStaleRecovery = $true
-        return Invoke-StatusDesk -ModuleText $ModuleText -LaunchParameters $nextLaunch -ViewReady $ViewReady
+        return Invoke-StatusDesk -DefinitionInitializer $DefinitionInitializer -LaunchParameters $nextLaunch -ViewReady $ViewReady
     }
     $session.ExitCode
 }
