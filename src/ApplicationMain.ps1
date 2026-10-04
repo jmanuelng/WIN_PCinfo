@@ -707,8 +707,19 @@ if ($Workflow -eq 'SignAndVerifyCandidate') {
             }
         }
         catch {
+            $sessionRemoved = $true
+            $signingFailure = $_.Exception
+            while ($null -ne $signingFailure) {
+                $removal = $signingFailure.Data['SigningSessionCapabilityRemoved']
+                if ($removal -is [bool]) {
+                    $sessionRemoved = $removal
+                    break
+                }
+                $signingFailure = $signingFailure.InnerException
+            }
             $signingResult = New-SigningBoundaryResult -State Rejected `
-                -ReasonCode 'SIGNING.REQUEST_INVALID'
+                -ReasonCode $(if ($sessionRemoved) { 'SIGNING.REQUEST_INVALID' } else { 'SIGNING.CLEANUP_INCOMPLETE' }) `
+                -SessionCapabilityRemoved $sessionRemoved
         }
     }
     $signingSucceeded = $signingResult.state -eq 'SignedAndVerified'
@@ -724,7 +735,14 @@ if ($Workflow -eq 'SignAndVerifyCandidate') {
     $terminal = New-TerminalRecord -ReasonCode $signingResult.reasonCode `
         -Phase SigningBoundary
     $exitCode = 20
-    if ($signingSucceeded) {
+    if (-not $signingResult.sessionCapabilityRemoved) {
+        $terminal.outcome = 'CleanupIncomplete'
+        $terminal.exitCode = 60
+        $terminal.cleanup.required = $true
+        $terminal.cleanup.verified = $false
+        $exitCode = 60
+    }
+    elseif ($signingSucceeded) {
         $terminal.outcome = 'Completed'
         $terminal.exitCode = 0
         $exitCode = 0

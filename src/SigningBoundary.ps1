@@ -911,131 +911,158 @@ function Invoke-SigningBoundarySession {
 
     $sessionGranted = $false
     $sessionRemoved = $false
+    $bodyFailure = $null
+    $cleanupFailure = $null
+    $pendingResult = $null
     try {
-        if ($scenario -eq 'PermissionDenied') {
-            return New-SigningBoundaryResult @common -State Rejected `
-                -ReasonCode 'SIGNING.PERMISSION_DENIED' -SessionCapabilityRemoved $true
-        }
-        $sessionGranted = $true
-        if ($scenario -eq 'ServiceUnavailable') {
-            return New-SigningBoundaryResult @common -State AttestedFallbackEligible `
-                -ReasonCode 'SIGNING.SERVICE_UNAVAILABLE' `
-                -AttestedFallbackEligible $true `
-                -FallbackReason ArtifactSigningNotOperational `
-                -TrustClass AttestedPreview `
-                -SessionCapabilityRemoved $true
-        }
+        try {
+            :SigningTransaction do {
+                if ($scenario -eq 'PermissionDenied') {
+                    $pendingResult = New-SigningBoundaryResult @common -State Rejected `
+                        -ReasonCode 'SIGNING.PERMISSION_DENIED' -SessionCapabilityRemoved $true
+                    break SigningTransaction
+                }
+                $sessionGranted = $true
+                if ($scenario -eq 'ServiceUnavailable') {
+                    $pendingResult = New-SigningBoundaryResult @common -State AttestedFallbackEligible `
+                        -ReasonCode 'SIGNING.SERVICE_UNAVAILABLE' `
+                        -AttestedFallbackEligible $true `
+                        -FallbackReason ArtifactSigningNotOperational `
+                        -TrustClass AttestedPreview `
+                        -SessionCapabilityRemoved $true
+                    break SigningTransaction
+                }
 
-        $trailer = switch ($scenario) {
-            'MissingSignature' { $null }
-            'InvalidSignature' {
-                New-SigningBoundarySyntheticTrailer -UnsignedSha256 $candidateDigest `
-                    -SignatureStatus Invalid -IncludeMarker $false
-            }
-            'TimestampFailure' {
-                New-SigningBoundarySyntheticTrailer -UnsignedSha256 $candidateDigest `
-                    -TimestampStatus Missing
-            }
-            default {
-                New-SigningBoundarySyntheticTrailer -UnsignedSha256 $candidateDigest
-            }
-        }
-        $utf8 = [System.Text.UTF8Encoding]::new($false)
-        $signedBytesToWrite = [byte[]] $candidateBytes
-        if ($scenario -eq 'ChangedContent') {
-            $mutation = $utf8.GetBytes("# mutated-after-sign`n")
-            $combined = [byte[]]::new($signedBytesToWrite.Length + $mutation.Length)
-            [System.Buffer]::BlockCopy($signedBytesToWrite, 0, $combined, 0, $signedBytesToWrite.Length)
-            [System.Buffer]::BlockCopy($mutation, 0, $combined, $signedBytesToWrite.Length, $mutation.Length)
-            $signedBytesToWrite = $combined
-        }
-        if (-not [string]::IsNullOrWhiteSpace($trailer)) {
-            $trailerBytes = $utf8.GetBytes($trailer)
-            $combined = [byte[]]::new($signedBytesToWrite.Length + $trailerBytes.Length)
-            [System.Buffer]::BlockCopy(
-                $signedBytesToWrite, 0, $combined, 0, $signedBytesToWrite.Length
-            )
-            [System.Buffer]::BlockCopy(
-                $trailerBytes, 0, $combined, $signedBytesToWrite.Length, $trailerBytes.Length
-            )
-            $signedBytesToWrite = $combined
-        }
-        [System.IO.File]::WriteAllBytes($signedPath, $signedBytesToWrite)
+                $trailer = switch ($scenario) {
+                    'MissingSignature' { $null }
+                    'InvalidSignature' {
+                        New-SigningBoundarySyntheticTrailer -UnsignedSha256 $candidateDigest `
+                            -SignatureStatus Invalid -IncludeMarker $false
+                    }
+                    'TimestampFailure' {
+                        New-SigningBoundarySyntheticTrailer -UnsignedSha256 $candidateDigest `
+                            -TimestampStatus Missing
+                    }
+                    default {
+                        New-SigningBoundarySyntheticTrailer -UnsignedSha256 $candidateDigest
+                    }
+                }
+                $utf8 = [System.Text.UTF8Encoding]::new($false)
+                $signedBytesToWrite = [byte[]] $candidateBytes
+                if ($scenario -eq 'ChangedContent') {
+                    $mutation = $utf8.GetBytes("# mutated-after-sign`n")
+                    $combined = [byte[]]::new($signedBytesToWrite.Length + $mutation.Length)
+                    [System.Buffer]::BlockCopy($signedBytesToWrite, 0, $combined, 0, $signedBytesToWrite.Length)
+                    [System.Buffer]::BlockCopy($mutation, 0, $combined, $signedBytesToWrite.Length, $mutation.Length)
+                    $signedBytesToWrite = $combined
+                }
+                if (-not [string]::IsNullOrWhiteSpace($trailer)) {
+                    $trailerBytes = $utf8.GetBytes($trailer)
+                    $combined = [byte[]]::new($signedBytesToWrite.Length + $trailerBytes.Length)
+                    [System.Buffer]::BlockCopy(
+                        $signedBytesToWrite, 0, $combined, 0, $signedBytesToWrite.Length
+                    )
+                    [System.Buffer]::BlockCopy(
+                        $trailerBytes, 0, $combined, $signedBytesToWrite.Length, $trailerBytes.Length
+                    )
+                    $signedBytesToWrite = $combined
+                }
+                [System.IO.File]::WriteAllBytes($signedPath, $signedBytesToWrite)
 
-        $signedBytes = [System.IO.File]::ReadAllBytes($signedPath)
-        $signedDigest = Get-SigningBoundarySha256 -Bytes $signedBytes
-        $verification = Test-SigningBoundaryAuthenticode -SignedBytes $signedBytes `
-            -ExpectedUnsignedSha256 $candidateDigest
-        if (-not $verification.Valid) {
-            return New-SigningBoundaryResult @common -State Rejected `
-                -ReasonCode $verification.ReasonCode `
-                -Signed ($scenario -notin @('MissingSignature')) `
-                -SignedPrimaryScriptSha256 $signedDigest `
-                -SignatureStatus $verification.SignatureStatus `
-                -TimestampStatus $verification.TimestampStatus `
-                -ChainStatus $verification.ChainStatus `
-                -SessionCapabilityRemoved $true
-        }
+                $signedBytes = [System.IO.File]::ReadAllBytes($signedPath)
+                $signedDigest = Get-SigningBoundarySha256 -Bytes $signedBytes
+                $verification = Test-SigningBoundaryAuthenticode -SignedBytes $signedBytes `
+                    -ExpectedUnsignedSha256 $candidateDigest
+                if (-not $verification.Valid) {
+                    $pendingResult = New-SigningBoundaryResult @common -State Rejected `
+                        -ReasonCode $verification.ReasonCode `
+                        -Signed ($scenario -notin @('MissingSignature')) `
+                        -SignedPrimaryScriptSha256 $signedDigest `
+                        -SignatureStatus $verification.SignatureStatus `
+                        -TimestampStatus $verification.TimestampStatus `
+                        -ChainStatus $verification.ChainStatus `
+                        -SessionCapabilityRemoved $true
+                    break SigningTransaction
+                }
 
-        $final = New-SigningBoundaryFinalPackage -WorkspacePath $PrivateWorkspacePath `
-            -SignedScriptPath $signedPath `
-            -UnsignedSha256 $candidateDigest `
-            -SignedSha256 $signedDigest `
-            -Policy $Policy
-        if (-not $final.ManifestValid -or -not $final.ProvenanceValid) {
-            return New-SigningBoundaryResult @common -State Rejected `
-                -ReasonCode 'SIGNING.CANDIDATE_CHANGED' `
-                -Signed $true `
-                -SignedPrimaryScriptSha256 $signedDigest `
-                -SignatureStatus Valid `
-                -TimestampStatus Valid `
-                -ChainStatus Valid `
-                -SessionCapabilityRemoved $true
-        }
+                $final = New-SigningBoundaryFinalPackage -WorkspacePath $PrivateWorkspacePath `
+                    -SignedScriptPath $signedPath `
+                    -UnsignedSha256 $candidateDigest `
+                    -SignedSha256 $signedDigest `
+                    -Policy $Policy
+                if (-not $final.ManifestValid -or -not $final.ProvenanceValid) {
+                    $pendingResult = New-SigningBoundaryResult @common -State Rejected `
+                        -ReasonCode 'SIGNING.CANDIDATE_CHANGED' `
+                        -Signed $true `
+                        -SignedPrimaryScriptSha256 $signedDigest `
+                        -SignatureStatus Valid `
+                        -TimestampStatus Valid `
+                        -ChainStatus Valid `
+                        -SessionCapabilityRemoved $true
+                    break SigningTransaction
+                }
 
-        $smoked = Invoke-SigningBoundarySmoke -SignedScriptPath $signedPath `
-            -PowerShellPath $PowerShellPath
-        if (-not $smoked) {
-            return New-SigningBoundaryResult @common -State Rejected `
-                -ReasonCode 'SIGNING.SMOKE_FAILED' `
-                -Signed $true `
-                -Verified $true `
-                -SignedPrimaryScriptSha256 $signedDigest `
-                -FinalSignedDistributableSha256 $final.ArchiveSha256 `
-                -IdentitiesDistinct $true `
-                -SignatureStatus Valid `
-                -TimestampStatus Valid `
-                -ChainStatus Valid `
-                -PublisherThumbprint (Get-SigningBoundarySyntheticThumbprint) `
-                -SessionCapabilityRemoved $true
-        }
+                $smoked = Invoke-SigningBoundarySmoke -SignedScriptPath $signedPath `
+                    -PowerShellPath $PowerShellPath
+                if (-not $smoked) {
+                    $pendingResult = New-SigningBoundaryResult @common -State Rejected `
+                        -ReasonCode 'SIGNING.SMOKE_FAILED' `
+                        -Signed $true `
+                        -Verified $true `
+                        -SignedPrimaryScriptSha256 $signedDigest `
+                        -FinalSignedDistributableSha256 $final.ArchiveSha256 `
+                        -IdentitiesDistinct $true `
+                        -SignatureStatus Valid `
+                        -TimestampStatus Valid `
+                        -ChainStatus Valid `
+                        -PublisherThumbprint (Get-SigningBoundarySyntheticThumbprint) `
+                        -SessionCapabilityRemoved $true
+                    break SigningTransaction
+                }
 
-        New-SigningBoundaryResult @common -State SignedAndVerified `
-            -ReasonCode 'SIGNING.SIGNED_AND_VERIFIED' `
-            -Signed $true `
-            -Verified $true `
-            -Smoked $true `
-            -SignedPrimaryScriptSha256 $signedDigest `
-            -FinalSignedDistributableSha256 $final.ArchiveSha256 `
-            -IdentitiesDistinct $true `
-            -SignatureStatus Valid `
-            -TimestampStatus Valid `
-            -ChainStatus Valid `
-            -PublisherThumbprint (Get-SigningBoundarySyntheticThumbprint) `
-            -TrustClass SyntheticSigningContract `
-            -SessionCapabilityRemoved $true
+                $pendingResult = New-SigningBoundaryResult @common -State SignedAndVerified `
+                    -ReasonCode 'SIGNING.SIGNED_AND_VERIFIED' `
+                    -Signed $true `
+                    -Verified $true `
+                    -Smoked $true `
+                    -SignedPrimaryScriptSha256 $signedDigest `
+                    -FinalSignedDistributableSha256 $final.ArchiveSha256 `
+                    -IdentitiesDistinct $true `
+                    -SignatureStatus Valid `
+                    -TimestampStatus Valid `
+                    -ChainStatus Valid `
+                    -PublisherThumbprint (Get-SigningBoundarySyntheticThumbprint) `
+                    -TrustClass SyntheticSigningContract `
+                    -SessionCapabilityRemoved $true
+            } while ($false)
+        }
+        catch {
+            $bodyFailure = $_.Exception
+        }
+        finally {
+            # A pipeline consumer must not receive a result before finalization.
+            # This transaction models a synthetic capability with local flags;
+            # actual signing permission removal remains a separate live gate.
+            $sessionGranted = $false
+            $sessionRemoved = $true
+            $null = $sessionGranted
+        }
     }
-    finally {
-        # Temporary signing capability must not outlive the transaction.
-        # The threat is a standing least-privilege exception. The mechanism
-        # is a finally block that always clears the session marker. The
-        # trust assumption is that this slice never created a real Azure
-        # role. Safe failure is to report cleanup incomplete only when the
-        # local marker cannot be cleared; callers still see removed=true
-        # after this synthetic session.
-        $sessionGranted = $false
-        $sessionRemoved = $true
-        $null = $sessionGranted
-        $null = $sessionRemoved
+    catch {
+        $cleanupFailure = $_.Exception
     }
+    if ($null -ne $cleanupFailure) {
+        $failures = [System.Collections.Generic.List[Exception]]::new()
+        if ($null -ne $bodyFailure) { $failures.Add($bodyFailure) }
+        $failures.Add($cleanupFailure)
+        $failure = [AggregateException]::new('Signing session finalization failed', $failures.ToArray())
+        $failure.Data['SigningSessionCapabilityRemoved'] = $false
+        throw $failure
+    }
+    if ($null -ne $bodyFailure) {
+        $bodyFailure.Data['SigningSessionCapabilityRemoved'] = $sessionRemoved
+        throw $bodyFailure
+    }
+    $pendingResult.sessionCapabilityRemoved = $sessionRemoved
+    $pendingResult
 }
