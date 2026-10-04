@@ -44,7 +44,7 @@ function Invoke-GeneratedApplication {
     $startInfo.RedirectStandardError = $true
     $startInfo.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false)
     $startInfo.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
-    $startInfo.RedirectStandardInput = $PSBoundParameters.ContainsKey('StandardInput')
+    $startInfo.RedirectStandardInput = $true
     foreach ($argument in @('-NoLogo', '-NoProfile', '-File', $CandidatePath) + $Arguments) {
         $null = $startInfo.ArgumentList.Add($argument)
     }
@@ -55,8 +55,9 @@ function Invoke-GeneratedApplication {
         $null = $process.Start()
         if ($PSBoundParameters.ContainsKey('StandardInput')) {
             $process.StandardInput.Write($StandardInput)
-            $process.StandardInput.Close()
         }
+        # Subprocess tests receive EOF even when their parent has an open console.
+        $process.StandardInput.Close()
         $standardOutput = $process.StandardOutput.ReadToEnd()
         $standardError = $process.StandardError.ReadToEnd()
         $process.WaitForExit()

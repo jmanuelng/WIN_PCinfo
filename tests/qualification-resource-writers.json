@@ -27,7 +27,7 @@
     },
     {
       "path": "tests/TestHarness.ps1",
-      "sha256": "9177eeff21505b06d70ecac0aa667b637b10bc9c0eaf3158353e2806be835d2c"
+      "sha256": "33ca49ffed78f32ecb677029e9a797ef77f2e8033caf980e583cafbdce6792d0"
     },
     {
       "path": "tests/AdditionalScopeSourceAdapters.ps1",
