@@ -39,11 +39,17 @@ function Invoke-WinPCInfoPortableEntry {
         [Parameter(Mandatory)] [string] $ApplicationPath,
         [switch] $Gui,
         [string[]] $ApplicationArguments = @(),
-        [AllowEmptyCollection()] [string[]] $CandidatePaths = @(Get-WinPCInfoRuntimeCandidates),
+        [AllowEmptyCollection()] [string[]] $CandidatePaths,
         [scriptblock] $ReadSignature = { param($Path) Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $Path },
         [scriptblock] $Probe = ${function:Invoke-WinPCInfoRuntimeProbe},
-        [scriptblock] $Launch = ${function:Invoke-WinPCInfoApplicationProcess}
+        [scriptblock] $Launch = ${function:Invoke-WinPCInfoApplicationProcess},
+        [scriptblock] $WriteStatus = { param($Text) [Console]::Error.WriteLine($Text); [Console]::Error.Flush() }
     )
+    # Feedback has no authority and must not enter the application result stream.
+    if ($Gui) {
+        try { $null = & $WriteStatus 'Starting WIN-PCInfo - verifying application trust and runtime. No assessment has started.' }
+        catch { }
+    }
     $reason = ''
     $executable = $null
     if (-not [IO.File]::Exists($ApplicationPath)) { $reason = 'LAUNCH.APPLICATION_MISSING' }
@@ -64,7 +70,10 @@ function Invoke-WinPCInfoPortableEntry {
         catch { $reason = 'LAUNCH.SIGNATURE_INVALID' }
     }
     if (-not $reason) {
-        try { $executable = Resolve-WinPCInfoRuntime -ApplicationPath $ApplicationPath -CandidatePaths $CandidatePaths -Probe $Probe }
+        try {
+            if (-not $PSBoundParameters.ContainsKey('CandidatePaths')) { $CandidatePaths = @(Get-WinPCInfoRuntimeCandidates) }
+            $executable = Resolve-WinPCInfoRuntime -ApplicationPath $ApplicationPath -CandidatePaths $CandidatePaths -Probe $Probe
+        }
         catch {
             $reason = if ($_.Exception.Data['ReasonCode'] -eq 'LAUNCH.POLICY_REJECTED' -or
                 [string] $_.Exception.Data['ReasonCode'] -match '^RUNTIME\.[A-Z_]{1,64}$') {
@@ -78,6 +87,10 @@ function Invoke-WinPCInfoPortableEntry {
         $launchArguments += @('-File', $ApplicationPath)
         if ($Gui) { $launchArguments += @('-Mode', 'Gui') }
         else { $launchArguments += $ApplicationArguments }
+        if ($Gui) {
+            try { $null = & $WriteStatus 'Opening guided window - preparation and approval are pending.' }
+            catch { }
+        }
         try { return (& $Launch $executable $launchArguments) }
         catch { $reason = 'LAUNCH.POLICY_REJECTED' }
     }
