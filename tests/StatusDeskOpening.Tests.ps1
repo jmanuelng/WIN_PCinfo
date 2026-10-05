@@ -1,9 +1,17 @@
 [CmdletBinding()]
-param([string] $EvidencePath = '')
+param([string] $EvidencePath = '', [switch] $ColdProcess)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+# This regression must compile the helper on first use even when earlier
+# suite files have already loaded it in the shared test process.
+if (-not $ColdProcess) {
+    $arguments = @('-NoLogo','-NoProfile','-File',$PSCommandPath,'-ColdProcess')
+    if ($EvidencePath) { $arguments += @('-EvidencePath',$EvidencePath) }
+    Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments $arguments
+    return
+}
 $candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
 $tokens = $null; $parseErrors = $null
