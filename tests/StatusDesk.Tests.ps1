@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -84,7 +84,8 @@ finally {
 
 $session = Start-StatusDeskSession -ModuleText $moduleText -LaunchParameters $parameters
 $deadline = [Diagnostics.Stopwatch]::StartNew()
-while (-not $session.Transport.State.Preparation -and -not $session.Pending.IsCompleted -and $deadline.Elapsed.TotalSeconds -lt 30) {
+while (-not $session.Transport.State.Preparation -and -not $session.Completed -and $deadline.Elapsed.TotalSeconds -lt 30) {
+    $null = Complete-StatusDeskSession $session
     Start-Sleep -Milliseconds 20
 }
 Assert-Equal $true ([bool]$session.Transport.State.Preparation) 'generated worker reaches frozen preparation'
@@ -120,7 +121,7 @@ foreach ($faultCase in @(
     $fakeWorker | Add-Member ScriptMethod Dispose { $this.DisposeCalled=$true; if($this.DisposeFault){throw 'Synthetic worker disposal failure'} }
     $fakeRunspace=[pscustomobject]@{ DisposeFault=$faultCase.runspace; DisposeCalled=$false }
     $fakeRunspace | Add-Member ScriptMethod Dispose { $this.DisposeCalled=$true; if($this.DisposeFault){throw 'Synthetic runspace disposal failure'} }
-    $fakeSession=[pscustomobject]@{ Completed=$false; Pending=[pscustomobject]@{ IsCompleted=$true }; Worker=$fakeWorker; Runspace=$fakeRunspace; ExitCode=20 }
+    $fakeSession=[pscustomobject]@{ Completed=$false; Stage='Running'; OpeningTask=$null; Pending=[pscustomobject]@{ IsCompleted=$true }; Worker=$fakeWorker; Runspace=$fakeRunspace; ExitCode=20 }
     $failure=$null
     try { Complete-StatusDeskSession $fakeSession | Out-Null } catch { $failure=$_.Exception }
     Assert-Equal $true ($null -ne $failure) 'a finalization fault cannot report completion'

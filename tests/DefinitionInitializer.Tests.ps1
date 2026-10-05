@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -19,7 +19,7 @@ $regions=[regex]::Matches($initializer.Ast.Extent.Text,
 Assert-Equal 39 $regions.Count 'all original definition regions remain inside the parsed initializer'
 Assert-Equal 0 @($regions | Where-Object {$_.Groups[1].Value -in @('ApplicationHeader.ps1','ApplicationMain.ps1')}).Count 'entry parameters and application execution remain outside initialization'
 $expectedFunctions=@($initializer.Ast.EndBlock.Statements | Where-Object {$_ -is [Management.Automation.Language.FunctionDefinitionAst]})
-Assert-Equal 700 $expectedFunctions.Count 'the complete original definition inventory is retained'
+Assert-Equal 702 $expectedFunctions.Count 'the complete original definition inventory is retained'
 $initializationOutput=@(. $initializer)
 Assert-Equal 0 $initializationOutput.Count 'initialization emits no records and authorizes no collection'
 
@@ -66,7 +66,7 @@ foreach($iteration in @(1,2)) {
     try {
         $session=Start-StatusDeskSession -DefinitionInitializer $initializer -LaunchParameters $launch
         $watch=[Diagnostics.Stopwatch]::StartNew()
-        while(-not $session.Transport.State.Preparation -and -not $session.Pending.IsCompleted -and $watch.ElapsedMilliseconds -lt 30000) {Start-Sleep -Milliseconds 20}
+        while(-not $session.Transport.State.Preparation -and -not $session.Completed -and $watch.ElapsedMilliseconds -lt 30000) {$null=Complete-StatusDeskSession $session;Start-Sleep -Milliseconds 20}
         Assert-Equal $true ([bool]$session.Transport.State.Preparation) 'a fresh parsed-definition worker reaches frozen preparation'
         Assert-Equal $false $session.Transport.State.CollectionStarted 'worker initialization cannot imply assessment consent'
         $summary=$session.Transport.State.Preparation | ConvertFrom-Json

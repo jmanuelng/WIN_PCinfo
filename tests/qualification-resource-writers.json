@@ -1,8 +1,8 @@
 {
   "kind": "ControlledAssessmentClosedDiskWriterInventory",
   "version": "1.2.0",
-  "candidateSha256": "2047b35b150fbed8735aadfc6897d6093d1069ca1e6dae6b22e5a9157384b0ef",
-  "harnessSha256": "a50bb42eb5690062e4b2c30132c49e76d00a19595de9c8242eace8cba3b09cc3",
+  "candidateSha256": "53a04d684281ec50677e4a9f4a53d6ba00703ea0bbba9dff7b8abf1aeea1902a",
+  "harnessSha256": "094492518edabba193901f48d2950447bfaf6d984c48f9a2caee1e08405b46ba",
   "scope": "OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses",
   "writers": [
     "Write-RunRecoveryJournal",
@@ -87,7 +87,7 @@
     },
     {
       "path": "tests/QualificationDiskBounds.ps1",
-      "sha256": "9ef65781df9ccb54725ce7ff320ac7bfebc7ada9b83c3a75f9b87f6f8d66557c"
+      "sha256": "4749fd855fe5c3a7f59e15dbb9b25ba7e844982c0f39789938532a8aef490bb8"
     },
     {
       "path": "tests/QualificationWorkspaceSampling.ps1",

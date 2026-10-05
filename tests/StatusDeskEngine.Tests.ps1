@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
     [switch] $DelayPrivilegeStartup,
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity')]
@@ -430,10 +430,10 @@ if ($IdentitySourceScenario) {
     $moduleText = Add-ControlledIdentitySources -ModuleText $moduleText -Scenario $IdentitySourceScenario
 }
 if ($PolicySourceScenario) {
-    $sessionSource=(Get-Command Start-StatusDeskSession).Definition.Replace(
+    $sessionSource=(Get-Command Initialize-StatusDeskWorker).Definition.Replace(
         '# Never copy an exception (potentially Restricted) into GUI activity.',
         '$Transport.State.PolicySourceFailure=$_.Exception.Message + '' '' + $_.ScriptStackTrace')
-    . ([scriptblock]::Create('function Start-StatusDeskSession {' + $sessionSource + '}'))
+    . ([scriptblock]::Create('function Initialize-StatusDeskWorker {' + $sessionSource + '}'))
     . (Join-Path $PSScriptRoot 'PolicySourceAdapters.ps1')
     $moduleText = Add-ControlledPolicySources -ModuleText $moduleText -Scenario $PolicySourceScenario
 }
@@ -584,7 +584,7 @@ if ($RequireQualityBudgets) {
     $moduleText=$diskInstrumentation.ModuleText
     $definitionInitializer=$diskInstrumentation.DefinitionInitializer
     . ([scriptblock]::Create($diskInstrumentation.ControllerDefinitions))
-    . ([scriptblock]::Create($diskInstrumentation.ControllerStart))
+    . ([scriptblock]::Create($diskInstrumentation.ControllerWorker))
     $diskInstrumentationAccepted=$true
     # The inventory parser and generated replacement strings are setup only.
     [GC]::Collect(2,[GCCollectionMode]::Aggressive,$true,$true)

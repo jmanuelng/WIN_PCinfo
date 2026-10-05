@@ -79,14 +79,69 @@ function Start-StatusDeskSession {
         $DefinitionInitializer = [scriptblock]::Create($ModuleText)
     }
     $workerDefinitions = $DefinitionInitializer.Ast.GetScriptBlock()
+
     $transport = New-StatusDeskTransport
-    Send-StatusDeskRecord -Transport $transport -Record (New-ProgressRecord -Sequence 0 `
-        -Phase RunControl -State Started -MessageId controller.starting-worker -CompletedUnits 0 -TotalUnits 1)
-    $runspace = [RunspaceFactory]::CreateRunspace()
-    $runspace.ApartmentState = 'MTA'
-    $runspace.ThreadOptions = 'ReuseThread'
-    $runspace.Open()
+    $session = [pscustomobject]@{
+        Transport = $transport; Worker = $null; Runspace = $null; Pending = $null
+        Completed = $false; ExitCode = 20; Stage = 'Opening'; StartupFailure = $null
+        DefinitionInitializer = $workerDefinitions; ParameterJson = $null; OpeningTask = $null
+        Finalization = @{
+            OpeningConsumed = $false; InvocationConsumed = $false; PrimaryError = $null
+            WorkerAllocated = $false; RunspaceAllocated = $false
+            WorkerDisposed = $false; RunspaceDisposed = $false
+        }
+    }
+    Send-StatusDeskRecord -Transport $transport -Record (New-ProgressRecord -Sequence 0 -Phase RunControl -State Started -MessageId controller.starting-worker -CompletedUnits 0 -TotalUnits 1)
+    try {
+        # Capture caller-owned parameters before compiler or asynchronous work.
+        $session.ParameterJson = Microsoft.PowerShell.Utility\ConvertTo-Json -InputObject $LaunchParameters -Compress -Depth 40
+        if ($null -eq ('WinPCInfoOwnedRunspaceOpening' -as [type])) {
+            $ownedOpeningSource = @'
+        using System;
+        using System.Management.Automation.Runspaces;
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        // One opening operation on the session's already owned runspace. Completion
+        // covers Open's entire initialization, including ISS BindRunspace.
+        public static class WinPCInfoOwnedRunspaceOpening
+        {
+            public static Task Begin(Runspace ownedRunspace)
+            {
+                if (ownedRunspace == null) throw new ArgumentNullException(nameof(ownedRunspace));
+                return Task.Factory.StartNew(ownedRunspace.Open, CancellationToken.None,
+                    TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            }
+        }
+'@
+            Add-Type -TypeDefinition $ownedOpeningSource -ReferencedAssemblies @(
+                [Management.Automation.Runspaces.Runspace].Assembly.Location,
+                (Join-Path $PSHOME 'ref\System.Runtime.dll'),
+                (Join-Path $PSHOME 'ref\System.Threading.Tasks.dll'),
+                (Join-Path $PSHOME 'ref\System.Threading.dll'))
+            Remove-Variable -Name ownedOpeningSource
+        }
+        # One operation opens this exact owned runspace; its task observes full initialization.
+        $session.Runspace = [RunspaceFactory]::CreateRunspace()
+        $session.Finalization.RunspaceAllocated = $true
+        $session.Runspace.ApartmentState = 'MTA'
+        $session.Runspace.ThreadOptions = 'ReuseThread'
+        $session.OpeningTask = [WinPCInfoOwnedRunspaceOpening]::Begin($session.Runspace)
+    } catch {
+        $session.StartupFailure = $_.Exception
+        $session.Stage = 'Finalizing'
+    }
+    $session
+}
+
+function Initialize-StatusDeskWorker {
+    param($Session)
+    $transport = $Session.Transport
+    $runspace = $Session.Runspace
+    $workerDefinitions = $Session.DefinitionInitializer
     $worker = [PowerShell]::Create()
+    $Session.Worker = $worker
+    $Session.Finalization.WorkerAllocated = $true
     $worker.Runspace = $runspace
     $null = $worker.AddScript({
         param($Definitions, $ParameterJson, $Transport)
@@ -118,12 +173,13 @@ function Start-StatusDeskSession {
             $exitCode
         }
     }.ToString()).AddArgument($workerDefinitions).AddArgument(
-        (Microsoft.PowerShell.Utility\ConvertTo-Json -InputObject $LaunchParameters -Compress -Depth 40)
+        $Session.ParameterJson
     ).AddArgument($transport)
-    [pscustomobject]@{
-        Transport = $transport; Worker = $worker; Runspace = $runspace
-        Pending = $worker.BeginInvoke(); Completed = $false; ExitCode = 20
-    }
+
+    $Session.Pending = $worker.BeginInvoke()
+    $Session.Stage = 'Running'
+    $Session.DefinitionInitializer = $null
+    $Session.ParameterJson = $null
 }
 
 function New-StatusDeskWindow {
@@ -705,7 +761,7 @@ function Set-StatusDeskDecision {
     $Session.Transport.DecisionReady.Set()
 }
 
-function Complete-StatusDeskSession {
+function Complete-StatusDeskWorkerSession {
     param([Parameter(Mandatory)] $Session)
     if ($Session.Completed) { return $true }
     if (-not $Session.Pending.IsCompleted) {
@@ -759,5 +815,105 @@ function Complete-StatusDeskSession {
         throw $failure
     }
     if ($null -ne $finalization.PrimaryError) { throw $finalization.PrimaryError }
+    $true
+}
+
+function Complete-StatusDeskSession {
+    param([Parameter(Mandatory)] $Session)
+    if ($Session.Completed) { return $true }
+    if ($Session.Stage -eq 'Opening') {
+        $opening = $Session.Runspace.RunspaceStateInfo
+        if (-not $Session.OpeningTask.IsCompleted) {
+            if ($Session.Transport.Clock.ElapsedMilliseconds - $Session.Transport.State.LastProgressMilliseconds -ge 2500) {
+                Send-StatusDeskRecord -Transport $Session.Transport -Record (New-ProgressRecord -Sequence 0 -Phase RunControl -State Heartbeat -MessageId controller.waiting-for-worker -CompletedUnits 0 -TotalUnits 1)
+            }
+            return $false
+        }
+        if (-not $Session.Finalization.OpeningConsumed) {
+            # Consume only the completed task. Opened alone can precede ISS binding.
+            $Session.Finalization.OpeningConsumed = $true
+            try { $Session.OpeningTask.GetAwaiter().GetResult() }
+            catch {
+                $Session.StartupFailure = $_.Exception
+                $Session.Stage = 'Finalizing'
+            }
+        }
+        if ($Session.Stage -eq 'Opening' -and $Session.Runspace.RunspaceStateInfo.State -eq [Management.Automation.Runspaces.RunspaceState]::Opened) {
+            if ($Session.Transport.Cancellation.IsCancellationRequested) {
+                $Session.Stage = 'Finalizing'
+            } else {
+                try { Initialize-StatusDeskWorker $Session }
+                catch {
+                    $Session.StartupFailure = $_.Exception
+                    $Session.Stage = 'Finalizing'
+                }
+            }
+        } elseif ($Session.Stage -eq 'Opening') {
+            $Session.StartupFailure = if ($null -ne $opening.Reason) {
+                $opening.Reason
+            } else { [InvalidOperationException]::new('Owned runspace did not open') }
+            $Session.Stage = 'Finalizing'
+        }
+    }
+    if ($Session.Stage -eq 'Running') {
+        try { $done = Complete-StatusDeskWorkerSession $Session }
+        finally {
+            if ($Session.Completed) {
+                $Session.Stage = 'Completed'
+                $Session.OpeningTask = $null
+            }
+        }
+        return $done
+    }
+    if ($Session.Stage -ne 'Finalizing') { throw 'Unexpected Status desk startup stage' }
+    # No invocation was returned. Never EndInvoke a null pending result; retain
+    # each allocated handle and independently retry only uncertain disposal.
+    $finalization = $Session.Finalization
+    $failures = [Collections.Generic.List[Exception]]::new()
+    $disposalFailures = 0
+    if (($null -ne $Session.OpeningTask -and -not $Session.OpeningTask.IsCompleted) -or
+        ($finalization.RunspaceAllocated -and $Session.Runspace.RunspaceStateInfo.State -in @(
+            [Management.Automation.Runspaces.RunspaceState]::Opening,
+            [Management.Automation.Runspaces.RunspaceState]::Closing))) {
+        if ($Session.Transport.Clock.ElapsedMilliseconds - $Session.Transport.State.LastProgressMilliseconds -ge 2500) {
+            Send-StatusDeskRecord -Transport $Session.Transport -Record (New-ProgressRecord -Sequence 0 -Phase RunControl -State Heartbeat -MessageId controller.waiting-for-worker -CompletedUnits 0 -TotalUnits 1)
+        }
+        return $false
+    }
+    if ($null -ne $Session.OpeningTask -and -not $finalization.OpeningConsumed) {
+        $finalization.OpeningConsumed = $true
+        try { $Session.OpeningTask.GetAwaiter().GetResult() }
+        catch { $Session.StartupFailure = $_.Exception }
+    }
+    if ($null -ne $Session.StartupFailure) { $failures.Add($Session.StartupFailure) }
+    foreach ($kind in @('Worker','Runspace')) {
+        if ($finalization[$kind + 'Allocated'] -and -not $finalization[$kind + 'Disposed']) {
+            try {
+                $Session.$kind.Dispose()
+                $finalization[$kind + 'Disposed'] = $true
+            } catch {
+                $failures.Add($_.Exception)
+                $disposalFailures++
+            }
+        }
+    }
+    if ($disposalFailures) {
+        $failure = [AggregateException]::new('Status desk owned startup cleanup unverified', $failures.ToArray())
+        $failure.Data['OwnedCleanupUnverified'] = $true
+        throw $failure
+    }
+    if ($Session.Transport.State.CollectionStarted) { throw 'Startup finalization cannot assert no-collection after collection' }
+    $cancelled = $Session.Transport.Cancellation.IsCancellationRequested -and $null -eq $Session.StartupFailure
+    $Session.ExitCode = if ($cancelled) { 30 } else { 20 }
+    Send-StatusDeskRecord -Transport $Session.Transport -Record ([pscustomobject]@{
+        recordType = 'win-pcinfo.terminal'; contractVersion = '1.0.0'
+        outcome = if ($cancelled) { 'Cancelled' } else { 'NotStarted' }; exitCode = $Session.ExitCode
+        reasonCode = if ($cancelled) { 'RUN.CANCELLED' } else { 'GUI.WORKER_FAILED' }; collectionStarted = $false
+        cleanup = [pscustomobject]@{ required = $false; verified = $true }
+    })
+    $Session.Worker = $null; $Session.Runspace = $null; $Session.Pending = $null
+    $Session.DefinitionInitializer = $null; $Session.ParameterJson = $null; $Session.OpeningTask = $null
+    $Session.Completed = $true
+    $Session.Stage = 'Completed'
     $true
 }

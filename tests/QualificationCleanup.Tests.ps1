@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -110,7 +110,7 @@ function Test-LateSessionCleanupUncertainty {
     $tokens=$null;$parseErrors=$null
     $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repositoryRoot 'src/StatusDesk.ps1'),[ref]$tokens,[ref]$parseErrors)
     if($parseErrors.Count){throw 'Actual session finalization source did not parse.'}
-    foreach($name in @('Set-StatusDeskDecision','Complete-StatusDeskSession')){
+    foreach($name in @('Set-StatusDeskDecision','Complete-StatusDeskWorkerSession','Complete-StatusDeskSession')){
         $definition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$false)
         if($null -eq $definition){throw 'Actual finalization function is missing.'}
         . ([scriptblock]::Create($definition.Extent.Text))
@@ -123,7 +123,7 @@ function Test-LateSessionCleanupUncertainty {
     $RequireQualityBudgets=$false;$assessmentQuality=$null;$quality=[ordered]@{}
     $qualityWatch=[Diagnostics.Stopwatch]::StartNew();$qualificationArguments=[ordered]@{}
     $projection=[ordered]@{coverage=@()};$Wpf=$false;$runLock=$null;$runLockOwned=$false;$RecoveryDestination=''
-    $session=[pscustomobject]@{Completed=$false;ExitCode=0;Worker=$worker;Runspace=$runspace;Pending=$pending;Transport=@{
+    $session=[pscustomobject]@{Completed=$false;Stage='Running';OpeningTask=$null;ExitCode=0;Worker=$worker;Runspace=$runspace;Pending=$pending;Transport=@{
         State=@{Terminal='{"recordType":"win-pcinfo.terminal","outcome":"Completed","cleanup":{"verified":true}}'}
         Cancellation=[Threading.CancellationTokenSource]::new()
         DecisionReady=[Threading.ManualResetEventSlim]::new()

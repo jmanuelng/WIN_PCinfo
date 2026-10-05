@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
  [string]$RepositoryRoot=(Split-Path -Parent $PSScriptRoot),
  [string]$HarnessPath=''
@@ -35,7 +35,7 @@ function Import-PreparationWaitActualFunction {
  if($functions.Count-ne1){throw 'Actual controller regression function must be unique.'}
  $functions[0].Extent.Text
 }
-foreach($name in @('Send-StatusDeskRecord','Complete-StatusDeskSession')){
+foreach($name in @('Send-StatusDeskRecord','Complete-StatusDeskWorkerSession','Complete-StatusDeskSession')){
  . ([scriptblock]::Create((Import-PreparationWaitActualFunction -Path (Join-Path $RepositoryRoot 'src\StatusDesk.ps1') -Name $name)))
 }
 . ([scriptblock]::Create((Import-PreparationWaitActualFunction -Path (Join-Path $RepositoryRoot 'src\Contracts.ps1') -Name 'New-ProgressRecord')))
@@ -51,7 +51,7 @@ function Invoke-PreparationWaitActualCase {
  $worker|Add-Member -MemberType ScriptMethod -Name Dispose -Value {$this.DisposeCalls++;if($this.ThrowDispose){throw 'Synthetic exact-owned disposal failure.'}}
  $runspace=[pscustomobject]@{DisposeCalls=0}
  $runspace|Add-Member -MemberType ScriptMethod -Name Dispose -Value {$this.DisposeCalls++}
- $session=[pscustomobject]@{Transport=$transport;Worker=$worker;Runspace=$runspace;Pending=[pscustomobject]@{IsCompleted=$false};Completed=$false;ExitCode=20}
+ $session=[pscustomobject]@{Transport=$transport;Worker=$worker;Runspace=$runspace;Pending=[pscustomobject]@{IsCompleted=$false};Completed=$false;Stage='Running';OpeningTask=$null;ExitCode=20}
  $steps=[pscustomobject]@{Count=0}
  function Start-Sleep {
   param([int]$Milliseconds)

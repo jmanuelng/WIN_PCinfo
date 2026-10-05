@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 
 function Add-QualificationDiskReservation {
     param([string] $Path, [long] $Bytes, [string] $Kind)
@@ -220,7 +220,7 @@ function New-QualificationDiskInstrumentation {
     }
     # A test-only extra argument shares one synchronized ledger between the
     # controller's viewing writer and the ordinary worker's assessment writers.
-    $start=Get-QualificationFunctionDefinition -Name 'Start-StatusDeskSession'
+    $start=Get-QualificationFunctionDefinition -Name 'Initialize-StatusDeskWorker'
     foreach($anchor in @('param($Definitions, $ParameterJson, $Transport)', '.AddArgument($transport)', '. $Definitions')){
         if([regex]::Matches($start,[regex]::Escape($anchor)).Count-ne1){throw 'Qualification shared-ledger launch seam changed.'}
     }
@@ -238,5 +238,5 @@ function New-QualificationDiskInstrumentation {
     # Derive every writer and launch seam before creating the owned root.
     $null=[IO.Directory]::CreateDirectory($fullRoot)
     [pscustomobject]@{ModuleText=$ModuleText;DefinitionInitializer=$definitionInitializer;ControllerDefinitions=($controllerDefinitions -join [Environment]::NewLine);
-        ControllerOriginalDefinitions=($originalDefinitions -join [Environment]::NewLine);ControllerStart=$start;Ledger=$ledger;actualSourceInputs=$actualSourceInputs.ToArray();sourceIdentityKind=$manifest.sourceIdentityKind;instrumentationSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1') -Algorithm SHA256).Hash.ToLowerInvariant();inventorySha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'qualification-resource-writers.json')).Hash.ToLowerInvariant()}
+        ControllerOriginalDefinitions=($originalDefinitions -join [Environment]::NewLine);ControllerWorker=$start;Ledger=$ledger;actualSourceInputs=$actualSourceInputs.ToArray();sourceIdentityKind=$manifest.sourceIdentityKind;instrumentationSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1') -Algorithm SHA256).Hash.ToLowerInvariant();inventorySha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'qualification-resource-writers.json')).Hash.ToLowerInvariant()}
 }
