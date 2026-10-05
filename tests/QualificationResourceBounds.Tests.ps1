@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([string]$RepoRoot=(Split-Path -Parent $PSScriptRoot))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -82,7 +82,7 @@ try {
         'Invoke-QualificationWitnessAdmission')
     foreach($projection in @(
         @{text=$instrumentation.ControllerDefinitions;expected=$expectedDefinitions;name='controller writers'}
-        @{text=$instrumentation.ControllerStart;expected=@('Start-StatusDeskSession');name='session startup'}
+        @{text=$instrumentation.ControllerWorker;expected=@('Initialize-StatusDeskWorker');name='worker invocation setup'}
     )){
         $projectionTokens=$null;$projectionErrors=$null
         $projectionAst=[Management.Automation.Language.Parser]::ParseInput($projection.text,[ref]$projectionTokens,[ref]$projectionErrors)
@@ -93,6 +93,19 @@ try {
             Assert-Equal 1 @($emitted|Where-Object Name -CEQ $name).Count ($projection.name+' emits '+$name+' exactly once')
         }
     }
+    # The final worker AST must include every reservation and helper that was
+    # added after the original inventory parse. Never execute the stale AST.
+    Assert-Equal $true ($instrumentation.DefinitionInitializer -is [scriptblock]) 'controlled parsed definitions are admitted only after instrumentation'
+    $finalWorkerDefinitions=@($instrumentation.DefinitionInitializer.Ast.EndBlock.Statements | Where-Object {$_ -is [Management.Automation.Language.FunctionDefinitionAst]})
+    $controllerTokens=$null;$controllerErrors=$null
+    $controllerAst=[Management.Automation.Language.Parser]::ParseInput($instrumentation.ControllerDefinitions,[ref]$controllerTokens,[ref]$controllerErrors)
+    Assert-Equal 0 $controllerErrors.Count 'the narrow reserved controller definitions parse'
+    foreach($controllerDefinition in @($controllerAst.EndBlock.Statements)) {
+        $workerMatch=@($finalWorkerDefinitions | Where-Object Name -CEQ $controllerDefinition.Name)
+        Assert-Equal 1 $workerMatch.Count 'the final controlled worker contains each reserved writer/helper exactly once'
+        Assert-Equal $controllerDefinition.Extent.Text $workerMatch[0].Extent.Text 'the final controlled AST preserves the actual writer reservation formulas'
+    }
+    Assert-Equal $true $instrumentation.ControllerWorker.Contains('$script:QualificationDiskLedger=$DiskLedger; . $Definitions') 'the shared ledger is installed before parsed worker initialization'
     $controllerProjection=& {
         param($Definitions,$Start)
         . ([scriptblock]::Create($Definitions))
@@ -108,7 +121,7 @@ try {
             WriterPreserved=((Get-Command Export-RestrictedAssessmentReport).ScriptBlock.ToString()-ceq$writerBefore)
             WriterIsBounded=$writerBefore.Contains('Add-QualificationDiskReservation -Path $partialPath')
         }
-    } $instrumentation.ControllerDefinitions $instrumentation.ControllerStart
+    } $instrumentation.ControllerDefinitions $instrumentation.ControllerWorker
     Assert-Equal $true $controllerProjection.SenderPreserved 'actual startup import preserves installed progress publication'
     Assert-Equal $true $controllerProjection.PollPreserved 'actual startup import preserves installed controller polling'
     Assert-Equal $true $controllerProjection.WriterPreserved 'actual startup import preserves bounded controller writers'

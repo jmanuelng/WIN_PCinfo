@@ -1,5 +1,51 @@
 Set-StrictMode -Version Latest
 
+function Add-QualificationPrivilegeExecutionWitness {
+    param([string] $ModuleText, [switch] $CancelAfterAdmission)
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseInput($ModuleText,[ref]$tokens,[ref]$errors)
+    if ($errors.Count) { throw 'Controlled privilege module did not parse.' }
+    $definitions=$ast.FindAll({param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ceq 'Invoke-ControlledPrivilegedCollectionPlan'
+    },$true)
+    if ($definitions.Count -ne 1) { throw 'Controlled privilege coordinator is not unique.' }
+    $definition=$definitions[0]
+    $transition='$executionStarted = $true'
+    if (([regex]::Matches($definition.Extent.Text,[regex]::Escape($transition))).Count -ne 1) {
+        throw 'Authenticated privilege execution transition is not unique.'
+    }
+    # Observe the admitted transition after its closed frame validation. Process
+    # creation, coordinator invocation and an unvalidated frame cannot start it.
+    $action=if ($CancelAfterAdmission) { '$script:StatusDeskTransport.Cancellation.CancelAfter(1500)' }
+        else { '$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp()' }
+    $replacement=$definition.Extent.Text.Replace($transition,
+        $transition+'; $script:StatusDeskTransport.State.ActivePrivilegeAdmissionObserved=$true; '+$action)
+    $ModuleText.Remove($definition.Extent.StartOffset,$definition.Extent.Text.Length).
+        Insert($definition.Extent.StartOffset,$replacement)
+}
+
+function Add-QualificationPrivilegeStartupDelay {
+    param([string] $ModuleText)
+    $ModuleText=Rename-QualificationFunction -Source $ModuleText -Name Get-PrivilegedCollectionWorkerSource -Replacement Get-ActiveOriginalPrivilegeWorkerSource
+    $ModuleText=Rename-QualificationFunction -Source $ModuleText -Name Get-PrivilegedCollectionPlanPolicy -Replacement Get-ActiveOriginalPrivilegePolicy
+    $ModuleText+@'
+
+function Get-PrivilegedCollectionWorkerSource {
+    $source=Get-ActiveOriginalPrivilegeWorkerSource
+    $hello='Write-Frame -Stream $pipe -Json $hello -MaximumBytes $maximumBytes -Token $tokenSource.Token'
+    if (([regex]::Matches($source,[regex]::Escape($hello))).Count -ne 1) { throw 'Active privilege hello boundary changed.' }
+    $source.Replace($hello,'[IO.File]::WriteAllText(''__PRE_START_WITNESS__'',''SyntheticBeforeWorkerHello''); [Threading.Thread]::Sleep(5000); '+$hello)
+}
+function Get-PrivilegedCollectionPlanPolicy {
+    $policy=Get-ActiveOriginalPrivilegePolicy
+    $source=(Get-PrivilegedCollectionWorkerSource).Replace("`r`n","`n").Replace("`r","`n")
+    $policy.worker.payloadSha256=Get-PrivilegedCollectionPlanSha256 -Bytes ([Text.Encoding]::UTF8.GetBytes($source))
+    $policy
+}
+'@
+}
+
 function Rename-QualificationFunction {
     param([string] $Source, [string] $Name, [string] $Replacement)
     $tokens=$null; $errors=$null

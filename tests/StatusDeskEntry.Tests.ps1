@@ -79,12 +79,17 @@ try {
     if($Choices){
         $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),'(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
         foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
-        $moduleText=($regions | ForEach-Object {$_.Groups[2].Value}) -join "`n"
+        $tokens=$null;$errors=$null
+        $candidateAst=[Management.Automation.Language.Parser]::ParseFile($candidate,[ref]$tokens,[ref]$errors)
+        Assert-Equal 0 $errors.Count 'the actual choice/retry candidate parses'
+        $initializers=@($candidateAst.EndBlock.Statements | Where-Object {$_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -ceq 'Initialize-WinPCInfoDefinitions'})
+        Assert-Equal 1 $initializers.Count 'choice/retry uses the actual candidate initializer'
+        $definitionInitializer=$initializers[0].Body.GetScriptBlock()
         $context=@{IsFixture=$true}
         foreach($name in @('Preparation','Contract','Run','PrivilegedCollection','SystemCollection','EvidenceWorkspace','ProtectedPackage','RecipientSharing','DeviceReadiness','IdentityEnrollment','AdministratorExposure','EffectivePolicy','ResourceDependencies','NetworkTopology','SoftwareInventory','CertificateTrust','MicrosoftConnectivity')){$context[$name+'FixturePath']=''}
         $context.PreparationFixturePath=Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
         [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);[Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
-        $exitCode=Invoke-StatusDesk -ModuleText $moduleText -LaunchParameters @{
+        $exitCode=Invoke-StatusDesk -DefinitionInitializer $definitionInitializer -LaunchParameters @{
             Request=(Get-GuidedRequest);RuntimeFacts=(Get-ActiveRuntimeFacts -ModuleFacts (Get-BuiltInModuleCompatibilityFacts));ArtifactTrustValid=$true;ValidationContext=[pscustomobject]$context
         } -ViewReady {param($testWindow,$testSession);$entryTest.Session=$testSession}.GetNewClosure()
         $entryTest.Remove('Session')

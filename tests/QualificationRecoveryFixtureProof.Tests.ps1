@@ -75,7 +75,7 @@ try{
         $recoveryFixtureSnapshot=Get-QualificationRecoveryFixtureSnapshot -Destination $RecoveryDestination -OwnedParent $ownedParent -InvocationId $recoveryFixtureInvocationId
         $recoveryFixtureInvocationTimestamp=[Diagnostics.Stopwatch]::GetTimestamp()
         $terminal=@{recordType='win-pcinfo.terminal';outcome=$(if($RecoveryAuthorized){'CleanupIncomplete'}else{'NotStarted'});reasonCode=$RecoveryExpectedReason;exitCode=$(if($RecoveryAuthorized){60}else{20});collectionStarted=$false;cleanup=@{verified=$false}}
-        $session=[pscustomobject]@{Completed=$true;Worker=$null;Runspace=$null;Pending=$null;ExitCode=$(if($RecoveryAuthorized){60}else{20});
+        $session=[pscustomobject]@{Completed=$true;Stage='Completed';OpeningTask=$null;Worker=$null;Runspace=$null;Pending=$null;ExitCode=$(if($RecoveryAuthorized){60}else{20});
             Finalization=@{PrimaryError=$null;WorkerDisposed=$true;RunspaceDisposed=$true};Transport=@{
                 State=@{CollectionStarted=$false;PackagePath='';Terminal='';FirstProgressMilliseconds=1L;MaximumProgressGapMilliseconds=1L;TerminalMilliseconds=2L;CancellationRequestedMilliseconds=-1L}
                 Cancellation=[Threading.CancellationTokenSource]::new()
@@ -125,7 +125,7 @@ try{
             'Package'{$session.Transport.State.PackagePath='synthetic-new-package'}
             'FreshWorker'{$session.Transport.State.SystemInvoked=$true}
             'UnclearedWorker'{$session.Worker='synthetic-handle'}
-            'Incomplete'{$session.Completed=$false}
+            'Incomplete'{$session.Completed=$false;$session.Stage='Running'}
             'FinalizationError'{$session.Finalization.PrimaryError=[InvalidOperationException]::new('Synthetic finalization failure')}
             'FinalizationDisposal'{$session.Finalization.WorkerDisposed=$false}
             'UnsafeBody'{$body='$failure=[InvalidOperationException]::new("Synthetic unsafe child state");$failure.Data["OwnedCleanupUnverified"]=$true;throw $failure'}
@@ -139,6 +139,7 @@ try{
         $session.Transport.State.Terminal=$terminal|ConvertTo-Json -Depth 6 -Compress
         if($fault-ceq'MalformedTerminal'){$session.Transport.State.Terminal='{'}
         $FailureKind='None';$QualificationPlanFault='';$qualificationFailed=$false;$qualificationBodyError=$null
+        $ActiveAction='None';$ActiveWorker='Privilege';$CancelDuringPrivilege=$false
         $RequireQualityBudgets=$false;$assessmentQuality=$null
         $quality=[ordered]@{packageBytes=0L;htmlBytes=0L};$qualityWatch=[Diagnostics.Stopwatch]::StartNew()
         $qualificationArguments=[ordered]@{};$projection=[ordered]@{cleanupVerified=$false}

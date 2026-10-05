@@ -1,5 +1,6 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
+    [switch] $DelayPrivilegeStartup,
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity')]
     [string] $QualificationCancelAfter = '',
     [string] $QualificationPath = '',
@@ -15,6 +16,8 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [switch] $Wpf, [switch] $HoldRunLock, [switch] $ReportContract,
     [ValidateSet('None','Cancel','Close')] [string] $ActiveAction = 'None',
     [ValidateSet('Privilege','System','NativeCooperative','NativeHard')] [string] $ActiveWorker = 'Privilege',
+    [ValidateSet('AfterExecution','BeforeExecution','DelayedAfterExecution')]
+    [string] $ActivePrivilegeBoundary = 'AfterExecution',
     [switch] $RequireRecoveryJournal, [switch] $RequireFrontLoadedPrivilege,
     [string] $ReadinessSourceScenario = '',
     [string] $IdentitySourceScenario = '',
@@ -35,6 +38,26 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('None','Integrity','PreStartIntegrity','Cleanup')] [string] $FailureKind = 'None')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ($CancelDuringPrivilege -and ($ActiveAction -ne 'None' -or $QualificationPlanFault)) {
+    throw 'Automatic active privilege cancellation cannot compose a GUI action or independent plan fault.'
+}
+if ($DelayPrivilegeStartup) {
+    $startupArguments=@('CancelDuringPrivilege','DelayPrivilegeStartup','QualificationPath')
+    if (-not $CancelDuringPrivilege -or @($PSBoundParameters.Keys | Where-Object { $_ -notin $startupArguments }).Count) {
+        throw 'Delayed privilege startup requires only the controlled automatic cancellation regression.'
+    }
+}
+if ($ActivePrivilegeBoundary -ne 'AfterExecution' -and
+    (-not $Wpf -or $ActiveAction -eq 'None' -or $ActiveWorker -ne 'Privilege' -or
+     $QualificationPlanFault -or $RequireQualityBudgets -or -not $RequireRecoveryJournal)) {
+    throw 'Explicit privilege startup witnesses require an active WPF Privilege case outside resource qualification.'
+}
+if ($ActivePrivilegeBoundary -ne 'AfterExecution') {
+    $boundaryArguments=@('Wpf','ActiveAction','ActiveWorker','ActivePrivilegeBoundary','RequireRecoveryJournal','QualificationPath')
+    if (@($PSBoundParameters.Keys | Where-Object { $_ -notin $boundaryArguments }).Count) {
+        throw 'Explicit privilege startup witnesses cannot compose independent cancellation or fault seams.'
+    }
+}
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
 function ConvertTo-QualificationPlanFault {
@@ -214,8 +237,14 @@ if ($CancelAfterResource) {
         'Invoke-ControlledResourceDependenciesCollection -Policy $Policy -ValidationScenario Empty; $script:StatusDeskTransport.Cancellation.Cancel() }')
 }
 if ($CancelDuringPrivilege) {
-    $moduleText = $moduleText.Replace('Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
-        '$script:StatusDeskTransport.Cancellation.CancelAfter(1500); Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
+    . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+    $moduleText=Add-QualificationPrivilegeExecutionWitness -ModuleText $moduleText -CancelAfterAdmission
+    $resultAnchor='$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }'
+    if (([regex]::Matches($moduleText,[regex]::Escape($resultAnchor))).Count -ne 1) {
+        throw 'Automatic privilege cancellation result boundary changed.'
+    }
+    $moduleText=$moduleText.Replace($resultAnchor,
+        '$script:StatusDeskTransport.State.DirectPrivilegeExecutionStarted=[bool]$result.executionStarted; '+$resultAnchor)
     $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
         '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
 }
@@ -317,12 +346,17 @@ if ($ActiveAction -ne 'None') {
     $moduleText = $moduleText.Replace('Invoke-ControlledResourceDependenciesCollection -Policy',
         '[Threading.Thread]::Sleep(11500); Invoke-ControlledResourceDependenciesCollection -Policy')
     if ($ActiveWorker -eq 'Privilege') {
-        $moduleText = $moduleText.Replace('$result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
-            '$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp(); $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
+        . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+        if ($ActivePrivilegeBoundary -ne 'BeforeExecution') {
+            $moduleText=Add-QualificationPrivilegeExecutionWitness -ModuleText $moduleText
+        }
         $moduleText = $moduleText.Replace('$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $result }',
-            '$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.cleanup.verified; $result }')
+            '$script:StatusDeskTransport.State.PrivilegeCompleted=$true; $script:StatusDeskTransport.State.ActivePrivilegeExecutionStarted=[bool]$result.executionStarted; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.cleanup.verified; $result }')
         $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
             '-LocalPackageProtector $LocalPackageProtector -ValidationScenario Cancellation')
+        if ($ActivePrivilegeBoundary -ne 'AfterExecution') {
+            $moduleText=Add-QualificationPrivilegeStartupDelay -ModuleText $moduleText
+        }
     }
     elseif ($ActiveWorker -eq 'System') {
         $moduleText = $moduleText.Replace('Invoke-ControlledSystemCollectionPlan -Plan $Plan -PlanDigest $PlanDigest -ValidationScenario SyntheticSuccess -CancellationToken $CancellationToken -PrivilegeChannel $PrivilegeChannel }',
@@ -333,6 +367,10 @@ if ($ActiveAction -ne 'None') {
         $moduleText = $moduleText.Replace('Invoke-ControlledApprovedCollectorProcess -OperationId $OperationId -DeviceReadinessScenario Complete -CancellationToken $CancellationToken }',
             ('$script:StatusDeskTransport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp(); $result=Invoke-ControlledApprovedCollectorProcess -OperationId fixture:synthetic.' + $fixture + ' -CancellationToken $CancellationToken; $script:StatusDeskTransport.State.ControlledWorkerCleanup=$result.Supervision.completeOwnedTreeAbsent -and $result.Supervision.temporaryArtifactsAbsent; $script:StatusDeskTransport.State.TerminationMode=$result.Supervision.terminationMode; $result }'))
     }
+}
+if ($DelayPrivilegeStartup) {
+    . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+    $moduleText=Add-QualificationPrivilegeStartupDelay -ModuleText $moduleText
 }
 if ($RequireRecoveryJournal) {
     $moduleText = $moduleText.Replace('$result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan',
@@ -392,10 +430,10 @@ if ($IdentitySourceScenario) {
     $moduleText = Add-ControlledIdentitySources -ModuleText $moduleText -Scenario $IdentitySourceScenario
 }
 if ($PolicySourceScenario) {
-    $sessionSource=(Get-Command Start-StatusDeskSession).Definition.Replace(
+    $sessionSource=(Get-Command Initialize-StatusDeskWorker).Definition.Replace(
         '# Never copy an exception (potentially Restricted) into GUI activity.',
         '$Transport.State.PolicySourceFailure=$_.Exception.Message + '' '' + $_.ScriptStackTrace')
-    . ([scriptblock]::Create('function Start-StatusDeskSession {' + $sessionSource + '}'))
+    . ([scriptblock]::Create('function Initialize-StatusDeskWorker {' + $sessionSource + '}'))
     . (Join-Path $PSScriptRoot 'PolicySourceAdapters.ps1')
     $moduleText = Add-ControlledPolicySources -ModuleText $moduleText -Scenario $PolicySourceScenario
 }
@@ -544,12 +582,14 @@ if ($RequireQualityBudgets) {
     $diskInstrumentation=New-QualificationDiskInstrumentation -ModuleText $moduleText -Root $testRoot -CandidatePath $candidate -HarnessPath $PSCommandPath -WitnessFault $witnessFault
     $script:QualificationDiskLedger=$diskInstrumentation.Ledger
     $moduleText=$diskInstrumentation.ModuleText
+    $definitionInitializer=$diskInstrumentation.DefinitionInitializer
     . ([scriptblock]::Create($diskInstrumentation.ControllerDefinitions))
-    . ([scriptblock]::Create($diskInstrumentation.ControllerStart))
+    . ([scriptblock]::Create($diskInstrumentation.ControllerWorker))
     $diskInstrumentationAccepted=$true
     # The inventory parser and generated replacement strings are setup only.
     [GC]::Collect(2,[GCCollectionMode]::Aggressive,$true,$true)
 }
+else { $definitionInitializer=[scriptblock]::Create($moduleText) }
     if ($HoldRunLock) {
         $runLock = [Threading.Mutex]::new($false, [string](Get-AssessmentRunLifecyclePolicy).activeRunLock.name)
         $runLockOwned = $runLock.WaitOne(0)
@@ -603,6 +643,13 @@ if ($RequireQualityBudgets) {
                 $uiState.Clicked=$true
                 $window.FindName('Approve').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
             }
+            if ($ActiveAction -ne 'None' -and $ActiveWorker -eq 'Privilege' -and
+                $ActivePrivilegeBoundary -eq 'BeforeExecution' -and
+                -not $uiState.Session.Transport.State.ContainsKey('ControlledWorkerStarted') -and
+                [IO.File]::Exists($preStartWitness)) {
+                Assert-Equal 'SyntheticBeforeWorkerHello' ([IO.File]::ReadAllText($preStartWitness)) 'actual worker reached its bounded pre-admission witness'
+                $uiState.Session.Transport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp()
+            }
             if ($ActiveAction -ne 'None' -and -not $uiState.ActionSent -and
                 $uiState.Session.Transport.State.ContainsKey('ControlledWorkerStarted') -and
                 [Diagnostics.Stopwatch]::GetElapsedTime($uiState.Session.Transport.State.ControlledWorkerStarted).TotalMilliseconds -ge 1500) {
@@ -626,7 +673,7 @@ if ($RequireQualityBudgets) {
             }
         }.GetNewClosure())
         try {
-            $null = Invoke-StatusDesk -ModuleText $moduleText -LaunchParameters $launch -ViewReady {
+            $null = Invoke-StatusDesk -DefinitionInitializer $definitionInitializer -LaunchParameters $launch -ViewReady {
                 param($window, $workerSession)
                 $window.Opacity=0; $window.ShowInTaskbar=$false
                 $uiState.Window=$window; $uiState.Session=$workerSession
@@ -646,13 +693,17 @@ if ($RequireQualityBudgets) {
             Assert-Equal $true $uiState.Acknowledged 'actual control acknowledges cancellation within two seconds'
             Assert-Equal $true ($uiState.ResponsiveTicks -ge 3) 'dispatcher remains responsive throughout supervised finalization'
             Assert-Equal $true $session.Transport.State.ControlledWorkerCleanup 'active action verifies owned privileged process tree and channel absence'
+            if ($ActiveWorker -eq 'Privilege') {
+                Assert-Equal ($ActivePrivilegeBoundary -ne 'BeforeExecution') $session.Transport.State.ContainsKey('ActivePrivilegeAdmissionObserved') 'the private privilege witness records only admitted execution'
+                Assert-Equal ($ActivePrivilegeBoundary -ne 'BeforeExecution') $session.Transport.State.ActivePrivilegeExecutionStarted 'active privilege action preserves authenticated execution admission'
+            }
             Assert-Equal $true ($session.Transport.State.FirstProgressMilliseconds -le 5000) 'first generated application progress arrives within five seconds'
             Assert-Equal $true ($session.Transport.State.MaximumProgressGapMilliseconds -le 10000) 'sustained generated application progress gaps stay within ten seconds'
             if ($ActiveWorker -like 'Native*') { Assert-Equal $(if ($ActiveWorker -eq 'NativeCooperative') {'Cooperative'}else{'Hard'}) $session.Transport.State.TerminationMode 'native worker uses the expected cooperative or bounded hard stop' }
             Write-Output ('TIMING: action={0}; worker={1}; first={2}ms; maximumGap={3}ms; acknowledgment={4}ms; cancellationToTerminal={5}ms; sampledPrivateMiB={6}; sampledWorkingSetMiB={7}' -f $ActiveAction,$ActiveWorker,$session.Transport.State.FirstProgressMilliseconds,$session.Transport.State.MaximumProgressGapMilliseconds,$uiState.AcknowledgmentMilliseconds,($session.Transport.State.TerminalMilliseconds-$session.Transport.State.CancellationRequestedMilliseconds),[Math]::Round($uiState.PeakPrivateBytes/1MB),[Math]::Round($uiState.PeakWorkingSetBytes/1MB))
         }
     }
-    else { $session = Start-StatusDeskSession -ModuleText $moduleText -LaunchParameters $launch }
+    else { $session = Start-StatusDeskSession -DefinitionInitializer $definitionInitializer -LaunchParameters $launch }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     while (-not $session.Transport.State.Preparation -and $watch.Elapsed.TotalSeconds -lt 30) {
         # Match the product timer's controller polling while preparation loads.
@@ -860,7 +911,25 @@ if ($RequireQualityBudgets) {
         return
     }
     Assert-Equal $(if(($QualificationWorkerFamily -and $QualificationWorkerFault -eq 'Cancel') -or $QualificationCancelAfter -or $CancelAfterIdentity -or $CancelAfterResource -or $CancelDuringPrivilege -or $QualificationPlanFault -eq 'SystemCancel' -or $ActiveAction -ne 'None' -or $ReadinessSourceScenario -eq 'Cancelled'){'Cancelled'}else{'CompletedWithGaps'}) $terminal.outcome ('controlled ordinary engine: ' + $terminal.reasonCode)
+    if ($ActiveAction -ne 'None' -and $ActiveWorker -eq 'Privilege' -and $ActivePrivilegeBoundary -eq 'BeforeExecution') {
+        Assert-Equal $false $terminal.collectionStarted 'pre-admission WPF cancellation does not invent collection'
+        Assert-Equal 30 $session.ExitCode 'actual pre-admission WPF action retains cancellation exit'
+        Assert-Equal $false $session.Transport.State.ContainsKey('SystemInvoked') 'pre-admission cancellation cannot dispatch SYSTEM'
+        Assert-Equal '' $session.Transport.State.PackagePath 'pre-admission cancellation exposes no package'
+        Assert-Equal $true $terminal.cleanup.verified 'pre-admission cancellation verifies exact owned cleanup'
+        Assert-Equal $true $session.Transport.State.JournalObserved 'pre-admission worker has durable ownership'
+        Assert-Equal $preparation.planDigest $terminal.planDigest 'pre-admission terminal binds the approved frozen plan'
+        Assert-Equal 0 @(Get-ChildItem -LiteralPath $testRoot -Filter WINPCInfo-Recovery-v1-* -Directory).Count 'pre-admission cleanup retires the owned journal'
+        return
+    }
     Assert-Equal $true $terminal.collectionStarted 'ordinary collection actually executed'
+    if ($CancelDuringPrivilege) {
+        Assert-Equal $true $session.Transport.State.ActivePrivilegeAdmissionObserved 'automatic active cancellation follows admitted privilege execution'
+        Assert-Equal $true $session.Transport.State.DirectPrivilegeExecutionStarted 'automatic cancellation preserves the returned authenticated execution fact'
+        if ($DelayPrivilegeStartup) {
+            Assert-Equal 'SyntheticBeforeWorkerHello' ([IO.File]::ReadAllText($preStartWitness)) 'delayed automatic cancellation reached the actual startup witness'
+        }
+    }
     if ($RequireRecoveryJournal) {
         Assert-Equal $true $session.Transport.State.JournalObserved 'ordinary assessment registers durable ownership before the first source executes'
         Assert-Equal 0 @(Get-ChildItem -LiteralPath $testRoot -Filter WINPCInfo-Recovery-v1-* -Directory).Count 'successful finalization removes the journal after owned transient absence'
@@ -1076,6 +1145,16 @@ finally {
                 -not [string]::IsNullOrEmpty($session.Transport.State.PackagePath)
         }
         $projection['arguments'] = $qualificationArguments
+        if ($ActiveAction -ne 'None' -and $ActiveWorker -eq 'Privilege' -and $null -ne $session -and
+            $session.Transport.State.ContainsKey('ActivePrivilegeExecutionStarted')) {
+            $projection['activePrivilegeExecutionStarted']=$session.Transport.State.ActivePrivilegeExecutionStarted
+            $projection['activePrivilegeAdmissionObserved']=$session.Transport.State.ContainsKey('ActivePrivilegeAdmissionObserved')
+        }
+        if ($CancelDuringPrivilege -and $null -ne $session -and
+            $session.Transport.State.ContainsKey('DirectPrivilegeExecutionStarted')) {
+            $projection['directPrivilegeExecutionStarted']=$session.Transport.State.DirectPrivilegeExecutionStarted
+            $projection['activePrivilegeAdmissionObserved']=$session.Transport.State.ContainsKey('ActivePrivilegeAdmissionObserved')
+        }
         $projection['bodyAssertions'] = if ($qualificationFailed) { 'Fail' } else { 'Pass' }
         $projection['testCleanup'] = 'Pending'
         $projection['elapsedMilliseconds'] = $qualityWatch.ElapsedMilliseconds

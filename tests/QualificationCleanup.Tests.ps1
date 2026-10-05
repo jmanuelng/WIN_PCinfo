@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -110,7 +110,7 @@ function Test-LateSessionCleanupUncertainty {
     $tokens=$null;$parseErrors=$null
     $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repositoryRoot 'src/StatusDesk.ps1'),[ref]$tokens,[ref]$parseErrors)
     if($parseErrors.Count){throw 'Actual session finalization source did not parse.'}
-    foreach($name in @('Set-StatusDeskDecision','Complete-StatusDeskSession')){
+    foreach($name in @('Set-StatusDeskDecision','Complete-StatusDeskWorkerSession','Complete-StatusDeskSession')){
         $definition=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$false)
         if($null -eq $definition){throw 'Actual finalization function is missing.'}
         . ([scriptblock]::Create($definition.Extent.Text))
@@ -123,7 +123,7 @@ function Test-LateSessionCleanupUncertainty {
     $RequireQualityBudgets=$false;$assessmentQuality=$null;$quality=[ordered]@{}
     $qualityWatch=[Diagnostics.Stopwatch]::StartNew();$qualificationArguments=[ordered]@{}
     $projection=[ordered]@{coverage=@()};$Wpf=$false;$runLock=$null;$runLockOwned=$false;$RecoveryDestination=''
-    $session=[pscustomobject]@{Completed=$false;ExitCode=0;Worker=$worker;Runspace=$runspace;Pending=$pending;Transport=@{
+    $session=[pscustomobject]@{Completed=$false;Stage='Running';OpeningTask=$null;ExitCode=0;Worker=$worker;Runspace=$runspace;Pending=$pending;Transport=@{
         State=@{Terminal='{"recordType":"win-pcinfo.terminal","outcome":"Completed","cleanup":{"verified":true}}'}
         Cancellation=[Threading.CancellationTokenSource]::new()
         DecisionReady=[Threading.ManualResetEventSlim]::new()
@@ -223,6 +223,7 @@ function Test-StatusDeskRetentionFailure {
     param([ValidateSet('Write','Sampling','Serialization','Worker')] [string] $Fault = 'Write')
     # Match the actual harness's ordinary plan-fault parameter default.
     $QualificationPlanFault=''
+    $ActiveAction='None'; $ActiveWorker='Privilege'; $CancelDuringPrivilege=$false
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $testRoot=Join-Path $repositoryRoot ('.test-output/cleanup-negative-'+[guid]::NewGuid().ToString('N'))
     $null=[IO.Directory]::CreateDirectory($testRoot)
@@ -273,6 +274,13 @@ function Test-StatusDeskRetentionFailure {
     }
     catch { $errorRecord=$_ }
     try {
+        Assert-Equal $false ($errorRecord.Exception.ToString().Contains('cannot be retrieved because it has not been set')) 'retention replay supplies the actual argument defaults'
+        if ($Fault -eq 'Sampling') {
+            Assert-Equal $true ($errorRecord.Exception.ToString().Contains('Synthetic sampler access denial')) 'the intended sampler fault survives evidence retention'
+        }
+        if ($Fault -eq 'Serialization') {
+            Assert-Equal $true ($errorRecord.Exception.ToString().Contains('Synthetic serialization failure')) 'the intended serialization fault survives evidence retention'
+        }
         if ($Fault -eq 'Worker') {
             Assert-Equal $true ([IO.Directory]::Exists($testRoot)) 'an unverified worker preserves its recovery workspace'
             Assert-Equal $true ([IO.File]::Exists($syntheticBlocker)) 'unverified cleanup creates a durable stop signal'
@@ -352,6 +360,7 @@ function Test-StatusDeskCleanupProjection {
     param([switch] $Recovery)
     # Match the actual harness's ordinary plan-fault parameter default.
     $QualificationPlanFault=''
+    $ActiveAction='None'; $ActiveWorker='Privilege'; $CancelDuringPrivilege=$false
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $testRoot=Join-Path $repositoryRoot ('.test-output/projection-'+[guid]::NewGuid().ToString('N'))
     $null=[IO.Directory]::CreateDirectory($testRoot)
