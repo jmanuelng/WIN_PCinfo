@@ -19,12 +19,14 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
   public string HostPath; public string WorkingDirectory; public string[] Arguments;
   public bool UseShellExecute=false, RedirectStandardInput=true, CreateNoWindow=false;
   public bool StdoutRedirected=true, StderrRedirected=true; public int ConfiguredOutputCodePage=65001;
+  public string EnvironmentMode="Inherited";
   public bool ExactStartedProcessHandlePinned; public string ObservationFailure;
  }
  public sealed class Outcome {
   public bool Started, NativeTerminalObserved, DeadlineReached, TerminationAttempted, TerminationSucceeded;
   public bool StreamsDrained, StreamFailure, OutputOverflow, UnsafeSignalObserved, OwnedCleanupUnverified;
   public bool InputCompleted, InputFailure;
+  public bool InputChannelRequested;
   public int? NativeExitCode; public string ObservedTerminalUtc, Failure;
   public long TotalLines, DroppedLines, TotalCharacters, DroppedCharacters, RetainedCharacters;
   public Line[] Lines;
@@ -58,6 +60,28 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
   process.StartInfo=new ProcessStartInfo {FileName=host,WorkingDirectory=directory,UseShellExecute=false,RedirectStandardInput=true,CreateNoWindow=false,RedirectStandardOutput=true,RedirectStandardError=true,StandardInputEncoding=new UTF8Encoding(false,true),StandardOutputEncoding=new UTF8Encoding(false,true),StandardErrorEncoding=new UTF8Encoding(false,true)};
   foreach(string arg in args)process.StartInfo.ArgumentList.Add(arg);
  }
+ // The original constructor retains inherited environment and redirected stdin.
+ // Only the closed portable-bootstrap adapter selects this overload.
+ public WinPCInfoTestGeneratedApplicationNativeSupervisor(string host,string directory,string[] args,string input,int lineLimit,int lineCharsLimit,int totalCharsLimit,bool clearEnvironment,Dictionary<string,string> exactEnvironment,bool redirectStandardInput)
+  : this(host,directory,args,input,lineLimit,lineCharsLimit,totalCharsLimit) {
+  if(clearEnvironment&&exactEnvironment==null||!clearEnvironment&&exactEnvironment!=null)throw new ArgumentException("Environment mode differs from its explicit map");
+  if(!redirectStandardInput&&!String.IsNullOrEmpty(input))throw new ArgumentException("No input channel was requested");
+  if(clearEnvironment){
+   process.StartInfo.Environment.Clear();
+   foreach(var entry in exactEnvironment)process.StartInfo.Environment.Add(entry.Key,entry.Value);
+   StartedIdentity.EnvironmentMode="ClearExact";
+  }
+  process.StartInfo.RedirectStandardInput=redirectStandardInput;
+  StartedIdentity.RedirectStandardInput=redirectStandardInput;
+ }
+ // Pure snapshots expose only requested synthetic values, never all inherited
+ // secrets. Returned copies cannot mutate the native owner's configuration.
+ public Dictionary<string,string> CaptureEnvironmentFixture(string[] keys) {
+  var result=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+  foreach(string key in keys){string value;if(process.StartInfo.Environment.TryGetValue(key,out value))result.Add(key,value);}
+  return result;
+ }
+ public int ConfiguredEnvironmentCountFixture {get{return process.StartInfo.Environment.Count;}}
  public void Start() {
   if(StartedIdentity.Started)throw new InvalidOperationException("Native instance already started");
   lifetimeClock.Start();
@@ -67,7 +91,8 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
   ownedHandle=process.SafeHandle;StartedIdentity.ExactStartedProcessHandlePinned=!ownedHandle.IsInvalid&&!ownedHandle.IsClosed;
   stdoutTask=Task.Run(()=>Drain(new StreamReader(process.StandardOutput.BaseStream,new UTF8Encoding(false,true),false,4096,true),"stdout"));
   stderrTask=Task.Run(()=>Drain(new StreamReader(process.StandardError.BaseStream,new UTF8Encoding(false,true),false,4096,true),"stderr"));
-  inputTask=Task.Run(WriteInput);
+  // No input channel is a declared configuration, not a fabricated stdin EOF.
+  inputTask=StartedIdentity.RedirectStandardInput?Task.Run(WriteInput):Task.CompletedTask;
   try {
    StartedIdentity.Pid=process.Id;StartedIdentity.CreationUtc=process.StartTime.ToUniversalTime().ToString("o");
    IntPtr token;
@@ -136,7 +161,7 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
  }
  public Outcome Wait(DateTimeOffset authorityEnds,long cleanupReserveMs,long maximumExecutionMs) {
   if(!StartedIdentity.Started||cleanupReserveMs<1||maximumExecutionMs<1)throw new InvalidOperationException("Owned wait has no finite reservation");
-  var result=new Outcome {Started=true};
+  var result=new Outcome {Started=true,InputChannelRequested=StartedIdentity.RedirectStandardInput};
   DateTimeOffset executionEnds=authorityEnds.AddMilliseconds(-cleanupReserveMs);
   while(!Signaled()){
    if(DateTimeOffset.UtcNow>=executionEnds||lifetimeClock.ElapsedMilliseconds>=maximumExecutionMs){result.DeadlineReached=true;break;}

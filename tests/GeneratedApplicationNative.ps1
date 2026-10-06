@@ -248,6 +248,112 @@ function Save-GeneratedApplicationNativeOutcome {
     [pscustomobject]$record
 }
 
+function Get-PortableBootstrapSourceBytes {
+    param([Parameter(Mandatory)] [string] $RepositoryRoot)
+    # Reuse the actual portable owner canonicalizer; do not approximate BOM or
+    # newline rules in this development admission seam. No build executes.
+    . (Join-Path $RepositoryRoot 'build/PortableDistribution.ps1')
+    $hostSource=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'build/RuntimeHost.ps1'))
+    $helperText=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'build/Start-WIN-PCInfo.ps1')).Replace('# __RUNTIME_HOST_FUNCTIONS__',$hostSource)
+    ConvertTo-PortableScriptBytes -Text $helperText -IncludeBom
+}
+
+function Complete-PortableBootstrapNativeBinding {
+    param([Parameter(Mandatory)] $Binding,
+        [AllowNull()] [Management.Automation.ErrorRecord] $BodyError)
+    try {
+        Complete-QualificationHarness -BodyError $BodyError -Cleanup @(
+            {if ($null -ne $Binding.TargetStream) { $Binding.TargetStream.Dispose() }},
+            {if ($null -ne $Binding.HostStream) { $Binding.HostStream.Dispose() }}
+        )
+    }
+    catch {
+        if (Test-QualificationCleanupUnverified -Exception $_.Exception) {
+            if ($null -eq (Get-Variable PortableBootstrapUnverifiedBindings -Scope Script -ErrorAction SilentlyContinue)) {
+                $script:PortableBootstrapUnverifiedBindings=[Collections.Generic.List[object]]::new()
+            }
+            $script:PortableBootstrapUnverifiedBindings.Add($Binding)
+        }
+        throw
+    }
+}
+
+function Open-PortableBootstrapNativeBinding {
+    param([Parameter(Mandatory)] [string] $RepositoryRoot,
+        [Parameter(Mandatory)] [string] $HostPath, [Parameter(Mandatory)] [string] $WorkingDirectory,
+        [Parameter(Mandatory)] [string[]] $Arguments, [hashtable] $ExactEnvironment)
+    $root=[IO.Path]::GetFullPath($RepositoryRoot)
+    $context=Get-TestNativeAdmissionContext -RepositoryRoot $root -SelfIdentity (Get-TestNativeSelfIdentity)
+    $testPath=Join-Path $root 'tests/PortableDistributionApplication.Tests.ps1'
+    if ($context.Parent.Admission.testPath -isnot [string] -or $context.Parent.Admission.testPath -ine $testPath -or
+        @($context.Root.Admission.inputs | Where-Object path -IEQ $testPath).Count -ne 1) {
+        throw 'Portable bootstrap requires its exact currently admitted test source.'
+    }
+    $expectedHost=Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    if ($HostPath -ine $expectedHost -or $Arguments.Count -ne 6 -or
+        $Arguments[0] -cne '-NoLogo' -or $Arguments[1] -cne '-NoProfile' -or $Arguments[2] -cne '-File' -or
+        $Arguments[4] -cne '-Workflow' -or $Arguments[5] -cne 'Help') { throw 'Portable bootstrap host or closed Help argv changed.' }
+    $target=[IO.Path]::GetFullPath($Arguments[3])
+    if (-not [IO.Path]::IsPathFullyQualified($Arguments[3]) -or $Arguments[3] -ine $target) {
+        throw 'Portable bootstrap argv must name its exact absolute target.'
+    }
+    $parts=[IO.Path]::GetRelativePath($root,$target).Replace('\','/').Split('/')
+    $policy=Read-TestNativeRecord -Path (Join-Path $root 'docs/spec/releases/2.0.0-preview.1-portable-distribution.json')
+    if ($parts.Count -ne 5 -or $parts[0] -cne '.test-output' -or
+        $parts[1] -cnotmatch '^portable-distribution-application-[a-f0-9]{32}$' -or $parts[2] -cne 'extract-a' -or
+        $parts[3] -cne $policy.archiveRootName -or $parts[4] -cne 'Start-WIN-PCInfo.ps1' -or
+        $WorkingDirectory -ine [IO.Path]::GetDirectoryName($target)) { throw 'Portable bootstrap target or working directory escaped its exact fixture.' }
+    $workRoot=Join-Path (Join-Path $root '.test-output') $parts[1]
+    for ($directory=[IO.Path]::GetDirectoryName($target); $directory.Length -ge $root.Length; $directory=[IO.Path]::GetDirectoryName($directory)) {
+        if (((Get-Item -LiteralPath $directory).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Portable bootstrap fixture cannot be redirected.' }
+        if ($directory -ieq $root) { break }
+    }
+    foreach ($path in @($HostPath,$target)) {
+        if (((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Portable bootstrap executable cannot be redirected.' }
+    }
+    $clear=$PSBoundParameters.ContainsKey('ExactEnvironment')
+    $map=$null
+    if ($clear) {
+        $emptyRoot=Join-Path $workRoot 'no-pwsh'
+        $expected=@{PATH=(Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0');SystemRoot=$env:SystemRoot;WINDIR=$env:WINDIR;
+            ProgramFiles=$emptyRoot;'ProgramFiles(x86)'=$emptyRoot;LOCALAPPDATA=$emptyRoot;USERPROFILE=$emptyRoot;
+            ComSpec=(Join-Path $env:WINDIR 'System32/cmd.exe');PATHEXT='.COM;.EXE;.BAT;.CMD'}
+        if ($null -eq $ExactEnvironment -or $ExactEnvironment.Count -ne $expected.Count -or -not [IO.Directory]::Exists($emptyRoot)) {
+            throw 'Portable bootstrap exact environment differs from the missing-host fixture.'
+        }
+        $map=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($key in $ExactEnvironment.Keys) {
+            if (-not $expected.ContainsKey($key) -or [string]$ExactEnvironment[$key] -cne [string]$expected[$key]) { throw 'Portable bootstrap exact environment entry changed.' }
+            $map.Add($key,[string]$ExactEnvironment[$key])
+        }
+    }
+    $hostStream=$null; $targetStream=$null
+    try {
+        $hostStream=[IO.File]::Open($HostPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+        $targetStream=[IO.File]::Open($target,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+        $targetSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($targetStream)).ToLowerInvariant()
+        $expectedBytes=Get-PortableBootstrapSourceBytes -RepositoryRoot $root
+        if ($targetStream.Length -ne $expectedBytes.Length -or $targetSha -cne
+            [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]]$expectedBytes)).ToLowerInvariant()) {
+            throw 'Portable bootstrap target bytes differ from the actual reviewed portable builder.'
+        }
+        $hostSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($hostStream)).ToLowerInvariant()
+        $hostStream.Position=0; $targetStream.Position=0
+        $end=[DateTimeOffset]::ParseExact($context.Parent.Pending.authorityEnds,'o',[Globalization.CultureInfo]::InvariantCulture).
+            AddMilliseconds(-[long]$context.Parent.Pending.cleanupReserveMs-2000)
+        [pscustomobject]@{HostStream=$hostStream;TargetStream=$targetStream;ClearEnvironment=$clear;Environment=$map;AuthorityEnds=$end;
+            Record=[ordered]@{contract='win-pcinfo.portable-bootstrap-native/1.0.0';testPath=$testPath;
+                parentPendingCanonicalSha256=(Get-TestNativeDigest -Value $context.Parent.Pending);
+                hostPath=$HostPath;hostSha256=$hostSha;targetPath=$target;targetSha256=$targetSha;
+                arguments=$Arguments;workingDirectory=$WorkingDirectory;environmentMode=$(if($clear){'ClearExact'}else{'Inherited'});
+                explicitEnvironment=$map;redirectStandardInput=$false;processTreeAbsenceClaim=$false}}
+    }
+    catch {
+        Complete-PortableBootstrapNativeBinding -Binding ([pscustomobject]@{TargetStream=$targetStream;HostStream=$hostStream;
+            Phase='AdmissionFailedBeforeNativeCreation'}) -BodyError $_
+    }
+}
+
 function Invoke-GeneratedApplicationNative {
     param([Parameter(Mandatory)] [string] $HostPath,
         [Parameter(Mandatory)] [string] $WorkingDirectory,
@@ -259,7 +365,15 @@ function Invoke-GeneratedApplicationNative {
         [int] $MaximumTotalCharacters = 33554432,
         [scriptblock] $ObserveStartup, [scriptblock] $ObserveTerminal,
         [ValidateSet('GeneratedApplication','TestFile','QualificationCase')] [string] $NativeRole = 'GeneratedApplication',
-        [AllowNull()] $TestFileAdmission, [AllowNull()] $QualificationCaseAdmission)
+        [AllowNull()] $TestFileAdmission, [AllowNull()] $QualificationCaseAdmission,
+        [switch] $PortableBootstrap, [hashtable] $ExactEnvironment)
+
+    $portableBinding=$null; $portableSafe=$false; $startRequested=$false; $owner=$null
+    try {
+    if ($PSBoundParameters.ContainsKey('ExactEnvironment') -and -not $PortableBootstrap) { throw 'Exact environment requires the closed portable bootstrap caller.' }
+    if ($PortableBootstrap -and ($NativeRole -cne 'GeneratedApplication' -or $null -ne $TestFileAdmission -or
+        $null -ne $QualificationCaseAdmission -or -not [string]::IsNullOrEmpty($StandardInput))) { throw 'Portable bootstrap cannot change another native role or request stdin.' }
+    if ($PortableBootstrap -and ($TimeoutMs -gt 60000 -or $CleanupReserveMs -lt 10000)) { throw 'Portable bootstrap requires its bounded execution and retention reservation.' }
 
     # Test execution is separate from product collection limits. The default
     # reserves the product's 60-minute ceiling plus two minutes for termination
@@ -277,6 +391,14 @@ function Invoke-GeneratedApplicationNative {
     $outputRoot=Join-Path $repository '.test-output'
     if ([IO.Directory]::Exists($outputRoot) -and ((Get-Item -LiteralPath $outputRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Generated application output root cannot use a reparse point.' }
     Assert-TestNativeRoleReady -NativeRole $NativeRole -RepositoryRoot $repository
+    if ($PortableBootstrap) {
+        $bindingArguments=@{RepositoryRoot=$repository;HostPath=$HostPath;WorkingDirectory=$WorkingDirectory;Arguments=$Arguments}
+        if ($PSBoundParameters.ContainsKey('ExactEnvironment')) { $bindingArguments.ExactEnvironment=$ExactEnvironment }
+        $portableBinding=Open-PortableBootstrapNativeBinding @bindingArguments
+        if ($portableBinding.AuthorityEnds -lt $budget.AuthorityEnds) {
+            $budget=Get-GeneratedApplicationNativeBudget -TimeoutMs $TimeoutMs -CleanupReserveMs $CleanupReserveMs -AuthorityEnds $portableBinding.AuthorityEnds
+        }
+    }
     $parent=Join-Path $outputRoot $(switch ($NativeRole) {'TestFile' {'test-file-native'} 'QualificationCase' {'qualification-case-native'} default {'generated-native'}})
     $nonce=[guid]::NewGuid().ToString('N')
     $admission=$null
@@ -299,8 +421,15 @@ function Invoke-GeneratedApplicationNative {
     if (($NativeRole -ne 'TestFile' -and $null -ne $TestFileAdmission) -or
         ($NativeRole -ne 'QualificationCase' -and $null -ne $QualificationCaseAdmission)) { throw 'Native role cannot accept another role admission.' }
     Initialize-GeneratedApplicationNativeSupervisor
-    $owner=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::new($HostPath,$WorkingDirectory,$Arguments,$StandardInput,
-        $MaximumLines,$MaximumLineCharacters,$MaximumTotalCharacters)
+    if ($PortableBootstrap) {
+        $admission=$portableBinding.Record
+        $owner=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::new($HostPath,$WorkingDirectory,$Arguments,$StandardInput,
+            $MaximumLines,$MaximumLineCharacters,$MaximumTotalCharacters,$portableBinding.ClearEnvironment,$portableBinding.Environment,$false)
+    }
+    else {
+        $owner=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::new($HostPath,$WorkingDirectory,$Arguments,$StandardInput,
+            $MaximumLines,$MaximumLineCharacters,$MaximumTotalCharacters)
+    }
     $directory=Join-Path $parent $nonce
     $null=[IO.Directory]::CreateDirectory($parent)
     $null=New-Item -ItemType Directory -Path $directory -ErrorAction Stop
@@ -411,6 +540,7 @@ function Invoke-GeneratedApplicationNative {
         throw $exception
     }
     $owner.Dispose()
+    $portableSafe=$true
     # Natural nonzero exits are part of the existing negative-test contract.
     # Behavior assertions, including JSON parsing, run only after ownership is
     # retained and safely released. Their failure cannot erase native evidence.
@@ -419,6 +549,36 @@ function Invoke-GeneratedApplicationNative {
     [pscustomobject]@{ExitCode=$outcome.NativeExitCode; StandardOutput=$stdout; StandardError=$stderr;
         EvidenceDirectory=$directory; NativeIdentity=$owner.StartedIdentity; NativeOutcome=$original.outcome; Nonce=$nonce;
         StreamRecords=$outcome.Lines}
+    }
+    catch {
+        if ($PortableBootstrap -and $startRequested -and -not $portableSafe -and
+            -not (Test-QualificationCleanupUnverified -Exception $_.Exception)) {
+            # Fallible post-start disposal/retention must not let the caller
+            # delete its package root while original ownership is uncertain.
+            $_.Exception.Data['OwnedCleanupUnverified']=$true
+            $_.Exception.Data['NativeEvidenceDirectory']=$directory
+            if ($null -ne $owner) {
+                if ($null -eq (Get-Variable GeneratedApplicationUnverifiedOwners -Scope Script -ErrorAction SilentlyContinue)) {
+                    $script:GeneratedApplicationUnverifiedOwners=[Collections.Generic.List[object]]::new()
+                }
+                $script:GeneratedApplicationUnverifiedOwners.Add($owner)
+            }
+            try { [IO.File]::WriteAllText((Get-QualificationCleanupBlockerPath),'{"state":"OwnedCleanupUnverified"}',[Text.UTF8Encoding]::new($false)) } catch { }
+            Write-Output 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'
+        }
+        throw
+    }
+    finally {
+        if ($null -ne $portableBinding) {
+            if ($startRequested -and -not $portableSafe) {
+                if ($null -eq (Get-Variable PortableBootstrapUnverifiedBindings -Scope Script -ErrorAction SilentlyContinue)) {
+                    $script:PortableBootstrapUnverifiedBindings=[Collections.Generic.List[object]]::new()
+                }
+                $script:PortableBootstrapUnverifiedBindings.Add($portableBinding)
+            }
+            else { Complete-PortableBootstrapNativeBinding -Binding $portableBinding }
+        }
+    }
 }
 
 . (Join-Path $PSScriptRoot 'QualificationCaseAdmission.ps1')
