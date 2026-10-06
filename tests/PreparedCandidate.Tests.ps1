@@ -19,7 +19,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $repository 'tests/GeneratedApplicationNativeSupervisor.cs'),'// synthetic native supervisor')
     [IO.File]::WriteAllText((Join-Path $repository 'tests/Invoke-TestFile.ps1'),'# synthetic fresh file bootstrap')
     [IO.File]::WriteAllText((Join-Path $repository 'tests/Run-Tests.ps1'),'# synthetic suite owner')
-    foreach ($dependency in @('QualificationCleanup.ps1','QualificationCaseAdmission.ps1','Invoke-QualificationCase.ps1','Invoke-FocusedTest.ps1','QualificationFixtureProcess.ps1','QualificationCapabilityProcess.ps1','QualificationInlineRepresentation.ps1')) {
+    foreach ($dependency in @('QualificationCleanup.ps1','QualificationCaseAdmission.ps1','Invoke-QualificationCase.ps1','Invoke-FocusedTest.ps1','QualificationFixtureProcess.ps1','QualificationCapabilityProcess.ps1','QualificationInlineRepresentation.ps1','QualificationRecipientViewingInterruption.ps1')) {
         [IO.File]::WriteAllText((Join-Path $repository ('tests/'+$dependency)),'# synthetic case/focused dependency')
     }
     # This bounded fixture substitutes the build owner only; it executes no
@@ -48,7 +48,7 @@ param([string] $OutputPath)
         Assert-Equal $true $refused $Because
     }
     $original=New-PreparedTestCandidateManifest -RepositoryRoot $repository -CandidatePath $candidate
-    foreach ($dependency in @('tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1')) {
+    foreach ($dependency in @('tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1','tests/QualificationRecipientViewingInterruption.ps1')) {
         Assert-Equal 1 @($original.inputs | Where-Object { $_.path -ceq $dependency }).Count "present ownership dependency is declared exactly once: $dependency"
         $checks++
     }
@@ -80,7 +80,7 @@ param([string] $OutputPath)
         'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs',
         'tests/Invoke-TestFile.ps1','tests/Run-Tests.ps1','tests/QualificationCleanup.ps1',
         'tests/QualificationCaseAdmission.ps1','tests/Invoke-QualificationCase.ps1','tests/Invoke-FocusedTest.ps1','tests/QualificationFixtureProcess.ps1',
-        'tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1')) {
+        'tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1','tests/QualificationRecipientViewingInterruption.ps1')) {
         $literal=Join-Path $repository $path
         $saved=[IO.File]::ReadAllBytes($literal)
         try {
@@ -90,7 +90,7 @@ param([string] $OutputPath)
         finally { [IO.File]::WriteAllBytes($literal,$saved) }
         $checks++
     }
-    foreach ($dependency in @('tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1')) {
+    foreach ($dependency in @('tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1','tests/QualificationRecipientViewingInterruption.ps1')) {
         $literal=Join-Path $repository $dependency
         $saved=[IO.File]::ReadAllBytes($literal)
         try {
@@ -105,11 +105,13 @@ param([string] $OutputPath)
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate -PreparedManifestPath $manifestPath -PreparedManifestSha256 $pin } 'new undeclared input refuses'
     [IO.File]::Delete($added)
     $checks++
-    foreach ($fault in @('MissingInput','DuplicateInput','Runtime','CandidatePath')) {
+    foreach ($fault in @('MissingInput','DuplicateInput','Runtime','CandidatePath','MissingRecipientHelper','RecipientHelperHash')) {
         $changed=$original | ConvertTo-Json -Depth 10 | ConvertFrom-Json -Depth 10
         switch ($fault) {
             'MissingInput' { $changed.inputs=@($changed.inputs | Select-Object -Skip 1) }
             'DuplicateInput' { $changed.inputs[1]=$changed.inputs[0] }
+            'MissingRecipientHelper' { $changed.inputs=@($changed.inputs | Where-Object { $_.path -cne 'tests/QualificationRecipientViewingInterruption.ps1' }) }
+            'RecipientHelperHash' { @($changed.inputs | Where-Object { $_.path -ceq 'tests/QualificationRecipientViewingInterruption.ps1' })[0].sha256='0'*64 }
             'Runtime' { $changed.runtime.sha256='0'*64 }
             'CandidatePath' { $changed.candidate.path=Join-Path $root 'other.ps1' }
         }
