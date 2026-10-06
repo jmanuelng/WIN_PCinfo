@@ -102,6 +102,7 @@ $watch=[Diagnostics.Stopwatch]::StartNew()
                 $window.FindName($button).RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
             }
         }.GetNewClosure())
+        $caseBodyError=$null
         try {
             if($case.Name -eq 'BrowseCancel'){
                 # Substitute only chooser creation; this fixture proves its cancel
@@ -126,14 +127,12 @@ $watch=[Diagnostics.Stopwatch]::StartNew()
                 Assert-Equal $true $caseState.BrowsePreserved 'Browse cancellation preserves both typed inputs'
             }
         }
+        catch {$caseBodyError=$_}
         finally {
-            try {$caseDriver.Stop()}
-            catch {
-                $stopError=[InvalidOperationException]::new('Recipient selection case timer cleanup remains unverified.',$_.Exception)
-                $stopError.Data['OwnedCleanupUnverified']=$true
-                throw $stopError
-            }
-            finally {${function:Show-StatusDeskRecipientDialog}=$originalDialog}
+            Complete-QualificationHarness -BodyError $caseBodyError -Cleanup @(
+                {$caseDriver.Stop()},
+                {Set-Item -LiteralPath Function:script:Show-StatusDeskRecipientDialog -Value $originalDialog -ErrorAction Stop}
+            )
         }
     }
 }
