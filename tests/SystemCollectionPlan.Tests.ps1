@@ -10,6 +10,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot 'src/PrivilegedCollectionPlan.ps1')
 . (Join-Path $repositoryRoot 'src/SystemCollectionPlan.ps1')
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 
 $convertToJsonCommand = $ExecutionContext.InvokeCommand.GetCommand(
     'ConvertTo-Json', [System.Management.Automation.CommandTypes]::Cmdlet
@@ -401,7 +402,13 @@ $null = $engineStart.ArgumentList.Add('-NoLogo')
 $null = $engineStart.ArgumentList.Add('-NoProfile')
 $null = $engineStart.ArgumentList.Add('-Command')
 $null = $engineStart.ArgumentList.Add('[System.Threading.Thread]::Sleep(30000)')
+$fixtureOwner = New-QualificationFixtureProcessOwner -RepositoryRoot $repositoryRoot -StartInfo $engineStart
+$script:systemCleanupEngine = $null
+$fixtureError = $null
+try {
+Assert-QualificationFixtureProcessAdmission -Owner $fixtureOwner
 $script:systemCleanupEngine = [System.Diagnostics.Process]::Start($engineStart)
+Register-QualificationFixtureProcess -Owner $fixtureOwner -Process $script:systemCleanupEngine
 $script:systemCleanupInstanceActive = $true
 $script:systemCleanupRegistered = $true
 $script:systemCleanupInstance = [pscustomobject]@{
@@ -430,7 +437,6 @@ $folder | Add-Member -MemberType ScriptMethod -Name GetTask -Value {
     if (-not $script:systemCleanupRegistered) { throw [Runtime.InteropServices.COMException]::new('Synthetic task not found.', -2147024894) }
     [pscustomobject]@{}
 }
-try {
     $preJobCleanup = Remove-SystemCollectionTransientTask -Activation ([pscustomobject]@{
         Service = $service
         Folder = $folder
@@ -443,12 +449,9 @@ try {
     Assert-Equal $false $preJobCleanup.EngineProcessAbsent `
         'cleanup records the exact captured task EnginePID as surviving'
 }
+catch { $fixtureError = $_ }
 finally {
-    if (-not $script:systemCleanupEngine.HasExited) {
-        $script:systemCleanupEngine.Kill($true)
-        $script:systemCleanupEngine.WaitForExit()
-    }
-    $script:systemCleanupEngine.Dispose()
+    Complete-QualificationFixtureProcess -Owner $fixtureOwner -Process $script:systemCleanupEngine -BodyError $fixtureError
 }
 
 Write-Output 'PASS: all twenty SYSTEM sub-plan cases enforce catalog, parameters, provenance, confinement, lifecycle, and cleanup contracts.'
