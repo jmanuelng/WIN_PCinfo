@@ -1,5 +1,6 @@
 ﻿[CmdletBinding()]
 param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
+    [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '',
     [switch] $DelayPrivilegeStartup,
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity')]
     [string] $QualificationCancelAfter = '',
@@ -42,7 +43,7 @@ if ($CancelDuringPrivilege -and ($ActiveAction -ne 'None' -or $QualificationPlan
     throw 'Automatic active privilege cancellation cannot compose a GUI action or independent plan fault.'
 }
 if ($DelayPrivilegeStartup) {
-    $startupArguments=@('CancelDuringPrivilege','DelayPrivilegeStartup','QualificationPath')
+    $startupArguments=@('CancelDuringPrivilege','DelayPrivilegeStartup','QualificationPath','CandidatePath','PreparedManifestPath','PreparedManifestSha256')
     if (-not $CancelDuringPrivilege -or @($PSBoundParameters.Keys | Where-Object { $_ -notin $startupArguments }).Count) {
         throw 'Delayed privilege startup requires only the controlled automatic cancellation regression.'
     }
@@ -53,7 +54,7 @@ if ($ActivePrivilegeBoundary -ne 'AfterExecution' -and
     throw 'Explicit privilege startup witnesses require an active WPF Privilege case outside resource qualification.'
 }
 if ($ActivePrivilegeBoundary -ne 'AfterExecution') {
-    $boundaryArguments=@('Wpf','ActiveAction','ActiveWorker','ActivePrivilegeBoundary','RequireRecoveryJournal','QualificationPath')
+    $boundaryArguments=@('Wpf','ActiveAction','ActiveWorker','ActivePrivilegeBoundary','RequireRecoveryJournal','QualificationPath','CandidatePath','PreparedManifestPath','PreparedManifestSha256')
     if (@($PSBoundParameters.Keys | Where-Object { $_ -notin $boundaryArguments }).Count) {
         throw 'Explicit privilege startup witnesses cannot compose independent cancellation or fault seams.'
     }
@@ -78,7 +79,7 @@ if (-not $QualificationPath -and $env:WINPCINFO_TEST_EVIDENCE) {
 }
 $qualificationArguments = [ordered]@{}
 foreach ($entry in $PSBoundParameters.GetEnumerator()) {
-    if ($entry.Key -notin @('QualificationPath','RecoveryDestination','InterruptHandoffPath')) {
+    if ($entry.Key -notin @('QualificationPath','RecoveryDestination','InterruptHandoffPath','CandidatePath','PreparedManifestPath','PreparedManifestSha256')) {
         $qualificationArguments[$entry.Key] = if ($entry.Value -is [Management.Automation.SwitchParameter]) { [bool]$entry.Value } else { $entry.Value }
     }
 }
@@ -153,15 +154,12 @@ if ($RequireQualityBudgets) {
     if ($memoryCalibrationAccepted) { $memoryCalibrationSha256=(Get-FileHash -LiteralPath $memoryCalibrationPath).Hash.ToLowerInvariant() }
 }
 
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-if ($RequireQualityBudgets) {
-    # A delivered assessment does not execute its build pipeline. Run the exact
-    # same deterministic build in a separate process; retain the original
-    # mixed-process failures rather than subtracting estimated overhead.
-    Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @(
-        '-NoLogo','-NoProfile','-File',(Join-Path $repositoryRoot 'build/Build.ps1'),'-OutputPath',$candidate
-    ) | Out-Null
-} else { & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null }
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256 -SeparateBuildProcess:$RequireQualityBudgets
+$candidate=$candidateContext.Path
+$qualificationArguments['PreparedCandidate']=$candidateContext.Prepared
+$candidateUseError=$null
+try {
 $regions = [regex]::Matches([IO.File]::ReadAllText($candidate),
     '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach ($region in $regions) { . ([scriptblock]::Create($region.Groups[2].Value)) }
@@ -1164,7 +1162,7 @@ finally {
             process = 'ControlledGeneratedStatusDeskAndTestDriver'
             assessmentInterval = 'ProcessLifetimeThroughCompletedSessionAndWpfViewingBeforePostAssessmentAssertions'
             includesModuleLoadingAndTestDriver = $true
-            includesInProcessBuild = (-not $RequireQualityBudgets)
+            includesInProcessBuild = (-not $RequireQualityBudgets -and $qualificationArguments['PreparedCandidate'] -ne $true)
             includesPostAssessmentAssertions = $true
             workingSetMethod = 'WindowsProcessLifetimePeakAndPeriodicSamples'
             privateMemoryMethod = if ($RequireQualityBudgets) { 'NativeWindowsLifetimePrivateCommitPeakAndPeriodicSamples' } else { 'PeriodicSamplesWithRecordedCountAndMaximumGap' }
@@ -1366,3 +1364,6 @@ finally {
     }
 }
 Write-Output 'PASS: generated Status desk worker executes controlled comprehensive collectors, protects a useful offline report, and cleans viewing.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

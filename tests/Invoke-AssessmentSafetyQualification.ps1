@@ -2,14 +2,23 @@
 param(
     [ValidateSet('Coverage','Cultures','Safety','Workers','Sources')] [string] $Mode = 'Safety',
     [Parameter(Mandatory)] [string] $ResultDirectory,
-    [string] $CaseFilter = ''
+    [string] $CaseFilter = '',
+    [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = ''
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateUseError=$null
+try {
+if (-not $candidateContext.Prepared) {
+    $PreparedManifestPath=Join-Path $candidateContext.OwnedDirectory 'prepared-test-candidate.json'
+    [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidate) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+    $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+}
 $hostPath = Resolve-WinPCInfoRuntime -ApplicationPath $candidate
 $windowsPowerShellPath=Join-Path ([Environment]::GetFolderPath('Windows')) 'System32/WindowsPowerShell/v1.0/powershell.exe'
 $provenance = [ordered]@{
@@ -91,7 +100,8 @@ try {
         $failedCase=$case.id
         $resultPath = Join-Path ([IO.Path]::GetFullPath($ResultDirectory)) "$($case.id).json"
         $watch = [Diagnostics.Stopwatch]::StartNew()
-        $arguments = @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'), '-QualificationPath', $resultPath) + $case.arguments
+        $arguments = @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'), '-QualificationPath', $resultPath,
+            '-CandidatePath',$candidate,'-PreparedManifestPath',$PreparedManifestPath,'-PreparedManifestSha256',$PreparedManifestSha256) + $case.arguments
         Invoke-QualificationTestProcess -HostPath $hostPath -Arguments $arguments
         $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
         $results.Add([ordered]@{ id=$case.id; elapsedMilliseconds=$watch.ElapsedMilliseconds; evidence=$result })
@@ -107,3 +117,6 @@ finally {
     [IO.File]::WriteAllText($summaryPath, ([ordered]@{ provenance=$provenance; failedCase=$failedCase; results=$results.ToArray() } | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
     }
 }
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
