@@ -83,7 +83,7 @@ function Test-Json {
         'AdministratorExposureApplication.Tests.ps1','MicrosoftConnectivityApplication.Tests.ps1',
         'NetworkTopologyApplication.Tests.ps1','IdentityEnrollmentApplication.Tests.ps1',
         'SoftwareInventoryApplication.Tests.ps1','ComprehensiveReportApplication.Tests.ps1',
-        'RequestValidation.Tests.ps1','ResourceDependenciesApplication.Tests.ps1','SchemaContracts.Tests.ps1')) {
+        'RequestValidation.Tests.ps1','ResourceDependenciesApplication.Tests.ps1','SchemaContracts.Tests.ps1','CertificateTrustApplication.Tests.ps1','PrivilegedCollectionPlanApplication.Tests.ps1','ProductHelpApplication.Tests.ps1')) {
         $copy=Join-Path $fixtureTests $name
         [IO.File]::Copy((Join-Path $PSScriptRoot $name),$copy)
         foreach ($manifest in @('prepared-manifest.json','')) {
@@ -105,7 +105,7 @@ function Test-Json {
             }
         }
     }
-    Write-Output 'PASS: four source campaigns and thirteen ordinary consumers retain explicit prepared input, original failures and closure; native leaves and schema validation are substituted.'
+    Write-Output 'PASS: four source campaigns and sixteen ordinary consumers retain explicit prepared input, original failures and closure; native leaves and schema validation are substituted.'
 }
 finally {
     if ($null -ne $previousSpy) { Set-Variable -Name SourceCampaignCandidateSpy -Scope Global -Value $previousSpy.Value }
