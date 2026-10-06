@@ -49,8 +49,19 @@ function Invoke-GeneratedApplication {
     $global:SourceCampaignCandidateSpy.calls.Add($CandidatePath)
     throw 'Synthetic original application failure'
 }
+function Test-Json {
+    param($Json,$SchemaFile)
+    # Schema semantics are outside this caller control. Reach the first leaf
+    # using the original fixture read, with schema validation substituted.
+    $true
+}
 '@
     [IO.File]::WriteAllText((Join-Path $fixtureTests 'TestHarness.ps1'),$stub,[Text.UTF8Encoding]::new($false))
+    $fixtureInputs=Join-Path $fixtureTests 'fixtures'
+    $null=[IO.Directory]::CreateDirectory($fixtureInputs)
+    foreach ($inputName in @('automation-request.json','automation-request-connectivity.json')) {
+        [IO.File]::Copy((Join-Path $PSScriptRoot ('fixtures/'+$inputName)),(Join-Path $fixtureInputs $inputName))
+    }
     foreach ($name in @('RemoteSourceApplication.Tests.ps1','IdentitySourceApplication.Tests.ps1','SecuritySourceApplication.Tests.ps1','PolicySourceApplication.Tests.ps1')) {
         $copy=Join-Path $fixtureTests $name
         [IO.File]::Copy((Join-Path $PSScriptRoot $name),$copy)
@@ -71,7 +82,8 @@ function Invoke-GeneratedApplication {
         'FirmwareReadinessApplication.Tests.ps1','CrossDomainGuidanceApplication.Tests.ps1',
         'AdministratorExposureApplication.Tests.ps1','MicrosoftConnectivityApplication.Tests.ps1',
         'NetworkTopologyApplication.Tests.ps1','IdentityEnrollmentApplication.Tests.ps1',
-        'SoftwareInventoryApplication.Tests.ps1','ComprehensiveReportApplication.Tests.ps1')) {
+        'SoftwareInventoryApplication.Tests.ps1','ComprehensiveReportApplication.Tests.ps1',
+        'RequestValidation.Tests.ps1','ResourceDependenciesApplication.Tests.ps1','SchemaContracts.Tests.ps1')) {
         $copy=Join-Path $fixtureTests $name
         [IO.File]::Copy((Join-Path $PSScriptRoot $name),$copy)
         foreach ($manifest in @('prepared-manifest.json','')) {
@@ -93,7 +105,7 @@ function Invoke-GeneratedApplication {
             }
         }
     }
-    Write-Output 'PASS: four source campaigns and ten ordinary consumers retain explicit prepared input, original failures and closure; native leaves are substituted.'
+    Write-Output 'PASS: four source campaigns and thirteen ordinary consumers retain explicit prepared input, original failures and closure; native leaves and schema validation are substituted.'
 }
 finally {
     if ($null -ne $previousSpy) { Set-Variable -Name SourceCampaignCandidateSpy -Scope Global -Value $previousSpy.Value }

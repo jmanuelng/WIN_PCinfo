@@ -1,15 +1,18 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $fixtureDirectory = Join-Path $repositoryRoot '.test-output/request-validation'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateError = $null
+try {
+$candidatePath = $candidateContext.Path
 $null = New-Item -ItemType Directory -Path $fixtureDirectory -Force
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
 function New-ValidRequestFixture {
     [ordered]@{
@@ -92,4 +95,7 @@ Assert-Equal 'CleanupOnly' $staleRecoverySummary[0].plan.cleanup.staleRunRecover
 Assert-Equal 'PREPARATION.DECLINED' $staleRecoveryResult.Records[-1].reasonCode `
     'absence of approval still prevents every post-preparation side effect'
 
+}
+catch { $candidateError = $_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateError }
 Write-Output "PASS: generated application rejected $($cases.Count) invalid automation requests through the terminal contract."
