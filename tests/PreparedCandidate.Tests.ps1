@@ -19,7 +19,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $repository 'tests/GeneratedApplicationNativeSupervisor.cs'),'// synthetic native supervisor')
     [IO.File]::WriteAllText((Join-Path $repository 'tests/Invoke-TestFile.ps1'),'# synthetic fresh file bootstrap')
     [IO.File]::WriteAllText((Join-Path $repository 'tests/Run-Tests.ps1'),'# synthetic suite owner')
-    foreach ($dependency in @('QualificationCleanup.ps1','QualificationCaseAdmission.ps1','Invoke-QualificationCase.ps1','Invoke-FocusedTest.ps1','QualificationFixtureProcess.ps1')) {
+    foreach ($dependency in @('QualificationCleanup.ps1','QualificationCaseAdmission.ps1','Invoke-QualificationCase.ps1','Invoke-FocusedTest.ps1','QualificationFixtureProcess.ps1','QualificationCapabilityProcess.ps1','QualificationInlineRepresentation.ps1')) {
         [IO.File]::WriteAllText((Join-Path $repository ('tests/'+$dependency)),'# synthetic case/focused dependency')
     }
     # This bounded fixture substitutes the build owner only; it executes no
@@ -48,6 +48,10 @@ param([string] $OutputPath)
         Assert-Equal $true $refused $Because
     }
     $original=New-PreparedTestCandidateManifest -RepositoryRoot $repository -CandidatePath $candidate
+    foreach ($dependency in @('tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1')) {
+        Assert-Equal 1 @($original.inputs | Where-Object { $_.path -ceq $dependency }).Count "present ownership dependency is declared exactly once: $dependency"
+        $checks++
+    }
     $pin=Save-FixtureManifest $original
     $context=Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate -PreparedManifestPath $manifestPath -PreparedManifestSha256 $pin
     $contexts.Add($context)
@@ -75,12 +79,23 @@ param([string] $OutputPath)
     foreach ($path in @('src/Fixture.ps1','docs/fixture.json','build/Build.ps1','SECURITY.md',
         'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs',
         'tests/Invoke-TestFile.ps1','tests/Run-Tests.ps1','tests/QualificationCleanup.ps1',
-        'tests/QualificationCaseAdmission.ps1','tests/Invoke-QualificationCase.ps1','tests/Invoke-FocusedTest.ps1','tests/QualificationFixtureProcess.ps1')) {
+        'tests/QualificationCaseAdmission.ps1','tests/Invoke-QualificationCase.ps1','tests/Invoke-FocusedTest.ps1','tests/QualificationFixtureProcess.ps1',
+        'tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1')) {
         $literal=Join-Path $repository $path
         $saved=[IO.File]::ReadAllBytes($literal)
         try {
             [IO.File]::AppendAllText($literal,'changed')
             Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate -PreparedManifestPath $manifestPath -PreparedManifestSha256 $pin } "changed source/resource/build input refuses: $path"
+        }
+        finally { [IO.File]::WriteAllBytes($literal,$saved) }
+        $checks++
+    }
+    foreach ($dependency in @('tests/QualificationCapabilityProcess.ps1','tests/QualificationInlineRepresentation.ps1')) {
+        $literal=Join-Path $repository $dependency
+        $saved=[IO.File]::ReadAllBytes($literal)
+        try {
+            [IO.File]::Delete($literal)
+            Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate -PreparedManifestPath $manifestPath -PreparedManifestSha256 $pin } "missing declared ownership dependency refuses: $dependency"
         }
         finally { [IO.File]::WriteAllBytes($literal,$saved) }
         $checks++

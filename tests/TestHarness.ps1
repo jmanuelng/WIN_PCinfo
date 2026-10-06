@@ -36,7 +36,8 @@ function Get-TestCandidateInputInventory {
         'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs',
         'tests/Invoke-TestFile.ps1','tests/Run-Tests.ps1','tests/QualificationCleanup.ps1',
         'tests/QualificationCaseAdmission.ps1','tests/Invoke-QualificationCase.ps1','tests/Invoke-FocusedTest.ps1',
-        'tests/QualificationFixtureProcess.ps1')) {
+        'tests/QualificationFixtureProcess.ps1','tests/QualificationCapabilityProcess.ps1',
+        'tests/QualificationInlineRepresentation.ps1')) {
         if ([IO.File]::Exists((Join-Path $root $path))) { $paths.Add($path) }
     }
     foreach ($path in @($paths | Sort-Object -CaseSensitive -Unique)) {
