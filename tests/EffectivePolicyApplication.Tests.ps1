@@ -1,15 +1,79 @@
 [CmdletBinding()]
-param([string[]] $Scenario = @())
+param(
+    [string[]] $Scenario = @(),
+    [string] $CandidatePath,
+    [string] $PreparedManifestPath,
+    [string] $PreparedManifestSha256
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
-$candidatePath=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath=Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath=Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath|Out-Null
+function Get-EffectivePolicyPrivacyDiagnostic {
+    param([string] $Scenario, [string] $StandardOutput, [string] $Pattern)
+    $records=[Collections.Generic.List[object]]::new()
+    $recordOrdinal=0
+    foreach ($line in [regex]::Matches($StandardOutput, '(?m)^[^\r\n]+')) {
+        $lineMatches=@([regex]::Matches($line.Value, $Pattern))
+        if ($lineMatches.Count) {
+            $record=$line.Value | ConvertFrom-Json -Depth 20
+            $paths=[Collections.Generic.List[object]]::new()
+            function Add-PrivacyPropertyPaths($Value, [string] $Path) {
+                if ($Value -is [pscustomobject]) {
+                    foreach ($property in $Value.PSObject.Properties) {
+                        $propertyPath=$Path+'['+($property.Name | ConvertTo-Json -Compress)+']'
+                        $nameMatches=@([regex]::Matches(($property.Name | ConvertTo-Json -Compress), $Pattern))
+                        if ($nameMatches.Count) {
+                            $paths.Add([ordered]@{path=$propertyPath;kind='PropertyName';matches=@($nameMatches | ForEach-Object Value)})
+                        }
+                        Add-PrivacyPropertyPaths -Value $property.Value -Path $propertyPath
+                    }
+                }
+                elseif ($Value -is [array]) {
+                    for ($index=0; $index -lt $Value.Count; $index++) {
+                        Add-PrivacyPropertyPaths -Value $Value[$index] -Path ($Path+'['+$index+']')
+                    }
+                }
+                else {
+                    $encoded=ConvertTo-Json -InputObject $Value -Compress -Depth 20
+                    $valueMatches=@([regex]::Matches($encoded, $Pattern))
+                    if ($valueMatches.Count) {
+                        $paths.Add([ordered]@{path=$Path;kind='Value';matches=@($valueMatches | ForEach-Object Value)})
+                    }
+                }
+            }
+            Add-PrivacyPropertyPaths -Value $record -Path '$'
+            $typeProperty=$record.PSObject.Properties['recordType']
+            $records.Add([ordered]@{
+                recordOrdinal=$recordOrdinal
+                recordType=$(if ($null -ne $typeProperty) { $typeProperty.Value } else { $null })
+                rawPublicRecord=$line.Value
+                exactMatches=@($lineMatches | ForEach-Object {
+                    [ordered]@{value=$_.Value;recordOffset=$_.Index;stdoutOffset=$line.Index+$_.Index;length=$_.Length}
+                })
+                propertyPaths=$paths.ToArray()
+            })
+        }
+        $recordOrdinal++
+    }
+    [pscustomobject][ordered]@{
+        kind='PrivateEffectivePolicyPublicOutputPrivacyDiagnostic'
+        scenario=$Scenario
+        stdoutSha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($StandardOutput))).ToLowerInvariant()
+        matchingPublicRecords=$records.ToArray()
+        diagnosticOnly=$true
+    }
+}
+
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateUseError=$null
+try {
 $cases=@(
     @{scenario='Workgroup';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=1;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
     @{scenario='Domain';exit=0;outcome='Completed';applied='Complete';configured='Complete';control='Complete';count=2;appliedFinding='Informational';localFinding='Informational';orderFinding='ExpectedCondition';securityFinding='Informational';constraintFinding='Informational';providers=1;firewalls=3;asr=0},
@@ -151,8 +215,22 @@ foreach($case in $cases){
     Assert-Equal $true $validation[0].beginnerReportVerified "$($case.scenario) creates three-layer beginner guidance"
     Assert-Equal $true $validation[0].protectedPackageVerified "$($case.scenario) reopens the protected package"
     Assert-Equal $true $validation[0].validationCleanupVerified "$($case.scenario) proves validation residue absent"
-    if($result.StandardOutput -match '(?i)6ac1786c|7f7d1f60|LocalGPO|synthetic-(?:domain|user|computer)-link|local-machine|bounded-link-[0-9]+|registry:(?:[0-9a-f-]{36}|bounded-setting-[0-9]+)|S-1-5-(?:18|19|20|21-[0-9-]+|32-54[46])|RecoveryPassword|NumericalPassword|TpmPin|XtsAes(?:128|256)?|PolicyXml|RuleCollectionXml|5985|5986|DisableDualScan|NtlmMin(?:Client|Server)Sec'){
-        throw "$($case.scenario) leaked Restricted policy evidence into public output."
+    $policyPrivacyPattern='(?i)6ac1786c|7f7d1f60|LocalGPO|synthetic-(?:domain|user|computer)-link|local-machine|bounded-link-[0-9]+|registry:(?:[0-9a-f-]{36}|bounded-setting-[0-9]+)|S-1-5-(?:18|19|20|21-[0-9-]+|32-54[46])|RecoveryPassword|NumericalPassword|TpmPin|XtsAes(?:128|256)?|PolicyXml|RuleCollectionXml|5985|5986|DisableDualScan|NtlmMin(?:Client|Server)Sec'
+    if($result.StandardOutput -match $policyPrivacyPattern){
+        $privacyFailure=[InvalidOperationException]::new("$($case.scenario) leaked Restricted policy evidence into public output.")
+        if ($env:WINPCINFO_TEST_EVIDENCE) {
+            try {
+                $diagnostic=Get-EffectivePolicyPrivacyDiagnostic -Scenario $case.scenario -StandardOutput $result.StandardOutput -Pattern $policyPrivacyPattern
+                $diagnosticPath=Join-Path $env:WINPCINFO_TEST_EVIDENCE ('effective-policy-private-privacy-'+[guid]::NewGuid().ToString('N')+'.json')
+                [IO.File]::WriteAllText($diagnosticPath,($diagnostic | ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
+            }
+            catch {
+                # Never echo a failing serializer's input or a private path.
+                throw [AggregateException]::new('Policy privacy assertion and private diagnostic retention failed.',
+                    [Exception[]]@($privacyFailure,[InvalidOperationException]::new('Private diagnostic capture could not be retained.')))
+            }
+        }
+        throw $privacyFailure
     }
     if($result.StandardError){throw "$($case.scenario) wrote stderr: $($result.StandardError)"}
     $applicationEvidence.Add([pscustomobject][ordered]@{
@@ -181,3 +259,6 @@ foreach($case in $cases){
 }
 
 Write-Output 'PASS: the generated application exercises three-layer policy evidence, findings, privacy, packaging, and cleanup.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
