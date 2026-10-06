@@ -87,9 +87,7 @@ try {
     [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
     $global:OutputEncoding=[Text.UTF8Encoding]::new($false)
     $parameters=@{}
-    $tokens=$null; $parseErrors=$null
-    $ast=[Management.Automation.Language.Parser]::ParseFile($lease.Admission.testPath,[ref]$tokens,[ref]$parseErrors)
-    if ($parseErrors.Count) { throw 'Admitted test file does not parse.' }
+    $ast=Assert-TestFileExecutableProtocol -Path $lease.Admission.testPath
     $names=if ($null -ne $ast.ParamBlock) {@($ast.ParamBlock.Parameters.Name.VariablePath.UserPath)} else {@()}
     $preparedNames=@('CandidatePath','PreparedManifestPath','PreparedManifestSha256')
     $declared=@($preparedNames | Where-Object { $_ -in $names }).Count

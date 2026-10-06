@@ -23,6 +23,30 @@ function Write-TestNativeNewRecord {
     try { $file.Write($bytes); $file.Flush($true) } finally { $file.Dispose() }
 }
 
+function Assert-TestFileExecutableProtocol {
+    param([Parameter(Mandatory)] [string] $Path)
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile($Path,[ref]$tokens,[ref]$errors)
+    if ($errors.Count -or $null -ne $ast.Find({param($node) $node -is [Management.Automation.Language.ExitStatementAst]},$true)) {
+        throw 'Admitted test files require the bootstrap completion protocol; executable exit statements or parse errors refuse before execution.'
+    }
+    # Fixture child script strings remain ordinary strings. Residual native
+    # LASTEXITCODE from a passing negative test cannot determine file outcome.
+    $ast
+}
+
+function Assert-TestFileLauncher {
+    param([Parameter(Mandatory)] $Admission, [Parameter(Mandatory)] [string] $RepositoryRoot,
+        [Parameter(Mandatory)] [string] $HostPath, [Parameter(Mandatory)] [string] $WorkingDirectory,
+        [Parameter(Mandatory)] [string[]] $Arguments)
+    Assert-TestFileAdmissionInputs -Admission $Admission
+    if ($Admission.repositoryRoot -ine $RepositoryRoot -or $HostPath -ine $Admission.hostPath -or
+        [IO.Path]::GetFullPath($WorkingDirectory) -ine [IO.Path]::GetFullPath($Admission.repositoryRoot) -or
+        $Arguments.Count -ne 4 -or ($Arguments -join '|') -cne (@('-NoLogo','-NoProfile','-File',$Admission.bootstrapPath) -join '|')) {
+        throw 'Test file launcher does not match its fixed admitted bootstrap and working directory.'
+    }
+}
+
 function Assert-TestFileAdmissionInputs {
     param([Parameter(Mandatory)] $Admission)
     if ($Admission.contract -cne 'win-pcinfo.test-file-admission/1.0.0' -or
@@ -42,6 +66,7 @@ function Assert-TestFileAdmissionInputs {
     }
     $testPin=@($Admission.inputs | Where-Object path -IEQ $Admission.testPath)
     if ($testPin.Count -ne 1 -or $testPin[0].sha256 -cne $Admission.testSha256) { throw 'Test file source pin differs from its admitted cohort.' }
+    $null=Assert-TestFileExecutableProtocol -Path $Admission.testPath
     $root=[IO.Path]::GetFullPath($Admission.repositoryRoot)
     if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Admission.testPath)) -ine (Join-Path $root 'tests') -or
         [IO.Path]::GetFileName($Admission.testPath) -cnotlike '*.Tests.ps1' -or
@@ -235,9 +260,7 @@ function Invoke-GeneratedApplicationNative {
     $parent=Join-Path $outputRoot $(if ($NativeRole -eq 'TestFile') {'test-file-native'} else {'generated-native'})
     $nonce=[guid]::NewGuid().ToString('N')
     if ($NativeRole -eq 'TestFile') {
-        Assert-TestFileAdmissionInputs -Admission $TestFileAdmission
-        if ($TestFileAdmission.repositoryRoot -ine $repository -or $HostPath -ine $TestFileAdmission.hostPath -or
-            $Arguments.Count -ne 4 -or ($Arguments -join '|') -cne (@('-NoLogo','-NoProfile','-File',$TestFileAdmission.bootstrapPath) -join '|')) { throw 'Test file launcher does not match its fixed admitted bootstrap.' }
+        Assert-TestFileLauncher -Admission $TestFileAdmission -RepositoryRoot $repository -HostPath $HostPath -WorkingDirectory $WorkingDirectory -Arguments $Arguments
         $Arguments=@($Arguments)+@('-NativeLeaseId',$nonce)
     }
     elseif ($null -ne $TestFileAdmission) { throw 'Generated application cannot accept a test file admission.' }

@@ -43,6 +43,19 @@ try {
         testPath=$testPath; testSha256=(Get-FileHash -LiteralPath $testPath).Hash.ToLowerInvariant(); bootstrapPath=$bootstrap;
         hostPath=$hostPath; inventoryPath=$inventoryPath; suiteEvidenceRoot=$suiteRoot;
         candidatePath=''; preparedManifestPath=''; preparedManifestSha256=''; inputs=$inputs; cohortSha256=(Get-TestNativeDigest -Value $inputs)}
+    Assert-TestFileLauncher -Admission $admission -RepositoryRoot $repository -HostPath $hostPath -WorkingDirectory $repository -Arguments @('-NoLogo','-NoProfile','-File',$bootstrap)
+    Assert-RunnerControl $true 'actual role launcher admits the fixed repository working directory'
+    Assert-RunnerRefusal { Assert-TestFileLauncher -Admission $admission -RepositoryRoot $repository -HostPath $hostPath -WorkingDirectory $fixture -Arguments @('-NoLogo','-NoProfile','-File',$bootstrap) } 'wrong working directory refuses before prearm or child request'
+    foreach ($scriptText in @('exit 1','exit 0','if ($true) { exit 1 }')) {
+        [IO.File]::WriteAllText($testPath,$scriptText)
+        Assert-RunnerRefusal { Assert-TestFileExecutableProtocol -Path $testPath } 'actual shim protocol refuses executable exits instead of falsely passing or interpreting residual native status'
+    }
+    foreach ($scriptText in @('throw ''synthetic body assertion''','$childScript = ''exit 7''; & $hostPath -Command $childScript; if ($LASTEXITCODE -ne 7) { throw ''negative control'' }')) {
+        [IO.File]::WriteAllText($testPath,$scriptText)
+        $null=Assert-TestFileExecutableProtocol -Path $testPath
+        Assert-RunnerControl $true 'ordinary body throws and intentional child exit fixture strings retain their completion protocol'
+    }
+    [IO.File]::WriteAllText($testPath,'synthetic input')
     $self=[pscustomobject]@{Pid=123; CreationUtc='2026-10-06T12:00:00.0000000Z'; OwnerSid='S-1-5-21-111'; HostPath=$hostPath}
     $pending=[ordered]@{nativeRole='TestFile'; nonce=$nonce; authorityEnds='2026-10-06T13:00:00Z'; childCreationRequested=$true;
         child=[ordered]@{Started=$true; ExactStartedProcessHandlePinned=$true; ObservationFailure=''; Pid=$self.Pid;
