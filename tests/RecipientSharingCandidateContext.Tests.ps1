@@ -42,7 +42,7 @@ function New-PreparedTestCandidateManifest {
     [ordered]@{contract='DisclosedPureRecipientSharingContextOnly';candidate=$CandidatePath}
 }
 function Close-TestCandidate {
-    param($Candidate,$BodyError)
+    param($Candidate,[AllowNull()] [Management.Automation.ErrorRecord] $BodyError)
     $probe.events.Add('CandidateClose');$probe.closes++;$probe.closedContext=$Candidate;$probe.closedBodyError=$BodyError
     if($probe.kind -in @('CloseFailure','BodyAndClose')){
         $probe.closeFailure.Data['OwnedCleanupUnverified']=$true
@@ -53,6 +53,7 @@ function Close-TestCandidate {
         throw $probe.closeFailure
     }
     if($BodyError){throw $BodyError.Exception}
+    $probe.events.Add('CandidateClosed')
 }
 function New-Item {
     param($ItemType,$Path,$ErrorAction,[switch]$Force)
@@ -103,16 +104,39 @@ function Test-SharingContainsException {
     $false
 }
 function Normalize-SharingBody { param([string]$Text) $Text.Replace("`r`n","`n").Trim() }
+function Assert-SharingPassOrder {
+    param([object[]]$Output,[string[]]$Events,[bool]$Success,[AllowNull()]$Failure)
+    $passes=@($Output | Where-Object { $_ -like 'PASS:*' })
+    if($passes.Count -gt 0 -and (-not $Success -or ($Events -join '|') -cne 'CandidateClose|CandidateClosed|FixtureFinalize|FixtureFinalized|PASS')){
+        $exception=[InvalidOperationException]::new('Early PASS was observed before both successful finalizers.')
+        $exception.Data['EarlyPassDetected']=$true
+        throw $exception
+    }
+    Assert-SharingControl ($passes.Count -eq $(if($Success){1}else{0}) -and ($null -eq $Failure) -eq $Success) 'PASS requires the entire original campaign and both finalizers to succeed.'
+}
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
 $ownedParent=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))
 $controlRoot=Join-Path $ownedParent ('recipient-sharing-context-'+[guid]::NewGuid().ToString('N'))
 $null=[IO.Directory]::CreateDirectory($controlRoot)
 $expectedScenarios=@('TpmBackedSetup','SoftwareFallbackSetup','ProfileValidation','WrongFingerprint','ExpiredAdmission','HistoricalOpening','MissingKey','ZeroRecipient','OneRecipient','InterruptedExport','WarningDeclined','RestrictedExport')
-$controls=0;$recordedLeaves=0
+$controls=0;$recordedLeaves=0;$mutantsRejected=0
+$mutantOutcomes=[Collections.Generic.List[object]]::new()
 try {
     $path=Join-Path $PSScriptRoot 'RecipientSharingApplication.Tests.ps1';$tokens=$null;$errors=$null
     $ast=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)
     Assert-SharingControl ($errors.Count -eq 0 -and ($ast.ParamBlock.Parameters.Name.VariablePath.UserPath -join '|') -ceq 'CandidatePath|PreparedManifestPath|PreparedManifestSha256') 'Actual caller exposes exactly the shared prepared triple.'
+    $harnessTokens=$null;$harnessErrors=$null
+    $harnessAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'TestHarness.ps1'),[ref]$harnessTokens,[ref]$harnessErrors)
+    $controlTokens=$null;$controlErrors=$null
+    $controlAst=[Management.Automation.Language.Parser]::ParseFile($PSCommandPath,[ref]$controlTokens,[ref]$controlErrors)
+    $actualClose=@($harnessAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Close-TestCandidate'},$true))
+    $recordingClose=@($controlAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Close-TestCandidate'},$true))
+    Assert-SharingControl ($harnessErrors.Count -eq 0 -and $controlErrors.Count -eq 0 -and $actualClose.Count -eq 1 -and $recordingClose.Count -eq 1) 'The actual harness and recording Close APIs parse and are unique.'
+    foreach($definition in @($actualClose[0],$recordingClose[0])){
+        $bodyParameter=@($definition.Body.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -ceq 'BodyError' })
+        $bodyTypes=@($bodyParameter.Attributes | Where-Object { $_ -is [Management.Automation.Language.TypeConstraintAst] })
+        Assert-SharingControl ($bodyParameter.Count -eq 1 -and $bodyTypes.Count -eq 1 -and $bodyTypes[0].TypeName.GetReflectionType() -eq [Management.Automation.ErrorRecord]) 'Recording Close BodyError binds the exact actual TestHarness ErrorRecord type.'
+    }
     $outer=@($ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.TryStatementAst] })
     Assert-SharingControl ($outer.Count -eq 1 -and $outer[0].CatchClauses.Count -eq 1 -and $outer[0].Finally.Extent.Text.Contains('Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError')) 'All setup and cases share one candidate owner and body-error finalizer.'
     $loop=@($outer[0].Body.Statements | Where-Object { $_ -is [Management.Automation.Language.ForEachStatementAst] -and $_.Variable.VariablePath.UserPath -ceq 'scenario' })
@@ -245,6 +269,10 @@ Assert-Equal $false ([System.IO.Directory]::Exists($recipientValidationRoot)) `
         foreach($at in @(4,15)){$cases.Add(@{mode='Success';prefix=$prefix;kind='AssertionFailure';at=$at})}
     }
     foreach($mode in @('AdmissionRefuse','PartialCandidate','PartialManifest','BadDigest','ManifestFailure')){$cases.Add(@{mode=$mode;prefix=$(if($mode -eq 'ManifestFailure'){'Standalone'}else{'Prepared'});kind='';at=0})}
+    foreach($prefix in @('Prepared','Standalone')){
+        $cases.Add(@{mode='Success';prefix=$prefix;kind='CloseFailure';at=0;mutant=$true;mutantTarget='CandidateClose'})
+        $cases.Add(@{mode='Success';prefix=$prefix;kind='FixtureCleanupFailure';at=0;mutant=$true;mutantTarget='FixtureFinalize'})
+    }
     foreach($case in $cases){
         $caseRoot=Join-Path $controlRoot ('case-'+($controls+1));$repo=Join-Path $caseRoot 'repository'
         $null=[IO.Directory]::CreateDirectory((Join-Path $repo '.test-output'))
@@ -265,14 +293,32 @@ Assert-Equal $false ([System.IO.Directory]::Exists($recipientValidationRoot)) `
             'PartialManifest' {$parameters.Remove('CandidatePath');$parameters.Remove('PreparedManifestSha256')}
             'BadDigest' {$parameters.PreparedManifestSha256='invalid'}
         }
-        $failure=$null;$output=@()
-        try{$output=@(& $control @parameters)}catch{$failure=$_}
+        $caseControl=$control
+        $isMutant=$case.ContainsKey('mutant') -and $case.mutant
+        if($isMutant){
+            $finalizerLine=if($case.mutantTarget -eq 'CandidateClose'){'    try { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }'}else{'    Complete-QualificationHarness -BodyError $candidateUseError -Cleanup @({'}
+            Assert-SharingControl ($source.Contains($finalizerLine)) 'Early-PASS mutant insertion binds the actual assigned finalizer seam.'
+            $mutantSource=$source.Replace($finalizerLine,"    Write-Output 'PASS: Disclosed early success before failing finalizers.'"+[Environment]::NewLine+$finalizerLine)
+            $mutantTokens=$null;$mutantErrors=$null
+            $mutantAst=[Management.Automation.Language.Parser]::ParseInput($mutantSource,$path,[ref]$mutantTokens,[ref]$mutantErrors)
+            Assert-SharingControl ($mutantErrors.Count -eq 0) 'Replay-only early-PASS mutant parses.'
+            $caseControl=$mutantAst.GetScriptBlock()
+        }
+        $failure=$null;$output=[Collections.Generic.List[object]]::new()
+        # An array assignment loses success records when a later command throws.
+        # Record each success item as it arrives, including premature PASS text.
+        try{
+            & $caseControl @parameters | ForEach-Object {
+                $output.Add($_)
+                if($_ -like 'PASS:*'){$probe.events.Add('PASS')}
+            }
+        }catch{$failure=$_}
         $controls++;$recordedLeaves+=$probe.calls.Count
         Assert-SharingControl ([Convert]::ToBase64String([IO.File]::ReadAllBytes($foreign)) -ceq [Convert]::ToBase64String($foreignBytes)) 'Every replay preserves the preexisting foreign untrusted profile exactly.'
         Assert-SharingControl ($probe.opens -eq 1 -and $probe.admission[0] -ceq $repo) 'Candidate ownership opens once against the owning repository.'
         $refused=$case.mode -in @('AdmissionRefuse','PartialCandidate','PartialManifest','BadDigest')
         if($refused){Assert-SharingControl ($null -ne $failure -and $probe.closes -eq 0 -and $probe.finalizers -eq 0 -and $probe.calls.Count -eq 0 -and $null -eq $probe.fixture) 'Refused candidate never starts setup, application work or an unowned finalizer.';continue}
-        Assert-SharingControl ($probe.closes -eq 1 -and $probe.finalizers -eq 1 -and [object]::ReferenceEquals($probe.closedContext,$probe.context) -and ($probe.events -join '|').StartsWith('CandidateClose|FixtureFinalize')) 'Exact candidate closes before the single fixture finalizer.'
+        Assert-SharingControl ($probe.closes -eq 1 -and $probe.finalizers -eq 1 -and [object]::ReferenceEquals($probe.closedContext,$probe.context) -and $probe.events.IndexOf('CandidateClose') -ge 0 -and $probe.events.IndexOf('FixtureFinalize') -gt $probe.events.IndexOf('CandidateClose')) 'Exact candidate closes before the single fixture finalizer.'
         Assert-SharingControl ($probe.manifests -eq $(if($case.prefix -eq 'Standalone'){1}else{0})) 'Standalone creates one manifest; prepared admission creates none.'
         if($case.prefix -eq 'Prepared'){Assert-SharingControl (($probe.admission[1..3] -join '|') -ceq (@($parameters.CandidatePath,$parameters.PreparedManifestPath,$parameters.PreparedManifestSha256) -join '|')) 'Prepared operands reach admission exactly.'}
         if($case.mode -like 'Foreign*'){
@@ -298,11 +344,17 @@ Assert-Equal $false ([System.IO.Directory]::Exists($recipientValidationRoot)) `
         if($unsafe){Assert-SharingControl ($null -ne $failure -and (Test-QualificationCleanupUnverified $failure.Exception) -and [IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'Unsafe fixture finalization retains the durable stop signal and unsafe exception.'}
         if($case.kind -in @('SetupFailure','BodyFailure','UnsafeFailure','BodyAndClose') -or $case.mode -eq 'ManifestFailure'){Assert-SharingControl ($null -ne $failure -and (Test-SharingContainsException $failure.Exception $probe.bodyFailure)) 'Original setup/manifest/body failure survives both finalizers.'}
         if($case.kind -in @('CloseFailure','BodyAndClose')){Assert-SharingControl (Test-SharingContainsException $failure.Exception $probe.closeFailure) 'Original close failure survives fixture finalization.'}
-        $passes=@($output | Where-Object { $_ -like 'PASS:*' })
         $success=$case.mode -eq 'Success' -and $case.kind -eq ''
-        Assert-SharingControl ($passes.Count -eq $(if($success){1}else{0}) -and ($null -eq $failure) -eq $success) 'PASS requires the entire original campaign and both finalizers to succeed.'
-        if($success){Assert-SharingControl (($probe.events -join '|') -ceq 'CandidateClose|FixtureFinalize|FixtureFinalized') 'Success follows completed candidate and fixture finalization.'}
+        $passFailure=$null
+        try{Assert-SharingPassOrder -Output @($output.ToArray()) -Events @($probe.events.ToArray()) -Success $success -Failure $failure}catch{$passFailure=$_}
+        if($isMutant){
+            Assert-SharingControl ($null -ne $passFailure -and $passFailure.Exception.Data['EarlyPassDetected'] -eq $true -and @($output | Where-Object { $_ -like 'PASS:*' }).Count -eq 1 -and $probe.events.IndexOf('PASS') -ge 0 -and $probe.events.IndexOf('PASS') -lt $probe.events.IndexOf($case.mutantTarget)) 'Actual early PASS survives its assigned terminating finalizer failure and is rejected by the same normal-caller order guard.'
+            if($case.mutantTarget -eq 'FixtureFinalize'){Assert-SharingControl ($probe.events.IndexOf('CandidateClosed') -lt $probe.events.IndexOf('PASS')) 'Fixture-finalizer mutant is independently observed after successful candidate close.'}
+            $mutantOutcomes.Add([pscustomobject]@{admission=$case.prefix;target=$case.mutantTarget;events=@($probe.events.ToArray());passItems=@($output | Where-Object { $_ -like 'PASS:*' }).Count;terminatingFailureObserved=($null -ne $failure);rejected=$passFailure.Exception.Data['EarlyPassDetected']})
+            $mutantsRejected++
+        }elseif($null -ne $passFailure){throw $passFailure}
     }
+    Assert-SharingControl ($mutantsRejected -eq 4) 'Prepared and standalone early-PASS mutants before each finalizer are rejected.'
 }
 finally {
     $resolved=[IO.Path]::GetFullPath($controlRoot)
@@ -310,4 +362,4 @@ finally {
     if([IO.Directory]::Exists($resolved)){[IO.Directory]::Delete($resolved,$true)}
     if([IO.Directory]::Exists($resolved)){throw 'Pure fixture cleanup remains incomplete.'}
 }
-Write-Output ('PASS: {0} pure actual recipient-sharing caller controls; {1} recorded leaves; foreign preservation, original twelve scenarios, candidate ownership and unsafe finalizers; no partition/native acceptance.' -f $controls,$recordedLeaves)
+Write-Output ('PASS: {0} pure actual recipient-sharing caller controls; {1} recorded leaves; {2} early-PASS mutants rejected; foreign preservation, original twelve scenarios, typed candidate ownership and ordered unsafe finalizers; no partition/native acceptance.' -f $controls,$recordedLeaves,$mutantsRejected)
