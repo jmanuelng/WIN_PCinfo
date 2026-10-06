@@ -1,17 +1,27 @@
 [CmdletBinding()]
-param([switch]$StaChild)
+param([switch]$StaChild,
+    [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-if(-not $StaChild){
-    & (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -STA -File $PSCommandPath -StaChild
-    if($LASTEXITCODE -ne 0){throw 'Generated failure-to-correction workflow failed.'};return
-}
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateUseError=$null
+try {
+if(-not $StaChild){
+    if (-not $candidateContext.Prepared) {
+        $PreparedManifestPath=Join-Path $candidateContext.OwnedDirectory 'prepared-test-candidate.json'
+        [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+        $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-STA','-File',$PSCommandPath,'-StaChild',
+        '-CandidatePath',$candidateContext.Path,'-PreparedManifestPath',$PreparedManifestPath,'-PreparedManifestSha256',$PreparedManifestSha256)
+    if($LASTEXITCODE -ne 0){throw 'Generated failure-to-correction workflow failed.'};return
+}
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
-$candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidate=$candidateContext.Path
 $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),'(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
 $moduleText=($regions | ForEach-Object {$_.Groups[2].Value}) -join "`n"
@@ -110,3 +120,6 @@ Assert-Equal 2 $state.FreshApprovals 'both corrected preparations require a fres
 Assert-Equal 20 $exitCode 'declining preserves the application exit contract'
 Assert-Equal $original ($request | ConvertTo-Json -Depth 40 -Compress) 'correction never mutates the original frozen request'
 Write-Output 'PASS: unavailable recipient details survive terminal rendering; network/output and recipient correction require fresh preparation and approval.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
