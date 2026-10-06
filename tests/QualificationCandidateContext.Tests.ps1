@@ -24,7 +24,9 @@ function Close-TestCandidate {
     if ($probe.mode -eq 'CloseFailure') { throw $probe.cleanupFailure }
 }
 
-foreach ($name in @('QualificationResourceBounds.Tests.ps1','QualificationWitnessInventory.Tests.ps1')) {
+foreach ($name in @('QualificationResourceBounds.Tests.ps1','QualificationWitnessInventory.Tests.ps1',
+    'BoundedAssessmentSchema.Tests.ps1','ContractCultureOutput.Tests.ps1','ContractFormats.Tests.ps1',
+    'ContractSemanticMatrix.Tests.ps1','ContractValidator.Tests.ps1','LaunchContract.Tests.ps1','PreparationSummary.Tests.ps1')) {
     $path=Join-Path $PSScriptRoot $name
     $tokens=$null; $errors=$null
     $ast=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)
@@ -38,19 +40,29 @@ foreach ($name in @('QualificationResourceBounds.Tests.ps1','QualificationWitnes
         $_.Extent.Text.Contains("'TestHarness.ps1'")
     })
     if ($outer.Count -ne 1 -or $imports.Count -ne 1) { throw 'Qualification candidate consumer control seam is not unique.' }
+    $assignments=@($ast.EndBlock.Statements | Where-Object {
+        $_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Right.Extent.Text -ceq '$candidateContext.Path'
+    })
+    if ($assignments.Count -ne 1) { throw 'Actual consumer candidate context selection is not unique.' }
+    $candidateVariableName=$assignments[0].Left.VariablePath.UserPath
     $workload=@'
 {
     $probe.events.Add('work')
-    $probe.usedCandidate=$candidate
+    $probe.usedCandidate=Get-Variable -Name $candidateVariableName -ValueOnly
     if ($probe.mode -in @('BodyFailure','BodyUnsafe')) { throw $probe.bodyFailure }
 }
 '@
     $source=$ast.Extent.Text.Replace($imports[0].Extent.Text,'# Disclosed in-process API stubs are inherited from the fixture.').
         Replace($outer[0].Body.Extent.Text,$workload)
+    # Other support imports are outside this consumer admission seam too. No
+    # imported helper or generated module executes in this owning-seam fixture.
+    foreach ($import in @($ast.EndBlock.Statements | Where-Object { $_.Extent.Text.StartsWith('. (Join-Path ',[StringComparison]::Ordinal) })) {
+        $source=$source.Replace($import.Extent.Text,'# Disclosed support import omission for the pure consumer replay.')
+    }
     # Explicit red-capability controls mutate only the in-memory replay. The
     # production consumers, admitted candidate and all fixture files stay intact.
     if ($ConsumerFault -eq 'BypassContext') {
-        $source=$source.Replace('$candidate=$candidateContext.Path',"`$candidate='synthetic-shared-artifact.ps1'")
+        $source=$source.Replace($assignments[0].Extent.Text,$assignments[0].Left.Extent.Text+"='synthetic-shared-artifact.ps1'")
     }
     elseif ($ConsumerFault -eq 'OmitRelease') { $source=$source.Replace($outer[0].Finally.Extent.Text,'{}') }
     $controlErrors=$null; $controlTokens=$null
@@ -102,4 +114,67 @@ foreach ($name in @('QualificationResourceBounds.Tests.ps1','QualificationWitnes
         elseif ($null -ne $failure -or $null -ne $probe.closedBodyError) { throw 'Successful candidate consumer introduced a body failure.' }
     }
 }
-Write-Output 'PASS: both actual qualification consumers admit before workload, preserve explicit and standalone operands, honor repository ownership, and close exact contexts with original failure/unsafe state.'
+$cleanupPath=Join-Path $PSScriptRoot 'QualificationCleanup.ps1'
+$cleanupTokens=$null; $cleanupErrors=$null
+$cleanupAst=[Management.Automation.Language.Parser]::ParseFile($cleanupPath,[ref]$cleanupTokens,[ref]$cleanupErrors)
+if ($cleanupErrors.Count) { throw 'Cleanup classification source does not parse.' }
+$classifiers=@($cleanupAst.FindAll({param($node)
+    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Test-QualificationCleanupUnverified'
+},$true))
+if ($classifiers.Count -ne 1) { throw 'Cleanup classifier source is not unique.' }
+. ([scriptblock]::Create($classifiers[0].Extent.Text))
+$repositoryRoot=Split-Path -Parent $PSScriptRoot
+foreach ($name in @('ContractCultureOutput.Tests.ps1','ContractSemanticMatrix.Tests.ps1','ContractValidator.Tests.ps1')) {
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $name),[ref]$tokens,[ref]$errors)
+    $roots=@($ast.FindAll({param($node)
+        $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Left.VariablePath.UserPath -in @('root','generatedFixtureRoot') -and
+        $node.Right.Extent.Text.Contains('[guid]::NewGuid()')
+    },$true))
+    $finalizers=@($ast.FindAll({param($node)
+        $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -ceq 'Complete-QualificationHarness'
+    },$true))
+    if ($errors.Count -or $roots.Count -ne 1 -or $finalizers.Count -ne 1) { throw 'Actual consumer fixture ownership seam is not unique.' }
+    $actions=@($finalizers[0].FindAll({param($node)$node -is [Management.Automation.Language.ScriptBlockExpressionAst]},$true))
+    if ($actions.Count -ne 1) { throw 'Actual fixture cleanup action is not unique.' }
+    $rootAssignment=[scriptblock]::Create($roots[0].Extent.Text)
+    . $rootAssignment
+    $firstRoot=Get-Variable -Name $roots[0].Left.VariablePath.UserPath -ValueOnly
+    . $rootAssignment
+    $fixtureRoot=Get-Variable -Name $roots[0].Left.VariablePath.UserPath -ValueOnly
+    $expectedParent=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))
+    if ($firstRoot -ceq $fixtureRoot -or [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($fixtureRoot)) -cne $expectedParent) {
+        throw 'Actual fixture path assignment lost unique repository ownership.'
+    }
+    $action=$actions[0].ScriptBlock.GetScriptBlock()
+    try {
+        $null=[IO.Directory]::CreateDirectory($fixtureRoot)
+        [IO.File]::WriteAllText((Join-Path $fixtureRoot 'disclosed-pure-fixture.txt'),'Synthetic fixture only.')
+        $fixtureBodyError=$null
+        $fixtureRootCreated=$false
+        & $action
+        if (-not [IO.Directory]::Exists($fixtureRoot)) { throw 'Actual fixture cleanup deleted a root it never created.' }
+        $fixtureRootCreated=$true
+        & $action
+        if ([IO.Directory]::Exists($fixtureRoot)) { throw 'Actual successful fixture cleanup did not prove absence.' }
+        $null=[IO.Directory]::CreateDirectory($fixtureRoot)
+        $retained=Join-Path $fixtureRoot 'disclosed-pure-fixture.txt'
+        [IO.File]::WriteAllText($retained,'Synthetic fixture only.')
+        $unsafe=[InvalidOperationException]::new('Disclosed synthetic cleanup uncertainty; no native instance exists.')
+        $unsafe.Data['OwnedCleanupUnverified']=$true
+        $fixtureBodyError=[Management.Automation.ErrorRecord]::new($unsafe,'SyntheticUnsafeFixture',[Management.Automation.ErrorCategory]::OperationStopped,$null)
+        $refused=$false
+        try { & $action } catch { $refused=$true }
+        if (-not $refused -or -not [IO.File]::Exists($retained)) { throw 'Actual fixture cleanup discarded synthetic unsafe evidence.' }
+    }
+    finally {
+        # Only synthetic local files were created; no blocker/hold/native owner
+        # exists. Validate the exact absolute root before fixture disposal.
+        if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($fixtureRoot)) -cne $expectedParent) { throw 'Pure cleanup fixture escaped its owned boundary.' }
+        if ([IO.Directory]::Exists($fixtureRoot)) { [IO.Directory]::Delete($fixtureRoot,$true) }
+        if ([IO.Directory]::Exists($fixtureRoot)) { throw 'Pure cleanup fixture absence is unverified.' }
+    }
+}
+Write-Output 'PASS: all nine actual consumers admit before workload, preserve explicit and standalone operands, honor repository ownership, and close exact contexts with original failure/unsafe state.'
