@@ -73,7 +73,8 @@ try {
             rootPendingSha256=(Get-FileHash -LiteralPath $root.PendingPath).Hash.ToLowerInvariant()}
         $pending=[ordered]@{nativeRole='QualificationCase'; nonce=$caseNonces[$depth-1]; authorityEnds=$now.AddMinutes(55-$depth*5).ToString('o');
             cleanupReserveMs=10000; childCreationRequested=$true; child=(New-CaseChildIdentity $identities[$depth]);
-            parent=$identities[$depth-1]; admission=$admission}
+            parent=[ordered]@{pid=$identities[$depth-1].Pid; creationUtc=$identities[$depth-1].CreationUtc;
+                ownerSid=$identities[$depth-1].OwnerSid; hostPath=$identities[$depth-1].HostPath; arguments=@('contrived original creator argv')}; admission=$admission}
         Save-CaseLeaseFixture $directory $pending QualificationCase
         $parent=Read-QualificationCaseLease -RepositoryRoot $repository -Nonce $pending.nonce -SelfIdentity $identities[$depth] -RequireClaim -Now $now
         Assert-CaseControl ($parent.Admission.depth -eq $depth -and $parent.AllowedCasePendingPaths.Count -eq $depth) "exact immediate-owner chain at depth $depth"
@@ -94,6 +95,15 @@ try {
             Assert-CaseRefusal { Read-LastCaseFixture } "repinned wrong admission field $field refuses"
         }
         finally { $last.admission[$field]=$saved; Save-CaseLeaseFixture $lastDirectory $last QualificationCase }
+    }
+    foreach ($field in @('pid','creationUtc','ownerSid','hostPath')) {
+        $saved=$last.parent[$field]
+        try {
+            $last.parent[$field]=$(if ($field -eq 'pid') {999} else {$saved+'wrong'})
+            Save-CaseLeaseFixture $lastDirectory $last QualificationCase
+            Assert-CaseRefusal { Read-LastCaseFixture } "actual constructor-shaped immediate creator $field differs"
+        }
+        finally { $last.parent[$field]=$saved; Save-CaseLeaseFixture $lastDirectory $last QualificationCase }
     }
     $saved=$last.authorityEnds
     try { $last.authorityEnds='2026-10-06T13:00:00.0000000Z'; Save-CaseLeaseFixture $lastDirectory $last QualificationCase; Assert-CaseRefusal { Read-LastCaseFixture } 'child cannot enlarge parent deadline' }
@@ -197,6 +207,23 @@ try {
     Assert-CaseControl $true 'standalone mutator accepts only its explicit unique output profile'
     Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$build,'-OutputPath',(Join-Path $repository 'artifacts/WIN-PCInfo.ps1')) } 'shared candidate output is not a delegated build target'
     Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$build,'-OutputPath',$output,'-SignedHelperPath','synthetic') } 'qualification fallback cannot introduce signing inputs'
+    $opening=Join-Path $repository 'tests/StatusDeskOpening.Tests.ps1'
+    # Disclosed ParamBlock fixture for the new G Opening interface. T's older
+    # product leaf is not modified or represented as the integrated G source.
+    [IO.File]::WriteAllText($opening,'param([switch]$ColdProcess,[string]$EvidencePath,[string]$CandidatePath,[string]$PreparedManifestPath,[string]$PreparedManifestSha256)')
+    $openingRoot=[ordered]@{candidatePath=(Join-Path $fixture 'candidate.ps1'); preparedManifestPath=(Join-Path $fixture 'prepared.json'); preparedManifestSha256=('a'*64)}
+    $openingArgv=@('-NoLogo','-NoProfile','-File',$opening,'-ColdProcess','-CandidatePath',$openingRoot.candidatePath,'-PreparedManifestPath',$openingRoot.preparedManifestPath,'-PreparedManifestSha256',$openingRoot.preparedManifestSha256)
+    $openingInvocation=ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments $openingArgv
+    $boundOpening=ConvertTo-QualificationPreparedParameters -RootAdmission $openingRoot -TestPath $opening -Parameters $openingInvocation.NamedParameters
+    Assert-CaseControl ($boundOpening.ColdProcess -and $boundOpening.CandidatePath -ceq $openingRoot.candidatePath) 'new Opening explicit three-operand child argv is admitted consistently with root'
+    $partialOpening=ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$opening,'-ColdProcess','-CandidatePath',$openingRoot.candidatePath)
+    Assert-CaseRefusal { ConvertTo-QualificationPreparedParameters -RootAdmission $openingRoot -TestPath $opening -Parameters $partialOpening.NamedParameters } 'partial explicit Opening input cannot be silently repaired by propagation'
+    $openingInvocation.NamedParameters.CandidatePath=Join-Path $fixture 'drifting.ps1'
+    Assert-CaseRefusal { ConvertTo-QualificationPreparedParameters -RootAdmission $openingRoot -TestPath $opening -Parameters $openingInvocation.NamedParameters } 'Opening explicit candidate drift refuses'
+    Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$opening,'-ColdProcess:false') } 'Opening false recursion guard cannot bypass the cold child boundary'
+    Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$opening,'-ColdProcess','-AuthorityEnds','synthetic') } 'Opening unknown authority flag refuses'
+    $emptyRoot=[ordered]@{candidatePath='';preparedManifestPath='';preparedManifestSha256=''}
+    Assert-CaseRefusal { ConvertTo-QualificationPreparedParameters -RootAdmission $emptyRoot -TestPath $opening -Parameters $openingInvocation.NamedParameters } 'explicit Opening child input cannot create a new unbound root'
     # Disclosed pure native-result substitution verifies public compatibility;
     # actual File->Case->leaf ownership remains a separate root native gate.
     & {

@@ -34,19 +34,7 @@ function Assert-TestSuiteAccounting {
     }
 }
 
-function Assert-TestFileCompletion {
-    param([Parameter(Mandatory)] $Completion, [Parameter(Mandatory)] $Admission,
-        [Parameter(Mandatory)] [string] $Nonce, [Parameter(Mandatory)] $NativeOutcome)
-    if ($Completion.contract -cne 'win-pcinfo.test-file-result/1.0.0' -or $Completion.nonce -cne $Nonce -or
-        $Completion.testPath -ine $Admission.testPath -or $Completion.testSha256 -cne $Admission.testSha256 -or
-        $Completion.completed -isnot [bool] -or -not $Completion.completed -or
-        $Completion.cleanupVerified -isnot [bool] -or -not $Completion.cleanupVerified -or
-        $Completion.result -cnotin @('Pass','Fail') -or
-        -not $NativeOutcome.NativeTerminalObserved -or $NativeOutcome.OwnedCleanupUnverified -or
-        -not $NativeOutcome.StreamsDrained -or $NativeOutcome.StreamFailure -or $NativeOutcome.OutputOverflow -or
-        ($Completion.result -eq 'Pass' -and $NativeOutcome.NativeExitCode -ne 0) -or
-        ($Completion.result -eq 'Fail' -and $NativeOutcome.NativeExitCode -ne 1)) { throw 'Test file completion differs from its original native outcome or admission.' }
-}
+
 
 # Dot sourcing supplies the pure inventory/accounting functions to the suite
 # and fixture controls; executing the shim always requires a one-use lease.

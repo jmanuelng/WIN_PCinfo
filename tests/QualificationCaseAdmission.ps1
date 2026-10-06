@@ -98,7 +98,7 @@ function ConvertTo-QualificationCaseInvocation {
             if ($named.Count -ne 2 -or -not $named.Contains('Calibrate') -or -not $named.Calibrate -or -not $named.Contains('OutputPath')) { throw 'Qualification calibration requires its original explicit workload and output.' }
             Assert-QualificationCaseOutputPath -RepositoryRoot $RepositoryRoot -Path $named.OutputPath -ParentPattern '^resource-bounds-[a-f0-9]{32}$' -FileName 'calibration.json'
         }
-        'tests/StatusDeskOpening.Tests.ps1' { if (-not $named.Contains('ColdProcess') -or -not $named.ColdProcess -or @($named.Keys | Where-Object { $_ -notin @('ColdProcess','EvidencePath') }).Count) { throw 'Qualification cold opening requires its recursion guard.' } }
+        'tests/StatusDeskOpening.Tests.ps1' { if (-not $named.Contains('ColdProcess') -or -not $named.ColdProcess -or @($named.Keys | Where-Object { $_ -notin @('ColdProcess','EvidencePath','CandidatePath','PreparedManifestPath','PreparedManifestSha256') }).Count) { throw 'Qualification cold opening requires its recursion guard and closed prepared input interface.' } }
     }
     [pscustomobject]@{TestPath=$profile.Path; Sta=$sta; NamedParameters=$named; OriginalArguments=@($Arguments)}
 }
@@ -223,6 +223,8 @@ function ConvertTo-QualificationPreparedParameters {
     $prepared=@('CandidatePath','PreparedManifestPath','PreparedManifestSha256')
     $count=@($prepared | Where-Object { $_ -in $names }).Count
     if ($count -ne 0 -and $count -ne 3) { throw 'Qualification leaf declares partial prepared input.' }
+    $explicit=@($prepared | Where-Object { $named.Contains($_) }).Count
+    if ($explicit -ne 0 -and ($explicit -ne 3 -or [string]::IsNullOrEmpty($RootAdmission.candidatePath))) { throw 'Qualification explicit prepared input must be complete and bound to its immutable root.' }
     if ($count -eq 3 -and -not [string]::IsNullOrEmpty($RootAdmission.candidatePath)) {
         $values=@($RootAdmission.candidatePath,$RootAdmission.preparedManifestPath,$RootAdmission.preparedManifestSha256)
         for ($index=0; $index -lt 3; $index++) {
@@ -280,6 +282,22 @@ function Confirm-QualificationCaseNativeRetention {
     catch { $Failures.Add($_.Exception); $false }
 }
 
+function Confirm-TestFileNativeRetention {
+    param([Parameter(Mandatory)] [string] $RepositoryRoot, [Parameter(Mandatory)] [string] $Directory,
+        [Parameter(Mandatory)] [string] $Nonce, [Parameter(Mandatory)] $Admission,
+        [Parameter(Mandatory)] $NativeIdentity, [AllowNull()] $NativeOutcome,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [Collections.Generic.List[Exception]] $Failures,
+        [DateTimeOffset] $Now=[DateTimeOffset]::UtcNow)
+    try {
+        $lease=Read-TestFileLease -RepositoryRoot $RepositoryRoot -Nonce $Nonce -SelfIdentity $NativeIdentity -RequireClaim -Now $Now
+        if ($Directory -ine $lease.Directory -or (Get-TestNativeDigest -Value $Admission) -cne (Get-TestNativeDigest -Value $lease.Admission)) { throw 'Test file retained directory or admission differs from original ownership.' }
+        $completion=Read-TestNativeRecord -Path (Join-Path $Directory 'file-result.json')
+        Assert-TestFileCompletion -Completion $completion -Admission $Admission -Nonce $Nonce -NativeOutcome $NativeOutcome
+        $true
+    }
+    catch { $Failures.Add($_.Exception); $false }
+}
+
 function Invoke-OwnedQualificationCase {
     param([Parameter(Mandatory)] [string] $HostPath, [Parameter(Mandatory)] [AllowEmptyString()] [string[]] $Arguments,
         [long] $TimeoutMs=3600000, [long] $CleanupReserveMs=10000,
@@ -316,4 +334,18 @@ function Invoke-OwnedQualificationCase {
         throw
     }
     $native
+}
+
+function Assert-TestFileCompletion {
+    param([Parameter(Mandatory)] $Completion, [Parameter(Mandatory)] $Admission,
+        [Parameter(Mandatory)] [string] $Nonce, [Parameter(Mandatory)] $NativeOutcome)
+    if ($Completion.contract -cne 'win-pcinfo.test-file-result/1.0.0' -or $Completion.nonce -cne $Nonce -or
+        $Completion.testPath -ine $Admission.testPath -or $Completion.testSha256 -cne $Admission.testSha256 -or
+        $Completion.completed -isnot [bool] -or -not $Completion.completed -or
+        $Completion.cleanupVerified -isnot [bool] -or -not $Completion.cleanupVerified -or
+        $Completion.result -cnotin @('Pass','Fail') -or
+        -not $NativeOutcome.NativeTerminalObserved -or $NativeOutcome.OwnedCleanupUnverified -or
+        -not $NativeOutcome.StreamsDrained -or $NativeOutcome.StreamFailure -or $NativeOutcome.OutputOverflow -or
+        ($Completion.result -eq 'Pass' -and $NativeOutcome.NativeExitCode -ne 0) -or
+        ($Completion.result -eq 'Fail' -and $NativeOutcome.NativeExitCode -ne 1)) { throw 'Test file completion differs from its original native outcome or admission.' }
 }

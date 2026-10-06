@@ -82,6 +82,31 @@ try {
     Save-LeaseFixture
     $lease=Read-FixtureLease
     Assert-RunnerControl ($lease.Admission.testPath -ceq $testPath) 'valid disclosed lease binds its actual fixture file'
+    $protocolOutcome=[pscustomobject]@{NativeTerminalObserved=$true; NativeExitCode=0; OwnedCleanupUnverified=$false; StreamsDrained=$true; StreamFailure=$false; OutputOverflow=$false}
+    $protocolCompletion=[ordered]@{contract='win-pcinfo.test-file-result/1.0.0'; nonce=$nonce; testPath=$testPath; testSha256=$admission.testSha256; completed=$true; cleanupVerified=$true; result='Pass'}
+    $fileResultPath=Join-Path $directory 'file-result.json'
+    Write-TestNativeNewRecord -Path $fileResultPath -Value $protocolCompletion
+    $protocolErrors=[Collections.Generic.List[Exception]]::new()
+    function Confirm-FixtureFileRetention {
+        Confirm-TestFileNativeRetention -RepositoryRoot $repository -Directory $directory -Nonce $nonce -Admission $admission -NativeIdentity $self -NativeOutcome $protocolOutcome -Failures $protocolErrors -Now ([DateTimeOffset]::Parse('2026-10-06T12:30:00Z'))
+    }
+    $confirmed=Confirm-FixtureFileRetention
+    Assert-RunnerControl ($confirmed -and $protocolErrors.Count -eq 0) 'actual file pre-release boundary accepts complete claimed natural zero'
+    [IO.File]::Delete($claimPath); $protocolErrors.Clear()
+    $confirmed=Confirm-FixtureFileRetention
+    Assert-RunnerControl (-not $confirmed -and $protocolErrors.Count -gt 0 -and $protocolOutcome.NativeExitCode -eq 0 -and [IO.File]::Exists($pendingPath)) 'missing file claim blocks release without replacing actual zero or deleting hold'
+    Save-LeaseFixture
+    [IO.File]::Delete($fileResultPath); $protocolErrors.Clear()
+    $confirmed=Confirm-FixtureFileRetention
+    Assert-RunnerControl (-not $confirmed -and $protocolErrors.Count -gt 0 -and $protocolOutcome.NativeExitCode -eq 0 -and [IO.File]::Exists($pendingPath)) 'lost file completion blocks release while independently retained original zero remains zero'
+    $protocolCompletion.cleanupVerified=$false
+    Write-TestNativeNewRecord -Path $fileResultPath -Value $protocolCompletion
+    $protocolErrors.Clear(); $confirmed=Confirm-FixtureFileRetention
+    Assert-RunnerControl (-not $confirmed -and $protocolErrors.Count -gt 0 -and [IO.File]::Exists($pendingPath)) 'cleanup-unverified file completion preserves operative pending hold'
+    $protocolCompletion.cleanupVerified=$true; $protocolCompletion.result='Fail'; $protocolOutcome.NativeExitCode=1
+    [IO.File]::Delete($fileResultPath); Write-TestNativeNewRecord -Path $fileResultPath -Value $protocolCompletion
+    $protocolErrors.Clear(); $confirmed=Confirm-FixtureFileRetention
+    Assert-RunnerControl ($confirmed -and $protocolErrors.Count -eq 0 -and $protocolOutcome.NativeExitCode -eq 1) 'claimed ordinary file assertion failure retains its original nonzero before valid release'
     Assert-RunnerRefusal { Read-TestFileLease -RepositoryRoot $repository -Nonce '../escape' -SelfIdentity $self } 'malformed nonce cannot fall back to standalone'
     Assert-RunnerRefusal { Write-TestNativeNewRecord -Path $claimPath -Value @{} } 'one-use claim cannot be replaced'
     foreach ($field in @('Pid','CreationUtc','OwnerSid','HostPath')) {

@@ -372,6 +372,9 @@ function Invoke-GeneratedApplicationNative {
         # even if the original handle has already observed native zero.
         $null=Confirm-QualificationCaseNativeRetention -RepositoryRoot $repository -Directory $directory -Nonce $nonce -Admission $admission -NativeIdentity $owner.StartedIdentity -NativeOutcome $outcome -Failures $failures
     }
+    elseif ($NativeRole -eq 'TestFile') {
+        $null=Confirm-TestFileNativeRetention -RepositoryRoot $repository -Directory $directory -Nonce $nonce -Admission $admission -NativeIdentity $owner.StartedIdentity -NativeOutcome $outcome -Failures $failures
+    }
     try {
         $errorRecord=[ordered]@{startRequested=$startRequested; started=$owner.StartedIdentity.Started; original=$original;
             failures=@($failures | ForEach-Object { [ordered]@{type=$_.GetType().FullName; message=$_.Message} })}
