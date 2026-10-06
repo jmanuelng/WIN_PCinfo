@@ -1,16 +1,26 @@
 [CmdletBinding()]
-param([switch]$StaChild)
+param([switch]$StaChild,
+    [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+$repositoryRoot=Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateUseError=$null
+try {
 if (-not $StaChild) {
-    & (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -STA -File $PSCommandPath -StaChild
+    if (-not $candidateContext.Prepared) {
+        $PreparedManifestPath=Join-Path $candidateContext.OwnedDirectory 'prepared-test-candidate.json'
+        [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+        $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-STA','-File',$PSCommandPath,'-StaChild',
+        '-CandidatePath',$candidateContext.Path,'-PreparedManifestPath',$PreparedManifestPath,'-PreparedManifestSha256',$PreparedManifestSha256)
     if ($LASTEXITCODE -ne 0) { throw 'Generated WPF report viewing failed.' }
     return
 }
-$repositoryRoot=Split-Path -Parent $PSScriptRoot
-. (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidate=$candidateContext.Path
 $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),'(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
 $root=Join-Path ([IO.Path]::GetTempPath()) ('winpcinfo-view-ui-'+[guid]::NewGuid().ToString('N'))
@@ -51,3 +61,6 @@ finally {
     if([IO.Directory]::Exists($resolved)){[IO.Directory]::Delete($resolved,$true)}
 }
 Write-Output 'PASS: generated WPF report exposes explicit close and verifies plaintext cleanup.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
