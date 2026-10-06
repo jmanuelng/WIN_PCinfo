@@ -61,7 +61,7 @@ function Complete-TestSuiteFinalization {
     # stop independently before calling it, including when retention fails.
     if ($Unsafe) { & $retainUnsafe }
     if ($null -ne $Candidate) {
-        try { & $CloseCandidate $Candidate $BodyError | Out-Null }
+        try { & $CloseCandidate $Candidate $BodyError $Unsafe | Out-Null }
         catch {
             if (-not $failures.Contains($_.Exception)) { $failures.Add($_.Exception) }
             if (-not $Unsafe -and (Test-QualificationCleanupUnverified -Exception $_.Exception)) {
@@ -75,6 +75,80 @@ function Complete-TestSuiteFinalization {
         $exception.Data['OwnedCleanupUnverified']=$Unsafe
         throw $exception
     }
+}
+
+function Open-TestSuiteCandidate {
+    param([Parameter(Mandatory)] [string] $RepositoryRoot, [string] $CandidatePath,
+        [string] $PreparedManifestPath, [string] $PreparedManifestSha256,
+        [Parameter(Mandatory)] [DateTimeOffset] $AuthorityEnds, [long] $CleanupReserveMs=120000)
+    $supplied=-not [string]::IsNullOrEmpty($CandidatePath) -or -not [string]::IsNullOrEmpty($PreparedManifestPath) -or
+        -not [string]::IsNullOrEmpty($PreparedManifestSha256)
+    if ($supplied -and ([string]::IsNullOrWhiteSpace($CandidatePath) -or [string]::IsNullOrWhiteSpace($PreparedManifestPath) -or
+        $PreparedManifestSha256 -cnotmatch '^[a-f0-9]{64}$')) { throw 'Suite prepared input requires its complete exact root-bound triple.' }
+    if (($AuthorityEnds-[DateTimeOffset]::UtcNow).TotalMilliseconds -lt ($CleanupReserveMs+10000)) {
+        throw 'Suite preparation has insufficient finite authority before candidate admission.'
+    }
+    $candidate=$null
+    $context=$null
+    try {
+        $before=@(Get-TestCandidateInputInventory -RepositoryRoot $RepositoryRoot)
+        # Open refuses partial supplied input. The no-input branch builds once
+        # in this host; no native build can start before a file lease exists.
+        $candidate=Open-TestCandidate -RepositoryRoot $RepositoryRoot -CandidatePath $CandidatePath `
+            -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+        $context=[pscustomobject]@{Candidate=$candidate; CandidatePath=$candidate.Path;
+            PreparedManifestPath=$PreparedManifestPath; PreparedManifestSha256=$PreparedManifestSha256; ManifestStream=$null}
+        if (-not $candidate.Prepared) {
+            $null=Set-TestNativePrivateDirectory -Path $candidate.OwnedDirectory
+            $context.PreparedManifestPath=Join-Path $candidate.OwnedDirectory 'prepared-candidate.json'
+            Write-TestNativeNewRecord -Path $context.PreparedManifestPath -Value `
+                (New-PreparedTestCandidateManifest -RepositoryRoot $RepositoryRoot -CandidatePath $candidate.Path)
+            $context.PreparedManifestSha256=(Get-FileHash -LiteralPath $context.PreparedManifestPath).Hash.ToLowerInvariant()
+        }
+        $context.ManifestStream=[IO.File]::Open($context.PreparedManifestPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+        $digest=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($context.ManifestStream)).ToLowerInvariant()
+        $context.ManifestStream.Position=0
+        if ($digest -cne $context.PreparedManifestSha256 -or
+            (Get-TestNativeDigest -Value $before) -cne (Get-TestNativeDigest -Value @(Get-TestCandidateInputInventory -RepositoryRoot $RepositoryRoot))) {
+            throw 'Suite preparation input or manifest identity changed.'
+        }
+        if (($AuthorityEnds-[DateTimeOffset]::UtcNow).TotalMilliseconds -lt ($CleanupReserveMs+10000)) {
+            throw 'Suite preparation exhausted finite authority before file admission.'
+        }
+        $context
+    }
+    catch {
+        $original=$_
+        if ($null -ne $context) {
+            # Once output exists, incomplete preparation retains that owned
+            # evidence. No manifest failure can silently clean it as success.
+            Close-TestSuiteCandidate -Context $context -BodyError $original -Unsafe $true
+        }
+        throw
+    }
+}
+
+function Close-TestSuiteCandidate {
+    param([Parameter(Mandatory)] $Context, [AllowNull()] [Management.Automation.ErrorRecord] $BodyError, [bool] $Unsafe)
+    $failures=[Collections.Generic.List[Exception]]::new()
+    if ($null -ne $BodyError) { $failures.Add($BodyError.Exception) }
+    if ($null -ne $Context.ManifestStream) {
+        try {
+            $Context.ManifestStream.Position=0
+            $digest=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($Context.ManifestStream)).ToLowerInvariant()
+            if ($digest -cne $Context.PreparedManifestSha256) { throw 'Suite prepared manifest identity changed during consumption.' }
+        }
+        catch { $Unsafe=$true; $failures.Add($_.Exception) }
+        try { $Context.ManifestStream.Dispose() }
+        catch { $Unsafe=$true; $failures.Add($_.Exception) }
+    }
+    $failure=$BodyError
+    if ($Unsafe -or $failures.Count -gt 1) {
+        $exception=[AggregateException]::new('Suite candidate preparation or retention is incomplete.', $failures.ToArray())
+        $exception.Data['OwnedCleanupUnverified']=$Unsafe
+        $failure=[Management.Automation.ErrorRecord]::new($exception,'SuiteCandidateOwnership',[Management.Automation.ErrorCategory]::InvalidResult,$Context.CandidatePath)
+    }
+    Close-TestCandidate -Candidate $Context.Candidate -BodyError $failure
 }
 
 Assert-QualificationCleanupReady
@@ -123,13 +197,16 @@ try {
         $path=Join-Path $repository $inputPin.path
         if ($path -notin $inputs.path) { $inputs.Add([pscustomobject][ordered]@{path=$path; bytes=$inputPin.bytes; sha256=$inputPin.sha256}) }
     }
-    if (-not [string]::IsNullOrEmpty($CandidatePath) -or -not [string]::IsNullOrEmpty($PreparedManifestPath) -or -not [string]::IsNullOrEmpty($PreparedManifestSha256)) {
-        $candidate=Open-TestCandidate -RepositoryRoot $repository -CandidatePath $CandidatePath -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
-        $manifest=Read-TestNativeRecord -Path $PreparedManifestPath
-        foreach ($inputPin in $manifest.inputs) {
-            $path=Join-Path $repository $inputPin.path
-            if ($path -notin $inputs.path) { $inputs.Add([pscustomobject][ordered]@{path=$path; bytes=$inputPin.bytes; sha256=$inputPin.sha256}) }
-        }
+    $candidate=Open-TestSuiteCandidate -RepositoryRoot $repository -CandidatePath $CandidatePath `
+        -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256 `
+        -AuthorityEnds $budget.AuthorityEnds -CleanupReserveMs $CleanupReserveMs
+    $CandidatePath=$candidate.CandidatePath
+    $PreparedManifestPath=$candidate.PreparedManifestPath
+    $PreparedManifestSha256=$candidate.PreparedManifestSha256
+    $manifest=Read-TestNativeRecord -Path $PreparedManifestPath
+    foreach ($inputPin in $manifest.inputs) {
+        $path=Join-Path $repository $inputPin.path
+        if ($path -notin $inputs.path) { $inputs.Add([pscustomobject][ordered]@{path=$path; bytes=$inputPin.bytes; sha256=$inputPin.sha256}) }
     }
     foreach ($path in @((Join-Path $PSHOME 'pwsh.exe'),$inventoryPath,$CandidatePath,$PreparedManifestPath,$FocusedRequestPath)) {
         if (-not [string]::IsNullOrEmpty($path) -and $path -notin $inputs.path) {
@@ -199,6 +276,6 @@ Complete-TestSuiteFinalization -Candidate $candidate -BodyError $bodyError -Unsa
     [IO.File]::WriteAllText((Get-QualificationCleanupBlockerPath),'{"state":"OwnedCleanupUnverified"}',[Text.UTF8Encoding]::new($false))
 } -ObserveUnsafe {
     [Console]::Out.WriteLine('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'); [Console]::Out.Flush()
-} -CloseCandidate {param($Context,$Failure) Close-TestCandidate -Candidate $Context -BodyError $Failure}
+} -CloseCandidate {param($Context,$Failure,$Unsafe) Close-TestSuiteCandidate -Context $Context -BodyError $Failure -Unsafe $Unsafe}
 if ($scope -eq 'Full') { Write-Output "PASS: $($inventory.Count) test files completed." }
 else { Write-Output "PASS: $scope completed; full discovery contains $($fullDiscovery.Count) files and has not been executed by this focused run." }

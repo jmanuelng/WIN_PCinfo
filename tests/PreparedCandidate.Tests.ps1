@@ -127,6 +127,101 @@ param([string] $OutputPath)
     Assert-Equal $false ([IO.Directory]::Exists($failed.OwnedDirectory)) 'verified output cleanup completes despite an ordinary body failure'
     $checks+=2
 
+    function Invoke-SuitePreparationControls {
+        # Execute the actual preparation/finalizer functions against a passive
+        # fixture build. Only the blocker destination is substituted, into this
+        # owned fake repository; no real unsafe hold is cleared or reused.
+        $runnerAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Run-Tests.ps1'),[ref]$null,[ref]$null)
+        foreach ($name in @('Open-TestSuiteCandidate','Close-TestSuiteCandidate')) {
+            $definition=$runnerAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
+            . ([scriptblock]::Create($definition.Extent.Text))
+        }
+        function Get-QualificationCleanupBlockerPath { Join-Path $repository '.test-output/synthetic-suite-blocker.json' }
+        $buildPath=Join-Path $repository 'build/Build.ps1'
+        $savedBuild=[IO.File]::ReadAllBytes($buildPath)
+        $counter=Join-Path $repository '.test-output/build-count.txt'
+        $suiteContexts=[Collections.Generic.List[object]]::new()
+        try {
+            [IO.File]::AppendAllText($buildPath,"`n[IO.File]::AppendAllText((Join-Path (Split-Path (Split-Path `$OutputPath)) 'build-count.txt'),'built;')")
+            $authority=[DateTimeOffset]::UtcNow.AddMinutes(5)
+            $suite=Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds $authority
+            $suiteContexts.Add($suite)
+            Assert-Equal 'built;' ([IO.File]::ReadAllText($counter)) 'no-input suite prepares one passive owned candidate'
+            $one=Open-TestCandidate -RepositoryRoot $repository -CandidatePath $suite.CandidatePath -PreparedManifestPath $suite.PreparedManifestPath -PreparedManifestSha256 $suite.PreparedManifestSha256
+            $two=Open-TestCandidate -RepositoryRoot $repository -CandidatePath $suite.CandidatePath -PreparedManifestPath $suite.PreparedManifestPath -PreparedManifestSha256 $suite.PreparedManifestSha256
+            Assert-Equal $one.Path $two.Path 'independent file readers reuse the exact root candidate'
+            Close-TestCandidate -Candidate $one; Close-TestCandidate -Candidate $two
+            Assert-Equal 'built;' ([IO.File]::ReadAllText($counter)) 'two immutable readers cannot rebuild'
+            Assert-FixtureRefusal { [IO.File]::WriteAllText($suite.PreparedManifestPath,'changed') } 'root manifest remains read-owned across all files'
+            Assert-FixtureRefusal { Open-TestSuiteCandidate -RepositoryRoot $repository -CandidatePath $suite.CandidatePath -AuthorityEnds $authority } 'partial root input refuses rather than rebuilding'
+            Assert-FixtureRefusal { Open-TestSuiteCandidate -RepositoryRoot $repository -CandidatePath ' ' -AuthorityEnds $authority } 'explicit whitespace root input cannot select a default build'
+            Assert-FixtureRefusal { Open-TestSuiteCandidate -RepositoryRoot $repository -PreparedManifestSha256 $suite.PreparedManifestSha256 -AuthorityEnds $authority } 'manifest-pin-only root input cannot select a default build'
+            Assert-Equal 'built;' ([IO.File]::ReadAllText($counter)) 'partial input refusal cannot build'
+            Assert-FixtureRefusal { Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds ([DateTimeOffset]::UtcNow) } 'expired authority refuses before passive build'
+            Assert-Equal 'built;' ([IO.File]::ReadAllText($counter)) 'authority refusal cannot build'
+            Close-TestSuiteCandidate -Context $suite -Unsafe $false
+            $suiteContexts.Clear()
+            Assert-Equal $false ([IO.Directory]::Exists($suite.Candidate.OwnedDirectory)) 'verified root finalization closes both handles before owned output removal'
+
+            $suite=Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds $authority
+            $suiteContexts.Add($suite)
+            $suite.PreparedManifestSha256='0'*64
+            Assert-FixtureRefusal { Close-TestSuiteCandidate -Context $suite -Unsafe $false } 'manifest identity mismatch cannot become successful finalization'
+            Assert-Equal $true ([IO.Directory]::Exists($suite.Candidate.OwnedDirectory)) 'manifest uncertainty preserves the actual owned candidate output'
+            Assert-Equal $true ([IO.File]::Exists((Get-QualificationCleanupBlockerPath))) 'manifest uncertainty retains a durable scoped unsafe signal'
+            $suiteContexts.Clear()
+
+            $suite=Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds $authority
+            $suiteContexts.Add($suite)
+            $failure=$null
+            try { throw 'Synthetic full input inventory changed' } catch { $failure=$_ }
+            Assert-FixtureRefusal { Close-TestSuiteCandidate -Context $suite -BodyError $failure -Unsafe $true } 'suite unsafe state cannot be lost at candidate finalization'
+            Assert-Equal $true ([IO.Directory]::Exists($suite.Candidate.OwnedDirectory)) 'original suite uncertainty preserves candidate and pinned manifest'
+            $suiteContexts.Clear()
+
+            $sourcePath=Join-Path $repository 'src/Fixture.ps1'
+            $savedSource=[IO.File]::ReadAllBytes($sourcePath)
+            $ownedBefore=@(Get-ChildItem -LiteralPath (Join-Path $repository '.test-output') -Directory -Filter 'candidate-*').Count
+            try {
+                [IO.File]::WriteAllBytes($buildPath,$savedBuild)
+                [IO.File]::AppendAllText($buildPath,"`n[IO.File]::AppendAllText((Join-Path (Split-Path (Split-Path (Split-Path `$OutputPath))) 'src/Fixture.ps1'),'changed during build')")
+                Assert-FixtureRefusal { Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds $authority } 'build-time source drift cannot bind a newer manifest to the older admitted cohort'
+                Assert-Equal ($ownedBefore+1) @(Get-ChildItem -LiteralPath (Join-Path $repository '.test-output') -Directory -Filter 'candidate-*').Count 'build-time uncertainty preserves its separately owned output'
+            }
+            finally { [IO.File]::WriteAllBytes($sourcePath,$savedSource) }
+
+            [IO.File]::WriteAllText($buildPath,"throw 'Synthetic suite build failure'")
+            $ownedBefore=@(Get-ChildItem -LiteralPath (Join-Path $repository '.test-output') -Directory -Filter 'candidate-*').Count
+            Assert-FixtureRefusal { Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds $authority } 'failed root build never returns a file admission'
+            Assert-Equal $ownedBefore @(Get-ChildItem -LiteralPath (Join-Path $repository '.test-output') -Directory -Filter 'candidate-*').Count 'failed passive build removes only its own incomplete output'
+
+            [IO.File]::WriteAllText($buildPath,@'
+param([string] $OutputPath)
+[IO.File]::WriteAllText($OutputPath,'synthetic failed build output')
+$global:WinPCInfoPreparedFixtureLock=[IO.File]::Open($OutputPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+throw 'Synthetic original build failure with owned lock'
+'@)
+            $retained=$null
+            try { Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds $authority | Out-Null }
+            catch { $retained=$_.Exception }
+            try {
+                Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $retained) 'failed build cleanup cannot lose its unsafe ownership state'
+                Assert-Equal 1 @($retained.Flatten().InnerExceptions | Where-Object Message -eq 'Synthetic original build failure with owned lock').Count 'cleanup failure retains the original passive build error independently'
+                Assert-Equal $true ([IO.Directory]::Exists($retained.Data['OwnedCandidateDirectory'])) 'unverified setup cleanup retains its exact owned output path'
+            }
+            finally { $global:WinPCInfoPreparedFixtureLock.Dispose(); Remove-Variable -Name WinPCInfoPreparedFixtureLock -Scope Global }
+        }
+        finally {
+            foreach ($suite in $suiteContexts) {
+                if ($null -ne $suite.ManifestStream) { $suite.ManifestStream.Dispose() }
+                $suite.Candidate.Stream.Dispose()
+            }
+            [IO.File]::WriteAllBytes($buildPath,$savedBuild)
+        }
+        23
+    }
+    $checks+=Invoke-SuitePreparationControls
+
     # Check closure against the existing package owner, rather than maintaining
     # a competing list of packaged documentation, schemas and release resources.
     $actualRepository=Split-Path $PSScriptRoot
@@ -141,8 +236,9 @@ param([string] $OutputPath)
     $checks++
 
     [IO.File]::WriteAllText((Join-Path $repository 'build/Build.ps1'),"throw 'Synthetic failed build'")
+    $ownedBefore=@(Get-ChildItem -LiteralPath (Join-Path $repository '.test-output') -Directory).Count
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository } 'a failed standalone fixture build cannot return an admitted candidate'
-    Assert-Equal 0 @(Get-ChildItem -LiteralPath (Join-Path $repository '.test-output') -Directory).Count 'failed build cleans only its newly owned output'
+    Assert-Equal $ownedBefore @(Get-ChildItem -LiteralPath (Join-Path $repository '.test-output') -Directory).Count 'failed build cleans only its newly owned output'
     $checks+=2
 }
 finally {

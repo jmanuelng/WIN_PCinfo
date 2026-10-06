@@ -16,8 +16,29 @@ try {
     foreach ($dependency in @('Invoke-TestFile.ps1','GeneratedApplicationNative.ps1','GeneratedApplicationNativeSupervisor.cs','QualificationCaseAdmission.ps1','Invoke-QualificationCase.ps1','Invoke-FocusedTest.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $dependency) -Destination $testDirectory
     }
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'TestHarness.ps1') -Destination $testDirectory
+    foreach ($directory in @('src','build','schemas','docs')) { $null=[IO.Directory]::CreateDirectory((Join-Path $root $directory)) }
+    Copy-Item -LiteralPath (Join-Path (Split-Path $PSScriptRoot) 'build/RuntimeHost.ps1') -Destination (Join-Path $root 'build')
+    [IO.File]::WriteAllText((Join-Path $root 'build/Build.ps1'),@'
+param([string] $OutputPath)
+# Passive fixture builder; no native application or process is started.
+[IO.File]::WriteAllText($OutputPath,'synthetic candidate')
+[IO.File]::AppendAllText((Join-Path (Split-Path (Split-Path $OutputPath)) 'build-count.txt'),'built;')
+'@)
     [IO.File]::WriteAllText((Join-Path $testDirectory 'A.Tests.ps1'), "throw 'Synthetic expected failure'")
     [IO.File]::WriteAllText((Join-Path $testDirectory 'B.Tests.ps1'), "Write-Output 'SYNTHETIC_SECOND_FILE_EXECUTED'")
+    foreach ($name in @('Open-TestSuiteCandidate','Close-TestSuiteCandidate')) {
+        $definition=$runnerAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
+        . ([scriptblock]::Create($definition.Extent.Text))
+    }
+    $preparedSuite=Open-TestSuiteCandidate -RepositoryRoot $root -AuthorityEnds ([DateTimeOffset]::UtcNow.AddMinutes(5))
+    try {
+        $reader=Open-TestCandidate -RepositoryRoot $root -CandidatePath $preparedSuite.CandidatePath `
+            -PreparedManifestPath $preparedSuite.PreparedManifestPath -PreparedManifestSha256 $preparedSuite.PreparedManifestSha256
+        Close-TestCandidate -Candidate $reader
+        Assert-Equal 'built;' ([IO.File]::ReadAllText((Join-Path $root '.test-output/build-count.txt'))) 'synthetic repository uses the actual default preparation once without replacing admission or cleanup functions'
+    }
+    finally { Close-TestSuiteCandidate -Context $preparedSuite -Unsafe $false }
     # The aggregation negative controls use disclosed native-result stubs.
     # Real unsafe native owners retain holds for root recovery and therefore
     # cannot be erased/reused by this fixture. Root separately certifies the

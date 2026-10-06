@@ -119,8 +119,27 @@ function Open-TestCandidate {
         [pscustomobject]@{Path=$resolvedCandidate; Sha256=$actualDigest; Stream=$stream; OwnedDirectory=$ownedDirectory; Prepared=$supplied}
     }
     catch {
-        if ($null -ne $stream) { $stream.Dispose() }
-        if ($null -ne $ownedDirectory -and [IO.Directory]::Exists($ownedDirectory)) { [IO.Directory]::Delete($ownedDirectory,$true) }
+        $original=$_
+        $cleanupFailures=[Collections.Generic.List[Exception]]::new()
+        if ($null -ne $stream) {
+            try { $stream.Dispose() } catch { $cleanupFailures.Add($_.Exception) }
+        }
+        if ($null -ne $ownedDirectory) {
+            try {
+                if ([IO.Directory]::Exists($ownedDirectory)) { [IO.Directory]::Delete($ownedDirectory,$true) }
+                if ([IO.Directory]::Exists($ownedDirectory)) { throw 'Failed candidate preparation output remains owned.' }
+            }
+            catch { $cleanupFailures.Add($_.Exception) }
+        }
+        if ($cleanupFailures.Count) {
+            $failures=[Collections.Generic.List[Exception]]::new()
+            $failures.Add($original.Exception)
+            foreach ($failure in $cleanupFailures) { $failures.Add($failure) }
+            $exception=[AggregateException]::new('Candidate preparation failed and owned cleanup remains unverified.',$failures.ToArray())
+            $exception.Data['OwnedCleanupUnverified']=$true
+            $exception.Data['OwnedCandidateDirectory']=$ownedDirectory
+            throw $exception
+        }
         throw
     }
 }
