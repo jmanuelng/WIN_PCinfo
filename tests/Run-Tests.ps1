@@ -258,6 +258,9 @@ try {
         $path=Join-Path $repository $inputPin.path
         if ($path -notin $inputs.path) { $inputs.Add([pscustomobject][ordered]@{path=$path; bytes=$inputPin.bytes; sha256=$inputPin.sha256}) }
     }
+    foreach ($inputPin in $manifest.runtime.dependencies.inputs) {
+        if ($inputPin.path -notin $inputs.path) { $inputs.Add([pscustomobject][ordered]@{path=$inputPin.path; bytes=$inputPin.bytes; sha256=$inputPin.sha256}) }
+    }
     foreach ($path in @((Join-Path $PSHOME 'pwsh.exe'),$inventoryPath,$CandidatePath,$PreparedManifestPath,$FocusedRequestPath)) {
         if (-not [string]::IsNullOrEmpty($path) -and $path -notin $inputs.path) {
             $item=Get-Item -LiteralPath ([IO.Path]::GetFullPath($path))

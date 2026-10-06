@@ -1,11 +1,15 @@
-﻿[CmdletBinding()]
-param()
+[CmdletBinding()]
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 $tokens=$null;$errors=$null
 $applicationAst=[Management.Automation.Language.Parser]::ParseFile($candidate,[ref]$tokens,[ref]$errors)
 Assert-Equal 0 $errors.Count 'the generated initializer must parse as part of the delivered application'
@@ -88,4 +92,9 @@ foreach($iteration in @(1,2)) {
     }
 }
 Remove-Variable -Name ProtectedPackageJsonCommands -Scope Script
-Write-Output 'PASS: generated original initializer and fresh parsed workers retain complete definitions, explicit decline and independent state.'
+$candidateSuccessMessages.Add('PASS: generated original initializer and fresh parsed workers retain complete definitions, explicit decline and independent state.')
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

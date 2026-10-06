@@ -14,6 +14,7 @@ $candidate=$candidateContext.Path
 $candidateUseError=$null
 try {
 . (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1')
+$null=Assert-QualificationResourceInventoryBinding -CandidatePath $candidate -HarnessPath (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1') -RepositoryRoot $repositoryRoot
 . (Join-Path $repositoryRoot 'src/PrivilegedCollectionPlan.ps1')
 . (Join-Path $repositoryRoot 'src/StatusDesk.ps1')
 . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
@@ -278,7 +279,8 @@ finally {
         }
     )
 }
-Write-Output 'PASS: finite privileged witness inventory reserves before one launch, validates actual emitted source, and independently rejects tampering and repeat admission.'
+
 }
 catch { $candidateUseError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+Write-Output 'PASS: finite privileged witness inventory reserves before one launch, validates actual emitted source, and independently rejects tampering and repeat admission.'

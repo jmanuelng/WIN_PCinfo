@@ -2,11 +2,18 @@
 param(
     [string] $RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
     [string] $SupportPath,
-    [string] $ReferencePath
+    [string] $ReferencePath,
+    [string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $RepositoryRoot 'tests/TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $RepositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 . (Join-Path $RepositoryRoot 'tests/IdentitySourceAdapters.ps1')
 . (Join-Path $RepositoryRoot 'tests/ReadinessSourceAdapters.ps1')
 if (-not $SupportPath) { $SupportPath=Join-Path $RepositoryRoot 'tests/AssessmentQualificationSupport.ps1' }
@@ -61,8 +68,6 @@ if ([IO.File]::ReadAllText($SupportPath).Contains('function Rename-Qualification
 }
 $actual=New-CultureTransformationProbe -Path $SupportPath -Name CultureActual -Functions $actualFunctions
 try {
-    $candidate=Join-Path $RepositoryRoot 'artifacts/WIN-PCInfo.ps1'
-    if (-not [IO.File]::Exists($candidate)) { & (Join-Path $RepositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null }
     $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),
         '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
     Assert-Equal $true ($regions.Count -gt 0) 'regression uses actual generated module regions'
@@ -150,8 +155,12 @@ try {
             if(-not $refused){throw 'Malformed, missing, or out-of-bound original definitions were admitted.'}
         }
     }
-    Write-Output "PASS: Culture preparation preserves $comparisons actual-source transformations and uses one rename-phase full-module parse (certificate embedding retains its two existing parses)."
+    $candidateSuccessMessages.Add("PASS: Culture preparation preserves $comparisons actual-source transformations and uses one rename-phase full-module parse (certificate embedding retains its two existing parses).")
 }
 finally {
     Remove-Module -ModuleInfo $reference,$actual -Force -ErrorAction SilentlyContinue
 }
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

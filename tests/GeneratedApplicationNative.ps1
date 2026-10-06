@@ -83,6 +83,12 @@ function Assert-TestFileAdmissionInputs {
     if ($supplied -ne 0 -and ($supplied -ne 3 -or -not $paths.Contains($Admission.candidatePath) -or
         -not $paths.Contains($Admission.preparedManifestPath) -or $Admission.preparedManifestSha256 -cnotmatch '^[a-f0-9]{64}$' -or
         (Get-FileHash -LiteralPath $Admission.preparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Admission.preparedManifestSha256)) { throw 'Test file prepared input is incomplete or changed.' }
+    if ($supplied -eq 3) {
+        $prepared=Read-TestNativeRecord -Path $Admission.preparedManifestPath
+        if ($prepared.contract -cne 'win-pcinfo.test-prepared-candidate/1.0.0') { throw 'Test file prepared manifest contract differs.' }
+        Assert-TestPreparedRuntimeDependencies -Dependencies $prepared.runtime.dependencies -VerifiedInputPins @($Admission.inputs)
+        if ($Admission.hostPath -ine (Join-Path $prepared.runtime.dependencies.root 'pwsh.exe')) { throw 'Test file host differs from its prepared runtime.' }
+    }
     $named=Get-TestRecordOptionalProperty -Record $Admission -Name 'namedParameters'
     if ($null -ne $named) {
         $parameters=ConvertFrom-TestNamedParameterRecord -Parameters $named
@@ -163,22 +169,23 @@ function Set-TestNativePrivateDirectory {
 
 function Assert-TestNativeRoleReady {
     param([ValidateSet('GeneratedApplication','TestFile','QualificationCase')] [string] $NativeRole,
-        [Parameter(Mandatory)] [string] $RepositoryRoot)
+        [Parameter(Mandatory)] [string] $RepositoryRoot, [string] $InputLauncherOwnerDirectory)
     $generated=Join-Path $RepositoryRoot '.test-output/generated-native'
     $testFiles=Join-Path $RepositoryRoot '.test-output/test-file-native'
     $cases=Join-Path $RepositoryRoot '.test-output/qualification-case-native'
     Assert-GeneratedApplicationNativeReady -EvidenceParent $generated
-    $allowed=$null
+    $inputBinding=$null; if (-not [string]::IsNullOrEmpty($InputLauncherOwnerDirectory)) { if ($NativeRole -cne 'GeneratedApplication') { throw 'Input launcher cannot delegate another native role.' }; $inputBinding=Get-InputLauncherContext -RepositoryRoot $RepositoryRoot -Directory $InputLauncherOwnerDirectory -SelfIdentity (Get-TestNativeSelfIdentity) -SelfArguments (Get-InputLauncherSelfArguments) }; $allowed=$null
     $allowedCases=@()
     if (-not [string]::IsNullOrEmpty($env:WINPCINFO_TEST_FILE_LEASE) -or -not [string]::IsNullOrEmpty($env:WINPCINFO_TEST_CASE_LEASE)) {
         if ($NativeRole -eq 'TestFile') { throw 'A test file lease cannot delegate another test file launch.' }
-        $context=Get-TestNativeAdmissionContext -RepositoryRoot $RepositoryRoot -SelfIdentity (Get-TestNativeSelfIdentity)
+        $context=if ($null -ne $inputBinding) { $inputBinding.CreatorContext } else { Get-TestNativeAdmissionContext -RepositoryRoot $RepositoryRoot -SelfIdentity (Get-TestNativeSelfIdentity) }
         $allowed=$context.Root.PendingPath
         $allowedCases=@($context.AllowedCasePendingPaths)
     }
     elseif ($NativeRole -eq 'QualificationCase') { throw 'Qualification cases require an exact current file or case owner.' }
     Assert-GeneratedApplicationNativeReady -EvidenceParent $testFiles -AllowedPendingPath $allowed
     Assert-GeneratedApplicationNativeReady -EvidenceParent $cases -AllowedPendingPaths $allowedCases
+    Assert-GeneratedApplicationNativeReady -EvidenceParent (Join-Path $RepositoryRoot '.test-output/input-launcher-native') -AllowedPendingPath $(if ($null -ne $inputBinding) { $inputBinding.PendingPath })
 }
 
 function Initialize-GeneratedApplicationNativeSupervisor {
@@ -366,10 +373,19 @@ function Invoke-GeneratedApplicationNative {
         [scriptblock] $ObserveStartup, [scriptblock] $ObserveTerminal,
         [ValidateSet('GeneratedApplication','TestFile','QualificationCase')] [string] $NativeRole = 'GeneratedApplication',
         [AllowNull()] $TestFileAdmission, [AllowNull()] $QualificationCaseAdmission,
-        [switch] $PortableBootstrap, [hashtable] $ExactEnvironment)
+        [switch] $PortableBootstrap, [hashtable] $ExactEnvironment, [string] $InputLauncherOwnerDirectory,
+        [AllowEmptyString()] [string] $PortableEntryCmdPackageRoot)
 
-    $portableBinding=$null; $portableSafe=$false; $startRequested=$false; $owner=$null
+    $portableBinding=$null; $cmdBinding=$null; $inputBinding=$null; $inputUseError=$null; $inputResult=$null; $portableSafe=$false; $startRequested=$false; $owner=$null
+    $cmdRequested=$PSBoundParameters.ContainsKey('PortableEntryCmdPackageRoot')
     try {
+    Assert-PortableEntryCmdAdmissionReady
+    if ($cmdRequested -and ($PortableBootstrap -or $NativeRole -cne 'GeneratedApplication' -or $null -ne $TestFileAdmission -or
+        $null -ne $QualificationCaseAdmission -or $PSBoundParameters.ContainsKey('ExactEnvironment') -or
+        -not [string]::IsNullOrEmpty($InputLauncherOwnerDirectory) -or -not [string]::IsNullOrEmpty($StandardInput) -or
+        $TimeoutMs -gt 60000 -or $CleanupReserveMs -ne 10000 -or
+        $HostPath -ine (Join-Path $env:WINDIR 'System32/cmd.exe') -or $WorkingDirectory -cne [Environment]::CurrentDirectory -or
+        $Arguments.Count -ne 1 -or $Arguments[0] -cne 'PortableEntryCmdHelp')) { throw 'CMD Help cannot change its closed source, host, stdin, environment or finite reservation.' }
     if ($PSBoundParameters.ContainsKey('ExactEnvironment') -and -not $PortableBootstrap) { throw 'Exact environment requires the closed portable bootstrap caller.' }
     if ($PortableBootstrap -and ($NativeRole -cne 'GeneratedApplication' -or $null -ne $TestFileAdmission -or
         $null -ne $QualificationCaseAdmission -or -not [string]::IsNullOrEmpty($StandardInput))) { throw 'Portable bootstrap cannot change another native role or request stdin.' }
@@ -390,7 +406,22 @@ function Invoke-GeneratedApplicationNative {
     $repository=Split-Path -Parent $PSScriptRoot
     $outputRoot=Join-Path $repository '.test-output'
     if ([IO.Directory]::Exists($outputRoot) -and ((Get-Item -LiteralPath $outputRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Generated application output root cannot use a reparse point.' }
-    Assert-TestNativeRoleReady -NativeRole $NativeRole -RepositoryRoot $repository
+    if (-not [string]::IsNullOrEmpty($InputLauncherOwnerDirectory)) {
+        if ($NativeRole -cne 'GeneratedApplication' -or $PortableBootstrap -or $null -ne $TestFileAdmission -or $null -ne $QualificationCaseAdmission -or $PSBoundParameters.ContainsKey('ExactEnvironment')) { throw 'Input launcher cannot change another native role/environment.' }
+        $inputBinding=Open-InputLauncherNativeBinding -RepositoryRoot $repository -Directory $InputLauncherOwnerDirectory
+        Assert-InputLauncherNativeInvocation -Binding $inputBinding -HostPath $HostPath -WorkingDirectory $WorkingDirectory -Arguments $Arguments -StandardInput $StandardInput -TimeoutMs $TimeoutMs -CleanupReserveMs $CleanupReserveMs
+        if ($inputBinding.Ends -lt $budget.AuthorityEnds) { $budget=Get-GeneratedApplicationNativeBudget -TimeoutMs $TimeoutMs -CleanupReserveMs $CleanupReserveMs -AuthorityEnds $inputBinding.Ends }
+    }
+    Assert-TestNativeRoleReady -NativeRole $NativeRole -RepositoryRoot $repository -InputLauncherOwnerDirectory $InputLauncherOwnerDirectory
+    if ($cmdRequested) {
+        $cmdBinding=Open-PortableEntryCmdBinding -RepositoryRoot $repository -PackageRoot $PortableEntryCmdPackageRoot
+        $fixedCmdEnd=$budget.AuthorityEnds
+        if ($cmdBinding.AuthorityEnds -lt $budget.AuthorityEnds) {
+            $fixedCmdEnd=$cmdBinding.AuthorityEnds
+        }
+        # Binding cannot refresh the original local end when its parent ends later.
+        $budget=Get-GeneratedApplicationNativeBudget -TimeoutMs $TimeoutMs -CleanupReserveMs $CleanupReserveMs -AuthorityEnds $fixedCmdEnd
+    }
     if ($PortableBootstrap) {
         $bindingArguments=@{RepositoryRoot=$repository;HostPath=$HostPath;WorkingDirectory=$WorkingDirectory;Arguments=$Arguments}
         if ($PSBoundParameters.ContainsKey('ExactEnvironment')) { $bindingArguments.ExactEnvironment=$ExactEnvironment }
@@ -401,7 +432,7 @@ function Invoke-GeneratedApplicationNative {
     }
     $parent=Join-Path $outputRoot $(switch ($NativeRole) {'TestFile' {'test-file-native'} 'QualificationCase' {'qualification-case-native'} default {'generated-native'}})
     $nonce=[guid]::NewGuid().ToString('N')
-    $admission=$null
+    $admission=if ($null -ne $inputBinding) { $inputBinding.Record } else { $null }
     if ($NativeRole -eq 'TestFile') {
         Assert-TestFileLauncher -Admission $TestFileAdmission -RepositoryRoot $repository -HostPath $HostPath -WorkingDirectory $WorkingDirectory -Arguments $Arguments
         $Arguments=@($Arguments)+@('-NativeLeaseId',$nonce)
@@ -421,7 +452,13 @@ function Invoke-GeneratedApplicationNative {
     if (($NativeRole -ne 'TestFile' -and $null -ne $TestFileAdmission) -or
         ($NativeRole -ne 'QualificationCase' -and $null -ne $QualificationCaseAdmission)) { throw 'Native role cannot accept another role admission.' }
     Initialize-GeneratedApplicationNativeSupervisor
-    if ($PortableBootstrap) {
+    if ($cmdRequested) {
+        $admission=$cmdBinding.Record
+        $owner=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::CreatePortableEntryCmdHelp($PortableEntryCmdPackageRoot,
+            $MaximumLines,$MaximumLineCharacters,$MaximumTotalCharacters)
+        Assert-PortableEntryCmdConfiguredOwner -Identity $owner.StartedIdentity -Binding $cmdBinding
+    }
+    elseif ($PortableBootstrap) {
         $admission=$portableBinding.Record
         $owner=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::new($HostPath,$WorkingDirectory,$Arguments,$StandardInput,
             $MaximumLines,$MaximumLineCharacters,$MaximumTotalCharacters,$portableBinding.ClearEnvironment,$portableBinding.Environment,$false)
@@ -455,8 +492,16 @@ function Invoke-GeneratedApplicationNative {
     try {
         # Arm durable ownership before requesting process creation. A parent
         # crash leaves admission blocked even before a child identity is saved.
+        if ($cmdRequested) {
+            # Compilation and first ownership retention consumed this fixed end.
+            $budget=Get-GeneratedApplicationNativeBudget -TimeoutMs $TimeoutMs -CleanupReserveMs $CleanupReserveMs -AuthorityEnds $budget.AuthorityEnds
+        }
         $pending.childCreationRequested=$true
         [IO.File]::WriteAllText($pendingPath,($pending | ConvertTo-Json -Depth 8 -Compress),[Text.UTF8Encoding]::new($false))
+        if ($cmdRequested) {
+            # Recheck after fallible pending IO, immediately before actual Start.
+            $budget=Get-GeneratedApplicationNativeBudget -TimeoutMs $TimeoutMs -CleanupReserveMs $CleanupReserveMs -AuthorityEnds $budget.AuthorityEnds
+        }
         $startRequested=$true
         $owner.Start()
         $wait=$owner.BeginWait($budget.AuthorityEnds,$CleanupReserveMs,$TimeoutMs)
@@ -504,6 +549,12 @@ function Invoke-GeneratedApplicationNative {
     elseif ($NativeRole -eq 'TestFile') {
         $null=Confirm-TestFileNativeRetention -RepositoryRoot $repository -Directory $directory -Nonce $nonce -Admission $admission -NativeIdentity $owner.StartedIdentity -NativeOutcome $outcome -Failures $failures
     }
+    if ($cmdRequested -and $null -ne $outcome -and $outcome.NativeTerminalObserved -and -not $outcome.OwnedCleanupUnverified -and $failures.Count -eq 0) {
+        # Verify/release every immutable input before releasing the native hold.
+        # A fallible binding finalizer cannot erase the original native outcome.
+        try { Complete-PortableEntryCmdBinding -Binding $cmdBinding }
+        catch { $failures.Add($_.Exception) }
+    }
     try {
         $errorRecord=[ordered]@{startRequested=$startRequested; started=$owner.StartedIdentity.Started; original=$original;
             failures=@($failures | ForEach-Object { [ordered]@{type=$_.GetType().FullName; message=$_.Message} })}
@@ -524,6 +575,7 @@ function Invoke-GeneratedApplicationNative {
         } catch { $failures.Add($_.Exception); $safe=$false }
     }
     if (-not $safe) {
+        if ($cmdRequested) { Retain-PortableEntryCmdBinding -Binding $cmdBinding }
         # Keep the original owner reachable if its native terminal is unknown.
         # Forced parent termination makes descendant cleanup unverified; this
         # helper never claims or kills descendants from an invented identity.
@@ -546,13 +598,16 @@ function Invoke-GeneratedApplicationNative {
     # retained and safely released. Their failure cannot erase native evidence.
     $stdout=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::Reconstruct($outcome.Lines,'stdout')
     $stderr=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::Reconstruct($outcome.Lines,'stderr')
-    [pscustomobject]@{ExitCode=$outcome.NativeExitCode; StandardOutput=$stdout; StandardError=$stderr;
+    $nativeResult=[pscustomobject]@{ExitCode=$outcome.NativeExitCode; StandardOutput=$stdout; StandardError=$stderr;
         EvidenceDirectory=$directory; NativeIdentity=$owner.StartedIdentity; NativeOutcome=$original.outcome; Nonce=$nonce;
         StreamRecords=$outcome.Lines}
+    if ($null -ne $inputBinding) { $inputResult=$nativeResult } else { $nativeResult }
     }
     catch {
-        if ($PortableBootstrap -and $startRequested -and -not $portableSafe -and
+        $inputUseError=$_
+        if (($PortableBootstrap -or $cmdRequested -or $null -ne $inputBinding) -and $startRequested -and -not $portableSafe -and
             -not (Test-QualificationCleanupUnverified -Exception $_.Exception)) {
+            if ($cmdRequested) { Retain-PortableEntryCmdBinding -Binding $cmdBinding }
             # Fallible post-start disposal/retention must not let the caller
             # delete its package root while original ownership is uncertain.
             $_.Exception.Data['OwnedCleanupUnverified']=$true
@@ -569,6 +624,19 @@ function Invoke-GeneratedApplicationNative {
         throw
     }
     finally {
+        if ($null -ne $cmdBinding -and -not $cmdBinding.Closed) {
+            if ($startRequested -and -not $portableSafe) {
+                Retain-PortableEntryCmdBinding -Binding $cmdBinding
+            }
+            else { Complete-PortableEntryCmdBinding -Binding $cmdBinding -BodyError $inputUseError }
+        }
+        if ($null -ne $inputBinding) {
+            if ($startRequested -and -not $portableSafe) {
+                if ($null -eq (Get-Variable InputLauncherUnverifiedBindings -Scope Script -ErrorAction SilentlyContinue)) { $script:InputLauncherUnverifiedBindings=[Collections.Generic.List[object]]::new() }
+                $script:InputLauncherUnverifiedBindings.Add($inputBinding)
+            }
+            else { Close-InputLauncherNativeBinding -Binding $inputBinding -BodyError $inputUseError }
+        }
         if ($null -ne $portableBinding) {
             if ($startRequested -and -not $portableSafe) {
                 if ($null -eq (Get-Variable PortableBootstrapUnverifiedBindings -Scope Script -ErrorAction SilentlyContinue)) {
@@ -579,6 +647,320 @@ function Invoke-GeneratedApplicationNative {
             else { Complete-PortableBootstrapNativeBinding -Binding $portableBinding }
         }
     }
+    if ($null -ne $inputResult) { $inputResult }
 }
 
 . (Join-Path $PSScriptRoot 'QualificationCaseAdmission.ps1')
+
+. (Join-Path $PSScriptRoot 'QualificationInputLauncher.ps1')
+
+function ConvertTo-PortableEntryCmdProfile {
+    param([Parameter(Mandatory)] [string] $RepositoryRoot, [Parameter(Mandatory)] [string] $PackageRoot,
+        [Parameter(Mandatory)] $Policy)
+    $root=[IO.Path]::GetFullPath($RepositoryRoot)
+    if ([string]::IsNullOrWhiteSpace($PackageRoot) -or -not [IO.Path]::IsPathFullyQualified($PackageRoot) -or
+        $PackageRoot -cne [IO.Path]::GetFullPath($PackageRoot) -or $PackageRoot -match '["%!&|<>^\x00-\x1f\x7f]') {
+        throw 'CMD Help package must be an exact literal absolute path without shell expansion or control characters.'
+    }
+    $parts=[IO.Path]::GetRelativePath($root,$PackageRoot).Replace('\','/').Split('/')
+    if ($Policy.archiveRootName -isnot [string] -or $Policy.archiveRootName -cne 'WIN-PCInfo-2.0.0-preview.1' -or
+        $Policy.archiveFileName -isnot [string] -or $Policy.archiveFileName -cne 'WIN-PCInfo-2.0.0-preview.1-portable.zip' -or
+        $parts.Count -ne 4 -or $parts[0] -cne '.test-output' -or $parts[1] -cnotmatch '^portable-entry-[a-f0-9]{32}$' -or
+        $parts[2] -cne 'extract' -or $parts[3] -cne $Policy.archiveRootName) { throw 'CMD Help package escaped its exact unique fixture.' }
+    $workRoot=Join-Path (Join-Path $root '.test-output') $parts[1]
+    $hostPath=Join-Path $env:WINDIR 'System32/cmd.exe'
+    $launcher=Join-Path $PackageRoot 'Start-WIN-PCInfo.cmd'
+    [pscustomobject]@{HostPath=$hostPath;WorkRoot=$workRoot;PackageRoot=$PackageRoot;
+        ArchivePath=(Join-Path (Join-Path $workRoot 'build') $Policy.archiveFileName);
+        BuiltCandidatePath=(Join-Path (Join-Path $workRoot 'build') 'WIN-PCInfo.ps1');
+        RawArguments=('/d /c ""'+$launcher+'" -Workflow Help"');
+        RedirectStandardInput=$false;WorkingDirectoryMode='Inherited';EnvironmentMode='Inherited';
+        OutputDecoding='ProcessDefaultReader';TextEvidenceRepresentation='DecodedTextReencodedUtf8';ProcessTreeAbsenceClaim=$false}
+}
+
+# This closes only the selected PS7 implementation/default-reference inputs.
+# It does not qualify transitive loader resolution or a Windows PowerShell compiler.
+function Get-TestPreparedRuntimeDependencies {
+    param([switch] $HashFiles)
+    if ($PSVersionTable.PSVersion.ToString() -cne '7.6.5') { throw 'Prepared runtime reference selection is reviewed only for PowerShell 7.6.5.' }
+    $root=[IO.Path]::GetFullPath($PSHOME)
+    $entry=[Reflection.Assembly]::GetEntryAssembly()
+    $automation=[Management.Automation.PSObject].Assembly
+    $referenceRoot=Join-Path ([IO.Path]::GetDirectoryName($(if ($null -ne $entry) {$entry.Location} else {$automation.Location}))) 'ref'
+    if ($referenceRoot -ine (Join-Path $root 'ref') -or $null -eq $entry) { throw 'Prepared runtime entry/reference root differs from the selected PowerShell host.' }
+    $ancestor=$root
+    while (-not [string]::IsNullOrEmpty($ancestor)) {
+        $item=Get-Item -LiteralPath $ancestor -ErrorAction Stop
+        if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Prepared runtime ancestor is redirected or not a directory.' }
+        $ancestor=[IO.Path]::GetDirectoryName($ancestor)
+    }
+    $refItem=Get-Item -LiteralPath $referenceRoot -ErrorAction Stop
+    if (-not $refItem.PSIsContainer -or ($refItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Prepared compiler reference root is redirected.' }
+    $roleTypes=[ordered]@{
+        Entry=$entry; Automation=$automation;
+        Utility=('Microsoft.PowerShell.Commands.AddTypeCommand' -as [type]);
+        ConvertFromJson=('Microsoft.PowerShell.Commands.ConvertFromJsonCommand' -as [type]);
+        Newtonsoft=('Newtonsoft.Json.JsonTextReader' -as [type]);
+        SystemTextJson=('System.Text.Json.JsonDocument' -as [type]);
+        Roslyn=('Microsoft.CodeAnalysis.Compilation' -as [type]);
+        RoslynCSharp=('Microsoft.CodeAnalysis.CSharp.CSharpCompilation' -as [type])
+    }
+    $roleFiles=[ordered]@{Entry='pwsh.dll';Automation='System.Management.Automation.dll';Utility='Microsoft.PowerShell.Commands.Utility.dll';
+        ConvertFromJson='Microsoft.PowerShell.Commands.Utility.dll';Newtonsoft='Newtonsoft.Json.dll';SystemTextJson='System.Text.Json.dll';
+        Roslyn='Microsoft.CodeAnalysis.dll';RoslynCSharp='Microsoft.CodeAnalysis.CSharp.dll'}
+    $roles=@(foreach ($role in $roleTypes.Keys) {
+        $value=$roleTypes[$role]
+        if ($null -eq $value) { throw "Prepared runtime implementation is not resolved in this host: $role." }
+        $assembly=if ($value -is [type]) {$value.Assembly} else {$value}
+        $path=[IO.Path]::GetFullPath($assembly.Location)
+        if ($path -ine (Join-Path $root $roleFiles[$role])) { throw "Prepared runtime implementation resolves outside the selected distribution: $role." }
+        [pscustomobject][ordered]@{role=$role;name=$assembly.FullName;path=$path}
+    })
+    # Names are the current recorded direct implementations/configuration/core,
+    # not a guessed exhaustive framework list. Ref membership follows AddType.cs.
+    $names=[Collections.Generic.List[string]]::new()
+    foreach ($name in @('pwsh.exe','pwsh.dll','pwsh.deps.json','pwsh.runtimeconfig.json','Newtonsoft.Json.dll','System.Text.Json.dll',
+        'System.Management.Automation.dll','Microsoft.PowerShell.Commands.Utility.dll','Microsoft.CodeAnalysis.dll',
+        'Microsoft.CodeAnalysis.CSharp.dll','coreclr.dll','hostfxr.dll','hostpolicy.dll','System.Private.CoreLib.dll')) { $names.Add($name) }
+    $references=@(Get-ChildItem -LiteralPath $referenceRoot -Filter '*.dll' -File -Force -ErrorAction Stop)
+    if ($references.Count -lt 1) { throw 'Prepared compiler reference inventory is empty.' }
+    foreach ($file in $references) { $names.Add('ref/'+$file.Name) }
+    $ordered=$names.ToArray(); [Array]::Sort($ordered,[StringComparer]::Ordinal)
+    $inputs=@(foreach ($name in $ordered) {
+        $file=Get-Item -LiteralPath (Join-Path $root $name) -ErrorAction Stop
+        if ($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Prepared runtime input is not an ordinary file.' }
+        [pscustomobject][ordered]@{relativePath=$name;path=$file.FullName;bytes=$file.Length;
+            sha256=$(if ($HashFiles) {(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()} else {$null})}
+    })
+    [pscustomobject][ordered]@{contract='win-pcinfo.test-prepared-runtime/1.0.0';scope='PS7ImplementationAndDefaultReferences';
+        root=$root;referenceRoot=$referenceRoot;roles=$roles;inputs=$inputs}
+}
+
+function Assert-TestPreparedRuntimeDependencies {
+    param([Parameter(Mandatory)] $Dependencies, [AllowNull()] [object[]] $VerifiedInputPins)
+    $verified=$PSBoundParameters.ContainsKey('VerifiedInputPins')
+    $actual=Get-TestPreparedRuntimeDependencies -HashFiles:(-not $verified)
+    if ($Dependencies.contract -isnot [string] -or $Dependencies.contract -cne $actual.contract -or
+        $Dependencies.scope -isnot [string] -or $Dependencies.scope -cne $actual.scope -or
+        $Dependencies.root -isnot [string] -or $Dependencies.root -ine $actual.root -or
+        $Dependencies.referenceRoot -isnot [string] -or $Dependencies.referenceRoot -ine $actual.referenceRoot -or
+        $Dependencies.roles -isnot [array] -or $Dependencies.roles.Count -ne $actual.roles.Count -or
+        $Dependencies.inputs -isnot [array] -or $Dependencies.inputs.Count -ne $actual.inputs.Count) { throw 'Prepared runtime dependency inventory is missing or differs.' }
+    for ($index=0; $index -lt $actual.roles.Count; $index++) {
+        $declared=$Dependencies.roles[$index]; $role=$actual.roles[$index]
+        if ($declared.role -isnot [string] -or $declared.role -cne $role.role -or $declared.name -isnot [string] -or
+            $declared.name -cne $role.name -or $declared.path -isnot [string] -or $declared.path -ine $role.path) { throw 'Prepared runtime loaded implementation identity changed.' }
+    }
+    for ($index=0; $index -lt $actual.inputs.Count; $index++) {
+        $declared=$Dependencies.inputs[$index]; $inputPin=$actual.inputs[$index]
+        if ($declared.relativePath -isnot [string] -or $declared.relativePath -cne $inputPin.relativePath -or
+            $declared.path -isnot [string] -or $declared.path -ine $inputPin.path -or
+            ($declared.bytes -isnot [int] -and $declared.bytes -isnot [long]) -or $declared.bytes -ne $inputPin.bytes -or
+            $declared.sha256 -isnot [string] -or $declared.sha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Prepared runtime physical/default-reference member changed.' }
+        if ($verified) {
+            # The File guard already hashed this exact full cohort. Do not hash
+            # every runtime file again on every recursive Case validation.
+            $pins=@($VerifiedInputPins | Where-Object path -IEQ $declared.path)
+            if ($pins.Count -ne 1 -or $pins[0].bytes -ne $declared.bytes -or $pins[0].sha256 -cne $declared.sha256) { throw 'Test file cohort omits or changes a prepared runtime input.' }
+        }
+        elseif ($declared.sha256 -cne $inputPin.sha256) { throw 'Prepared runtime file identity changed.' }
+    }
+}
+
+function Assert-PortableEntryCmdOrdinaryPath {
+    param([Parameter(Mandatory)] [string] $Path)
+    $full=[IO.Path]::GetFullPath($Path)
+    for ($current=$full; -not [string]::IsNullOrEmpty($current); $current=[IO.Path]::GetDirectoryName($current)) {
+        $item=Get-Item -LiteralPath $current -ErrorAction Stop
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'CMD Help input or ancestor cannot be redirected.' }
+    }
+}
+
+function Add-PortableEntryCmdFilePin {
+    param([Parameter(Mandatory)] $Binding, [Parameter(Mandatory)] [string] $Path, [AllowNull()] $ExpectedPin)
+    $full=[IO.Path]::GetFullPath($Path)
+    if (@($Binding.Files | Where-Object { $_.Path -ieq $full }).Count) { throw 'CMD Help physical input is duplicated.' }
+    Assert-PortableEntryCmdOrdinaryPath -Path $full
+    $stream=[IO.File]::Open($full,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+    # Register ownership before hashing, Length, admission or disposal can fail.
+    $pin=[pscustomobject]@{Path=$full;Stream=$stream;Sha256=$null;Bytes=$null;BaselineObserved=$false;Disposed=$false}
+    $Binding.Files.Add($pin)
+    $sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)).ToLowerInvariant()
+    $pin.Bytes=$stream.Length;$pin.Sha256=$sha;$pin.BaselineObserved=$true
+    if ($null -ne $ExpectedPin -and ($ExpectedPin.sha256 -isnot [string] -or $ExpectedPin.sha256 -cne $sha -or
+        $ExpectedPin.bytes -ne $pin.Bytes)) { throw 'CMD Help admitted physical input drifted.' }
+    $stream.Position=0
+    $pin
+}
+
+function Complete-PortableEntryCmdBinding {
+    param([Parameter(Mandatory)] $Binding, [AllowNull()] [Management.Automation.ErrorRecord] $BodyError)
+    # Retain the existing binding list before the shared finalizer attempts its
+    # fallible durable blocker. In-progress verification also blocks admission.
+    Retain-PortableEntryCmdBinding -Binding $Binding
+    try {
+        Complete-QualificationHarness -BodyError $BodyError -Cleanup @({
+            $failures=[Collections.Generic.List[Exception]]::new()
+            foreach ($pin in $Binding.Files) {
+                try {
+                    if ($pin.Disposed) { throw 'CMD Help held input was released prematurely.' }
+                    if ($pin.BaselineObserved -isnot [bool] -or -not $pin.BaselineObserved) { throw 'CMD Help held input baseline is incomplete.' }
+                    $pin.Stream.Position=0
+                    $hash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($pin.Stream)).ToLowerInvariant()
+                    if ($hash -cne $pin.Sha256 -or $pin.Stream.Length -ne $pin.Bytes) { throw 'CMD Help consumed input changed.' }
+                }
+                catch { $failures.Add($_.Exception) }
+                finally { try { $pin.Stream.Dispose();$pin.Disposed=$true } catch { $failures.Add($_.Exception) } }
+            }
+            if ($failures.Count) { throw [AggregateException]::new('CMD Help input verification/release failed.',$failures.ToArray()) }
+        },{
+            if ($null -ne $Binding.Candidate) { Close-TestCandidate -Candidate $Binding.Candidate }
+        })
+        $Binding.Closed=$true
+        $null=$script:PortableEntryCmdUnverifiedBindings.Remove($Binding)
+    }
+    catch {
+        if (Test-QualificationCleanupUnverified -Exception $_.Exception) {
+            # No native hold exists for a pre-creation binding failure. Keep
+            # the private stop even when the common durable blocker write fails.
+            Retain-PortableEntryCmdBinding -Binding $Binding
+        }
+        else { $null=$script:PortableEntryCmdUnverifiedBindings.Remove($Binding) }
+        throw
+    }
+}
+
+function Open-PortableEntryCmdBinding {
+    param([Parameter(Mandatory)] [string] $RepositoryRoot,[Parameter(Mandatory)] [string] $PackageRoot)
+    $root=[IO.Path]::GetFullPath($RepositoryRoot)
+    $context=Get-TestNativeAdmissionContext -RepositoryRoot $root -SelfIdentity (Get-TestNativeSelfIdentity)
+    Assert-TestFileAdmissionInputs -Admission $context.Root.Admission
+    $testPath=Join-Path $root 'tests/PortableEntry.Tests.ps1'
+    if ($context.Parent.Admission.testPath -isnot [string] -or $context.Parent.Admission.testPath -ine $testPath -or
+        @($context.Root.Admission.inputs | Where-Object path -IEQ $testPath).Count -ne 1) { throw 'CMD Help requires its exact admitted PortableEntry source.' }
+    $admission=$context.Root.Admission
+    foreach ($value in @($admission.candidatePath,$admission.preparedManifestPath,$admission.preparedManifestSha256)) {
+        if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) { throw 'CMD Help requires the complete immutable root candidate triple.' }
+    }
+    if ($admission.preparedManifestSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'CMD Help root manifest pin is malformed.' }
+    $policyPath=Join-Path $root 'docs/spec/releases/2.0.0-preview.1-portable-distribution.json'
+    $policy=Read-TestNativeRecord -Path $policyPath
+    $profile=ConvertTo-PortableEntryCmdProfile -RepositoryRoot $root -PackageRoot $PackageRoot -Policy $policy
+    $end=[DateTimeOffset]::ParseExact($context.Parent.Pending.authorityEnds,'o',[Globalization.CultureInfo]::InvariantCulture).
+        AddMilliseconds(-[long]$context.Parent.Pending.cleanupReserveMs-2000)
+    $binding=[pscustomobject]@{Files=[Collections.Generic.List[object]]::new();Candidate=$null;Closed=$false;Profile=$profile;AuthorityEnds=$end;Record=$null}
+    try {
+        $binding.Candidate=Open-TestCandidate -RepositoryRoot $root -CandidatePath $admission.candidatePath `
+            -PreparedManifestPath $admission.preparedManifestPath -PreparedManifestSha256 $admission.preparedManifestSha256
+        $paths=@('tests/PortableEntry.Tests.ps1','tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs',
+            'build/Build.ps1','build/PortableDistribution.ps1','build/RuntimeHost.ps1','build/Start-WIN-PCInfo.cmd',
+            'build/Start-WIN-PCInfo.ps1','build/TextCanonicalization.ps1','docs/spec/releases/2.0.0-preview.1-portable-distribution.json')
+        foreach ($member in $paths) {
+            $path=Join-Path $root $member;$pins=@($admission.inputs|Where-Object path -IEQ $path)
+            if ($pins.Count -ne 1) { throw 'CMD Help owning source is missing from the root cohort.' }
+            $null=Add-PortableEntryCmdFilePin -Binding $binding -Path $path -ExpectedPin $pins[0]
+        }
+        foreach ($path in @($admission.preparedManifestPath,$profile.HostPath,$profile.BuiltCandidatePath,$profile.ArchivePath,(Join-Path $profile.WorkRoot 'fixture-owner.txt'))) {
+            $pin=@($admission.inputs|Where-Object path -IEQ $path)
+            if ($path -ieq $admission.preparedManifestPath -and $pin.Count -ne 1) { throw 'CMD Help root manifest is not physically pinned.' }
+            $null=Add-PortableEntryCmdFilePin -Binding $binding -Path $path -ExpectedPin $(if($pin.Count-eq1){$pin[0]}else{$null})
+        }
+        $marker=@($binding.Files|Where-Object Path -IEQ (Join-Path $profile.WorkRoot 'fixture-owner.txt'))[0]
+        $expectedMarker=[Text.UTF8Encoding]::new($false).GetBytes('PortableEntry|'+[IO.Path]::GetFileName($profile.WorkRoot).Substring('portable-entry-'.Length))
+        if ($marker.Bytes -ne $expectedMarker.Length -or $marker.Sha256 -cne [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($expectedMarker)).ToLowerInvariant()) { throw 'CMD Help fixture marker differs from its unique owner.' }
+        $built=@($binding.Files|Where-Object Path -IEQ $profile.BuiltCandidatePath)[0]
+        if ($built.Sha256 -cne $binding.Candidate.Sha256 -or $built.Bytes -ne $binding.Candidate.Stream.Length) { throw 'CMD Help intentional package build differs from its immutable candidate.' }
+        Assert-PortableEntryCmdOrdinaryPath -Path $PackageRoot
+        $archive=@($binding.Files|Where-Object Path -IEQ $profile.ArchivePath)[0]
+        $zip=[IO.Compression.ZipArchive]::new($archive.Stream,[IO.Compression.ZipArchiveMode]::Read,$true)
+        $memberNames=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        try {
+            foreach ($entry in $zip.Entries) {
+                $prefix=$policy.archiveRootName+'/'
+                if (-not $entry.FullName.StartsWith($prefix,[StringComparison]::Ordinal) -or $entry.FullName.Contains('\') -or
+                    -not $memberNames.Add($entry.FullName) -or $entry.FullName.EndsWith('/')) { throw 'CMD Help archive contains an unexpected or duplicate member.' }
+                $relative=$entry.FullName.Substring($prefix.Length)
+                $path=[IO.Path]::GetFullPath((Join-Path $PackageRoot $relative))
+                if (-not $path.StartsWith($PackageRoot+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'CMD Help archive member escapes the package.' }
+                $pin=Add-PortableEntryCmdFilePin -Binding $binding -Path $path -ExpectedPin $null
+                $entryStream=$entry.Open()
+                try { $hash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($entryStream)).ToLowerInvariant() }
+                finally { $entryStream.Dispose() }
+                if ($hash -cne $pin.Sha256 -or $entry.Length -ne $pin.Bytes) { throw 'CMD Help extracted member differs from its held archive.' }
+            }
+        }
+        finally { $zip.Dispose();$archive.Stream.Position=0 }
+        foreach ($required in $policy.requiredPackagePaths) {
+            if (-not $memberNames.Contains($policy.archiveRootName+'/'+$required)) { throw 'CMD Help archive omits a required package member.' }
+        }
+        $physical=[Collections.Generic.List[string]]::new();$stack=[Collections.Generic.Stack[string]]::new();$stack.Push($PackageRoot)
+        while ($stack.Count) {
+            $directory=$stack.Pop();Assert-PortableEntryCmdOrdinaryPath -Path $directory
+            foreach ($file in [IO.Directory]::GetFiles($directory)) { $physical.Add($file) }
+            foreach ($child in [IO.Directory]::GetDirectories($directory)) { Assert-PortableEntryCmdOrdinaryPath -Path $child;$stack.Push($child) }
+        }
+        if ($physical.Count -ne $memberNames.Count) { throw 'CMD Help extracted inventory contains missing or extra members.' }
+        foreach ($path in $physical) {
+            if (-not $memberNames.Contains($policy.archiveRootName+'/'+[IO.Path]::GetRelativePath($PackageRoot,$path).Replace('\','/'))) { throw 'CMD Help physical member is not in its held archive.' }
+        }
+        $app=@($binding.Files|Where-Object Path -IEQ (Join-Path $PackageRoot 'WIN-PCInfo.ps1'))[0]
+        if ($app.Sha256 -cne $binding.Candidate.Sha256 -or $app.Bytes -ne $binding.Candidate.Stream.Length) { throw 'CMD Help extracted application differs from the root candidate.' }
+        $expected=@{ 'Start-WIN-PCInfo.ps1'=(Get-PortableBootstrapSourceBytes -RepositoryRoot $root);
+            'Start-WIN-PCInfo.cmd'=(ConvertTo-PortableScriptBytes -Text ([IO.File]::ReadAllText((Join-Path $root 'build/Start-WIN-PCInfo.cmd')))) }
+        foreach ($name in $expected.Keys) {
+            $pin=@($binding.Files|Where-Object Path -IEQ (Join-Path $PackageRoot $name))[0]
+            if ($pin.Bytes -ne $expected[$name].Length -or $pin.Sha256 -cne [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]]$expected[$name])).ToLowerInvariant()) { throw 'CMD Help launcher differs from the actual pinned builder.' }
+        }
+        $binding.Record=[ordered]@{contract='win-pcinfo.portable-entry-cmd-native/1.0.0';testPath=$testPath;
+            parentPendingCanonicalSha256=(Get-TestNativeDigest -Value $context.Parent.Pending);rootCohortSha256=$admission.cohortSha256;
+            profile=$profile;physicalInputs=@($binding.Files|ForEach-Object{[ordered]@{path=$_.Path;sha256=$_.Sha256;bytes=$_.Bytes}});
+            rootCandidate=[ordered]@{path=$binding.Candidate.Path;sha256=$binding.Candidate.Sha256;bytes=$binding.Candidate.Stream.Length};
+            preparedManifestPath=$admission.preparedManifestPath;preparedManifestSha256=$admission.preparedManifestSha256;
+            configuredOutputCodePageUnknown=$true;rawPipeByteRetentionClaim=$false;processTreeAbsenceClaim=$false}
+        $binding
+    }
+    catch { Complete-PortableEntryCmdBinding -Binding $binding -BodyError $_ }
+}
+
+function Assert-PortableEntryCmdConfiguredOwner {
+    param([Parameter(Mandatory)] $Identity,[Parameter(Mandatory)] $Binding)
+    # Factory configuration is checked before durable ownership or Start. This
+    # closes any WINDIR change between held executable binding and construction.
+    if ($Identity.Started -isnot [bool] -or $Identity.Started -or
+        $Identity.HostPath -isnot [string] -or $Identity.HostPath -ine $Binding.Profile.HostPath -or
+        $Identity.RawArguments -isnot [string] -or $Identity.RawArguments -cne $Binding.Profile.RawArguments -or
+        $Identity.ArgumentMode -cne 'RawCmdHelp' -or @($Identity.Arguments).Count -ne 0 -or
+        $Identity.WorkingDirectory -cne '' -or $Identity.WorkingDirectoryMode -cne 'Inherited' -or
+        $Identity.RedirectStandardInput -isnot [bool] -or $Identity.RedirectStandardInput -or
+        $Identity.UseShellExecute -isnot [bool] -or $Identity.UseShellExecute -or
+        $Identity.CreateNoWindow -isnot [bool] -or $Identity.CreateNoWindow -or
+        $Identity.StdoutRedirected -isnot [bool] -or -not $Identity.StdoutRedirected -or
+        $Identity.StderrRedirected -isnot [bool] -or -not $Identity.StderrRedirected -or
+        $Identity.EnvironmentMode -cne 'Inherited' -or $Identity.OutputDecoding -cne 'ProcessDefaultReader' -or
+        $Identity.ConfiguredOutputCodePage -isnot [int] -or $Identity.ConfiguredOutputCodePage -ne 0 -or
+        $Identity.TextEvidenceRepresentation -cne 'DecodedTextReencodedUtf8') { throw 'CMD Help factory configuration differs from its held closed profile.' }
+}
+
+function Invoke-PortableEntryCmdHelp {
+    param([Parameter(Mandatory)] [string] $PackageRoot,[ValidateRange(1,60000)] [long] $TimeoutMs=60000)
+    Invoke-GeneratedApplicationNative -HostPath (Join-Path $env:WINDIR 'System32/cmd.exe') `
+        -WorkingDirectory ([Environment]::CurrentDirectory) -Arguments @('PortableEntryCmdHelp') `
+        -PortableEntryCmdPackageRoot $PackageRoot -TimeoutMs $TimeoutMs -CleanupReserveMs 10000
+}
+
+function Assert-PortableEntryCmdAdmissionReady {
+    $held=Get-Variable PortableEntryCmdUnverifiedBindings -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $held -and $held.Value.Count -gt 0) {
+        $error=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: retained CMD ownership uncertainty blocks further native admission.')
+        $error.Data['OwnedCleanupUnverified']=$true
+        throw $error
+    }
+}
+
+function Retain-PortableEntryCmdBinding {
+    param([Parameter(Mandatory)] $Binding)
+    if ($null -eq (Get-Variable PortableEntryCmdUnverifiedBindings -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:PortableEntryCmdUnverifiedBindings=[Collections.Generic.List[object]]::new()
+    }
+    if (-not $script:PortableEntryCmdUnverifiedBindings.Contains($Binding)) { $script:PortableEntryCmdUnverifiedBindings.Add($Binding) }
+}

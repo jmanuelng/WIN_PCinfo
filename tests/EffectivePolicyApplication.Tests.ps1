@@ -336,7 +336,8 @@ foreach($case in $cases){
     Write-Output "PASS: EffectivePolicy $($case.scenario), $($terminal[0].outcome), verified package and cleanup."
 }
 
-Write-Output 'PASS: the generated application exercises three-layer policy evidence, findings, privacy, packaging, and cleanup.'
 }
 catch { $candidateUseError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+
+Write-Output 'PASS: the generated application exercises three-layer policy evidence, findings, privacy, packaging, and cleanup.'

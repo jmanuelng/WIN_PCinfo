@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$RepoRoot=(Split-Path -Parent $PSScriptRoot),
     [string] $CandidatePath,
@@ -16,6 +16,7 @@ $candidateUseError=$null
 try {
 . (Join-Path $testDirectory 'QualificationResourceBounds.ps1')
 . (Join-Path $testDirectory 'QualificationDiskBounds.ps1')
+$null=Assert-QualificationResourceInventoryBinding -CandidatePath $candidate -HarnessPath (Join-Path $testDirectory 'StatusDeskEngine.Tests.ps1') -RepositoryRoot $RepoRoot
 . (Join-Path $RepoRoot 'src/StatusDesk.ps1')
 $repositoryRoot=$RepoRoot
 $root=Join-Path $repositoryRoot ('.test-output/resource-bounds-'+[guid]::NewGuid().ToString('N'))
@@ -178,7 +179,8 @@ finally {
         }
     )
 }
-Write-Output 'PASS: native lifetime calibration fails closed on invalid evidence; complete cumulative writer reservations preserve rewrites and reject escapes, unaccounted writers and candidate drift.'
+
 }
 catch { $candidateUseError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+Write-Output 'PASS: native lifetime calibration fails closed on invalid evidence; complete cumulative writer reservations preserve rewrites and reject escapes, unaccounted writers and candidate drift.'

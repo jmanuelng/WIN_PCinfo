@@ -20,6 +20,9 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
   public bool UseShellExecute=false, RedirectStandardInput=true, CreateNoWindow=false;
   public bool StdoutRedirected=true, StderrRedirected=true; public int ConfiguredOutputCodePage=65001;
   public string EnvironmentMode="Inherited";
+  public string ArgumentMode="TokenArray", RawArguments;
+  public string WorkingDirectoryMode="Explicit", OutputDecoding="StrictUtf8";
+  public string TextEvidenceRepresentation="DecodedTextReencodedUtf8";
   public bool ExactStartedProcessHandlePinned; public string ObservationFailure;
  }
  public sealed class Outcome {
@@ -40,6 +43,7 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
  private Task stdoutTask,stderrTask,inputTask;
  private readonly Stopwatch lifetimeClock=new Stopwatch();
  private readonly string standardInput;
+ private readonly bool useProcessDefaultReaders;
  private Task<Outcome> waitTask;
  private readonly int maxLines,maxLineChars,maxTotalChars;
  private long sequence,totalLines,droppedLines,totalChars,droppedChars,retainedChars;
@@ -74,6 +78,24 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
   process.StartInfo.RedirectStandardInput=redirectStandardInput;
   StartedIdentity.RedirectStandardInput=redirectStandardInput;
  }
+ // Closed test-only CMD Help profile. No public raw-arguments or host override.
+ // The PS owner verifies exact File/Case/source/package pins before this factory.
+ public static WinPCInfoTestGeneratedApplicationNativeSupervisor CreatePortableEntryCmdHelp(string packageRoot,int lineLimit,int lineCharsLimit,int totalCharsLimit) {
+  if(String.IsNullOrWhiteSpace(packageRoot)||!Path.IsPathFullyQualified(packageRoot)||Path.GetFullPath(packageRoot)!=packageRoot||
+     packageRoot.IndexOfAny(new char[]{'"','%','!','&','|','<','>','^'})>=0)throw new ArgumentException("CMD Help requires its literal absolute owned package");
+  foreach(char c in packageRoot)if(Char.IsControl(c))throw new ArgumentException("CMD package contains a control character");
+  return new WinPCInfoTestGeneratedApplicationNativeSupervisor(packageRoot,lineLimit,lineCharsLimit,totalCharsLimit);
+ }
+ private WinPCInfoTestGeneratedApplicationNativeSupervisor(string packageRoot,int lineLimit,int lineCharsLimit,int totalCharsLimit) {
+  if(lineLimit<1||lineCharsLimit<1||totalCharsLimit<1)throw new ArgumentOutOfRangeException("capture bounds");
+  maxLines=lineLimit;maxLineChars=lineCharsLimit;maxTotalChars=totalCharsLimit;standardInput=String.Empty;useProcessDefaultReaders=true;
+  string host=Path.Combine(Environment.GetEnvironmentVariable("WINDIR"),"System32","cmd.exe");
+  string raw="/d /c \"\""+Path.Combine(packageRoot,"Start-WIN-PCInfo.cmd")+"\" -Workflow Help\"";
+  process.StartInfo=new ProcessStartInfo {FileName=host,Arguments=raw,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true};
+  StartedIdentity.HostPath=host;StartedIdentity.WorkingDirectory=String.Empty;StartedIdentity.WorkingDirectoryMode="Inherited";
+  StartedIdentity.Arguments=Array.Empty<string>();StartedIdentity.RawArguments=raw;StartedIdentity.ArgumentMode="RawCmdHelp";
+  StartedIdentity.RedirectStandardInput=false;StartedIdentity.ConfiguredOutputCodePage=0;StartedIdentity.OutputDecoding="ProcessDefaultReader";
+ }
  // Pure snapshots expose only requested synthetic values, never all inherited
  // secrets. Returned copies cannot mutate the native owner's configuration.
  public Dictionary<string,string> CaptureEnvironmentFixture(string[] keys) {
@@ -89,8 +111,8 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
   StartedIdentity.Started=true;
   // All killing and terminal reads use this original process handle. No PID reopen.
   ownedHandle=process.SafeHandle;StartedIdentity.ExactStartedProcessHandlePinned=!ownedHandle.IsInvalid&&!ownedHandle.IsClosed;
-  stdoutTask=Task.Run(()=>Drain(new StreamReader(process.StandardOutput.BaseStream,new UTF8Encoding(false,true),false,4096,true),"stdout"));
-  stderrTask=Task.Run(()=>Drain(new StreamReader(process.StandardError.BaseStream,new UTF8Encoding(false,true),false,4096,true),"stderr"));
+  stdoutTask=Task.Run(()=>Drain(useProcessDefaultReaders?process.StandardOutput:new StreamReader(process.StandardOutput.BaseStream,new UTF8Encoding(false,true),false,4096,true),"stdout"));
+  stderrTask=Task.Run(()=>Drain(useProcessDefaultReaders?process.StandardError:new StreamReader(process.StandardError.BaseStream,new UTF8Encoding(false,true),false,4096,true),"stderr"));
   // No input channel is a declared configuration, not a fabricated stdin EOF.
   inputTask=StartedIdentity.RedirectStandardInput?Task.Run(WriteInput):Task.CompletedTask;
   try {
