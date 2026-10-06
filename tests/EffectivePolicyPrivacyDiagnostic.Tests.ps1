@@ -141,6 +141,22 @@ foreach ($type in @('win-pcinfo.progress','win-pcinfo.terminal')) {
     }
 }
 $negativeControls.Add([ordered]@{recordType='synthetic.public-record';contractVersion='1.0.0';time='2026-10-06T00:00:00.5985000+00:00';planDigest=$controlDigest})
+foreach ($template in @(
+    @{recordType='win-pcinfo.progress';contractVersion='1.0.0';time='2026-10-06T00:00:00.5985000+00:00'},
+    @{recordType='win-pcinfo.progress';contractVersion='1.0.0';sequence=5985},
+    @{recordType='win-pcinfo.terminal';contractVersion='1.0.0';planDigest=$controlDigest}
+)) {
+    foreach ($wrongVersion in @(@('1.0.0','2.0.0'),[pscustomobject]@{value='1.0.0'},1)) {
+        $typedControl=$template.Clone()
+        $typedControl.contractVersion=$wrongVersion
+        $negativeControls.Add($typedControl)
+    }
+    foreach ($wrongOwner in @(@($template.recordType),[pscustomobject]@{value=$template.recordType},1)) {
+        $typedControl=$template.Clone()
+        $typedControl.recordType=$wrongOwner
+        $negativeControls.Add($typedControl)
+    }
+}
 foreach ($record in $negativeControls) {
     if (-not (Test-EffectivePolicyPublicOutputPrivacy -StandardOutput (Convert-PrivacyControlRecord $record) -Pattern $pattern)) {
         throw 'Ownership-aware privacy assertion waived restricted, unknown or invalidly shaped output.'

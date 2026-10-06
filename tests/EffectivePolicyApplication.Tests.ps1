@@ -89,8 +89,9 @@ function Test-EffectivePolicyPublicOutputPrivacy {
         catch { return $true }
         $typeProperty=$record.PSObject.Properties['recordType']
         $versionProperty=$record.PSObject.Properties['contractVersion']
-        $type=$(if ($null -ne $typeProperty) { [string]$typeProperty.Value } else { '' })
-        $knownVersion=$null -ne $versionProperty -and $versionProperty.Value -ceq '1.0.0'
+        $type=$(if ($null -ne $typeProperty -and $typeProperty.Value -is [string]) { $typeProperty.Value } else { '' })
+        $knownVersion=$null -ne $versionProperty -and $versionProperty.Value -is [string] -and
+            $versionProperty.Value -ceq '1.0.0'
         $counterPaths=@()
         $digestPaths=@()
         if ($knownVersion -and $type -ceq 'win-pcinfo.progress') {
