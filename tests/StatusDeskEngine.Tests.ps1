@@ -5,6 +5,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity')]
     [string] $QualificationCancelAfter = '',
     [string] $QualificationPath = '',
+    [string] $ControlledRunLockNamespace = '',
     [switch] $RequireQualityBudgets,
     [string] $QualificationSourceCase = '',
     [ValidateSet('','PrivilegeTimeout','PrivilegePreStartTimeout','PrivilegePreStartCancel','PrivilegeLoss','PrivilegePostStartLoss','SystemCancel','SystemTimeout','SystemLoss')] [string] $QualificationPlanFault = '',
@@ -39,6 +40,83 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('None','Integrity','PreStartIntegrity','Cleanup')] [string] $FailureKind = 'None')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+function Get-ControlledRunLockAdmission {
+    param([string] $Namespace, [Collections.IDictionary] $Arguments)
+    if (-not $Namespace) { return $null }
+    if ($Namespace -cnotmatch '\ALocal\\WINPCInfo-Qualification-([a-f0-9]{64})-worker([12])\z') {
+        throw 'Controlled run lock requires the exact local qualification cohort and worker namespace.'
+    }
+    $cohort=$Matches[1]; $worker=$Matches[2]
+    if ([string]$Arguments['ControlledRunLockNamespace'] -cne $Namespace) {
+        throw 'Controlled run lock namespace must match the explicit root binding.'
+    }
+    $allowed=@('ControlledRunLockNamespace','CandidatePath','PreparedManifestPath',
+        'PreparedManifestSha256','QualificationPath','RemoteSourceScenario','PlatformSourceScenario')
+    if (@($Arguments.Keys | Where-Object { $_ -notin $allowed }).Count) {
+        throw 'Controlled run lock cannot compose other scenarios, faults, recovery or quality measurement.'
+    }
+    foreach ($name in @('CandidatePath','PreparedManifestPath','PreparedManifestSha256','QualificationPath')) {
+        if ($name -notin $Arguments.Keys -or -not [string]$Arguments[$name]) {
+            throw 'Controlled run lock requires an explicit pinned candidate, manifest and retained evidence.'
+        }
+    }
+    if ([string]$Arguments['PreparedManifestSha256'] -cnotmatch '\A[a-f0-9]{64}\z') {
+        throw 'Controlled run lock requires a canonical prepared manifest digest.'
+    }
+    $remote='RemoteSourceScenario' -in $Arguments.Keys
+    $platform='PlatformSourceScenario' -in $Arguments.Keys
+    if ($remote -eq $platform -or
+        ($remote -and [string]$Arguments['RemoteSourceScenario'] -cne 'Configured') -or
+        ($platform -and [string]$Arguments['PlatformSourceScenario'] -cne 'Running')) {
+        throw 'Controlled run lock admits only Remote Configured or Platform Running, separately.'
+    }
+    [ordered]@{
+        originalNamespace='Global\WINPCInfo-AssessmentRun-v1'
+        replacementNamespace=$Namespace; cohort=$cohort; worker=[int]$worker
+        claimScope='ControlledCollectorFunctionalityOnly'
+        productionLockQualification='NotQualified'; resourceQualification='NotQualified'
+        clientQualification='NotQualified'
+    }
+}
+function Add-ControlledRunLockNamespace {
+    param([string] $ModuleText, [string] $Namespace)
+    if (-not $Namespace) { return $ModuleText }
+    if ($Namespace -cnotmatch '\ALocal\\WINPCInfo-Qualification-([a-f0-9]{64})-worker([12])\z') {
+        throw 'Controlled run lock namespace is not admitted.'
+    }
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseInput($ModuleText,[ref]$tokens,[ref]$errors)
+    $getters=@($ast.FindAll({param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ieq 'Get-AssessmentRunLifecyclePolicy'
+    },$true))
+    $aliases=@($ast.FindAll({param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ieq 'Get-ControlledOriginalAssessmentRunLifecyclePolicy'
+    },$true))
+    if ($errors.Count -or $getters.Count -ne 1 -or $aliases.Count) {
+        throw 'Controlled run lock requires one original policy getter and no competing alias.'
+    }
+    $source=Rename-QualificationFunction -Source $ModuleText -Name Get-AssessmentRunLifecyclePolicy `
+        -Replacement Get-ControlledOriginalAssessmentRunLifecyclePolicy
+    # Preserve the original integrity/provenance/semantic validation. Clone its
+    # returned object before replacing only the physical lock name. This source
+    # transform is private to the controlled harness and never changes a candidate.
+    $source+(@'
+
+function Get-AssessmentRunLifecyclePolicy {
+    $original=Get-ControlledOriginalAssessmentRunLifecyclePolicy
+    if ([string]$original.activeRunLock.name -cne 'Global\WINPCInfo-AssessmentRun-v1') {
+        throw 'The controlled harness does not recognize the production run lock.'
+    }
+    $copy=[Management.Automation.PSSerializer]::Deserialize(
+        [Management.Automation.PSSerializer]::Serialize($original,100))
+    $copy.activeRunLock.name='__CONTROLLED_RUN_LOCK_NAMESPACE__'
+    $copy
+}
+'@).Replace('__CONTROLLED_RUN_LOCK_NAMESPACE__',$Namespace)
+}
+$controlledRunLockAdmission=Get-ControlledRunLockAdmission -Namespace $ControlledRunLockNamespace -Arguments $PSBoundParameters
 if ($CancelDuringPrivilege -and ($ActiveAction -ne 'None' -or $QualificationPlanFault)) {
     throw 'Automatic active privilege cancellation cannot compose a GUI action or independent plan fault.'
 }
@@ -587,7 +665,13 @@ if ($RequireQualityBudgets) {
     # The inventory parser and generated replacement strings are setup only.
     [GC]::Collect(2,[GCCollectionMode]::Aggressive,$true,$true)
 }
-else { $definitionInitializer=[scriptblock]::Create($moduleText) }
+else {
+    if ($null -ne $controlledRunLockAdmission) {
+        . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+        $moduleText=Add-ControlledRunLockNamespace -ModuleText $moduleText -Namespace $ControlledRunLockNamespace
+    }
+    $definitionInitializer=[scriptblock]::Create($moduleText)
+}
     if ($HoldRunLock) {
         $runLock = [Threading.Mutex]::new($false, [string](Get-AssessmentRunLifecyclePolicy).activeRunLock.name)
         $runLockOwned = $runLock.WaitOne(0)
@@ -1143,6 +1227,7 @@ finally {
                 -not [string]::IsNullOrEmpty($session.Transport.State.PackagePath)
         }
         $projection['arguments'] = $qualificationArguments
+        if ($null -ne $controlledRunLockAdmission) { $projection['controlledRunLock'] = $controlledRunLockAdmission }
         if ($ActiveAction -ne 'None' -and $ActiveWorker -eq 'Privilege' -and $null -ne $session -and
             $session.Transport.State.ContainsKey('ActivePrivilegeExecutionStarted')) {
             $projection['activePrivilegeExecutionStarted']=$session.Transport.State.ActivePrivilegeExecutionStarted
