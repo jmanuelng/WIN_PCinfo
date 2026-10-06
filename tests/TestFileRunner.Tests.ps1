@@ -6,6 +6,8 @@ $ErrorActionPreference='Stop'
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Run-Tests.ps1'),[ref]$null,[ref]$null)
 $core=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-TestSuiteFiles'},$true)
 . ([scriptblock]::Create($core.Extent.Text))
+$finalizer=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Complete-TestSuiteFinalization'},$true)
+. ([scriptblock]::Create($finalizer.Extent.Text))
 $checks=0
 function Assert-RunnerControl {
     param([bool] $Condition,[string] $Because)
@@ -159,6 +161,29 @@ try {
     }
     $native.NativeTerminalObserved=$false
     Assert-RunnerRefusal { Assert-TestFileCompletion -Completion $completion -Admission $admission -Nonce $nonce -NativeOutcome $native } 'file data cannot substitute for native terminal'
+    foreach ($cause in @('suite stop','partial retention failure','full inventory changed')) {
+        $script:finalizationOrder=[Collections.Generic.List[string]]::new()
+        $body=$null
+        try { throw "synthetic $cause" } catch { $body=$_ }
+        $observed=$null
+        try {
+            Complete-TestSuiteFinalization -Candidate ([pscustomobject]@{Prepared=$true}) -BodyError $body -Unsafe $true `
+                -PersistBlocker {$script:finalizationOrder.Add('blocker')} -ObserveUnsafe {$script:finalizationOrder.Add('signal')} `
+                -CloseCandidate {param($Context,$Failure) $script:finalizationOrder.Add('close'); throw $Failure.Exception}
+        } catch { $observed=$_.Exception }
+        Assert-RunnerControl (($finalizationOrder -join '|') -ceq 'blocker|signal|close' -and
+            $observed.Data['OwnedCleanupUnverified'] -eq $true -and $observed.InnerExceptions.Contains($body.Exception)) "explicit prepared candidate retains $cause before Close rethrows"
+    }
+    $script:finalizationOrder=[Collections.Generic.List[string]]::new()
+    $observed=$null
+    try {
+        Complete-TestSuiteFinalization -Candidate ([pscustomobject]@{Prepared=$true}) -BodyError $body -Unsafe $true `
+            -PersistBlocker {$script:finalizationOrder.Add('blocker'); throw 'synthetic blocker write denial'} `
+            -ObserveUnsafe {$script:finalizationOrder.Add('signal'); throw 'synthetic observer denial'} `
+            -CloseCandidate {param($Context,$Failure) $script:finalizationOrder.Add('close'); throw $Failure.Exception}
+    } catch { $observed=$_.Exception }
+    Assert-RunnerControl (($finalizationOrder -join '|') -ceq 'blocker|signal|close' -and $observed.InnerExceptions.Count -eq 3 -and
+        $observed.InnerExceptions.Contains($body.Exception)) 'blocker and marker failures aggregate independently while retaining original body and attempting Close'
 }
 finally {
     $parent=[IO.Path]::GetFullPath((Join-Path (Split-Path $PSScriptRoot) '.test-output'))

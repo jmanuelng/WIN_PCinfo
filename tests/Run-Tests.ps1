@@ -46,6 +46,36 @@ function Invoke-TestSuiteFiles {
     [pscustomobject]@{Results=$results.ToArray(); Stopped=$stop; RetentionFailures=$retentionFailures.ToArray()}
 }
 
+function Complete-TestSuiteFinalization {
+    param([AllowNull()] $Candidate, [AllowNull()] [Management.Automation.ErrorRecord] $BodyError,
+        [bool] $Unsafe, [Parameter(Mandatory)] [scriptblock] $PersistBlocker,
+        [Parameter(Mandatory)] [scriptblock] $ObserveUnsafe, [Parameter(Mandatory)] [scriptblock] $CloseCandidate)
+    $failures=[Collections.Generic.List[Exception]]::new()
+    if ($null -ne $BodyError) { $failures.Add($BodyError.Exception) }
+    $retainUnsafe={
+        try { & $PersistBlocker | Out-Null } catch { $failures.Add($_.Exception) }
+        try { & $ObserveUnsafe | Out-Null } catch { $failures.Add($_.Exception) }
+    }
+    # Close-TestCandidate propagates a supplied body error. Retain the suite
+    # stop independently before calling it, including when retention fails.
+    if ($Unsafe) { & $retainUnsafe }
+    if ($null -ne $Candidate) {
+        try { & $CloseCandidate $Candidate $BodyError | Out-Null }
+        catch {
+            if (-not $failures.Contains($_.Exception)) { $failures.Add($_.Exception) }
+            if (-not $Unsafe -and (Test-QualificationCleanupUnverified -Exception $_.Exception)) {
+                $Unsafe=$true
+                & $retainUnsafe
+            }
+        }
+    }
+    if ($failures.Count) {
+        $exception=[AggregateException]::new('Suite body, ownership and evidence failures are retained.', $failures.ToArray())
+        $exception.Data['OwnedCleanupUnverified']=$Unsafe
+        throw $exception
+    }
+}
+
 Assert-QualificationCleanupReady
 $repository=Split-Path -Parent $PSScriptRoot
 Assert-TestNativeRoleReady -NativeRole TestFile -RepositoryRoot $repository
@@ -143,14 +173,11 @@ try {
     if ($failed.Count) { throw "Full gate failed: $($failed.Count) of $($inventory.Count) files failed; all files executed. Evidence: $evidenceRoot" }
 }
 catch { $bodyError=$_ }
-finally {
-    if ($null -ne $candidate) { Close-TestCandidate -Candidate $candidate -BodyError $bodyError }
-}
-if ($null -ne $bodyError) {
-    if ($null -eq $suite -or $suite.Stopped -or $suite.RetentionFailures.Count -or $bodyError.Exception.Message -like '*inventory changed*') {
-        try { [IO.File]::WriteAllText((Get-QualificationCleanupBlockerPath),'{"state":"OwnedCleanupUnverified"}',[Text.UTF8Encoding]::new($false)) } catch { }
-        Write-Output 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'
-    }
-    throw $bodyError
-}
+$unsafe=$null -ne $bodyError -and ($null -eq $suite -or $suite.Stopped -or $suite.RetentionFailures.Count -or
+    $bodyError.Exception.Message -like '*inventory changed*' -or (Test-QualificationCleanupUnverified -Exception $bodyError.Exception))
+Complete-TestSuiteFinalization -Candidate $candidate -BodyError $bodyError -Unsafe $unsafe -PersistBlocker {
+    [IO.File]::WriteAllText((Get-QualificationCleanupBlockerPath),'{"state":"OwnedCleanupUnverified"}',[Text.UTF8Encoding]::new($false))
+} -ObserveUnsafe {
+    [Console]::Out.WriteLine('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'); [Console]::Out.Flush()
+} -CloseCandidate {param($Context,$Failure) Close-TestCandidate -Candidate $Context -BodyError $Failure}
 Write-Output "PASS: $($inventory.Count) test files completed."
