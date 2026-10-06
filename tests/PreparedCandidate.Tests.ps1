@@ -15,6 +15,8 @@ try {
     [IO.File]::WriteAllText((Join-Path $repository 'src/Fixture.ps1'),'# synthetic source')
     [IO.File]::WriteAllText((Join-Path $repository 'docs/fixture.json'),'{"synthetic":true}')
     [IO.File]::WriteAllText((Join-Path $repository 'SECURITY.md'),'synthetic packaged security guidance')
+    [IO.File]::WriteAllText((Join-Path $repository 'tests/GeneratedApplicationNative.ps1'),'# synthetic native adapter')
+    [IO.File]::WriteAllText((Join-Path $repository 'tests/GeneratedApplicationNativeSupervisor.cs'),'// synthetic native supervisor')
     # This bounded fixture substitutes the build owner only; it executes no
     # generated application, provider, task or native child.
     [IO.File]::WriteAllText((Join-Path $repository 'build/Build.ps1'),@'
@@ -61,7 +63,8 @@ param([string] $OutputPath)
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate -PreparedManifestPath (Join-Path $root 'missing.json') -PreparedManifestSha256 $pin } 'missing manifest cannot fall back to a build'
     $checks+=5
 
-    foreach ($path in @('src/Fixture.ps1','docs/fixture.json','build/Build.ps1','SECURITY.md')) {
+    foreach ($path in @('src/Fixture.ps1','docs/fixture.json','build/Build.ps1','SECURITY.md',
+        'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs')) {
         $literal=Join-Path $repository $path
         $saved=[IO.File]::ReadAllBytes($literal)
         try {

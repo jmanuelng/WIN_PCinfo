@@ -1,5 +1,6 @@
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
+. (Join-Path $PSScriptRoot 'GeneratedApplicationNative.ps1')
 Assert-QualificationCleanupReady
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'build/RuntimeHost.ps1')
 
@@ -31,7 +32,8 @@ function Get-TestCandidateInputInventory {
     }
     foreach ($path in @('README.md','SECURITY.md','CONTRIBUTING.md','package.json','package-lock.json','LICENSE',
         'tests/TestHarness.ps1','tests/StatusDeskEngine.Tests.ps1','tests/Invoke-AssessmentSafetyQualification.ps1',
-        'tests/QualificationDiskBounds.ps1','tests/qualification-resource-writers.json')) {
+        'tests/QualificationDiskBounds.ps1','tests/qualification-resource-writers.json',
+        'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs')) {
         if ([IO.File]::Exists((Join-Path $root $path))) { $paths.Add($path) }
     }
     foreach ($path in @($paths | Sort-Object -CaseSensitive -Unique)) {
@@ -147,7 +149,10 @@ function Invoke-GeneratedApplication {
         [Parameter(Mandatory)] [string[]] $Arguments,
         [Parameter()] [AllowEmptyString()] [string] $StandardInput,
         [Parameter()] [string] $PowerShellPath,
-        [Parameter()] [string] $WorkingDirectory = (Get-Location).Path
+        [Parameter()] [string] $WorkingDirectory = (Get-Location).Path,
+        [long] $TimeoutMs = 3600000,
+        [long] $CleanupReserveMs = 120000,
+        [DateTimeOffset] $AuthorityEnds = [DateTimeOffset]::MinValue
     )
 
     if ([string]::IsNullOrWhiteSpace($PowerShellPath)) {
@@ -163,41 +168,13 @@ function Invoke-GeneratedApplication {
             $script:WinPCInfoTestHostCache = @{ Identity = $candidateIdentity; Executable = $PowerShellPath }
         }
     }
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $PowerShellPath
-    $startInfo.WorkingDirectory = $WorkingDirectory
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $startInfo.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false)
-    $startInfo.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
-    $startInfo.RedirectStandardInput = $true
-    foreach ($argument in @('-NoLogo', '-NoProfile', '-File', $CandidatePath) + $Arguments) {
-        $null = $startInfo.ArgumentList.Add($argument)
-    }
-
-    $process = [System.Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    try {
-        $null = $process.Start()
-        if ($PSBoundParameters.ContainsKey('StandardInput')) {
-            $process.StandardInput.Write($StandardInput)
-        }
-        # Subprocess tests receive EOF even when their parent has an open console.
-        $process.StandardInput.Close()
-        $standardOutput = $process.StandardOutput.ReadToEnd()
-        $standardError = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
-        [pscustomobject]@{
-            ExitCode = $process.ExitCode
-            Records = @($standardOutput -split "`r?`n" | Where-Object { $_ } | ForEach-Object {
-                $_ | ConvertFrom-Json -Depth 20
-            })
-            StandardOutput = $standardOutput
-            StandardError = $standardError
-        }
-    }
-    finally {
-        $process.Dispose()
+    $native=Invoke-GeneratedApplicationNative -HostPath ([IO.Path]::GetFullPath($PowerShellPath)) -WorkingDirectory ([IO.Path]::GetFullPath($WorkingDirectory)) `
+        -Arguments (@('-NoLogo','-NoProfile','-File',$CandidatePath)+$Arguments) -StandardInput $StandardInput `
+        -TimeoutMs $TimeoutMs -CleanupReserveMs $CleanupReserveMs -AuthorityEnds $AuthorityEnds
+    [pscustomobject]@{
+        ExitCode=$native.ExitCode
+        Records=@($native.StandardOutput -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json -Depth 20 })
+        StandardOutput=$native.StandardOutput
+        StandardError=$native.StandardError
     }
 }
