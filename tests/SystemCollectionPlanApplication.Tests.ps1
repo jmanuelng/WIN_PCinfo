@@ -1,16 +1,20 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 
 function Invoke-SystemFixtureApplication {
     param([Parameter(Mandatory)] [string] $Name)
@@ -98,4 +102,9 @@ Assert-Equal 20 $invalid.ExitCode 'an ambiguous SYSTEM fixture fails before work
 Assert-Equal 'SYSTEM.FIXTURE_INVALID' $invalid.Records[-1].reasonCode `
     'invalid SYSTEM fixture input has one sanitized reason'
 
-Write-Output 'PASS: the generated application exposes all nine SYSTEM paths with scoped continuation and verified cleanup.'
+$candidateSuccessMessages.Add('PASS: the generated application exposes all nine SYSTEM paths with scoped continuation and verified cleanup.')
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

@@ -1,11 +1,15 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
-$candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),
     '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
@@ -63,5 +67,10 @@ foreach($name in @($cases.Keys)+@('postStartLoss','wrongFinalPhase','success')) 
     if($name -in @('earlyLoss','postStartLoss')) {
         Assert-Equal 'PRIVILEGE.WORKER_LOST' $result.reasonCode 'actual channel loss is identified without scenario-specific reason substitution'
     }
-    Write-Output "PASS: authenticated execution boundary $name."
+    $candidateSuccessMessages.Add("PASS: authenticated execution boundary $name.")
 }
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }
