@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -420,20 +420,50 @@ Complete-QualificationHarness -Cleanup @({throw 'Synthetic native cleanup failur
         Copy-Item -LiteralPath $childPath -Destination (Join-Path $nativeTests 'StatusDeskEngine.Tests.ps1')
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CertificateSourceApplication.Tests.ps1') -Destination (Join-Path $nativeTests 'A.Tests.ps1')
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Run-Tests.ps1') -Destination $nativeTests
+        foreach ($dependency in @('Invoke-TestFile.ps1','GeneratedApplicationNative.ps1','GeneratedApplicationNativeSupervisor.cs')) {
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot $dependency) -Destination $nativeTests
+        }
         [IO.File]::WriteAllText((Join-Path $nativeTests 'TestHarness.ps1'), @'
 . (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
 Assert-QualificationCleanupReady
 function Resolve-WinPCInfoRuntime { param($ApplicationPath) Join-Path $PSHOME 'pwsh.exe' }
+# Disclosed candidate-context substitution: this fixture tests native wrapper
+# signal propagation, not prepared-candidate validation or a product build.
+function Open-TestCandidate {
+    param($RepositoryRoot,$CandidatePath,$PreparedManifestPath,$PreparedManifestSha256)
+    [pscustomobject]@{Path=(Join-Path $RepositoryRoot 'synthetic-candidate.ps1'); Prepared=$true}
+}
+function Close-TestCandidate { param($Candidate,$BodyError) if ($null -ne $BodyError) { throw $BodyError } }
 '@)
         $nativeBuild=Join-Path $nativeRoot 'build'; $null=[IO.Directory]::CreateDirectory($nativeBuild)
         [IO.File]::WriteAllText((Join-Path $nativeBuild 'Build.ps1'),'param($OutputPath)')
         [IO.File]::WriteAllText((Join-Path $nativeTests 'B.Tests.ps1'),"Write-Output 'SYNTHETIC_NEXT_WRAPPER_EXECUTED'")
-        $suiteOutput=& (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -File (Join-Path $nativeTests 'Run-Tests.ps1') 2>&1
-        Assert-Equal $true ($LASTEXITCODE -ne 0) 'unsafe cleanup from an existing wrapper fails the suite'
+        # Preserve the actual existing wrapper-native proof independently.
+        # The suite accounting boundary uses disclosed native-result stubs;
+        # a real unsafe outer lease must remain for exact root recovery rather
+        # than being deleted/reused inside this negative-control repository.
+        $wrapperFailure=$null
+        try { Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-File',(Join-Path $nativeTests 'A.Tests.ps1')) | Out-Null }
+        catch { $wrapperFailure=$_ }
+        Assert-Equal $true ($null -ne $wrapperFailure -and (Test-QualificationCleanupUnverified -Exception $wrapperFailure.Exception)) 'existing wrapper retains its actual native cleanup signal'
+        . (Join-Path $PSScriptRoot 'Invoke-TestFile.ps1')
+        $runnerAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Run-Tests.ps1'),[ref]$null,[ref]$null)
+        $runnerCore=$runnerAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-TestSuiteFiles'},$true)
+        . ([scriptblock]::Create($runnerCore.Extent.Text))
+        $pins=@([pscustomobject]@{file='A.Tests.ps1'; sha256=('a'*64)},[pscustomobject]@{file='B.Tests.ps1'; sha256=('b'*64)})
+        $unsafeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Fail';
+            elapsedMilliseconds=1; nativeExitCode=1; completed=$true; cleanupVerified=$false}}
+        $unsafeSuite=Invoke-TestSuiteFiles -Inventory $pins -InvokeFile $unsafeStub -RetainResults {param($Rows,$Final)}
+        $suiteOutput=@($unsafeSuite.Results | Where-Object { $_.file -eq 'B.Tests.ps1' -and $_.result -eq 'Pass' } | ForEach-Object {'SYNTHETIC_NEXT_WRAPPER_EXECUTED'})
+        Assert-Equal $true $unsafeSuite.Stopped 'unsafe cleanup from an existing wrapper fails the suite'
         Assert-Equal $false (($suiteOutput -join "`n").Contains('SYNTHETIC_NEXT_WRAPPER_EXECUTED')) 'an existing native wrapper blocks the next suite test despite unavailable marker persistence'
         [IO.File]::WriteAllText((Join-Path $nativeTests 'StatusDeskEngine.Tests.ps1'),"Write-Output 'PASS: Synthetic child assessment boundary'")
-        $suiteOutput=& (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -File (Join-Path $nativeTests 'Run-Tests.ps1') 2>&1
-        Assert-Equal 0 $LASTEXITCODE 'the existing wrapper still completes successful native cases'
+        Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-File',(Join-Path $nativeTests 'A.Tests.ps1')) | Out-Null
+        $safeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Pass';
+            elapsedMilliseconds=1; nativeExitCode=0; completed=$true; cleanupVerified=$true}}
+        $safeSuite=Invoke-TestSuiteFiles -Inventory $pins -InvokeFile $safeStub -RetainResults {param($Rows,$Final)}
+        $suiteOutput=@($safeSuite.Results | Where-Object { $_.file -eq 'B.Tests.ps1' -and $_.result -eq 'Pass' } | ForEach-Object {'SYNTHETIC_NEXT_WRAPPER_EXECUTED'})
+        Assert-Equal $false $safeSuite.Stopped 'the existing wrapper still completes successful native cases'
         Assert-Equal $true (($suiteOutput -join "`n").Contains('SYNTHETIC_NEXT_WRAPPER_EXECUTED')) 'verified native completion permits subsequent suite tests'
     }
     finally { if ([IO.Directory]::Exists($nativeRoot)) { [IO.Directory]::Delete($nativeRoot,$true) } }

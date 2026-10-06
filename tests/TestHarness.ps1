@@ -33,7 +33,8 @@ function Get-TestCandidateInputInventory {
     foreach ($path in @('README.md','SECURITY.md','CONTRIBUTING.md','package.json','package-lock.json','LICENSE',
         'tests/TestHarness.ps1','tests/StatusDeskEngine.Tests.ps1','tests/Invoke-AssessmentSafetyQualification.ps1',
         'tests/QualificationDiskBounds.ps1','tests/qualification-resource-writers.json',
-        'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs')) {
+        'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs',
+        'tests/Invoke-TestFile.ps1','tests/Run-Tests.ps1')) {
         if ([IO.File]::Exists((Join-Path $root $path))) { $paths.Add($path) }
     }
     foreach ($path in @($paths | Sort-Object -CaseSensitive -Unique)) {
