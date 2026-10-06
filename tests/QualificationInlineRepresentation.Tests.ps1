@@ -198,7 +198,9 @@ function Get-InlineActualOwningReplay {
     if($parseErrors.Count){throw 'Actual owning inline source must parse.'}
     $matches=@($ast.EndBlock.Statements|Where-Object{$_ -is [Management.Automation.Language.TryStatementAst] -and $_.Body.Extent.Text.Contains('$candidate=Open-TestCandidate')})
     if($matches.Count -ne 1){throw 'The actual owning inline body must be unique.'}
-    $text=$matches[0].Extent.Text
+    # Include the actual success command wherever it occurs after body entry;
+    # otherwise a finalization-order control could omit the very signal tested.
+    $text=($ast.EndBlock.Statements | Where-Object {$_.Extent.StartOffset -ge $matches[0].Extent.StartOffset} | ForEach-Object {$_.Extent.Text}) -join "`n"
     if(([regex]::Matches($text,'\[Diagnostics\.Process\]::Start\(\$start\)')).Count -ne 1){throw 'Actual ShellExecute creator substitution must be exact.'}
     [scriptblock]::Create($text.Replace('[Diagnostics.Process]::Start($start)','(New-InlineControlShellProcess -Start $start)'))
 }
@@ -224,6 +226,27 @@ foreach($name in @('Assert-Equal','Close-TestCandidate')){
     $nodes=@($harnessAst.FindAll({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$false))
     if($harnessErrors.Count -or $nodes.Count -ne 1){throw 'Actual owning support definition must be unique.'}
     . ([scriptblock]::Create($nodes[0].Extent.Text))
+}
+$actualInlineBindingClose=${function:Close-QualificationInlineRepresentationBinding}
+$actualInlineCandidateClose=${function:Close-TestCandidate}
+$script:replayCleanupFault='';$script:bindingCleanupAttempts=0;$script:candidateCleanupAttempts=0
+function Close-QualificationInlineRepresentationBinding {
+    param($Binding)
+    $script:bindingCleanupAttempts++
+    if($script:replayCleanupFault -cin @('Binding','BodyAndBoth')){
+        $original=$null;try{& $actualInlineBindingClose -Binding $Binding}catch{$original=$_}
+        Complete-QualificationHarness -BodyError $original -Cleanup @({throw 'Disclosed binding finalizer failure.'})
+    }
+    else {& $actualInlineBindingClose -Binding $Binding}
+}
+function Close-TestCandidate {
+    param($Candidate,$BodyError)
+    $script:candidateCleanupAttempts++
+    if($script:replayCleanupFault -cin @('Candidate','BodyAndBoth')){
+        $original=$null;try{& $actualInlineCandidateClose -Candidate $Candidate -BodyError $BodyError}catch{$original=$_}
+        Complete-QualificationHarness -BodyError $original -Cleanup @({throw 'Disclosed candidate finalizer failure.'})
+    }
+    else {& $actualInlineCandidateClose -Candidate $Candidate -BodyError $BodyError}
 }
 function New-InlineControlShellOwner {
     param($Binding,[string]$Fault='')
@@ -327,19 +350,45 @@ try {
     $before=$script:nativeCalls.Count;$caught=$null
     try{$null=. (Get-InlineActualOwningReplay)}catch{$caught=$_}
     Assert-InlineControl ($script:standalonePreparationObserved -and $null -ne $caught -and $null -eq $binding -and $script:nativeCalls.Count -eq $before) 'Actual bare standalone body may prepare its unique candidate but cannot grant runtime or inline native authority.'
+    foreach($fault in @('Binding','Candidate','BodyAndBoth')){
+        $preparedBinding=New-InlineControlBinding;$bindings.Add($preparedBinding)
+        $script:replayCandidateRoot=$preparedBinding.RepositoryRoot;$script:replayCandidate=$preparedBinding.Candidate
+        $repositoryRoot=$preparedBinding.RepositoryRoot;$CandidatePath=$preparedBinding.Candidate.Path
+        $PreparedManifestPath=$script:context.Root.Admission.preparedManifestPath;$PreparedManifestSha256=$script:context.Root.Admission.preparedManifestSha256
+        $candidate=$null;$binding=$null;$bodyError=$null;$script:shellMode=if($fault -ceq 'BodyAndBoth'){'Forced'}else{'Natural'}
+        $script:runtimeCandidates=@($preparedBinding.HostPath);$script:replayCleanupFault=$fault
+        $script:bindingCleanupAttempts=0;$script:candidateCleanupAttempts=0
+        $emitted=[Collections.Generic.List[object]]::new();$caught=$null
+        try{. (Get-InlineActualOwningReplay) | ForEach-Object {$emitted.Add($_)}}catch{$caught=$_}
+        if($null -ne $binding){$bindings.Add($binding)}
+        $script:replayCleanupFault=''
+        Assert-InlineControl ($null -ne $caught -and @($emitted|Where-Object{$_ -is [string] -and $_.StartsWith('PASS:')}).Count -eq 0 -and
+            $script:bindingCleanupAttempts -eq 1 -and $script:candidateCleanupAttempts -eq 1) 'Actual owning success output must wait for both independent finalizers; failed cleanup cannot emit PASS.'
+        $expected=if($fault -ceq 'Binding'){'Disclosed binding finalizer failure.'}else{'Disclosed candidate finalizer failure.'}
+        Assert-InlineControl ($caught.Exception.ToString().Contains($expected)) 'Actual owning cleanup failure retains its original finalizer cause.'
+        if($fault -ceq 'BodyAndBoth'){
+            Assert-InlineControl ($caught.Exception.ToString().Contains('controlled ShellExecute exits within its deadline') -and
+                $caught.Exception.ToString().Contains('Disclosed binding finalizer failure.') -and
+                $caught.Exception.ToString().Contains('Disclosed candidate finalizer failure.') -and
+                (Test-QualificationCleanupUnverified -Exception $caught.Exception)) 'Actual owning body failure and both cleanup failures remain independently retained and unsafe.'
+        }
+    }
     foreach($mode in @('Natural','Forced')){
         $preparedBinding=New-InlineControlBinding;$bindings.Add($preparedBinding)
         $script:replayCandidateRoot=$preparedBinding.RepositoryRoot;$script:replayCandidate=$preparedBinding.Candidate
         $repositoryRoot=$preparedBinding.RepositoryRoot;$CandidatePath=$preparedBinding.Candidate.Path
         $PreparedManifestPath=$script:context.Root.Admission.preparedManifestPath;$PreparedManifestSha256=$script:context.Root.Admission.preparedManifestSha256
         $candidate=$null;$binding=$null;$bodyError=$null;$script:shellMode=$mode;$script:runtimeCandidates=@($preparedBinding.HostPath)
-        $before=$script:nativeCalls.Count;$caught=$null
-        try{$null=. (Get-InlineActualOwningReplay)}catch{$caught=$_}
+        $before=$script:nativeCalls.Count;$caught=$null;$emitted=[Collections.Generic.List[object]]::new()
+        $script:bindingCleanupAttempts=0;$script:candidateCleanupAttempts=0
+        try{. (Get-InlineActualOwningReplay) | ForEach-Object {$emitted.Add($_)}}catch{$caught=$_}
         if($null -ne $binding){$bindings.Add($binding)}
         Assert-InlineControl ($script:nativeCalls.Count -eq ($before+17)) 'Actual owning body must execute one finite probe and all sixteen original inline cases.'
         if($mode -ceq 'Natural'){
             if($null -ne $caught){throw [InvalidOperationException]::new('Actual natural owning replay failed.', $caught.Exception)}
             Assert-InlineControl ($null -eq $caught -and $script:lastShellProcess.Disposed -and -not [IO.File]::Exists($outputPath)) 'Actual owning body preserves every assertion and deletes only independently verified natural writer output.'
+            Assert-InlineControl (@($emitted|Where-Object{$_ -ceq 'PASS: exact inline source roundtrip, Windows Unicode launch, padding, and unchanged oversize refusal.'}).Count -eq 1 -and
+                $script:bindingCleanupAttempts -eq 1 -and $script:candidateCleanupAttempts -eq 1) 'Actual natural owning replay emits the unchanged success exactly once after both finalizers.'
         }
         else {
             Assert-InlineControl ($null -ne $caught -and (Test-QualificationCleanupUnverified -Exception $caught.Exception) -and -not $script:lastShellProcess.Disposed -and $binding.Unsafe -and [IO.Directory]::Exists($ownedRoot)) 'Actual owning body retains forced original handle, fixture and typed unsafe outcome.'

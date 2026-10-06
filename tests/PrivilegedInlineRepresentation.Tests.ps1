@@ -81,7 +81,6 @@ try {
         }
     })
 }
-Write-Output 'PASS: exact inline source roundtrip, Windows Unicode launch, padding, and unchanged oversize refusal.'
 }
 catch {
     $bodyError=$_
@@ -93,3 +92,4 @@ finally {
         {if($null -ne $candidate){Close-TestCandidate -Candidate $candidate -BodyError $bodyError}}
     )
 }
+Write-Output 'PASS: exact inline source roundtrip, Windows Unicode launch, padding, and unchanged oversize refusal.'
