@@ -28,6 +28,15 @@ if ($Mode -eq 'Pure') {
         $checks+=3
     }
     $capture=Read-CaptureFixture -OutputBytes ([byte[]]@(0xff)) -ErrorBytes ([byte[]]@())
+    foreach ($boundaryText in @("abc`r`r`n", "abc`r`n", "abcd`r`n")) {
+        $boundary=Read-CaptureFixture -OutputBytes $utf8.GetBytes($boundaryText) -ErrorBytes ([byte[]]@()) -LineCharacters 4
+        Assert-NativeFixture ([WinPCInfoTestGeneratedApplicationNativeSupervisor]::Reconstruct($boundary.Lines,'stdout') -ceq $boundaryText) 'line cap preserves content CR separately from the CRLF terminator'
+        Assert-NativeFixture (-not $boundary.OwnedCleanupUnverified) 'exactly bounded content remains complete'
+        $checks+=2
+    }
+    $boundary=Read-CaptureFixture -OutputBytes $utf8.GetBytes("abcd`r`r`n") -ErrorBytes ([byte[]]@()) -LineCharacters 4
+    Assert-NativeFixture ($boundary.OutputOverflow -and $boundary.OwnedCleanupUnverified -and $boundary.Lines.Count -eq 0) 'over-limit content CR remains overflow rather than truncating to a safe line'
+    $checks++
     Assert-NativeFixture ($capture.StreamFailure -and $capture.OwnedCleanupUnverified) 'invalid UTF8 remains unsafe despite raw remainder draining'
     $checks++
     $capture=Read-CaptureFixture -OutputBytes $utf8.GetBytes(('x'*513)) -ErrorBytes ([byte[]]@())

@@ -122,7 +122,10 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
    if(logicalLength>maxLineChars||lines.Count>=maxLines||retainedChars+logicalLength+terminator.Length>maxTotalChars){
     overflow=true;droppedLines++;droppedChars+=logicalLength+terminator.Length;return;
    }
-   string text=prefix.ToString();if(newline&&last=='\r'&&text.EndsWith("\r",StringComparison.Ordinal))text=text.Substring(0,text.Length-1);
+   // Only a fully retained physical line contains its terminator CR. At the
+   // content cap, the retained trailing CR may be content while the next CR
+   // belongs to CRLF; stripping that content would silently lose a character.
+   string text=prefix.ToString();if(newline&&last=='\r'&&prefix.Length==actualLength&&text.EndsWith("\r",StringComparison.Ordinal))text=text.Substring(0,text.Length-1);
    lines.Add(new Line {Sequence=++sequence,Stream=stream,Text=text,Terminator=terminator});retainedChars+=text.Length+terminator.Length;
   }
  }
