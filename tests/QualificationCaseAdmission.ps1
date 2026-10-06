@@ -55,12 +55,12 @@ function ConvertTo-TestNamedParameters {
     }
     $named=[ordered]@{}
     for ($index=0; $index -lt $Arguments.Count; $index++) {
-        if ($Arguments[$index] -cnotmatch '^-(?<name>[A-Za-z][A-Za-z0-9]*)(?::(?<boolean>true|false))?$') { throw 'Qualification arguments require full declared named parameters.' }
+        if ($Arguments[$index] -cnotmatch '^-(?<name>[A-Za-z][A-Za-z0-9]*)(?::(?<boolean>[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]))?$') { throw 'Qualification arguments require full declared named parameters.' }
         $name=$Matches['name']; $boolean=$Matches['boolean']
         if (-not $declared.ContainsKey($name) -or $named.Contains($name)) { throw 'Qualification parameter is unknown, abbreviated or duplicated.' }
         $type=$declared[$name]
         if ($type -eq [Management.Automation.SwitchParameter]) {
-            $named[$name]=($boolean -cne 'false')
+            $named[$name]=($boolean -ine 'false')
         }
         else {
             if (-not [string]::IsNullOrEmpty($boolean) -or $index+1 -ge $Arguments.Count) { throw 'Qualification scalar parameter has no value or an invalid Boolean suffix.' }

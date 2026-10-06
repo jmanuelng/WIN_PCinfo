@@ -138,6 +138,27 @@ try {
     $typed=$binding.NamedParameters
     $bound=& {param([switch]$Choices,[string]$Name,[string[]]$Items) [pscustomobject]@{Present=$PSBoundParameters.ContainsKey('Choices'); Value=[bool]$Choices; Name=$Name; Items=$Items}} @typed
     Assert-CaseControl ($bound.Present -and -not $bound.Value -and $bound.Name -ceq '' -and $bound.Items.Count -eq 1) 'explicit false switch, empty scalar and named array bind without positional argv reinterpretation'
+    # Original Entry casts its switch to an ASCII Boolean string (True/False).
+    # These disclosed binder fixtures preserve that original argv spelling;
+    # they do not start a Case, native process or product workload.
+    foreach ($booleanCase in @(
+        @{Suffix='True'; Expected=$true}, @{Suffix='False'; Expected=$false},
+        @{Suffix='true'; Expected=$true}, @{Suffix='false'; Expected=$false},
+        @{Suffix='tRuE'; Expected=$true}, @{Suffix='fAlSe'; Expected=$false},
+        @{Suffix=$null; Expected=$true}
+    )) {
+        $booleanArgument=if ($null -eq $booleanCase.Suffix) {'-Choices'} else {'-Choices:'+$booleanCase.Suffix}
+        $booleanArgv=@('-NoLogo','-NoProfile','-STA','-File',$leaf,$booleanArgument,'-StaChild')
+        $booleanInvocation=ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments $booleanArgv
+        $booleanNamed=$booleanInvocation.NamedParameters
+        $booleanBound=& {param([switch]$Choices,[switch]$StaChild) [pscustomobject]@{Present=$PSBoundParameters.ContainsKey('Choices'); Value=[bool]$Choices; StaChild=[bool]$StaChild}} @booleanNamed
+        Assert-CaseControl ($booleanNamed.Choices -is [bool] -and $booleanNamed.Choices -eq $booleanCase.Expected -and
+            $booleanBound.Present -and $booleanBound.Value -eq $booleanCase.Expected -and $booleanBound.StaChild) "ASCII Boolean suffix '$($booleanCase.Suffix)' retains typed switch binding"
+        Assert-CaseControl ((Get-TestNativeDigest -Value $booleanInvocation.OriginalArguments) -ceq
+            (Get-TestNativeDigest -Value $booleanArgv)) 'Boolean admission preserves exact original host and Entry argv'
+    }
+    $nonAsciiBoolean='-Choices:Fal'+[char]0x017F+'e'
+    Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-STA','-File',$leaf,$nonAsciiBoolean,'-StaChild') } 'non-ASCII Boolean spelling cannot widen the closed suffix grammar'
     foreach ($arguments in @(@('-NoLogo','-NoProfile','-Command','exit 0'),@('-NoLogo','-NoProfile','-EncodedCommand','AA=='),@('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',$leaf),@('-NoLogo','-NoProfile','-File',$leaf,'-Cho'),@('-NoLogo','-NoProfile','-File',$leaf,'-Choices','-Choices:false'),@('-NoLogo','-NoProfile','-File',$leaf,'-Name:true'))) {
         Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments $arguments } 'unknown host grammar or leaf binding refuses'
     }
