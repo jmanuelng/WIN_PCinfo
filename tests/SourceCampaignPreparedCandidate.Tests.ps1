@@ -14,7 +14,8 @@ try {
     $stub=@'
 function Open-TestCandidate {
     param($RepositoryRoot,$CandidatePath,$PreparedManifestPath,$PreparedManifestSha256)
-    if ($CandidatePath -cne 'prepared-candidate.ps1' -or $PreparedManifestPath -cne 'prepared-manifest.json' -or $PreparedManifestSha256 -cne ('1'*64)) { throw 'Explicit prepared inputs were not forwarded to the owner.' }
+    $expected=if ($global:SourceCampaignCandidateSpy.ContainsKey('expectedCandidate')) {$global:SourceCampaignCandidateSpy.expectedCandidate} else {'prepared-candidate.ps1'}
+    if ($CandidatePath -cne $expected -or $PreparedManifestPath -cne 'prepared-manifest.json' -or $PreparedManifestSha256 -cne ('1'*64)) { throw 'Explicit prepared inputs were not forwarded to the owner.' }
     $global:SourceCampaignCandidateSpy.opens++
     [pscustomobject]@{Path=$CandidatePath;Prepared=$true;OwnedDirectory=$null}
 }
@@ -42,6 +43,12 @@ function Close-TestCandidate {
     $global:SourceCampaignCandidateSpy.closes++
     if ($null -ne $BodyError) { throw $BodyError }
 }
+function Invoke-GeneratedApplication {
+    param($CandidatePath,$Arguments)
+    if ($CandidatePath -cne $global:SourceCampaignCandidateSpy.expectedCandidate) { throw 'Ordinary application caller ignored its immutable input.' }
+    $global:SourceCampaignCandidateSpy.calls.Add($CandidatePath)
+    throw 'Synthetic original application failure'
+}
 '@
     [IO.File]::WriteAllText((Join-Path $fixtureTests 'TestHarness.ps1'),$stub,[Text.UTF8Encoding]::new($false))
     foreach ($name in @('RemoteSourceApplication.Tests.ps1','IdentitySourceApplication.Tests.ps1','SecuritySourceApplication.Tests.ps1','PolicySourceApplication.Tests.ps1')) {
@@ -60,7 +67,30 @@ function Close-TestCandidate {
             elseif ($null -ne $errorRecord) { throw $errorRecord }
         }
     }
-    Write-Output 'PASS: four original source campaigns reuse explicit prepared input and preserve leaf failures and candidate closure; native leaves are substituted.'
+    foreach ($name in @('DeviceReadinessApplication.Tests.ps1','DeviceReadinessScenarios.Tests.ps1',
+        'FirmwareReadinessApplication.Tests.ps1','CrossDomainGuidanceApplication.Tests.ps1')) {
+        $copy=Join-Path $fixtureTests $name
+        [IO.File]::Copy((Join-Path $PSScriptRoot $name),$copy)
+        foreach ($manifest in @('prepared-manifest.json','')) {
+            $expectedCandidate=Join-Path $root 'prepared-candidate.ps1'
+            $global:SourceCampaignCandidateSpy=@{opens=0;closes=0;calls=[Collections.Generic.List[string]]::new();fail=$false;expectedCandidate=$expectedCandidate}
+            $errorRecord=$null
+            try { & $copy -CandidatePath $expectedCandidate -PreparedManifestPath $manifest -PreparedManifestSha256 ('1'*64) | Out-Null }
+            catch { $errorRecord=$_ }
+            $spy=$global:SourceCampaignCandidateSpy
+            if ($manifest) {
+                if ($spy.opens -ne 1 -or $spy.closes -ne 1 -or $spy.calls.Count -ne 1 -or
+                    $null -eq $errorRecord -or $errorRecord.Exception.Message -cne 'Synthetic original application failure') {
+                    throw 'Ordinary consumer changed prepared input or hid its original failure/finalization.'
+                }
+            }
+            elseif ($spy.opens -ne 0 -or $spy.closes -ne 0 -or $spy.calls.Count -ne 0 -or
+                $null -eq $errorRecord -or $errorRecord.Exception.Message -cne 'Explicit prepared inputs were not forwarded to the owner.') {
+                throw 'Ordinary consumer rebuilt or launched after explicit incomplete input.'
+            }
+        }
+    }
+    Write-Output 'PASS: four source campaigns and four ordinary consumers retain explicit prepared input, original failures and closure; native leaves are substituted.'
 }
 finally {
     if ($null -ne $previousSpy) { Set-Variable -Name SourceCampaignCandidateSpy -Scope Global -Value $previousSpy.Value }

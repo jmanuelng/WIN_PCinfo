@@ -1,15 +1,18 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateError = $null
+try {
+$candidatePath = $candidateContext.Path
 
 $cases = @(
     @{name='firmware-supported';exit=0;outcome='Completed';firmware='Complete';secure='Complete';tpm='Complete';firmwareFinding='ExpectedCondition';secureFinding='ExpectedCondition';tpmFinding='ExpectedCondition';uac=1;tasks=0},
@@ -71,4 +74,7 @@ foreach ($case in $cases) {
     if ($result.StandardError) { throw "$($case.name) wrote stderr: $($result.StandardError)" }
 }
 
+}
+catch { $candidateError = $_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateError }
 Write-Output 'PASS: the generated application exercises all ten firmware, Secure Boot, and TPM states.'
