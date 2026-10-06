@@ -1,9 +1,19 @@
 ﻿[CmdletBinding()]
-param([string]$RepoRoot=(Split-Path -Parent $PSScriptRoot))
+param(
+    [string]$RepoRoot=(Split-Path -Parent $PSScriptRoot),
+    [string] $CandidatePath,
+    [string] $PreparedManifestPath,
+    [string] $PreparedManifestSha256
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $testDirectory=Join-Path $RepoRoot 'tests'
 . (Join-Path $testDirectory 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $RepoRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateUseError=$null
+try {
 . (Join-Path $testDirectory 'QualificationResourceBounds.ps1')
 . (Join-Path $testDirectory 'QualificationDiskBounds.ps1')
 . (Join-Path $RepoRoot 'src/StatusDesk.ps1')
@@ -66,7 +76,6 @@ try {
     Assert-Equal (Get-QualificationScriptIdentity -LiteralPath $lfSource) (Get-QualificationScriptIdentity -LiteralPath $crlfSource) 'Git line-ending/BOM normalization preserves the pinned logical source identity'
     [IO.File]::WriteAllText($crlfSource,"function Example { 'different' }"+$cr+$lf,[Text.UTF8Encoding]::new($false))
     Assert-Equal $false ((Get-QualificationScriptIdentity -LiteralPath $lfSource)-eq(Get-QualificationScriptIdentity -LiteralPath $crlfSource)) 'a source value change cannot reuse the canonical inventory identity'
-    $candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
     $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),
         '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
     $moduleText=($regions|ForEach-Object{$_.Groups[2].Value})-join[Environment]::NewLine
@@ -170,3 +179,6 @@ finally {
     )
 }
 Write-Output 'PASS: native lifetime calibration fails closed on invalid evidence; complete cumulative writer reservations preserve rewrites and reject escapes, unaccounted writers and candidate drift.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
