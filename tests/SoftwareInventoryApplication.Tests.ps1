@@ -1,14 +1,17 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
-$candidatePath=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath=Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath=Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath|Out-Null
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateError = $null
+try {
+$candidatePath = $candidateContext.Path
 
 $cases=@(
     @{file='registry-views';scenario='RegistryViews';count=4;registry=4;msi=0;msix=0;machine='Complete';user='Complete';machineFinding='NeedsAttention';userFinding='NeedsAttention'},
@@ -57,4 +60,7 @@ foreach($case in $cases){
     if($result.StandardOutput -match '(?i)Same Product|Same Publisher|Publisher [A-D]|"publisher"\s*:\s*"Publisher"|Synthetic\.|00000000-0000|应用程序|パッケージ|reg:m|release-2026'){throw "$($case.scenario) leaked Restricted software evidence into public output."}
     if($result.StandardError){throw "$($case.scenario) wrote stderr: $($result.StandardError)"}
 }
+}
+catch { $candidateError = $_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateError }
 Write-Output 'PASS: the generated application proves safe Software Inventory evidence, guidance, privacy, packaging, and cleanup.'

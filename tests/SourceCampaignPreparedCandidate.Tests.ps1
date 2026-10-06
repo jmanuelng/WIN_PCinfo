@@ -68,7 +68,10 @@ function Invoke-GeneratedApplication {
         }
     }
     foreach ($name in @('DeviceReadinessApplication.Tests.ps1','DeviceReadinessScenarios.Tests.ps1',
-        'FirmwareReadinessApplication.Tests.ps1','CrossDomainGuidanceApplication.Tests.ps1')) {
+        'FirmwareReadinessApplication.Tests.ps1','CrossDomainGuidanceApplication.Tests.ps1',
+        'AdministratorExposureApplication.Tests.ps1','MicrosoftConnectivityApplication.Tests.ps1',
+        'NetworkTopologyApplication.Tests.ps1','IdentityEnrollmentApplication.Tests.ps1',
+        'SoftwareInventoryApplication.Tests.ps1','ComprehensiveReportApplication.Tests.ps1')) {
         $copy=Join-Path $fixtureTests $name
         [IO.File]::Copy((Join-Path $PSScriptRoot $name),$copy)
         foreach ($manifest in @('prepared-manifest.json','')) {
@@ -90,7 +93,7 @@ function Invoke-GeneratedApplication {
             }
         }
     }
-    Write-Output 'PASS: four source campaigns and four ordinary consumers retain explicit prepared input, original failures and closure; native leaves are substituted.'
+    Write-Output 'PASS: four source campaigns and ten ordinary consumers retain explicit prepared input, original failures and closure; native leaves are substituted.'
 }
 finally {
     if ($null -ne $previousSpy) { Set-Variable -Name SourceCampaignCandidateSpy -Scope Global -Value $previousSpy.Value }
