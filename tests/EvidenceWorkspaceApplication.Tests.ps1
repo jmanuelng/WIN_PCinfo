@@ -127,6 +127,6 @@ Assert-Equal $false $notAuthorized.Records[-1].collectionStarted `
     'unauthorized recovery creates no workspace or collection'
 
 }
-catch { $bodyError=$_.Exception }
+catch { $bodyError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $bodyError }
 Write-Output 'PASS: the generated application exposes all nine Evidence Workspace and recovery safety cases without residue.'

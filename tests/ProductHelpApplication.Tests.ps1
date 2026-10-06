@@ -81,6 +81,6 @@ $fixtureRun = Invoke-GeneratedApplication -CandidatePath $candidatePath -Argumen
 Assert-NoDiscoveryLeak -Result $fixtureRun -Because 'a synthetic full-profile assessment'
 
 }
-catch { $bodyError=$_.Exception }
+catch { $bodyError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $bodyError }
 Write-Output 'PASS: generated Help and About are passive, and assessment runs never prompt for feedback.'

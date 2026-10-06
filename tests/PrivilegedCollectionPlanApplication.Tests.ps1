@@ -92,6 +92,6 @@ Assert-Equal 'PRIVILEGE.FIXTURE_INVALID' $invalid.Records[-1].reasonCode `
     'invalid privilege fixture input has one sanitized reason'
 
 }
-catch { $bodyError=$_.Exception }
+catch { $bodyError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $bodyError }
 Write-Output 'PASS: the generated application exposes all nine synthetic privilege paths and denial continuation.'

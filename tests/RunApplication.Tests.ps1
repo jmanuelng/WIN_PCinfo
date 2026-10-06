@@ -78,6 +78,6 @@ Assert-Equal $false $duplicateFixture.Records[-1].collectionStarted `
     'an invalid lifecycle fixture cannot start the approved collector'
 
 }
-catch { $bodyError=$_.Exception }
+catch { $bodyError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $bodyError }
 Write-Output 'PASS: the generated application exposes bounded synthetic lifecycle failures without claiming completion.'

@@ -65,6 +65,6 @@ foreach($case in $cases){
 }
 
 }
-catch { $bodyError=$_.Exception }
+catch { $bodyError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $bodyError }
 Write-Output 'PASS: the generated application proves purpose-bound certificate evidence and privacy.'
