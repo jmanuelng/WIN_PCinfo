@@ -392,84 +392,55 @@ function Test-StatusDeskCleanupProjection {
 Test-StatusDeskCleanupProjection
 Test-StatusDeskCleanupProjection -Recovery
 
-function Test-NativeCleanupFailure {
-    $nativeRoot=Join-Path (Split-Path $PSScriptRoot) ('.test-output/native-cleanup-'+[guid]::NewGuid().ToString('N'))
-    $nativeTests=Join-Path $nativeRoot 'tests'; $null=[IO.Directory]::CreateDirectory($nativeTests)
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'QualificationCleanup.ps1') -Destination $nativeTests
-    $childPath=Join-Path $nativeTests 'child.ps1'
-    [IO.File]::WriteAllText($childPath, @'
-$ErrorActionPreference='Stop'
-. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
-# A file in place of the parent makes marker retention fail without leaving a
-# marker file or marker directory. No application or worker process is started.
-$nativeOutput=Join-Path (Split-Path $PSScriptRoot) '.test-output'
-$null=[IO.Directory]::CreateDirectory($nativeOutput)
-[IO.File]::WriteAllText((Join-Path $nativeOutput 'blocked-parent'),'synthetic parent collision')
-function Get-QualificationCleanupBlockerPath { Join-Path (Split-Path $PSScriptRoot) '.test-output/blocked-parent/marker.json' }
-Complete-QualificationHarness -Cleanup @({throw 'Synthetic native cleanup failure'})
-'@)
+function Test-QualificationResultPropagation {
+    param([string] $TestDirectory=$PSScriptRoot)
+    . (Join-Path $TestDirectory 'Invoke-TestFile.ps1')
+    # Disclosed pure native-result substitution. The former dynamic child
+    # scripts emitted deliberate unsafe signals and erased their repository;
+    # finite native owners preserve those holds for separate root recovery.
+    # Actual startup/drain/marker failure certification remains a root gate.
+    $fixture=Join-Path (Split-Path $TestDirectory) ('.test-output/result-propagation-'+[guid]::NewGuid().ToString('N'))
+    $tests=Join-Path $fixture 'tests'; $null=[IO.Directory]::CreateDirectory($tests)
+    Copy-Item -LiteralPath (Join-Path $TestDirectory 'QualificationCleanup.ps1') -Destination $tests
+    Copy-Item -LiteralPath (Join-Path $TestDirectory 'CertificateSourceApplication.Tests.ps1') -Destination (Join-Path $tests 'A.Tests.ps1')
+    $harness=@('. (Join-Path $PSScriptRoot ''QualificationCleanup.ps1'')','function Resolve-WinPCInfoRuntime { param($ApplicationPath) Join-Path $PSHOME ''pwsh.exe'' }') -join "`n"
+    [IO.File]::WriteAllText((Join-Path $tests 'TestHarness.ps1'),$harness)
+    $syntheticCaseUnsafe=$true
+    function Invoke-OwnedQualificationCase {
+        $code=if ($syntheticCaseUnsafe) {1} else {0}
+        $line=if ($syntheticCaseUnsafe) {'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'} else {'PASS: Synthetic child assessment boundary'}
+        [pscustomobject]@{ExitCode=$code; StreamRecords=@([pscustomobject]@{Sequence=1; Stream='stdout'; Text=$line})}
+    }
     try {
         $failure=$null
-        try { Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-File',$childPath) | Out-Null }
-        catch { $failure=$_ }
-        Assert-Equal $true ($null -ne $failure) 'a native cleanup failure cannot become a passing case'
-        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'native cleanup state propagates even when no stop marker can be retained'
-
-        # Exercise an existing wrapper and the actual suite runner, substituting
-        # only build/runtime discovery and the child assessment boundary.
-        Copy-Item -LiteralPath $childPath -Destination (Join-Path $nativeTests 'StatusDeskEngine.Tests.ps1')
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CertificateSourceApplication.Tests.ps1') -Destination (Join-Path $nativeTests 'A.Tests.ps1')
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Run-Tests.ps1') -Destination $nativeTests
-        foreach ($dependency in @('Invoke-TestFile.ps1','GeneratedApplicationNative.ps1','GeneratedApplicationNativeSupervisor.cs')) {
-            Copy-Item -LiteralPath (Join-Path $PSScriptRoot $dependency) -Destination $nativeTests
-        }
-        [IO.File]::WriteAllText((Join-Path $nativeTests 'TestHarness.ps1'), @'
-. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
-Assert-QualificationCleanupReady
-function Resolve-WinPCInfoRuntime { param($ApplicationPath) Join-Path $PSHOME 'pwsh.exe' }
-# Disclosed candidate-context substitution: this fixture tests native wrapper
-# signal propagation, not prepared-candidate validation or a product build.
-function Open-TestCandidate {
-    param($RepositoryRoot,$CandidatePath,$PreparedManifestPath,$PreparedManifestSha256)
-    [pscustomobject]@{Path=(Join-Path $RepositoryRoot 'synthetic-candidate.ps1'); Prepared=$true}
-}
-function Close-TestCandidate { param($Candidate,$BodyError) if ($null -ne $BodyError) { throw $BodyError } }
-'@)
-        $nativeBuild=Join-Path $nativeRoot 'build'; $null=[IO.Directory]::CreateDirectory($nativeBuild)
-        [IO.File]::WriteAllText((Join-Path $nativeBuild 'Build.ps1'),'param($OutputPath)')
-        [IO.File]::WriteAllText((Join-Path $nativeTests 'B.Tests.ps1'),"Write-Output 'SYNTHETIC_NEXT_WRAPPER_EXECUTED'")
-        # Preserve the actual existing wrapper-native proof independently.
-        # The suite accounting boundary uses disclosed native-result stubs;
-        # a real unsafe outer lease must remain for exact root recovery rather
-        # than being deleted/reused inside this negative-control repository.
+        try { Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('synthetic') | Out-Null } catch { $failure=$_ }
+        Assert-Equal $true ($null -ne $failure) 'a cleanup failure cannot become a passing case'
+        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'cleanup signal propagates without relying on stop marker persistence'
         $wrapperFailure=$null
-        try { Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-File',(Join-Path $nativeTests 'A.Tests.ps1')) | Out-Null }
-        catch { $wrapperFailure=$_ }
-        Assert-Equal $true ($null -ne $wrapperFailure -and (Test-QualificationCleanupUnverified -Exception $wrapperFailure.Exception)) 'existing wrapper retains its actual native cleanup signal'
-        . (Join-Path $PSScriptRoot 'Invoke-TestFile.ps1')
-        $runnerAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Run-Tests.ps1'),[ref]$null,[ref]$null)
+        try { & (Join-Path $tests 'A.Tests.ps1') | Out-Null } catch { $wrapperFailure=$_ }
+        Assert-Equal $true ($null -ne $wrapperFailure -and (Test-QualificationCleanupUnverified -Exception $wrapperFailure.Exception)) 'existing wrapper retains the supplied unsafe native-result signal'
+        $runnerAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $TestDirectory 'Run-Tests.ps1'),[ref]$null,[ref]$null)
         $runnerCore=$runnerAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-TestSuiteFiles'},$true)
         . ([scriptblock]::Create($runnerCore.Extent.Text))
         $pins=@([pscustomobject]@{file='A.Tests.ps1'; sha256=('a'*64)},[pscustomobject]@{file='B.Tests.ps1'; sha256=('b'*64)})
-        $unsafeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Fail';
-            elapsedMilliseconds=1; nativeExitCode=1; completed=$true; cleanupVerified=$false}}
+        $unsafeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Fail'; elapsedMilliseconds=1; nativeExitCode=1; completed=$true; cleanupVerified=$false}}
         $unsafeSuite=Invoke-TestSuiteFiles -Inventory $pins -InvokeFile $unsafeStub -RetainResults {param($Rows,$Final)}
-        $suiteOutput=@($unsafeSuite.Results | Where-Object { $_.file -eq 'B.Tests.ps1' -and $_.result -eq 'Pass' } | ForEach-Object {'SYNTHETIC_NEXT_WRAPPER_EXECUTED'})
         Assert-Equal $true $unsafeSuite.Stopped 'unsafe cleanup from an existing wrapper fails the suite'
-        Assert-Equal $false (($suiteOutput -join "`n").Contains('SYNTHETIC_NEXT_WRAPPER_EXECUTED')) 'an existing native wrapper blocks the next suite test despite unavailable marker persistence'
-        [IO.File]::WriteAllText((Join-Path $nativeTests 'StatusDeskEngine.Tests.ps1'),"Write-Output 'PASS: Synthetic child assessment boundary'")
-        Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-File',(Join-Path $nativeTests 'A.Tests.ps1')) | Out-Null
-        $safeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Pass';
-            elapsedMilliseconds=1; nativeExitCode=0; completed=$true; cleanupVerified=$true}}
+        Assert-Equal 'Blocked' $unsafeSuite.Results[1].result 'unsafe wrapper blocks the next suite file despite unavailable marker persistence'
+        $syntheticCaseUnsafe=$false
+        & (Join-Path $tests 'A.Tests.ps1') | Out-Null
+        $safeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Pass'; elapsedMilliseconds=1; nativeExitCode=0; completed=$true; cleanupVerified=$true}}
         $safeSuite=Invoke-TestSuiteFiles -Inventory $pins -InvokeFile $safeStub -RetainResults {param($Rows,$Final)}
-        $suiteOutput=@($safeSuite.Results | Where-Object { $_.file -eq 'B.Tests.ps1' -and $_.result -eq 'Pass' } | ForEach-Object {'SYNTHETIC_NEXT_WRAPPER_EXECUTED'})
-        Assert-Equal $false $safeSuite.Stopped 'the existing wrapper still completes successful native cases'
-        Assert-Equal $true (($suiteOutput -join "`n").Contains('SYNTHETIC_NEXT_WRAPPER_EXECUTED')) 'verified native completion permits subsequent suite tests'
+        Assert-Equal $false $safeSuite.Stopped 'existing wrapper completes successful supplied native cases'
+        Assert-Equal 'Pass' $safeSuite.Results[1].result 'verified supplied completion permits subsequent suite files'
     }
-    finally { if ([IO.Directory]::Exists($nativeRoot)) { [IO.Directory]::Delete($nativeRoot,$true) } }
+    finally {
+        $allowed=[IO.Path]::GetFullPath((Join-Path (Split-Path $TestDirectory) '.test-output'))+[IO.Path]::DirectorySeparatorChar
+        if (-not [IO.Path]::GetFullPath($fixture).StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected result fixture cleanup path.' }
+        if ([IO.Directory]::Exists($fixture)) { [IO.Directory]::Delete($fixture,$true) }
+    }
 }
-Test-NativeCleanupFailure
-
+Test-QualificationResultPropagation
 function Test-RecoveryParentCleanupFailure {
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $allowedRoot=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar

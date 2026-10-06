@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256,
     [DateTimeOffset] $AuthorityEnds=[DateTimeOffset]::MinValue,
-    [long] $TimeoutMs=25200000, [long] $CleanupReserveMs=120000)
+    [long] $TimeoutMs=25200000, [long] $CleanupReserveMs=120000,
+    [string] $FocusedRequestPath, [string] $FocusedRequestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -86,6 +87,13 @@ if (-not [string]::IsNullOrEmpty($env:WINPCINFO_TEST_AUTHORITY_ENDS_UTC)) {
 }
 $testFiles=@(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.Tests.ps1' -File | Sort-Object Name)
 if ($testFiles.Count -eq 0) { throw 'No test files were found.' }
+$fullDiscovery=@($testFiles | ForEach-Object { [pscustomobject]@{file=$_.Name; path=$_.FullName; sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()} })
+$scope='Full'; $focused=$null
+if (-not [string]::IsNullOrEmpty($FocusedRequestPath) -or -not [string]::IsNullOrEmpty($FocusedRequestSha256)) {
+    $focused=Read-FocusedTestRequest -RepositoryRoot $repository -Path $FocusedRequestPath -Sha256 $FocusedRequestSha256
+    $scope=$focused.Scope
+    $testFiles=@(Get-Item -LiteralPath $focused.TestPath)
+}
 $inventory=@($testFiles | ForEach-Object { [pscustomobject][ordered]@{file=$_.Name; path=$_.FullName;
     bytes=$_.Length; sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()} })
 $inputInventory=@(Get-TestFileInventory -RepositoryRoot $repository)
@@ -97,7 +105,8 @@ if (((Get-Item -LiteralPath $evidenceRoot).Attributes -band [IO.FileAttributes]:
 $null=Set-TestNativePrivateDirectory -Path $evidenceRoot
 $inventoryPath=Join-Path $evidenceRoot 'suite-inventory.json'
 Write-TestNativeNewRecord -Path $inventoryPath -Value ([ordered]@{contract='win-pcinfo.test-suite-inventory/1.0.0';
-    authorityEnds=$budget.AuthorityEnds.ToString('o'); expectedFiles=$inventory.Count; files=$inventory; inputs=$inputInventory})
+    authorityEnds=$budget.AuthorityEnds.ToString('o'); scope=$scope; fullDiscovery=$fullDiscovery;
+    expectedFiles=$inventory.Count; files=$inventory; inputs=$inputInventory})
 $watch=[Diagnostics.Stopwatch]::StartNew()
 Write-Output "EVIDENCE: $evidenceRoot"
 $candidate=$null
@@ -106,8 +115,15 @@ $suite=$null
 try {
     $inputs=[Collections.Generic.List[object]]::new()
     foreach ($inputPin in $inputInventory) { $inputs.Add($inputPin) }
+    . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+    # Standalone builds consume the same closed source/package/resource input
+    # inventory as prepared candidates. Output destinations remain unique.
+    $sourceInputs=@(Get-TestCandidateInputInventory -RepositoryRoot $repository)
+    foreach ($inputPin in $sourceInputs) {
+        $path=Join-Path $repository $inputPin.path
+        if ($path -notin $inputs.path) { $inputs.Add([pscustomobject][ordered]@{path=$path; bytes=$inputPin.bytes; sha256=$inputPin.sha256}) }
+    }
     if (-not [string]::IsNullOrEmpty($CandidatePath) -or -not [string]::IsNullOrEmpty($PreparedManifestPath) -or -not [string]::IsNullOrEmpty($PreparedManifestSha256)) {
-        . (Join-Path $PSScriptRoot 'TestHarness.ps1')
         $candidate=Open-TestCandidate -RepositoryRoot $repository -CandidatePath $CandidatePath -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
         $manifest=Read-TestNativeRecord -Path $PreparedManifestPath
         foreach ($inputPin in $manifest.inputs) {
@@ -115,7 +131,7 @@ try {
             if ($path -notin $inputs.path) { $inputs.Add([pscustomobject][ordered]@{path=$path; bytes=$inputPin.bytes; sha256=$inputPin.sha256}) }
         }
     }
-    foreach ($path in @((Join-Path $PSHOME 'pwsh.exe'),$inventoryPath,$CandidatePath,$PreparedManifestPath)) {
+    foreach ($path in @((Join-Path $PSHOME 'pwsh.exe'),$inventoryPath,$CandidatePath,$PreparedManifestPath,$FocusedRequestPath)) {
         if (-not [string]::IsNullOrEmpty($path) -and $path -notin $inputs.path) {
             $item=Get-Item -LiteralPath ([IO.Path]::GetFullPath($path))
             $inputs.Add([pscustomobject][ordered]@{path=$item.FullName; bytes=$item.Length;
@@ -132,6 +148,8 @@ try {
             testPath=$Expected.path; testSha256=$Expected.sha256; bootstrapPath=(Join-Path $PSScriptRoot 'Invoke-TestFile.ps1');
             hostPath=(Join-Path $PSHOME 'pwsh.exe'); inventoryPath=$inventoryPath; suiteEvidenceRoot=$evidenceRoot;
             candidatePath=$CandidatePath; preparedManifestPath=$PreparedManifestPath; preparedManifestSha256=$PreparedManifestSha256;
+            scope=$scope; namedParameters=$(if ($null -ne $focused) {$focused.NamedParameters} else {[ordered]@{}});
+            focusedRequestPath=$FocusedRequestPath; focusedRequestSha256=$FocusedRequestSha256;
             inputs=$closedInputs; cohortSha256=$cohort}
         Assert-TestFileAdmissionInputs -Admission $admission
         $native=Invoke-GeneratedApplicationNative -NativeRole TestFile -TestFileAdmission $admission -HostPath $admission.hostPath -WorkingDirectory $repository -Arguments @('-NoLogo','-NoProfile','-File',$admission.bootstrapPath) -TimeoutMs $TimeoutMs -CleanupReserveMs 10000 -AuthorityEnds $budget.AuthorityEnds.AddMilliseconds(-$CleanupReserveMs)
@@ -155,6 +173,7 @@ try {
     $retain={
         param($Rows,$Final)
         $snapshot=[ordered]@{elapsedMilliseconds=$watch.ElapsedMilliseconds; expectedFiles=$inventory.Count;
+            scope=$scope; fullDiscoveryCount=$fullDiscovery.Count;
             inventorySha256=(Get-FileHash -LiteralPath $inventoryPath -Algorithm SHA256).Hash.ToLowerInvariant();
             results=@($Rows); final=[bool]$Final}
         $failures=[Collections.Generic.List[Exception]]::new()
@@ -168,9 +187,10 @@ try {
     $suite=Invoke-TestSuiteFiles -Inventory $inventory -InvokeFile $invoke -RetainResults $retain
     $current=@(Get-TestFileInventory -RepositoryRoot $repository)
     if ((Get-TestNativeDigest -Value $current) -cne (Get-TestNativeDigest -Value $inputInventory)) { throw 'Full test input inventory changed during execution.' }
+    if ((Get-TestNativeDigest -Value @(Get-TestCandidateInputInventory -RepositoryRoot $repository)) -cne (Get-TestNativeDigest -Value $sourceInputs)) { throw 'Full source and packaged input inventory changed during execution.' }
     if ($suite.Stopped -or $suite.RetentionFailures.Count) { throw 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: suite evidence or file ownership is incomplete.' }
     $failed=@($suite.Results | Where-Object result -eq Fail)
-    if ($failed.Count) { throw "Full gate failed: $($failed.Count) of $($inventory.Count) files failed; all files executed. Evidence: $evidenceRoot" }
+    if ($failed.Count) { throw "$scope gate failed: $($failed.Count) of $($inventory.Count) selected files failed; all selected files executed. Evidence: $evidenceRoot" }
 }
 catch { $bodyError=$_ }
 $unsafe=$null -ne $bodyError -and ($null -eq $suite -or $suite.Stopped -or $suite.RetentionFailures.Count -or
@@ -180,4 +200,5 @@ Complete-TestSuiteFinalization -Candidate $candidate -BodyError $bodyError -Unsa
 } -ObserveUnsafe {
     [Console]::Out.WriteLine('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'); [Console]::Out.Flush()
 } -CloseCandidate {param($Context,$Failure) Close-TestCandidate -Candidate $Context -BodyError $Failure}
-Write-Output "PASS: $($inventory.Count) test files completed."
+if ($scope -eq 'Full') { Write-Output "PASS: $($inventory.Count) test files completed." }
+else { Write-Output "PASS: $scope completed; full discovery contains $($fullDiscovery.Count) files and has not been executed by this focused run." }

@@ -13,7 +13,7 @@ try {
     $null = [IO.Directory]::CreateDirectory($testDirectory)
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Run-Tests.ps1') -Destination $testDirectory
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'QualificationCleanup.ps1') -Destination $testDirectory
-    foreach ($dependency in @('Invoke-TestFile.ps1','GeneratedApplicationNative.ps1','GeneratedApplicationNativeSupervisor.cs')) {
+    foreach ($dependency in @('Invoke-TestFile.ps1','GeneratedApplicationNative.ps1','GeneratedApplicationNativeSupervisor.cs','QualificationCaseAdmission.ps1','Invoke-QualificationCase.ps1','Invoke-FocusedTest.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $dependency) -Destination $testDirectory
     }
     [IO.File]::WriteAllText((Join-Path $testDirectory 'A.Tests.ps1'), "throw 'Synthetic expected failure'")

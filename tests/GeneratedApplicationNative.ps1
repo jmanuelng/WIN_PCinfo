@@ -68,8 +68,12 @@ function Assert-TestFileAdmissionInputs {
     if ($testPin.Count -ne 1 -or $testPin[0].sha256 -cne $Admission.testSha256) { throw 'Test file source pin differs from its admitted cohort.' }
     $null=Assert-TestFileExecutableProtocol -Path $Admission.testPath
     $root=[IO.Path]::GetFullPath($Admission.repositoryRoot)
+    $scope=Get-TestRecordOptionalProperty -Record $Admission -Name 'scope'
+    $eligible=[IO.Path]::GetFileName($Admission.testPath) -clike '*.Tests.ps1'
+    if ($scope -eq 'FocusedSafetyDriver' -and [IO.Path]::GetFullPath($Admission.testPath) -ieq (Join-Path $root 'tests/Invoke-AssessmentSafetyQualification.ps1')) { $eligible=$true }
+    if ($null -ne $scope -and $scope -cnotin @('Full','FocusedTestFile','FocusedSafetyDriver')) { throw 'Test file scope is not reviewed.' }
     if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Admission.testPath)) -ine (Join-Path $root 'tests') -or
-        [IO.Path]::GetFileName($Admission.testPath) -cnotlike '*.Tests.ps1' -or
+        -not $eligible -or
         [IO.Path]::GetFullPath($Admission.bootstrapPath) -ine (Join-Path $root 'tests/Invoke-TestFile.ps1') -or
         [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Admission.suiteEvidenceRoot)) -ine (Join-Path $root '.test-output') -or
         [IO.Path]::GetFileName($Admission.suiteEvidenceRoot) -cnotmatch '^suite-[a-f0-9]{32}$' -or
@@ -79,6 +83,16 @@ function Assert-TestFileAdmissionInputs {
     if ($supplied -ne 0 -and ($supplied -ne 3 -or -not $paths.Contains($Admission.candidatePath) -or
         -not $paths.Contains($Admission.preparedManifestPath) -or $Admission.preparedManifestSha256 -cnotmatch '^[a-f0-9]{64}$' -or
         (Get-FileHash -LiteralPath $Admission.preparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Admission.preparedManifestSha256)) { throw 'Test file prepared input is incomplete or changed.' }
+    $named=Get-TestRecordOptionalProperty -Record $Admission -Name 'namedParameters'
+    if ($null -ne $named) {
+        $parameters=ConvertFrom-TestNamedParameterRecord -Parameters $named
+        Assert-TestNamedParameterRecord -Ast (Assert-TestFileExecutableProtocol -Path $Admission.testPath) -Parameters $parameters
+    }
+    if ($scope -in @('FocusedTestFile','FocusedSafetyDriver')) {
+        $focused=Read-FocusedTestRequest -RepositoryRoot $root -Path $Admission.focusedRequestPath -Sha256 $Admission.focusedRequestSha256
+        if (-not $paths.Contains($focused.RequestPath) -or $focused.TestPath -ine $Admission.testPath -or $focused.Scope -cne $scope -or
+            (Get-TestNativeDigest -Value $focused.NamedParameters) -cne (Get-TestNativeDigest -Value $named)) { throw 'Focused file admission differs from the exact pinned request.' }
+    }
 }
 
 function Get-TestNativeSelfIdentity {
@@ -148,18 +162,23 @@ function Set-TestNativePrivateDirectory {
 }
 
 function Assert-TestNativeRoleReady {
-    param([ValidateSet('GeneratedApplication','TestFile')] [string] $NativeRole,
+    param([ValidateSet('GeneratedApplication','TestFile','QualificationCase')] [string] $NativeRole,
         [Parameter(Mandatory)] [string] $RepositoryRoot)
     $generated=Join-Path $RepositoryRoot '.test-output/generated-native'
     $testFiles=Join-Path $RepositoryRoot '.test-output/test-file-native'
+    $cases=Join-Path $RepositoryRoot '.test-output/qualification-case-native'
     Assert-GeneratedApplicationNativeReady -EvidenceParent $generated
     $allowed=$null
-    if (-not [string]::IsNullOrEmpty($env:WINPCINFO_TEST_FILE_LEASE)) {
-        if ($NativeRole -ne 'GeneratedApplication') { throw 'A test file lease cannot delegate another test file launch.' }
-        $lease=Read-TestFileLease -RepositoryRoot $RepositoryRoot -Nonce $env:WINPCINFO_TEST_FILE_LEASE -SelfIdentity (Get-TestNativeSelfIdentity) -RequireClaim
-        $allowed=$lease.PendingPath
+    $allowedCases=@()
+    if (-not [string]::IsNullOrEmpty($env:WINPCINFO_TEST_FILE_LEASE) -or -not [string]::IsNullOrEmpty($env:WINPCINFO_TEST_CASE_LEASE)) {
+        if ($NativeRole -eq 'TestFile') { throw 'A test file lease cannot delegate another test file launch.' }
+        $context=Get-TestNativeAdmissionContext -RepositoryRoot $RepositoryRoot -SelfIdentity (Get-TestNativeSelfIdentity)
+        $allowed=$context.Root.PendingPath
+        $allowedCases=@($context.AllowedCasePendingPaths)
     }
+    elseif ($NativeRole -eq 'QualificationCase') { throw 'Qualification cases require an exact current file or case owner.' }
     Assert-GeneratedApplicationNativeReady -EvidenceParent $testFiles -AllowedPendingPath $allowed
+    Assert-GeneratedApplicationNativeReady -EvidenceParent $cases -AllowedPendingPaths $allowedCases
 }
 
 function Initialize-GeneratedApplicationNativeSupervisor {
@@ -175,14 +194,15 @@ function Initialize-GeneratedApplicationNativeSupervisor {
 }
 
 function Assert-GeneratedApplicationNativeReady {
-    param([Parameter(Mandatory)] [string] $EvidenceParent, [AllowNull()] [string] $AllowedPendingPath)
+    param([Parameter(Mandatory)] [string] $EvidenceParent, [AllowNull()] [string] $AllowedPendingPath,
+        [string[]] $AllowedPendingPaths=@())
     Assert-QualificationCleanupReady
     if ([IO.Directory]::Exists($EvidenceParent)) {
         $parent=Get-Item -LiteralPath $EvidenceParent -ErrorAction Stop
         if (($parent.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Generated application evidence cannot use a reparse point.' }
         foreach ($directory in @(Get-ChildItem -LiteralPath $EvidenceParent -Directory -Force -ErrorAction Stop)) {
             $pending=Join-Path $directory.FullName 'owned-pending.json'
-            if (-not [string]::IsNullOrEmpty($AllowedPendingPath) -and $pending -ieq $AllowedPendingPath -and
+            if (($pending -ieq $AllowedPendingPath -or $pending -iin $AllowedPendingPaths) -and
                 ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 -and [IO.File]::Exists($pending)) { continue }
             if (($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
                 [IO.File]::Exists((Join-Path $directory.FullName 'owned-pending.json')) -or
@@ -238,8 +258,8 @@ function Invoke-GeneratedApplicationNative {
         [int] $MaximumLines = 65536, [int] $MaximumLineCharacters = 16777216,
         [int] $MaximumTotalCharacters = 33554432,
         [scriptblock] $ObserveStartup, [scriptblock] $ObserveTerminal,
-        [ValidateSet('GeneratedApplication','TestFile')] [string] $NativeRole = 'GeneratedApplication',
-        [AllowNull()] $TestFileAdmission)
+        [ValidateSet('GeneratedApplication','TestFile','QualificationCase')] [string] $NativeRole = 'GeneratedApplication',
+        [AllowNull()] $TestFileAdmission, [AllowNull()] $QualificationCaseAdmission)
 
     # Test execution is separate from product collection limits. The default
     # reserves the product's 60-minute ceiling plus two minutes for termination
@@ -257,13 +277,27 @@ function Invoke-GeneratedApplicationNative {
     $outputRoot=Join-Path $repository '.test-output'
     if ([IO.Directory]::Exists($outputRoot) -and ((Get-Item -LiteralPath $outputRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Generated application output root cannot use a reparse point.' }
     Assert-TestNativeRoleReady -NativeRole $NativeRole -RepositoryRoot $repository
-    $parent=Join-Path $outputRoot $(if ($NativeRole -eq 'TestFile') {'test-file-native'} else {'generated-native'})
+    $parent=Join-Path $outputRoot $(switch ($NativeRole) {'TestFile' {'test-file-native'} 'QualificationCase' {'qualification-case-native'} default {'generated-native'}})
     $nonce=[guid]::NewGuid().ToString('N')
+    $admission=$null
     if ($NativeRole -eq 'TestFile') {
         Assert-TestFileLauncher -Admission $TestFileAdmission -RepositoryRoot $repository -HostPath $HostPath -WorkingDirectory $WorkingDirectory -Arguments $Arguments
         $Arguments=@($Arguments)+@('-NativeLeaseId',$nonce)
+        $admission=$TestFileAdmission
     }
-    elseif ($null -ne $TestFileAdmission) { throw 'Generated application cannot accept a test file admission.' }
+    elseif ($NativeRole -eq 'QualificationCase') {
+        $context=Get-TestNativeAdmissionContext -RepositoryRoot $repository -SelfIdentity (Get-TestNativeSelfIdentity)
+        Assert-QualificationCaseAdmission -Admission $QualificationCaseAdmission -Parent $context.Parent -Root $context.Root -ParentDepth $context.Depth -AuthorityEnds $budget.AuthorityEnds
+        $expected=@('-NoLogo','-NoProfile'); if ($QualificationCaseAdmission.sta) { $expected+=@('-STA') }; $expected+=@('-File',$QualificationCaseAdmission.bootstrapPath)
+        if ($HostPath -ine $QualificationCaseAdmission.hostPath -or [IO.Path]::GetFullPath($WorkingDirectory) -ine $repository -or
+            ($Arguments -join '|') -cne ($expected -join '|')) { throw 'Qualification native launcher differs from its exact bootstrap, host or working directory.' }
+        $output=Get-TestRecordOptionalProperty -Record $QualificationCaseAdmission.namedParameters -Name 'OutputPath'
+        if ($null -ne $output -and ([IO.File]::Exists($output) -or [IO.Directory]::Exists($output))) { throw 'Qualification mutator output is already owned.' }
+        $Arguments=@($Arguments)+@('-NativeLeaseId',$nonce)
+        $admission=$QualificationCaseAdmission
+    }
+    if (($NativeRole -ne 'TestFile' -and $null -ne $TestFileAdmission) -or
+        ($NativeRole -ne 'QualificationCase' -and $null -ne $QualificationCaseAdmission)) { throw 'Native role cannot accept another role admission.' }
     Initialize-GeneratedApplicationNativeSupervisor
     $owner=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::new($HostPath,$WorkingDirectory,$Arguments,$StandardInput,
         $MaximumLines,$MaximumLineCharacters,$MaximumTotalCharacters)
@@ -274,12 +308,11 @@ function Invoke-GeneratedApplicationNative {
     # directory. No inherited broad ACL is allowed when collection may start.
     $sid=Set-TestNativePrivateDirectory -Path $directory
     $pendingPath=Join-Path $directory 'owned-pending.json'
-    $parentProcess=[Diagnostics.Process]::GetCurrentProcess()
-    try { $parentBirth=$parentProcess.StartTime.ToUniversalTime().ToString('o') } finally { $parentProcess.Dispose() }
-    $pending=[ordered]@{contract='win-pcinfo.test-owned-native/1.0.0'; nonce=$nonce; nativeRole=$NativeRole; admission=$TestFileAdmission;
+    $parentIdentity=Get-TestNativeSelfIdentity
+    $pending=[ordered]@{contract='win-pcinfo.test-owned-native/1.0.0'; nonce=$nonce; nativeRole=$NativeRole; admission=$admission;
         requestedAt=[DateTimeOffset]::UtcNow.ToString('o'); authorityEnds=$budget.AuthorityEnds.ToString('o');
         timeoutMs=$TimeoutMs; cleanupReserveMs=$CleanupReserveMs;
-        parent=[ordered]@{pid=$PID; creationUtc=$parentBirth; ownerSid=$sid.Value; arguments=[Environment]::GetCommandLineArgs()};
+        parent=[ordered]@{pid=$parentIdentity.Pid; creationUtc=$parentIdentity.CreationUtc; ownerSid=$sid.Value; hostPath=$parentIdentity.HostPath; arguments=[Environment]::GetCommandLineArgs()};
         hostSha256=(Get-FileHash -LiteralPath $HostPath -Algorithm SHA256).Hash.ToLowerInvariant();
         supervisorSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'GeneratedApplicationNativeSupervisor.cs') -Algorithm SHA256).Hash.ToLowerInvariant();
         childCreationRequested=$false; child=$null}
@@ -303,13 +336,13 @@ function Invoke-GeneratedApplicationNative {
             [IO.File]::WriteAllText($pendingPath,($pending | ConvertTo-Json -Depth 8 -Compress),[Text.UTF8Encoding]::new($false))
             [IO.File]::WriteAllText((Join-Path $directory 'startup.json'),($pending | ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
             if ($null -ne $ObserveStartup) { & $ObserveStartup $directory $owner.StartedIdentity | Out-Null }
-            if ($NativeRole -eq 'TestFile') {
+            if ($NativeRole -in @('TestFile','QualificationCase')) {
                 if (-not $owner.StartedIdentity.ExactStartedProcessHandlePinned -or -not [string]::IsNullOrEmpty($owner.StartedIdentity.ObservationFailure)) { throw 'Test file startup lacks its exact original-handle identity.' }
                 Write-TestNativeNewRecord -Path (Join-Path $directory 'startup-ack.json') -Value ([ordered]@{
-                    contract='win-pcinfo.test-file-startup/1.0.0'; nonce=$nonce; directory=$directory;
+                    contract=$(if ($NativeRole -eq 'TestFile') {'win-pcinfo.test-file-startup/1.0.0'} else {'win-pcinfo.qualification-case-startup/1.0.0'}); nonce=$nonce; directory=$directory;
                     pendingSha256=(Get-FileHash -LiteralPath $pendingPath -Algorithm SHA256).Hash.ToLowerInvariant();
                     startupSha256=(Get-FileHash -LiteralPath (Join-Path $directory 'startup.json') -Algorithm SHA256).Hash.ToLowerInvariant();
-                    admissionSha256=(Get-TestNativeDigest -Value $TestFileAdmission)})
+                    admissionSha256=(Get-TestNativeDigest -Value $admission)})
             }
         } catch { $failures.Add($_.Exception) }
         $outcome=$wait.GetAwaiter().GetResult()
@@ -333,6 +366,12 @@ function Invoke-GeneratedApplicationNative {
             try { foreach ($line in $outcome.Lines) { $writer.WriteLine(($line | ConvertTo-Json -Compress)); } } finally { $writer.Dispose() }
         }
     } catch { $failures.Add($_.Exception) }
+    if ($NativeRole -eq 'QualificationCase') {
+        # Check the child protocol while its exact pending hold still exists.
+        # Missing completion/claim or changed source must preserve this hold,
+        # even if the original handle has already observed native zero.
+        $null=Confirm-QualificationCaseNativeRetention -RepositoryRoot $repository -Directory $directory -Nonce $nonce -Admission $admission -NativeIdentity $owner.StartedIdentity -NativeOutcome $outcome -Failures $failures
+    }
     try {
         $errorRecord=[ordered]@{startRequested=$startRequested; started=$owner.StartedIdentity.Started; original=$original;
             failures=@($failures | ForEach-Object { [ordered]@{type=$_.GetType().FullName; message=$_.Message} })}
@@ -375,5 +414,8 @@ function Invoke-GeneratedApplicationNative {
     $stdout=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::Reconstruct($outcome.Lines,'stdout')
     $stderr=[WinPCInfoTestGeneratedApplicationNativeSupervisor]::Reconstruct($outcome.Lines,'stderr')
     [pscustomobject]@{ExitCode=$outcome.NativeExitCode; StandardOutput=$stdout; StandardError=$stderr;
-        EvidenceDirectory=$directory; NativeIdentity=$owner.StartedIdentity; NativeOutcome=$original.outcome; Nonce=$nonce}
+        EvidenceDirectory=$directory; NativeIdentity=$owner.StartedIdentity; NativeOutcome=$original.outcome; Nonce=$nonce;
+        StreamRecords=$outcome.Lines}
 }
+
+. (Join-Path $PSScriptRoot 'QualificationCaseAdmission.ps1')

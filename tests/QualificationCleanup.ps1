@@ -43,10 +43,17 @@ function Assert-QualificationTestProcessResult {
 }
 
 function Invoke-QualificationTestProcess {
-    param([Parameter(Mandatory)] [string] $HostPath, [Parameter(Mandatory)] [string[]] $Arguments)
+    param([Parameter(Mandatory)] [string] $HostPath, [Parameter(Mandatory)] [AllowEmptyString()] [string[]] $Arguments,
+        [long] $TimeoutMs=3600000, [long] $CleanupReserveMs=10000,
+        [DateTimeOffset] $AuthorityEnds=[DateTimeOffset]::MinValue)
     Assert-QualificationCleanupReady
-    $caseOutput=@(& $HostPath @Arguments 2>&1)
-    $caseExitCode=$LASTEXITCODE
+    if (-not (Get-Command Invoke-OwnedQualificationCase -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'GeneratedApplicationNative.ps1') }
+    $native=Invoke-OwnedQualificationCase -HostPath $HostPath -Arguments $Arguments -TimeoutMs $TimeoutMs -CleanupReserveMs $CleanupReserveMs -AuthorityEnds $AuthorityEnds
+    $caseExitCode=$native.ExitCode
+    # Preserve the caller's native status contract. Unknown outcomes throw
+    # before this assignment; no value is inferred from a terminal file.
+    Set-Variable -Name LASTEXITCODE -Value $caseExitCode -Scope 1
+    $caseOutput=@($native.StreamRecords | Sort-Object Sequence | ForEach-Object { $_.Text })
     foreach ($line in $caseOutput) { Write-Output $line }
     Assert-QualificationTestProcessResult -Output $caseOutput -ExitCode $caseExitCode
 }

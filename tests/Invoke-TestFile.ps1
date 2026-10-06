@@ -86,16 +86,9 @@ try {
     [Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
     [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
     $global:OutputEncoding=[Text.UTF8Encoding]::new($false)
-    $parameters=@{}
-    $ast=Assert-TestFileExecutableProtocol -Path $lease.Admission.testPath
-    $names=if ($null -ne $ast.ParamBlock) {@($ast.ParamBlock.Parameters.Name.VariablePath.UserPath)} else {@()}
-    $preparedNames=@('CandidatePath','PreparedManifestPath','PreparedManifestSha256')
-    $declared=@($preparedNames | Where-Object { $_ -in $names }).Count
-    if ($declared -ne 0 -and $declared -ne 3) { throw 'Test file declares an incomplete prepared input interface.' }
-    if ($declared -eq 3 -and -not [string]::IsNullOrEmpty($lease.Admission.candidatePath)) {
-        $parameters=@{CandidatePath=$lease.Admission.candidatePath; PreparedManifestPath=$lease.Admission.preparedManifestPath;
-            PreparedManifestSha256=$lease.Admission.preparedManifestSha256}
-    }
+    $named=Get-TestRecordOptionalProperty -Record $lease.Admission -Name 'namedParameters'
+    $parameters=if ($null -ne $named) {ConvertFrom-TestNamedParameterRecord -Parameters $named} else {[ordered]@{}}
+    $parameters=ConvertTo-QualificationPreparedParameters -RootAdmission $lease.Admission -TestPath $lease.Admission.testPath -Parameters $parameters
     $fileResult='Pass'
     try { & $lease.Admission.testPath @parameters }
     catch {

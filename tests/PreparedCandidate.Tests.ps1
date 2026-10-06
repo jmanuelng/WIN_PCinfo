@@ -19,6 +19,9 @@ try {
     [IO.File]::WriteAllText((Join-Path $repository 'tests/GeneratedApplicationNativeSupervisor.cs'),'// synthetic native supervisor')
     [IO.File]::WriteAllText((Join-Path $repository 'tests/Invoke-TestFile.ps1'),'# synthetic fresh file bootstrap')
     [IO.File]::WriteAllText((Join-Path $repository 'tests/Run-Tests.ps1'),'# synthetic suite owner')
+    foreach ($dependency in @('QualificationCleanup.ps1','QualificationCaseAdmission.ps1','Invoke-QualificationCase.ps1','Invoke-FocusedTest.ps1')) {
+        [IO.File]::WriteAllText((Join-Path $repository ('tests/'+$dependency)),'# synthetic case/focused dependency')
+    }
     # This bounded fixture substitutes the build owner only; it executes no
     # generated application, provider, task or native child.
     [IO.File]::WriteAllText((Join-Path $repository 'build/Build.ps1'),@'
@@ -67,7 +70,8 @@ param([string] $OutputPath)
 
     foreach ($path in @('src/Fixture.ps1','docs/fixture.json','build/Build.ps1','SECURITY.md',
         'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs',
-        'tests/Invoke-TestFile.ps1','tests/Run-Tests.ps1')) {
+        'tests/Invoke-TestFile.ps1','tests/Run-Tests.ps1','tests/QualificationCleanup.ps1',
+        'tests/QualificationCaseAdmission.ps1','tests/Invoke-QualificationCase.ps1','tests/Invoke-FocusedTest.ps1')) {
         $literal=Join-Path $repository $path
         $saved=[IO.File]::ReadAllBytes($literal)
         try {
