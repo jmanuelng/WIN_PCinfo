@@ -1,19 +1,29 @@
 [CmdletBinding()]
-param([string] $EvidencePath = '', [switch] $ColdProcess)
+param([string] $EvidencePath = '', [switch] $ColdProcess,
+    [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateUseError=$null
+try {
 # This regression must compile the helper on first use even when earlier
 # suite files have already loaded it in the shared test process.
 if (-not $ColdProcess) {
+    if (-not $candidateContext.Prepared) {
+        $PreparedManifestPath=Join-Path $candidateContext.OwnedDirectory 'prepared-test-candidate.json'
+        [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+        $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
     $arguments = @('-NoLogo','-NoProfile','-File',$PSCommandPath,'-ColdProcess')
     if ($EvidencePath) { $arguments += @('-EvidencePath',$EvidencePath) }
+    $arguments += @('-CandidatePath',$candidateContext.Path,'-PreparedManifestPath',$PreparedManifestPath,'-PreparedManifestSha256',$PreparedManifestSha256)
     Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments $arguments
     return
 }
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidate = $candidateContext.Path
 $tokens = $null; $parseErrors = $null
 $application = [Management.Automation.Language.Parser]::ParseFile($candidate,[ref]$tokens,[ref]$parseErrors)
 Assert-Equal 0 $parseErrors.Count 'current generated definitions parse'
@@ -231,3 +241,6 @@ finally {
     Assert-Equal $false ([IO.Directory]::Exists($resolved)) 'owned real opening fixtures are absent'
 }
 Write-Output 'PASS: cold GUI compilation, real delayed opening, internal startup failure and cancellation preserve owned completion and no collection authority.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
