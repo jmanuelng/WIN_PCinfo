@@ -65,8 +65,12 @@ param([string] $OutputPath)
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath (Join-Path $root 'missing.ps1') -PreparedManifestPath $manifestPath -PreparedManifestSha256 $pin } 'missing candidate cannot fall back to a build'
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate -PreparedManifestPath $manifestPath -PreparedManifestSha256 ('0'*64) } 'stale manifest pin refuses'
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate } 'partial explicit input cannot fall back to a build'
+    Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath ' ' } 'direct whitespace-only path refuses instead of choosing a standalone build'
+    Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -PreparedManifestPath ' ' } 'direct whitespace-only manifest refuses instead of choosing a standalone build'
+    Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -PreparedManifestSha256 $pin } 'direct hash-only input cannot fall back to a build'
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate -PreparedManifestPath (Join-Path $root 'missing.json') -PreparedManifestSha256 $pin } 'missing manifest cannot fall back to a build'
-    $checks+=5
+    Assert-Equal 0 @(Get-ChildItem -LiteralPath $repository -Directory -Filter '.test-output').Count 'direct whitespace/path/hash-only refusals create no passive build or output parent'
+    $checks+=9
 
     foreach ($path in @('src/Fixture.ps1','docs/fixture.json','build/Build.ps1','SECURITY.md',
         'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs',

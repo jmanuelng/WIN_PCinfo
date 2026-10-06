@@ -61,8 +61,8 @@ function New-PreparedTestCandidateManifest {
 function Open-TestCandidate {
     param([Parameter(Mandatory)] [string] $RepositoryRoot, [string] $CandidatePath,
         [string] $PreparedManifestPath, [string] $PreparedManifestSha256, [switch] $SeparateBuildProcess)
-    $supplied=-not [string]::IsNullOrWhiteSpace($CandidatePath) -or
-        -not [string]::IsNullOrWhiteSpace($PreparedManifestPath) -or -not [string]::IsNullOrWhiteSpace($PreparedManifestSha256)
+    $supplied=-not [string]::IsNullOrEmpty($CandidatePath) -or
+        -not [string]::IsNullOrEmpty($PreparedManifestPath) -or -not [string]::IsNullOrEmpty($PreparedManifestSha256)
     $ownedDirectory=$null
     $stream=$null
     try {
