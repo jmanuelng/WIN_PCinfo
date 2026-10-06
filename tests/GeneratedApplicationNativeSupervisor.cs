@@ -153,8 +153,8 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
    result.NativeTerminalObserved=true;result.NativeExitCode=unchecked((int)exit);result.ObservedTerminalUtc=DateTimeOffset.UtcNow.ToString("o");
   }
   while((!stdoutTask.IsCompleted||!stderrTask.IsCompleted||!inputTask.IsCompleted)&&cleanupClock.ElapsedMilliseconds<cleanupReserveMs&&DateTimeOffset.UtcNow<authorityEnds){Thread.Sleep(10);}
-  result.StreamsDrained=stdoutTask.IsCompleted&&stderrTask.IsCompleted;
-  result.InputCompleted=inputTask.IsCompleted;
+  result.StreamsDrained=stdoutTask.IsCompletedSuccessfully&&stderrTask.IsCompletedSuccessfully;
+  result.InputCompleted=inputTask.IsCompletedSuccessfully;
   if(!result.StreamsDrained||!result.InputCompleted){drainCancellation.Cancel();try{process.StandardInput.BaseStream.Dispose();}catch{}try{process.StandardOutput.Dispose();}catch{}try{process.StandardError.Dispose();}catch{} }
   lock(gate){
    result.StreamFailure=streamFailure;result.OutputOverflow=overflow;result.UnsafeSignalObserved=unsafeSignal;

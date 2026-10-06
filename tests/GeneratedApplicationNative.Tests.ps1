@@ -89,6 +89,19 @@ if ($Mode -eq 'Pure') {
         try { Assert-GeneratedApplicationNativeReady -EvidenceParent $fixture } catch { $rejected=$true }
         Assert-NativeFixture $rejected 'a preserved prearm blocks the next admission without querying processes'
         $checks++
+        # Disclosed synthetic outcome: exercise the same retention seam without
+        # a native handle. A terminal-file directory cannot erase the original
+        # supplied zero outcome from the independent record or error fallback.
+        $retention=Join-Path $fixture 'retention'
+        $null=[IO.Directory]::CreateDirectory((Join-Path $retention 'terminal.json'))
+        $failures=[Collections.Generic.List[Exception]]::new()
+        $synthetic=[pscustomobject]@{Started=$true; NativeTerminalObserved=$true; NativeExitCode=0; Lines=@('synthetic private line')}
+        $original=Save-GeneratedApplicationNativeOutcome -Directory $retention -Identity ([pscustomobject]@{Started=$true; Pid=0; Fixture=$true}) `
+            -Outcome $synthetic -Failures $failures -ObserveTerminal { throw 'synthetic observer failure' }
+        $saved=Get-Content -LiteralPath (Join-Path $retention 'original-native-outcome.json') -Raw | ConvertFrom-Json
+        Assert-NativeFixture ($saved.outcome.NativeExitCode -eq 0 -and $saved.outcome.NativeTerminalObserved -and $saved.identity.Fixture) 'independent retention preserves the disclosed synthetic zero outcome'
+        Assert-NativeFixture ($original.outcome.NativeExitCode -eq 0 -and $failures.Count -eq 2 -and $null -eq $saved.outcome.PSObject.Properties['Lines']) 'terminal and observer failures aggregate without leaking stream content into fallback metadata'
+        $checks+=2
     } finally {
         $expected=[IO.Path]::GetFullPath((Join-Path (Split-Path $PSScriptRoot) '.test-output'))
         if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($fixture)) -cne $expected) { throw 'Pure fixture cleanup is outside its owned boundary.' }
@@ -121,7 +134,8 @@ $encoding='[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]:
 [IO.File]::WriteAllText($leaf,($encoding+$scripts[$Case]),[Text.UTF8Encoding]::new($false))
 $arguments=@('-NoLogo','-NoProfile','-File',$leaf)
 $parameters=@{HostPath=(Join-Path $PSHOME 'pwsh.exe'); WorkingDirectory=$fixture; Arguments=$arguments;
-    TimeoutMs=10000; CleanupReserveMs=3000; AuthorityEnds=[DateTimeOffset]::UtcNow.AddSeconds(13)}
+    TimeoutMs=10000; CleanupReserveMs=3000; AuthorityEnds=[DateTimeOffset]::UtcNow.AddSeconds(13);
+    ObserveTerminal={param($Identity,$Outcome) [Console]::WriteLine(('TEST.NATIVE.TERMINAL '+$Outcome.NativeExitCode+' observed='+$Outcome.NativeTerminalObserved+' forced='+$Outcome.TerminationAttempted)); [Console]::Out.Flush()}}
 if ($Case -eq 'EofInput') { $parameters.StandardInput='日本語 input' }
 if ($Case -eq 'Timeout') { $parameters.TimeoutMs=500; $parameters.AuthorityEnds=[DateTimeOffset]::UtcNow.AddMilliseconds(3500) }
 if ($Case -eq 'Overflow') { $parameters.MaximumLineCharacters=128; $parameters.MaximumTotalCharacters=256 }

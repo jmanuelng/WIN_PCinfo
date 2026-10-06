@@ -39,6 +39,31 @@ function Get-GeneratedApplicationNativeBudget {
     [pscustomobject]@{AuthorityEnds=$AuthorityEnds; TimeoutMs=$TimeoutMs; CleanupReserveMs=$CleanupReserveMs}
 }
 
+function Save-GeneratedApplicationNativeOutcome {
+    param([Parameter(Mandatory)] [string] $Directory, [Parameter(Mandatory)] $Identity,
+        [AllowNull()] $Outcome, [Parameter(Mandatory)] [AllowEmptyCollection()] [Collections.Generic.List[Exception]] $Failures,
+        [scriptblock] $ObserveTerminal)
+    $terminal=if ($null -ne $Outcome) { $Outcome | Select-Object -Property * -ExcludeProperty Lines } else {
+        [ordered]@{Started=$Identity.Started; NativeTerminalObserved=$false}
+    }
+    # An admitted observer can flush the actual handle outcome before fallible
+    # retention. Its pipeline output is suppressed; normal callers get no new
+    # console metadata or return values. Observer failures cannot erase exit.
+    if ($null -ne $Outcome -and $null -ne $ObserveTerminal) {
+        try { & $ObserveTerminal $Identity $Outcome | Out-Null } catch { $Failures.Add($_.Exception) }
+    }
+    $record=[ordered]@{identity=$Identity; outcome=$terminal}
+    foreach ($name in @('original-native-outcome.json','terminal.json')) {
+        try {
+            $value=if ($name -eq 'terminal.json') { $terminal } else { $record }
+            [IO.File]::WriteAllText((Join-Path $Directory $name),($value | ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
+        } catch { $Failures.Add($_.Exception) }
+    }
+    # errors.json receives the same actual in-memory snapshot as an independent
+    # retention fallback. Nothing reloads these files to infer native completion.
+    [pscustomobject]$record
+}
+
 function Invoke-GeneratedApplicationNative {
     param([Parameter(Mandatory)] [string] $HostPath,
         [Parameter(Mandatory)] [string] $WorkingDirectory,
@@ -48,7 +73,7 @@ function Invoke-GeneratedApplicationNative {
         [DateTimeOffset] $AuthorityEnds = [DateTimeOffset]::MinValue,
         [int] $MaximumLines = 65536, [int] $MaximumLineCharacters = 16777216,
         [int] $MaximumTotalCharacters = 33554432,
-        [scriptblock] $ObserveStartup)
+        [scriptblock] $ObserveStartup, [scriptblock] $ObserveTerminal)
 
     # Test execution is separate from product collection limits. The default
     # reserves the product's 60-minute ceiling plus two minutes for termination
@@ -130,10 +155,8 @@ function Invoke-GeneratedApplicationNative {
     }
     # Each terminal/stream/error write is attempted independently after the
     # actual original-handle outcome; files never substitute for native exit.
-    try {
-        $terminal=if ($null -ne $outcome) { $outcome | Select-Object -Property * -ExcludeProperty Lines } else { [ordered]@{Started=$owner.StartedIdentity.Started; NativeTerminalObserved=$false} }
-        [IO.File]::WriteAllText((Join-Path $directory 'terminal.json'),($terminal | ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
-    } catch { $failures.Add($_.Exception) }
+    $original=Save-GeneratedApplicationNativeOutcome -Directory $directory -Identity $owner.StartedIdentity -Outcome $outcome `
+        -Failures $failures -ObserveTerminal $ObserveTerminal
     try {
         if ($null -ne $outcome) {
             $writer=[IO.StreamWriter]::new((Join-Path $directory 'streams.jsonl'),$false,[Text.UTF8Encoding]::new($false,$true))
@@ -141,7 +164,7 @@ function Invoke-GeneratedApplicationNative {
         }
     } catch { $failures.Add($_.Exception) }
     try {
-        $errorRecord=[ordered]@{startRequested=$startRequested; started=$owner.StartedIdentity.Started;
+        $errorRecord=[ordered]@{startRequested=$startRequested; started=$owner.StartedIdentity.Started; original=$original;
             failures=@($failures | ForEach-Object { [ordered]@{type=$_.GetType().FullName; message=$_.Message} })}
         [IO.File]::WriteAllText((Join-Path $directory 'errors.json'),($errorRecord | ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
     } catch { $failures.Add($_.Exception) }
