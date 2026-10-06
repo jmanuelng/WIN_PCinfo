@@ -63,6 +63,9 @@ function Get-ControlledRunLockAdmission {
     if ([string]$Arguments['PreparedManifestSha256'] -cnotmatch '\A[a-f0-9]{64}\z') {
         throw 'Controlled run lock requires a canonical prepared manifest digest.'
     }
+    if ($cohort -cne [string]$Arguments['PreparedManifestSha256']) {
+        throw 'Controlled run lock cohort must match the pinned prepared manifest digest.'
+    }
     $remote='RemoteSourceScenario' -in $Arguments.Keys
     $platform='PlatformSourceScenario' -in $Arguments.Keys
     if ($remote -eq $platform -or

@@ -31,7 +31,7 @@ $cohort='a'*64
 $namespace='Local\WINPCInfo-Qualification-'+$cohort+'-worker1'
 $binding=@{
     ControlledRunLockNamespace=$namespace; CandidatePath='candidate.ps1'
-    PreparedManifestPath='prepared.json'; PreparedManifestSha256='b'*64
+    PreparedManifestPath='prepared.json'; PreparedManifestSha256=$cohort
     QualificationPath='controlled.json'; RemoteSourceScenario='Configured'
 }
 $admission=Get-ControlledRunLockAdmission -Namespace $namespace -Arguments $binding
@@ -72,6 +72,9 @@ foreach($empty in @('CandidatePath','PreparedManifestPath','PreparedManifestSha2
 }
 $invalid=$binding.Clone();$invalid.PreparedManifestSha256='B'*64
 Assert-ControlledLockRefused {Get-ControlledRunLockAdmission -Namespace $namespace -Arguments $invalid} 'Noncanonical manifest digest must fail.'
+$invalid=$binding.Clone();$invalid.PreparedManifestSha256='b'*64
+Assert-ControlledLockRefused {Get-ControlledRunLockAdmission -Namespace $namespace -Arguments $invalid} 'Stale valid namespace cohort must fail against another manifest.'
+Assert-ControlledLockRefused {& $bindingReplay @invalid} 'Actual parameter binding must reject a stale cohort.'
 $invalid=$binding.Clone();$invalid.PlatformSourceScenario='Running'
 Assert-ControlledLockRefused {Get-ControlledRunLockAdmission -Namespace $namespace -Arguments $invalid} 'Two source cases must fail.'
 $invalid=$binding.Clone();$invalid.Remove('RemoteSourceScenario')
