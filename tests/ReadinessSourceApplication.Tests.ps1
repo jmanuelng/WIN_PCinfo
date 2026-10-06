@@ -25,5 +25,5 @@ foreach ($case in $cases) {
     Write-Output ('PASS: readiness source {0}; elapsed seconds {1:N1}.' -f $case, $watch.Elapsed.TotalSeconds)
 }
 }
-catch { $candidateUseError=$_; throw }
+catch { $candidateUseError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
