@@ -69,6 +69,83 @@ function Get-EffectivePolicyPrivacyDiagnostic {
     }
 }
 
+function Test-EffectivePolicyPublicOutputPrivacy {
+    param([string] $StandardOutput, [string] $Pattern)
+    # All original non-port alternatives retain their raw-output scope. Port
+    # digits may occur in public metadata, so only exact owner/path/type/shape
+    # exceptions apply; unknown fields and property names stay fail-closed.
+    $portAlternatives='|5985|5986|'
+    if ([regex]::Matches($Pattern,[regex]::Escape($portAlternatives)).Count -ne 1) {
+        throw 'Policy privacy port alternatives changed.'
+    }
+    if ($StandardOutput -match $Pattern.Replace($portAlternatives,'|')) { return $true }
+    $policyCountNames=@('appliedPolicyCount','auditCatalogCount','userRightCatalogCount',
+        'securityOptionCatalogCount','antivirusProviderCount','firewallProfileCount',
+        'asrRuleCount','bitLockerProtectorTypeCount','wdacPolicyCount',
+        'appLockerGpCollectionCount','appLockerCspCollectionCount')
+    foreach ($line in [regex]::Matches($StandardOutput,'(?m)^[^\r\n]+')) {
+        if ($line.Value -notmatch '5985|5986') { continue }
+        try { $record=ConvertFrom-Json -InputObject $line.Value -Depth 20 -DateKind String }
+        catch { return $true }
+        $typeProperty=$record.PSObject.Properties['recordType']
+        $versionProperty=$record.PSObject.Properties['contractVersion']
+        $type=$(if ($null -ne $typeProperty) { [string]$typeProperty.Value } else { '' })
+        $knownVersion=$null -ne $versionProperty -and $versionProperty.Value -ceq '1.0.0'
+        $counterPaths=@()
+        $digestPaths=@()
+        if ($knownVersion -and $type -ceq 'win-pcinfo.progress') {
+            $counterPaths=@('$["sequence"]','$["completion"]["completedUnits"]','$["completion"]["totalUnits"]')
+        }
+        elseif ($knownVersion -and $type -ceq 'win-pcinfo.effective-policy-validation') {
+            $counterPaths=@($policyCountNames | ForEach-Object { '$["'+$_+'"]' })
+        }
+        elseif ($knownVersion -and $type -ceq 'win-pcinfo.terminal') {
+            $digestPaths=@('$["requestDigest"]','$["planDigest"]')
+        }
+        elseif ($knownVersion -and $type -ceq 'win-pcinfo.preparation-summary') {
+            $digestPaths=@('$["requestDigest"]','$["planDigest"]','$["plan"]["requestDigest"]',
+                '$["plan"]["network"]["context"]["snapshotDigest"]',
+                '$["plan"]["integrity"]["embeddedDefinitionSha256"]',
+                '$["plan"]["integrity"]["applicationManifestSha256"]')
+        }
+        $state=[pscustomobject]@{rejected=$false}
+        function Test-PrivacyPortProperty($Value, [string] $Path) {
+            if ($Value -is [pscustomobject]) {
+                foreach ($property in $Value.PSObject.Properties) {
+                    if ($property.Name -match '5985|5986') { $state.rejected=$true }
+                    Test-PrivacyPortProperty -Value $property.Value -Path ($Path+'['+($property.Name | ConvertTo-Json -Compress)+']')
+                }
+            }
+            elseif ($Value -is [array]) {
+                for ($index=0; $index -lt $Value.Count; $index++) {
+                    Test-PrivacyPortProperty -Value $Value[$index] -Path ($Path+'['+$index+']')
+                }
+            }
+            elseif ((ConvertTo-Json -InputObject $Value -Compress -Depth 20) -match '5985|5986') {
+                $allowed=$false
+                if ($counterPaths -ccontains $Path -and ($Value -is [int] -or $Value -is [long]) -and $Value -ge 0) {
+                    $allowed=$true
+                }
+                elseif (($digestPaths -ccontains $Path -or ($knownVersion -and $type -ceq 'win-pcinfo.preparation-summary' -and
+                    $Path -cmatch '^\$\["plan"\]\[(?:"governingResources"|"integrity"\]\["applicationResources")\]\[[0-9]+\]\["sha256"\]$')) -and
+                    $Value -is [string] -and $Value -cmatch '^[0-9a-f]{64}$') {
+                    $allowed=$true
+                }
+                elseif ($knownVersion -and $type -ceq 'win-pcinfo.progress' -and $Path -ceq '$["time"]' -and
+                    $Value -is [string] -and $Value -cmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}[+-]\d{2}:\d{2}$') {
+                    $parsedTime=[DateTimeOffset]::MinValue
+                    $allowed=[DateTimeOffset]::TryParseExact($Value,'o',[Globalization.CultureInfo]::InvariantCulture,
+                        [Globalization.DateTimeStyles]::None,[ref]$parsedTime)
+                }
+                if (-not $allowed) { $state.rejected=$true }
+            }
+        }
+        Test-PrivacyPortProperty -Value $record -Path '$'
+        if ($state.rejected) { return $true }
+    }
+    return $false
+}
+
 $candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
     -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
 $candidatePath=$candidateContext.Path
@@ -216,7 +293,7 @@ foreach($case in $cases){
     Assert-Equal $true $validation[0].protectedPackageVerified "$($case.scenario) reopens the protected package"
     Assert-Equal $true $validation[0].validationCleanupVerified "$($case.scenario) proves validation residue absent"
     $policyPrivacyPattern='(?i)6ac1786c|7f7d1f60|LocalGPO|synthetic-(?:domain|user|computer)-link|local-machine|bounded-link-[0-9]+|registry:(?:[0-9a-f-]{36}|bounded-setting-[0-9]+)|S-1-5-(?:18|19|20|21-[0-9-]+|32-54[46])|RecoveryPassword|NumericalPassword|TpmPin|XtsAes(?:128|256)?|PolicyXml|RuleCollectionXml|5985|5986|DisableDualScan|NtlmMin(?:Client|Server)Sec'
-    if($result.StandardOutput -match $policyPrivacyPattern){
+    if(Test-EffectivePolicyPublicOutputPrivacy -StandardOutput $result.StandardOutput -Pattern $policyPrivacyPattern){
         $privacyFailure=[InvalidOperationException]::new("$($case.scenario) leaked Restricted policy evidence into public output.")
         if ($env:WINPCINFO_TEST_EVIDENCE) {
             try {
