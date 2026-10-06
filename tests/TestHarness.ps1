@@ -29,7 +29,7 @@ function Get-TestCandidateInputInventory {
             $paths.Add([IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/'))
         }
     }
-    foreach ($path in @('README.md','CONTRIBUTING.md','package.json','package-lock.json','LICENSE',
+    foreach ($path in @('README.md','SECURITY.md','CONTRIBUTING.md','package.json','package-lock.json','LICENSE',
         'tests/TestHarness.ps1','tests/StatusDeskEngine.Tests.ps1','tests/Invoke-AssessmentSafetyQualification.ps1',
         'tests/QualificationDiskBounds.ps1','tests/qualification-resource-writers.json')) {
         if ([IO.File]::Exists((Join-Path $root $path))) { $paths.Add($path) }

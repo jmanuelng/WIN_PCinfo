@@ -3,6 +3,7 @@ param([string] $HarnessPath = (Join-Path $PSScriptRoot 'TestHarness.ps1'))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . $HarnessPath
+. (Join-Path (Split-Path $PSScriptRoot) 'build/PortableDistribution.ps1')
 $parent=Join-Path (Split-Path $PSScriptRoot) '.test-output'
 $root=Join-Path $parent ('prepared-input-'+[guid]::NewGuid().ToString('N'))
 $null=[IO.Directory]::CreateDirectory($root)
@@ -13,6 +14,7 @@ try {
     foreach ($directory in @('src','build','schemas','docs','tests')) { $null=[IO.Directory]::CreateDirectory((Join-Path $repository $directory)) }
     [IO.File]::WriteAllText((Join-Path $repository 'src/Fixture.ps1'),'# synthetic source')
     [IO.File]::WriteAllText((Join-Path $repository 'docs/fixture.json'),'{"synthetic":true}')
+    [IO.File]::WriteAllText((Join-Path $repository 'SECURITY.md'),'synthetic packaged security guidance')
     # This bounded fixture substitutes the build owner only; it executes no
     # generated application, provider, task or native child.
     [IO.File]::WriteAllText((Join-Path $repository 'build/Build.ps1'),@'
@@ -31,7 +33,11 @@ param([string] $OutputPath)
     function Assert-FixtureRefusal {
         param([scriptblock] $Action,[string] $Because)
         $refused=$false
-        try { & $Action } catch { $refused=$true }
+        try {
+            $unexpected=& $Action
+            if ($null -ne $unexpected -and $null -ne $unexpected.PSObject.Properties['Stream']) { $unexpected.Stream.Dispose() }
+        }
+        catch { $refused=$true }
         Assert-Equal $true $refused $Because
     }
     $original=New-PreparedTestCandidateManifest -RepositoryRoot $repository -CandidatePath $candidate
@@ -55,7 +61,7 @@ param([string] $OutputPath)
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository -CandidatePath $candidate -PreparedManifestPath (Join-Path $root 'missing.json') -PreparedManifestSha256 $pin } 'missing manifest cannot fall back to a build'
     $checks+=5
 
-    foreach ($path in @('src/Fixture.ps1','docs/fixture.json','build/Build.ps1')) {
+    foreach ($path in @('src/Fixture.ps1','docs/fixture.json','build/Build.ps1','SECURITY.md')) {
         $literal=Join-Path $repository $path
         $saved=[IO.File]::ReadAllBytes($literal)
         try {
@@ -110,6 +116,19 @@ param([string] $OutputPath)
     Assert-Equal $true $retainedCause 'candidate finalization retains an ordinary body failure'
     Assert-Equal $false ([IO.Directory]::Exists($failed.OwnedDirectory)) 'verified output cleanup completes despite an ordinary body failure'
     $checks+=2
+
+    # Check closure against the existing package owner, rather than maintaining
+    # a competing list of packaged documentation, schemas and release resources.
+    $actualRepository=Split-Path $PSScriptRoot
+    $policy=Get-PortableDistributionPolicy -RepositoryRoot $actualRepository
+    $inputPaths=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($inputFile in @(Get-TestCandidateInputInventory -RepositoryRoot $actualRepository)) { $null=$inputPaths.Add($inputFile.path) }
+    $packagedInputs=@(Get-PortableSourceTreeFiles -RepositoryRoot $actualRepository -Policy $policy | ForEach-Object SourcePath)
+    $packagedInputs+=@($policy.helperSourcePath,$policy.firstRunSourcePath,'build/RuntimeHost.ps1','build/Start-WIN-PCInfo.cmd')
+    foreach ($sourcePath in $packagedInputs) {
+        Assert-Equal $true ($inputPaths.Contains($sourcePath)) "prepared inventory covers actual packaged input: $sourcePath"
+    }
+    $checks++
 
     [IO.File]::WriteAllText((Join-Path $repository 'build/Build.ps1'),"throw 'Synthetic failed build'")
     Assert-FixtureRefusal { Open-TestCandidate -RepositoryRoot $repository } 'a failed standalone fixture build cannot return an admitted candidate'
