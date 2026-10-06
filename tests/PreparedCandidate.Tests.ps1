@@ -132,7 +132,7 @@ param([string] $OutputPath)
         # fixture build. Only the blocker destination is substituted, into this
         # owned fake repository; no real unsafe hold is cleared or reused.
         $runnerAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Run-Tests.ps1'),[ref]$null,[ref]$null)
-        foreach ($name in @('Open-TestSuiteCandidate','Close-TestSuiteCandidate')) {
+        foreach ($name in @('Open-TestSuiteCandidate','Close-TestSuiteCandidate','Save-TestSuitePreparedManifest')) {
             $definition=$runnerAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
             . ([scriptblock]::Create($definition.Extent.Text))
         }
@@ -159,9 +159,62 @@ param([string] $OutputPath)
             Assert-Equal 'built;' ([IO.File]::ReadAllText($counter)) 'partial input refusal cannot build'
             Assert-FixtureRefusal { Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds ([DateTimeOffset]::UtcNow) } 'expired authority refuses before passive build'
             Assert-Equal 'built;' ([IO.File]::ReadAllText($counter)) 'authority refusal cannot build'
+            $archive=Join-Path $repository '.test-output/default-preparation-archive'
+            $null=[IO.Directory]::CreateDirectory($archive)
+            $retainedPins=@(Save-TestSuitePreparedManifest -Context $suite -EvidenceRoot $archive)
+            Assert-Equal 2 $retainedPins.Count 'raw manifest and independent origin record are closed file inputs'
+            Assert-Equal $suite.PreparedManifestSha256 (Get-FileHash -LiteralPath (Join-Path $archive 'suite-prepared-candidate-manifest.json')).Hash.ToLowerInvariant() 'retained manifest preserves exact held bytes and admitted digest'
+            $origin=Read-TestNativeRecord -Path (Join-Path $archive 'suite-candidate-preparation.json')
+            Assert-Equal $true ($origin.rawRetentionVerified -and $origin.mode -ceq 'DefaultPassiveBuild' -and $origin.candidate.path -ceq $suite.CandidatePath -and $origin.candidate.sha256 -ceq $suite.Candidate.Sha256) 'retained origin links actual default candidate and raw manifest without rebuilding'
+            $explicit=Open-TestSuiteCandidate -RepositoryRoot $repository -CandidatePath $suite.CandidatePath -PreparedManifestPath $suite.PreparedManifestPath -PreparedManifestSha256 $suite.PreparedManifestSha256 -AuthorityEnds $authority
+            $suiteContexts.Add($explicit)
+            $explicitArchive=Join-Path $repository '.test-output/explicit-preparation-archive'
+            $null=[IO.Directory]::CreateDirectory($explicitArchive)
+            $null=Save-TestSuitePreparedManifest -Context $explicit -EvidenceRoot $explicitArchive
+            Assert-Equal 'ExplicitPrepared' (Read-TestNativeRecord -Path (Join-Path $explicitArchive 'suite-candidate-preparation.json')).mode 'explicit mode retains its exact supplied manifest attribution'
+            Close-TestSuiteCandidate -Context $explicit -Unsafe $false
             Close-TestSuiteCandidate -Context $suite -Unsafe $false
             $suiteContexts.Clear()
             Assert-Equal $false ([IO.Directory]::Exists($suite.Candidate.OwnedDirectory)) 'verified root finalization closes both handles before owned output removal'
+            Assert-Equal $true ([IO.File]::Exists((Join-Path $archive 'suite-prepared-candidate-manifest.json'))) 'raw suite evidence remains independently after normal candidate removal'
+
+            $suite=Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds $authority
+            $suiteContexts.Add($suite)
+            foreach ($fault in @('MissingStream','HashDrift','RawWriteDenied','BothWritesDenied')) {
+                $failedArchive=Join-Path $repository ('.test-output/retention-'+$fault)
+                $null=[IO.Directory]::CreateDirectory($failedArchive)
+                $savedStream=$suite.ManifestStream; $savedPin=$suite.PreparedManifestSha256
+                switch ($fault) {
+                    MissingStream { $suite.ManifestStream=$null }
+                    HashDrift { $suite.PreparedManifestSha256='0'*64 }
+                    RawWriteDenied { $null=[IO.Directory]::CreateDirectory((Join-Path $failedArchive 'suite-prepared-candidate-manifest.json')) }
+                    BothWritesDenied {
+                        $null=[IO.Directory]::CreateDirectory((Join-Path $failedArchive 'suite-prepared-candidate-manifest.json'))
+                        $null=[IO.Directory]::CreateDirectory((Join-Path $failedArchive 'suite-candidate-preparation.json'))
+                    }
+                }
+                $retentionError=$null
+                try { Save-TestSuitePreparedManifest -Context $suite -EvidenceRoot $failedArchive | Out-Null }
+                catch { $retentionError=$_ }
+                finally { $suite.ManifestStream=$savedStream; $suite.PreparedManifestSha256=$savedPin }
+                Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $retentionError.Exception) "manifest $fault refuses admission as unsafe"
+                Assert-Equal $true ([IO.Directory]::Exists($suite.Candidate.OwnedDirectory)) "manifest $fault does not discard candidate evidence"
+                if ($fault -eq 'BothWritesDenied') {
+                    Assert-Equal 2 $retentionError.Exception.InnerExceptions.Count 'independent raw and origin failures aggregate without masking either original cause'
+                }
+                else {
+                    $failedOrigin=Read-TestNativeRecord -Path (Join-Path $failedArchive 'suite-candidate-preparation.json')
+                    Assert-Equal $false $failedOrigin.rawRetentionVerified "manifest $fault retains explicit failed origin without claiming a valid archive"
+                }
+            }
+            $originalRetention=$retentionError
+            $finalError=$null
+            try { Close-TestSuiteCandidate -Context $suite -BodyError $originalRetention -Unsafe $true | Out-Null }
+            catch { $finalError=$_.Exception }
+            Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $finalError) 'failed retention remains unsafe through suite candidate finalization'
+            Assert-Equal 2 @($finalError.Flatten().InnerExceptions | Where-Object { $_ -in $originalRetention.Exception.InnerExceptions }).Count 'finalization retains both original retention exceptions'
+            Assert-Equal $true ([IO.Directory]::Exists($suite.Candidate.OwnedDirectory)) 'unsafe retention finalization preserves owned candidate and original manifest'
+            $suiteContexts.Clear()
 
             $suite=Open-TestSuiteCandidate -RepositoryRoot $repository -AuthorityEnds $authority
             $suiteContexts.Add($suite)
@@ -218,7 +271,7 @@ throw 'Synthetic original build failure with owned lock'
             }
             [IO.File]::WriteAllBytes($buildPath,$savedBuild)
         }
-        23
+        43
     }
     $checks+=Invoke-SuitePreparationControls
 

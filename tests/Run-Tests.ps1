@@ -151,6 +151,55 @@ function Close-TestSuiteCandidate {
     Close-TestCandidate -Candidate $Context.Candidate -BodyError $failure
 }
 
+function Save-TestSuitePreparedManifest {
+    param([Parameter(Mandatory)] $Context, [Parameter(Mandatory)] [string] $EvidenceRoot)
+    $failures=[Collections.Generic.List[Exception]]::new()
+    $rawPath=Join-Path $EvidenceRoot 'suite-prepared-candidate-manifest.json'
+    $originPath=Join-Path $EvidenceRoot 'suite-candidate-preparation.json'
+    $retained=$false
+    $length=0L
+    $observedDigest=$null
+    try {
+        if ($null -eq $Context.ManifestStream -or $Context.ManifestStream.Length -gt 2MB) { throw 'Suite prepared manifest has no admitted bounded held stream.' }
+        $length=$Context.ManifestStream.Length
+        $bytes=[byte[]]::new([int]$length)
+        $Context.ManifestStream.Position=0
+        $Context.ManifestStream.ReadExactly($bytes)
+        $Context.ManifestStream.Position=0
+        $observedDigest=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+        if ($observedDigest -cne $Context.PreparedManifestSha256) { throw 'Held suite manifest bytes differ from the admitted pin.' }
+        $stream=[IO.File]::Open($rawPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+        try { $stream.Write($bytes); $stream.Flush($true) } finally { $stream.Dispose() }
+        if ((Get-Item -LiteralPath $rawPath).Length -ne $length -or
+            (Get-FileHash -LiteralPath $rawPath).Hash.ToLowerInvariant() -cne $Context.PreparedManifestSha256) { throw 'Exact raw suite manifest retention differs.' }
+        $retained=$true
+    }
+    catch { $failures.Add($_.Exception) }
+    # The origin attempt is independent of raw retention. A failed archive is
+    # recorded as failed, while all original pins and causes remain available.
+    try {
+        Write-TestNativeNewRecord -Path $originPath -Value ([ordered]@{
+            contract='win-pcinfo.suite-candidate-preparation/1.0.0';
+            mode=$(if ($Context.Candidate.Prepared) {'ExplicitPrepared'} else {'DefaultPassiveBuild'});
+            candidate=[ordered]@{path=$Context.CandidatePath; bytes=$Context.Candidate.Stream.Length; sha256=$Context.Candidate.Sha256};
+            originalManifest=[ordered]@{path=$Context.PreparedManifestPath; bytes=$length; sha256=$Context.PreparedManifestSha256};
+            retainedManifest=[ordered]@{path=$rawPath; bytes=$length; sha256=$Context.PreparedManifestSha256};
+            observedManifestSha256=$observedDigest; rawRetentionVerified=$retained;
+            failures=@($failures | ForEach-Object Message)
+        })
+    }
+    catch { $failures.Add($_.Exception) }
+    if ($failures.Count) {
+        $exception=[AggregateException]::new('Suite prepared manifest retention failed before file admission.',$failures.ToArray())
+        $exception.Data['OwnedCleanupUnverified']=$true
+        throw $exception
+    }
+    foreach ($path in @($rawPath,$originPath)) {
+        [pscustomobject][ordered]@{path=$path; bytes=(Get-Item -LiteralPath $path).Length;
+            sha256=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}
+    }
+}
+
 Assert-QualificationCleanupReady
 $repository=Split-Path -Parent $PSScriptRoot
 Assert-TestNativeRoleReady -NativeRole TestFile -RepositoryRoot $repository
@@ -203,6 +252,7 @@ try {
     $CandidatePath=$candidate.CandidatePath
     $PreparedManifestPath=$candidate.PreparedManifestPath
     $PreparedManifestSha256=$candidate.PreparedManifestSha256
+    foreach ($inputPin in @(Save-TestSuitePreparedManifest -Context $candidate -EvidenceRoot $evidenceRoot)) { $inputs.Add($inputPin) }
     $manifest=Read-TestNativeRecord -Path $PreparedManifestPath
     foreach ($inputPin in $manifest.inputs) {
         $path=Join-Path $repository $inputPin.path
