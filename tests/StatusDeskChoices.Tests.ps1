@@ -123,7 +123,7 @@ $probeState=@{Owner=$window;Modal=$null;Timer=$null;ModalTimer=$null;TimerHandle
     Expected='';Trigger=$null;ModalEnds=$probeEnd;BodyError=$null;StopError=$null;ModalStopError=$null;
     CloseErrors=[Collections.Generic.List[Exception]]::new();RetentionErrors=[Collections.Generic.List[Exception]]::new();
     EvidenceDirectory=$probeDirectory;DirectoryAllocationAttempted=$false;DirectoryCreated=$false;Frames=0;CaptureBytes=0L;
-    Observations=[Collections.Generic.List[object]]::new();InitialObserved=$false;
+    Observations=[Collections.Generic.List[object]]::new();InitialObserved=$false;MinimumReportControlGeometry=$null;
     Unsafe=$false;Artifacts=[Collections.Generic.List[object]]::new();FinalArtifactInventory=$null}
 $probeBodyError=$null
 $probeCases=@(
@@ -274,6 +274,42 @@ function Observe-ChoicesOwnedWindow {
     $area=[System.Windows.SystemParameters]::WorkArea
     Assert-Equal $true ($ObservedWindow.IsVisible -and $ObservedWindow.ActualWidth -gt 0 -and $ObservedWindow.ActualHeight -gt 0) "$Surface is genuinely rendered"
     Assert-Equal $true ($ObservedWindow.ActualWidth -le $area.Width+1 -and $ObservedWindow.ActualHeight -le $area.Height+1) "$Surface dimensions fit the actual work area"
+    if ($Surface -ceq 'OwnerMinimumSize') {
+        # Disabled report controls are skipped by focus traversal. Measure their
+        # existing rectangles before any synthetic scrolling can relocate them.
+        $viewport=$ObservedWindow.Content
+        $probeState.MinimumReportControlGeometry=[ordered]@{
+            surface=$Surface;coordinateTarget='ExactOwnedWindow.Content';measuredBeforeTraversal=$true;
+            bringIntoViewUsed=$false;windowWidth=[double]$ObservedWindow.ActualWidth;
+            windowHeight=[double]$ObservedWindow.ActualHeight;minimumWidth=[double]$ObservedWindow.MinWidth;
+            minimumHeight=[double]$ObservedWindow.MinHeight;viewportWidth=$null;viewportHeight=$null;
+            controls=@();completed=$false}
+        Assert-Equal $true ([object]::ReferenceEquals($ObservedWindow,$probeState.Owner)) 'minimum report geometry retains the exact owner'
+        Assert-Equal $true ($viewport -is [System.Windows.FrameworkElement] -and [object]::ReferenceEquals([System.Windows.Window]::GetWindow($viewport),$ObservedWindow)) 'minimum report geometry uses the exact owned client viewport'
+        $probeState.MinimumReportControlGeometry.viewportWidth=[double]$viewport.ActualWidth
+        $probeState.MinimumReportControlGeometry.viewportHeight=[double]$viewport.ActualHeight
+        Assert-Equal $true ($viewport.ActualWidth -gt 0 -and $viewport.ActualHeight -gt 0 -and -not [double]::IsNaN($viewport.ActualWidth) -and -not [double]::IsInfinity($viewport.ActualWidth) -and -not [double]::IsNaN($viewport.ActualHeight) -and -not [double]::IsInfinity($viewport.ActualHeight)) 'minimum report client viewport is measured and finite'
+        foreach($name in @('OpenReport','SaveHtml')) {
+            $control=$ObservedWindow.FindName($name)
+            $geometry=[ordered]@{name=$name;present=($null -ne $control);isVisible=$null;isEnabled=$null;
+                exactOwner=$false;bounds=$null;measurementSucceeded=$false;measurementError=$null;withinViewport=$false}
+            $probeState.MinimumReportControlGeometry.controls+=@($geometry)
+            Assert-Equal $true ($control -is [System.Windows.Controls.Button]) "$name exists as the actual report button at minimum size"
+            $geometry.isVisible=[bool]$control.IsVisible;$geometry.isEnabled=[bool]$control.IsEnabled
+            $geometry.exactOwner=[object]::ReferenceEquals([System.Windows.Window]::GetWindow($control),$ObservedWindow)
+            try {
+                $rect=$control.TransformToAncestor($viewport).TransformBounds([System.Windows.Rect]::new(0,0,$control.ActualWidth,$control.ActualHeight))
+                $geometry.bounds=[ordered]@{x=[double]$rect.X;y=[double]$rect.Y;width=[double]$rect.Width;height=[double]$rect.Height}
+                $geometry.measurementSucceeded=$true
+            }
+            catch {$geometry.measurementError=[ordered]@{type=$_.Exception.GetType().FullName;message=$_.Exception.Message};throw}
+            $geometry.withinViewport=($rect.Width -gt 0 -and $rect.Height -gt 0 -and -not [double]::IsNaN($rect.X) -and -not [double]::IsInfinity($rect.X) -and -not [double]::IsNaN($rect.Y) -and -not [double]::IsInfinity($rect.Y) -and -not [double]::IsInfinity($rect.Width) -and -not [double]::IsInfinity($rect.Height) -and $rect.Left -ge -1 -and $rect.Top -ge -1 -and $rect.Right -le $viewport.ActualWidth+1 -and $rect.Bottom -le $viewport.ActualHeight+1)
+            Assert-Equal $true ($geometry.exactOwner -and $geometry.isVisible) "$name remains visible in the exact owning window at minimum size"
+            Assert-Equal $false $geometry.isEnabled "$name remains honestly disabled before a report is available"
+            Assert-Equal $true $geometry.withinViewport "$name rectangle fits the client viewport at minimum size without synthetic scrolling"
+        }
+        $probeState.MinimumReportControlGeometry.completed=$true
+    }
     $moves=[Collections.Generic.List[object]]::new()
     foreach ($direction in @('Next','Previous')) {
         for ($step=0;$step -lt 24;$step++) {
@@ -296,7 +332,8 @@ function Observe-ChoicesOwnedWindow {
     }
     $probeState.Observations.Add([ordered]@{surface=$Surface;actualWidth=$ObservedWindow.ActualWidth;
         actualHeight=$ObservedWindow.ActualHeight;workAreaWidth=$area.Width;workAreaHeight=$area.Height;
-        dpiX=$dpi.PixelsPerInchX;dpiY=$dpi.PixelsPerInchY;syntheticTraversal=$moves.ToArray();physicalKeyboardAccepted=$false})
+        dpiX=$dpi.PixelsPerInchX;dpiY=$dpi.PixelsPerInchY;syntheticTraversal=$moves.ToArray();physicalKeyboardAccepted=$false;
+        reportControlGeometry=if($Surface -ceq 'OwnerMinimumSize'){$probeState.MinimumReportControlGeometry}else{$null}})
     if ($Capture -and $probeState.Frames -lt 5) {
         $scale=[Math]::Min(1,[Math]::Min(1920/($ObservedWindow.ActualWidth*$dpi.DpiScaleX),1080/($ObservedWindow.ActualHeight*$dpi.DpiScaleY)))
         $width=[Math]::Max(1,[int][Math]::Ceiling($ObservedWindow.ActualWidth*$dpi.DpiScaleX*$scale))
@@ -356,7 +393,7 @@ try {
             try {Write-ChoicesModalObservationRecord -Name 'callback-failure.json' -Value ([ordered]@{
                 type=$probeState.BodyError.Exception.GetType().FullName;case=$probeState.Next;
                 cleanupUnverified=(Test-QualificationCleanupUnverified $probeState.BodyError.Exception);
-                nativeDispositionPending=$true})} catch {$probeState.RetentionErrors.Add($_.Exception)}
+                nativeDispositionPending=$true;minimumReportControlGeometry=$probeState.MinimumReportControlGeometry})} catch {$probeState.RetentionErrors.Add($_.Exception)}
             try {$probeState.Timer.Stop()} catch {$probeState.StopError=$_;Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
             try {if ($null -ne $probeState.ModalTimer) {$probeState.ModalTimer.Stop()}} catch {$probeState.ModalStopError=$_;Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
             # Retain ambiguity: never close a modal we could not attribute.
@@ -420,7 +457,7 @@ try {
             try {Write-ChoicesModalObservationRecord -Name 'callback-failure.json' -Value ([ordered]@{
                 type=$probeState.BodyError.Exception.GetType().FullName;case=$probeState.Next;
                 cleanupUnverified=(Test-QualificationCleanupUnverified $probeState.BodyError.Exception);
-                nativeDispositionPending=$true})} catch {$probeState.RetentionErrors.Add($_.Exception)}
+                nativeDispositionPending=$true;minimumReportControlGeometry=$probeState.MinimumReportControlGeometry})} catch {$probeState.RetentionErrors.Add($_.Exception)}
             try {$probeState.Timer.Stop()} catch {$probeState.StopError=$_;Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
             try {if ($null -ne $probeState.ModalTimer) {$probeState.ModalTimer.Stop()}} catch {$probeState.ModalStopError=$_;Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
             # Retain ambiguity: never close a modal we could not attribute.
@@ -456,7 +493,8 @@ finally {
                 completedCases=$probeState.Next;bodyFailed=($null -ne $probeBodyError);
                 bodyType=if($null -ne $probeBodyError){$probeBodyError.Exception.GetType().FullName}else{''};
                 observationCount=$probeState.Observations.Count;frames=$probeState.Frames;captureBytes=$probeState.CaptureBytes;
-                candidateFinalizationStillPending=$true;nativeLifetimeCertificationStillPending=$true;clientAcceptance=$false})
+                candidateFinalizationStillPending=$true;nativeLifetimeCertificationStillPending=$true;clientAcceptance=$false;
+                minimumReportControlGeometry=$probeState.MinimumReportControlGeometry})
         }
         if ($probeState.RetentionErrors.Count) {throw [AggregateException]::new('Callback error retention failed.',$probeState.RetentionErrors.ToArray())}
     } -Cleanup @(

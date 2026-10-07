@@ -1,7 +1,7 @@
 {
   "kind": "ControlledAssessmentClosedDiskWriterInventory",
   "version": "1.2.0",
-  "candidateSha256": "a2e73c6a19c7fa05aaae272ed12ce997c614f1acc90960acb6c7ecaa58946ce0",
+  "candidateSha256": "5447bdd9f65f1506e7830ade6613adcdd2101216372f8e9dd1a696d26a274cc0",
   "harnessSha256": "d46b1c242bc44e63cd5e627a7970851e3c974db241bda1db41ae83bae2c90f89",
   "scope": "OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses",
   "writers": [
