@@ -5,7 +5,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
-$hostPath=Resolve-WinPCInfoRuntime -ApplicationPath (Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1')
+$hostPath=Get-TestAdmittedRuntimeHost
 foreach ($case in $Scenario) {
     $watch=[Diagnostics.Stopwatch]::StartNew()
     Invoke-QualificationTestProcess -HostPath $hostPath -Arguments @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),'-NetworkSourceScenario',$case)

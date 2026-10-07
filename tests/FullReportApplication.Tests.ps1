@@ -14,7 +14,7 @@ if (-not $candidateContext.Prepared) {
     [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
     $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 }
-$runtime = Resolve-WinPCInfoRuntime -ApplicationPath $candidateContext.Path
+$runtime = Get-TestAdmittedRuntimeHost
 foreach ($outcome in @('AcceptedElevation','ElevationDenied')) {
     $arguments = @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),'-ReportContract','-PrivilegeOutcome',$outcome)
     if ($outcome -eq 'AcceptedElevation') { $arguments += @('-SoftwareReportScenario','Maximum') }

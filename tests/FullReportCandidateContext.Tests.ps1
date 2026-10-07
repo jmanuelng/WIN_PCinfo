@@ -27,9 +27,8 @@ function New-PreparedTestCandidateManifest {
     if($probe.mode -eq 'StandaloneManifestFailure'){throw $probe.bodyFailure}
     [ordered]@{contract='DisclosedPureFullReportContextOnly';candidate=$CandidatePath}
 }
-function Resolve-WinPCInfoRuntime {
-    param($ApplicationPath)
-    $probe.runtimePaths.Add($ApplicationPath)
+function Get-TestAdmittedRuntimeHost {
+    $probe.runtimePaths.Add($resolvedRuntime)
     if($probe.kind -in @('Runtime','RuntimeAndClose')){throw $probe.bodyFailure}
     $resolvedRuntime
 }
@@ -67,7 +66,7 @@ try {
     Assert-ReportContext ($tryStatements.Count -eq 1 -and $tryStatements[0].Finally.Extent.Text -ceq '{ Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }') 'One exact candidate context/body error must reach one shared finalizer.'
     $body=Normalize-ReportBody (@($tryStatements[0].Body.Statements | Select-Object -Skip 1).Extent.Text -join "`n")
     $pinLine='    $arguments += @(''-CandidatePath'',$candidateContext.Path,''-PreparedManifestPath'',$PreparedManifestPath,''-PreparedManifestSha256'',$PreparedManifestSha256)'
-    $body=$body.Replace($pinLine+"`n",'').Replace('$runtime = Resolve-WinPCInfoRuntime -ApplicationPath $candidateContext.Path','$runtime = Resolve-WinPCInfoRuntime -ApplicationPath (Join-Path (Split-Path $PSScriptRoot) ''artifacts/WIN-PCInfo.ps1'')')
+    $body=$body.Replace($pinLine+"`n",'').Replace('$runtime = Get-TestAdmittedRuntimeHost','$runtime = Resolve-WinPCInfoRuntime -ApplicationPath (Join-Path (Split-Path $PSScriptRoot) ''artifacts/WIN-PCInfo.ps1'')')
     $original=@'
 $runtime = Resolve-WinPCInfoRuntime -ApplicationPath (Join-Path (Split-Path $PSScriptRoot) 'artifacts/WIN-PCInfo.ps1')
 foreach ($outcome in @('AcceptedElevation','ElevationDenied')) {
@@ -125,7 +124,7 @@ foreach ($outcome in @('AcceptedElevation','ElevationDenied')) {
         }
         $beforeRuntime=$case.mode -eq 'StandaloneManifestFailure'
         Assert-ReportContext ($probe.runtimePaths.Count -eq $(if($beforeRuntime){0}else{1})) 'Runtime resolution follows successful candidate/manifest admission exactly once.'
-        if(-not $beforeRuntime){Assert-ReportContext ($probe.runtimePaths[0] -ceq $probe.context.Path) 'Runtime selection uses the admitted candidate rather than fixed/shared artifacts.'}
+        if(-not $beforeRuntime){Assert-ReportContext ($probe.runtimePaths[0] -ceq $resolvedRuntime) 'Transport selects the admitted host once; original leaf arguments below retain the exact candidate triple.'}
         $bodyFails=$case.kind -ne '' -or $beforeRuntime
         $expectedCount=if($beforeRuntime -or $case.kind -like 'Runtime*'){0}elseif($bodyFails){$case.at}else{2}
         Assert-ReportContext ($probe.calls.Count -eq $expectedCount) 'Original accepted→denied campaign stops at the exact failing boundary.'

@@ -3,7 +3,7 @@ param([string[]]$Scenario=@('Complete','DeniedUser','DeniedAllUsers','MsiDenied'
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$hostPath=Resolve-WinPCInfoRuntime -ApplicationPath (Join-Path (Split-Path $PSScriptRoot) 'artifacts/WIN-PCInfo.ps1')
+$hostPath=Get-TestAdmittedRuntimeHost
 foreach($case in $Scenario){
     $watch=[Diagnostics.Stopwatch]::StartNew()
     Invoke-QualificationTestProcess -HostPath $hostPath -Arguments @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),'-SoftwareSourceScenario',$case)

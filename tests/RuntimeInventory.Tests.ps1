@@ -38,7 +38,7 @@ $script:probeExecution = {
 }
 $probeAdapter = {
     param($Executable, $ApplicationPath)
-    if ($Executable -eq $hostPath) { return (Invoke-WinPCInfoRuntimeProbe -Executable $Executable -ApplicationPath $ApplicationPath) }
+    if ($Executable -eq $hostPath) { return (Invoke-TestRuntimeProbe -Executable $Executable -ApplicationPath $ApplicationPath) }
     Invoke-WinPCInfoRuntimeProbe -Executable $Executable -ApplicationPath $ApplicationPath `
         -ReadSignature $script:hostSignature -RunProbe $script:probeExecution
 }

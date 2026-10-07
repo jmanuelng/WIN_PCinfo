@@ -13,7 +13,7 @@ if (-not $candidateContext.Prepared) {
     [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
     $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 }
-$hostPath = Resolve-WinPCInfoRuntime -ApplicationPath $candidateContext.Path
+$hostPath = Get-TestAdmittedRuntimeHost
 $cases = @('Complete','Denied','NullLicense','MixedUnknownLicense','Bounded','Absent',
     'Unsupported','Malformed','Virtual','MicrosoftPhysical','FirmwareBounded',
     'TimedOut','MalformedOutput','OversizeOutput','Cancelled')

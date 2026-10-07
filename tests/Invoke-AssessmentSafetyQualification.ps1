@@ -19,7 +19,7 @@ if (-not $candidateContext.Prepared) {
     [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidate) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
     $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 }
-$hostPath = Resolve-WinPCInfoRuntime -ApplicationPath $candidate
+$hostPath = Resolve-TestRuntime -ApplicationPath $candidate
 $windowsPowerShellPath=Join-Path ([Environment]::GetFolderPath('Windows')) 'System32/WindowsPowerShell/v1.0/powershell.exe'
 $provenance = [ordered]@{
     sourceRevision = (& git -C $repositoryRoot rev-parse HEAD).Trim()

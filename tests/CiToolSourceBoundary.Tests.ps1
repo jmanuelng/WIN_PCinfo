@@ -6,7 +6,7 @@ $repositoryRoot=Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot 'src/PrivilegedCollectionPlan.ps1')
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 . (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
-$hostPath=Resolve-WinPCInfoRuntime -ApplicationPath (Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1')
+$hostPath=Get-TestAdmittedRuntimeHost
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseInput((Get-PrivilegedCollectionWorkerSource),[ref]$tokens,[ref]$errors)
 $node=$ast.Find({param($item) $item -is [Management.Automation.Language.FunctionDefinitionAst] -and $item.Name -eq 'Read-CiToolJson'},$false)

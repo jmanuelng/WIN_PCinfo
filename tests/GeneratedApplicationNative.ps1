@@ -474,9 +474,16 @@ function Invoke-GeneratedApplicationNative {
     # Raw argv, native streams and failure messages stay in this private test
     # directory. No inherited broad ACL is allowed when collection may start.
     $sid=Set-TestNativePrivateDirectory -Path $directory
-    if($NativeRole -ceq 'GeneratedApplication' -and -not $cmdRequested -and -not $PortableBootstrap -and
-        $Arguments.Count -ge 4 -and $Arguments[0] -ceq '-NoLogo' -and $Arguments[1] -ceq '-NoProfile' -and $Arguments[2] -ceq '-File'){
-        $scriptPath=[IO.Path]::GetFullPath($Arguments[3]);Assert-PortableEntryCmdOrdinaryPath -Path $scriptPath
+    $scriptArgumentIndex=$null
+    if ($Arguments.Count -ge 4 -and $Arguments[0] -ceq '-NoLogo' -and $Arguments[1] -ceq '-NoProfile' -and $Arguments[2] -ceq '-File') {
+        $scriptArgumentIndex=3
+    }
+    elseif ($Arguments.Count -ge 5 -and $Arguments[0] -ceq '-NoLogo' -and $Arguments[1] -ceq '-NoProfile' -and
+        $Arguments[2] -ceq '-NonInteractive' -and $Arguments[3] -ceq '-File') {
+        $scriptArgumentIndex=4
+    }
+    if($NativeRole -ceq 'GeneratedApplication' -and -not $cmdRequested -and -not $PortableBootstrap -and $null -ne $scriptArgumentIndex){
+        $scriptPath=[IO.Path]::GetFullPath($Arguments[$scriptArgumentIndex]);Assert-PortableEntryCmdOrdinaryPath -Path $scriptPath
         $scriptInputStream=[IO.File]::Open($scriptPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
         $scriptHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($scriptInputStream)).ToLowerInvariant();$scriptInputStream.Position=0
         $scriptInput=[ordered]@{path=$scriptPath;bytes=$scriptInputStream.Length;sha256=$scriptHash;rootCandidateReference=$false}

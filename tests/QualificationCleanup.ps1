@@ -5,6 +5,8 @@ function Get-QualificationCleanupBlockerPath {
 }
 
 function Assert-QualificationCleanupReady {
+    $runtimeUnsafe=Get-Variable -Name WinPCInfoTestRuntimeProbeUnsafe -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $runtimeUnsafe) { throw $runtimeUnsafe.Value }
     $blocker=Get-QualificationCleanupBlockerPath
     if ([IO.File]::Exists($blocker) -or [IO.Directory]::Exists($blocker)) {
         throw 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: verify the preserved owned state before starting another test.'

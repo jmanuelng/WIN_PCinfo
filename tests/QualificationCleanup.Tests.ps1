@@ -404,7 +404,7 @@ function Test-QualificationResultPropagation {
     $tests=Join-Path $fixture 'tests'; $null=[IO.Directory]::CreateDirectory($tests)
     Copy-Item -LiteralPath (Join-Path $TestDirectory 'QualificationCleanup.ps1') -Destination $tests
     Copy-Item -LiteralPath (Join-Path $TestDirectory 'CertificateSourceApplication.Tests.ps1') -Destination (Join-Path $tests 'A.Tests.ps1')
-    $harness=@('. (Join-Path $PSScriptRoot ''QualificationCleanup.ps1'')','function Resolve-WinPCInfoRuntime { param($ApplicationPath) Join-Path $PSHOME ''pwsh.exe'' }') -join "`n"
+    $harness=@('. (Join-Path $PSScriptRoot ''QualificationCleanup.ps1'')','function Get-TestAdmittedRuntimeHost { Join-Path $PSHOME ''pwsh.exe'' }') -join "`n"
     [IO.File]::WriteAllText((Join-Path $tests 'TestHarness.ps1'),$harness)
     $syntheticCaseUnsafe=$true
     function Invoke-OwnedQualificationCase {

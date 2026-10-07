@@ -152,6 +152,18 @@ function Close-TestCandidate {
     param([Parameter(Mandatory)] $Candidate, [AllowNull()] [Management.Automation.ErrorRecord] $BodyError)
     # The open read handle prevents all consumers from replacing this input.
     # Verify it again before releasing ownership; never turn drift into a pass.
+    $runtimeUnsafe=Get-Variable -Name WinPCInfoTestRuntimeProbeUnsafe -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $runtimeUnsafe) {
+        if ($null -eq $BodyError) { $BodyError=$runtimeUnsafe.Value }
+        elseif (-not [object]::ReferenceEquals($BodyError,$runtimeUnsafe.Value)) {
+            $failure=[AggregateException]::new('Original candidate body and retained unsafe runtime probe both failed.',
+                [Exception[]]@($BodyError.Exception,$runtimeUnsafe.Value.Exception))
+            foreach($key in $BodyError.Exception.Data.Keys){$failure.Data[$key]=$BodyError.Exception.Data[$key]}
+            $failure.Data['OwnedCleanupUnverified']=$true
+            $BodyError=[Management.Automation.ErrorRecord]::new($failure,'TestRuntimeProbeUnsafe',
+                [Management.Automation.ErrorCategory]::InvalidOperation,$Candidate.Path)
+        }
+    }
     $preserveOutput=$null -ne $BodyError -and (Test-QualificationCleanupUnverified -Exception $BodyError.Exception)
     Complete-QualificationHarness -BodyError $BodyError -Cleanup @({
     try {
@@ -169,6 +181,135 @@ function Close-TestCandidate {
     })
 }
 
+# Runtime discovery retains the product signature and eligibility interpreter.
+# Test-only transport is admitted by the current immutable File/Case root; no
+# alternate installed host gains authority merely by having a valid signature.
+function Assert-TestRuntimeProbeReady {
+    $latch=Get-Variable -Name WinPCInfoTestRuntimeProbeUnsafe -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $latch) { throw $latch.Value }
+}
+
+function Get-TestRuntimeAdmission {
+    Assert-TestRuntimeProbeReady
+    $repository=[IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+    Assert-TestNativeRoleReady -NativeRole GeneratedApplication -RepositoryRoot $repository
+    $context=Get-TestNativeAdmissionContext -RepositoryRoot $repository -SelfIdentity (Get-TestNativeSelfIdentity)
+    $root=$context.Root.Admission
+    if ($root.hostPath -isnot [string] -or -not [IO.Path]::IsPathFullyQualified($root.hostPath) -or
+        $root.hostPath.StartsWith('\\') -or [IO.Path]::GetFileName($root.hostPath) -ine 'pwsh.exe' -or
+        $root.cohortSha256 -isnot [string] -or $root.cohortSha256 -cnotmatch '^[a-f0-9]{64}$') {
+        throw 'Test runtime transport requires the exact scalar current root host and cohort.'
+    }
+    $hostPin=@($root.inputs | Where-Object path -IEQ $root.hostPath)
+    if ($hostPin.Count -ne 1 -or $hostPin[0].sha256 -isnot [string] -or
+        $hostPin[0].sha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        ($hostPin[0].bytes -isnot [int] -and $hostPin[0].bytes -isnot [long]) -or $hostPin[0].bytes -lt 1) {
+        throw 'Test runtime transport lacks its closed current host input pin.'
+    }
+    $end=[DateTimeOffset]::ParseExact($context.Parent.Pending.authorityEnds,'o',[Globalization.CultureInfo]::InvariantCulture)
+    $end=$end.AddMilliseconds(-[long]$context.Parent.Pending.cleanupReserveMs-2000)
+    if ([string]::IsNullOrEmpty($env:WINPCINFO_TEST_AUTHORITY_ENDS_UTC)) { throw 'Test runtime authority is missing.' }
+    $inherited=[DateTimeOffset]::ParseExact($env:WINPCINFO_TEST_AUTHORITY_ENDS_UTC,'o',[Globalization.CultureInfo]::InvariantCulture)
+    if ($end.Offset -ne [TimeSpan]::Zero -or $inherited.Offset -ne [TimeSpan]::Zero) { throw 'Test runtime authority must be UTC.' }
+    if ($inherited -lt $end) { $end=$inherited }
+    if ($end -le [DateTimeOffset]::UtcNow.AddMilliseconds(5100)) { throw 'Test runtime authority has no unchanged cleanup reserve.' }
+    [pscustomobject]@{RepositoryRoot=$repository;HostPath=$root.hostPath;HostPin=$hostPin[0];AuthorityEnds=$end;
+        ParentDigest=(Get-TestNativeDigest -Value $context.Parent.Pending);CohortSha256=$root.cohortSha256;
+        PreparedManifestSha256=$root.preparedManifestSha256}
+}
+
+function Open-TestRuntimeHostStream {
+    param([Parameter(Mandatory)] $Admission)
+    $stream=$null;$bodyError=$null
+    try {
+        $item=Get-Item -LiteralPath $Admission.HostPath -ErrorAction Stop
+        if ($item -isnot [IO.FileInfo] -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Test runtime transport cannot substitute a redirected host.'
+        }
+        $stream=[IO.File]::Open($item.FullName,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+        $digest=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)).ToLowerInvariant()
+        $stream.Position=0
+        if ($stream.Length -ne $Admission.HostPin.bytes -or $digest -cne $Admission.HostPin.sha256) {
+            throw 'Test runtime bytes differ from the current admitted host.'
+        }
+    }
+    catch { $bodyError=$_ }
+    if ($null -ne $bodyError) {
+        Complete-QualificationHarness -BodyError $bodyError -Cleanup @({if($null -ne $stream){$stream.Dispose()}})
+    }
+    $stream
+}
+
+function Get-TestAdmittedRuntimeHost {
+    # Campaign transport does not repeat runtime eligibility probing. Engine
+    # leaves still receive their original root prepared triple through the
+    # existing Case parameter converter and execute the original assertions.
+    $admission=Get-TestRuntimeAdmission
+    $stream=$null;$bodyError=$null
+    try { $stream=Open-TestRuntimeHostStream -Admission $admission }
+    catch { $bodyError=$_ }
+    finally { Complete-QualificationHarness -BodyError $bodyError -Cleanup @({if($null -ne $stream){$stream.Dispose()}}) }
+    $admission.HostPath
+}
+
+function Invoke-TestOwnedRuntimeProbe {
+    param([Parameter(Mandatory)] $Admission,[Parameter(Mandatory)] [string] $Executable,
+        [Parameter(Mandatory)] [string] $ApplicationPath)
+    Assert-TestRuntimeProbeReady
+    $current=Get-TestRuntimeAdmission
+    if ($Executable -ine $current.HostPath -or $Admission.HostPath -cne $current.HostPath -or
+        $Admission.HostPin.sha256 -cne $current.HostPin.sha256 -or $Admission.ParentDigest -cne $current.ParentDigest -or
+        $Admission.CohortSha256 -cne $current.CohortSha256 -or
+        $Admission.PreparedManifestSha256 -cne $current.PreparedManifestSha256) {
+        throw 'Runtime probing cannot execute another installed host or transfer File/Case authority.'
+    }
+    $stream=$null;$bodyError=$null;$native=$null
+    try {
+        try {
+            $stream=Open-TestRuntimeHostStream -Admission $current
+            $end=if($Admission.AuthorityEnds-lt$current.AuthorityEnds){$Admission.AuthorityEnds}else{$current.AuthorityEnds}
+            # Original argv and environment/CWD semantics are retained. Package
+            # candidates are held by the native consumed-input boundary rather
+            # than forcibly replaced with the root candidate path.
+            $native=Invoke-GeneratedApplicationNative -HostPath $current.HostPath -WorkingDirectory ([Environment]::CurrentDirectory) `
+                -Arguments @('-NoLogo','-NoProfile','-NonInteractive','-File',$ApplicationPath,'-Workflow','CheckRuntime') `
+                -TimeoutMs 15000 -CleanupReserveMs 5000 -AuthorityEnds $end `
+                -MaximumLines 128 -MaximumLineCharacters 8192 -MaximumTotalCharacters 32768
+            if ($native.ExitCode -isnot [int]) {
+                $failure=[InvalidOperationException]::new('Runtime probe actual native terminal is unknown.')
+                $failure.Data['OwnedCleanupUnverified']=$true
+                throw $failure
+            }
+        }
+        catch { $bodyError=$_ }
+        finally { Complete-QualificationHarness -BodyError $bodyError -Cleanup @({if($null -ne $stream){$stream.Dispose()}}) }
+    }
+    catch {
+        if (Test-QualificationCleanupUnverified -Exception $_.Exception) { $script:WinPCInfoTestRuntimeProbeUnsafe=$_ }
+        throw
+    }
+    $native
+}
+
+function Invoke-TestRuntimeProbe {
+    param([string] $Executable,[string] $ApplicationPath,
+        [scriptblock] $ReadSignature={param($Path) Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $Path})
+    # Missing/stale File/Case admission is a test failure before the product's
+    # intentional catch-all can sanitize it into a host rejection.
+    $admission=Get-TestRuntimeAdmission
+    $runProbe={param($Executable,$ApplicationPath);Invoke-TestOwnedRuntimeProbe -Admission $admission -Executable $Executable -ApplicationPath $ApplicationPath}
+    $result=Invoke-WinPCInfoRuntimeProbe -Executable $Executable -ApplicationPath $ApplicationPath -ReadSignature $ReadSignature -RunProbe $runProbe
+    Assert-TestRuntimeProbeReady
+    $result
+}
+
+function Resolve-TestRuntime {
+    param([Parameter(Mandatory)] [string] $ApplicationPath,
+        [AllowEmptyCollection()] [string[]] $CandidatePaths)
+    $null=Get-TestRuntimeAdmission
+    if (-not $PSBoundParameters.ContainsKey('CandidatePaths')) { $CandidatePaths=@(Get-WinPCInfoRuntimeCandidates) }
+    Resolve-WinPCInfoRuntime -ApplicationPath $ApplicationPath -CandidatePaths $CandidatePaths -Probe ${function:Invoke-TestRuntimeProbe}
+}
 function Invoke-GeneratedApplication {
     param(
         [Parameter(Mandatory)] [string] $CandidatePath,
@@ -181,18 +322,23 @@ function Invoke-GeneratedApplication {
         [DateTimeOffset] $AuthorityEnds = [DateTimeOffset]::MinValue, [string] $InputLauncherOwnerDirectory
     )
 
+    Assert-TestRuntimeProbeReady
     Assert-ReleaseHelpInnerAdmission
     if ([string]::IsNullOrWhiteSpace($PowerShellPath)) {
-        # Reuse selection within this test file only for identical application
-        # bytes. Every application invocation still runs its own safety checks.
-        $candidateIdentity = (Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash
-        $cache = Get-Variable -Name WinPCInfoTestHostCache -Scope Script -ErrorAction SilentlyContinue
-        if ($null -ne $cache -and $cache.Value.Identity -eq $candidateIdentity) {
-            $PowerShellPath = $cache.Value.Executable
+        $runtimeAdmission=Get-TestRuntimeAdmission
+        $candidateIdentity=(Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $cacheIdentity=Get-TestNativeDigest -Value ([ordered]@{
+            candidatePath=[IO.Path]::GetFullPath($CandidatePath);candidateSha256=$candidateIdentity;
+            hostPath=$runtimeAdmission.HostPath;hostSha256=$runtimeAdmission.HostPin.sha256;
+            cohortSha256=$runtimeAdmission.CohortSha256;parentDigest=$runtimeAdmission.ParentDigest;
+            preparedManifestSha256=$runtimeAdmission.PreparedManifestSha256})
+        $cache=Get-Variable -Name WinPCInfoTestHostCache -Scope Script -ErrorAction SilentlyContinue
+        if ($null -ne $cache -and $cache.Value.Identity -ceq $cacheIdentity -and $cache.Value.Executable -ceq $runtimeAdmission.HostPath) {
+            $PowerShellPath=$cache.Value.Executable
         }
         else {
-            $PowerShellPath = Resolve-WinPCInfoRuntime -ApplicationPath $CandidatePath
-            $script:WinPCInfoTestHostCache = @{ Identity = $candidateIdentity; Executable = $PowerShellPath }
+            $PowerShellPath=Resolve-TestRuntime -ApplicationPath $CandidatePath
+            $script:WinPCInfoTestHostCache=@{Identity=$cacheIdentity;Executable=$PowerShellPath}
         }
     }
     $native=Invoke-GeneratedApplicationNative -HostPath ([IO.Path]::GetFullPath($PowerShellPath)) -WorkingDirectory ([IO.Path]::GetFullPath($WorkingDirectory)) `

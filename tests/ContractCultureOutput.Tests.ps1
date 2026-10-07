@@ -10,7 +10,7 @@ $candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidateP
 $candidate=$candidateContext.Path
 $candidateUseError=$null
 try {
-$hostPath = Resolve-WinPCInfoRuntime -ApplicationPath $candidate
+$hostPath = Resolve-TestRuntime -ApplicationPath $candidate
 $root = Join-Path $repositoryRoot ('.test-output/contract-cultures-' + [guid]::NewGuid().ToString('N'))
 $fixtureRootCreated=$false
 $fixtureBodyError=$null

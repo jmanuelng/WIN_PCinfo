@@ -15,7 +15,7 @@ if (-not $candidateContext.Prepared) {
     [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
     $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 }
-$hostPath=Resolve-WinPCInfoRuntime -ApplicationPath $candidateContext.Path
+$hostPath=Get-TestAdmittedRuntimeHost
 foreach($case in $Scenario){
     $watch=[Diagnostics.Stopwatch]::StartNew()
     Invoke-QualificationTestProcess -HostPath $hostPath -Arguments @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),'-CertificateSourceScenario',$case,

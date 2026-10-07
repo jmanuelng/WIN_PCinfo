@@ -27,7 +27,7 @@
     },
     {
       "path": "tests/TestHarness.ps1",
-      "sha256": "f9ec4e114551e570c02705a64ad81d6a8b798a0ead5995152d612b116709a50b"
+      "sha256": "88a145ad825b953a2c72f13281e28cb0064f54e6b01d8c70ea369759bb6837e5"
     },
     {
       "path": "tests/AdditionalScopeSourceAdapters.ps1",
@@ -130,7 +130,7 @@
   "executorInputs": [
     {
       "path": "tests/GeneratedApplicationNative.ps1",
-      "sha256": "5d2fbf8d2fb2af4e2c7e3a73ab4432312c92743580bbe8cdd30fa1d66a8cc50d"
+      "sha256": "cf8f6c1c83b7b650ba3c49669555e5d0d6950f283a5fb514a91985b7ad1c6060"
     },
     {
       "path": "tests/GeneratedApplicationNativeSupervisor.cs",
@@ -138,7 +138,7 @@
     },
     {
       "path": "tests/QualificationCleanup.ps1",
-      "sha256": "52e7f2761c691f9100b7da9f0aa51b5a59c7990baa48fbb0973eb6c7171fb890"
+      "sha256": "f705545d8a6e37c63b32fe137844759e60ede3c5aa0efede28fabdb468686dbd"
     },
     {
       "path": "tests/QualificationCaseAdmission.ps1",
@@ -182,7 +182,7 @@
     },
     {
       "path": "tests/Invoke-AssessmentSafetyQualification.ps1",
-      "sha256": "bb091c0a9e03ebb91421f73b8e775e1fca3ec49efa490a6ac8f332372549379c"
+      "sha256": "e7ee503c118a07085772f289bce2fa096b20cb5e6de13572f194c3e538acb480"
     },
     {
       "path": "tests/QualificationInputLauncher.ps1",

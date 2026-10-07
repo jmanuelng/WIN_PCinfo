@@ -26,9 +26,8 @@ function Open-TestCandidate {
     $global:SourceCampaignCandidateSpy.opens++
     [pscustomobject]@{Path=$CandidatePath;Prepared=$true;OwnedDirectory=$null}
 }
-function Resolve-WinPCInfoRuntime {
-    param($ApplicationPath)
-    if ($ApplicationPath -cne 'prepared-candidate.ps1') { throw 'Runtime resolution used a shared candidate.' }
+function Get-TestAdmittedRuntimeHost {
+    if ($global:SourceCampaignCandidateSpy.opens -ne 1) { throw 'Transport host selection must follow original candidate admission.' }
     'synthetic-pwsh'
 }
 function Invoke-QualificationTestProcess {

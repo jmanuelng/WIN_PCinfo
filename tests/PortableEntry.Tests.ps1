@@ -208,10 +208,11 @@ foreach ($mode in @('Guided', 'Automation')) {
     if ($mode -eq 'Automation') { $arguments += @('-RequestPath', (Join-Path $PSScriptRoot 'fixtures/automation-request.json')) }
     $result = Invoke-WinPCInfoPortableEntry -ApplicationPath $application -ApplicationArguments $arguments `
         -CandidatePaths @('C:\synthetic\rejected\pwsh.exe', $hostPath, $hostPath) `
-        -ReadSignature $validSignature -Probe ${function:Invoke-WinPCInfoRuntimeProbe} -Launch {
+        -ReadSignature $validSignature -Probe ${function:Invoke-TestRuntimeProbe} -Launch {
             param($Executable, $Arguments)
             Invoke-GeneratedApplication -PowerShellPath $Executable -CandidatePath $Arguments[3] -Arguments $Arguments[4..($Arguments.Count - 1)]
         }
+    Assert-TestRuntimeProbeReady
     Assert-Equal 20 $result.ExitCode "$mode preserves generated application exit code"
     Assert-Equal 'PREPARATION.DECLINED' $result.Records[-1].reasonCode "$mode reaches the generated preparation boundary"
     Assert-Equal $true $result.Records[-1].validationFixture "$mode is explicitly synthetic"
