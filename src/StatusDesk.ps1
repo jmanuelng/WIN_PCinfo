@@ -189,21 +189,51 @@ function New-StatusDeskWindow {
     Add-Type -AssemblyName PresentationFramework
     [xml] $layout = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="WIN-PCInfo — Status desk" Width="1040" Height="800" MinWidth="760" MinHeight="600" Background="#F3F5F8" FontFamily="Segoe UI" FontSize="14" WindowStartupLocation="CenterScreen">
- <Window.Resources><Style TargetType="Button"><Setter Property="Margin" Value="0,0,10,0"/><Setter Property="Padding" Value="18,10"/><Setter Property="Background" Value="#1765AE"/><Setter Property="Foreground" Value="White"/></Style></Window.Resources>
- <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid Margin="26" KeyboardNavigation.TabNavigation="Continue"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="160"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
- <StackPanel><TextBlock Text="WIN-PCInfo" Foreground="#1765AE" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="Status desk · Advisory assessment of this Windows device" Margin="0,5,0,20"/></StackPanel>
- <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,18">
-  <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="ASSESSMENT" FontWeight="Bold"/><TextBlock Name="ScopeFact" Text="Comprehensive Local Assessment" TextWrapping="Wrap"/></StackPanel></Border>
-  <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="AUTHORITY" FontWeight="Bold"/><TextBlock Name="AuthorityFact" Text="Frozen administrator and SYSTEM operations" TextWrapping="Wrap"/></StackPanel></Border>
-  <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="NETWORK" FontWeight="Bold"/><TextBlock Name="NetworkFact" Text="Preparing" TextWrapping="Wrap"/></StackPanel></Border>
-  <Border Background="White" Padding="12"><StackPanel><TextBlock Text="RESULTS" FontWeight="Bold"/><TextBlock Name="OutputFact" Text="Protected for the initiating user" TextWrapping="Wrap"/></StackPanel></Border>
- </UniformGrid>
- <DockPanel Grid.Row="2" Margin="0,0,0,14"><TextBlock Name="Elapsed" DockPanel.Dock="Right" Text="Elapsed 00:00"/><TextBlock Name="Status" TextWrapping="Wrap" Text="Checking preparation…" FontSize="20" FontWeight="SemiBold"/></DockPanel>
- <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" MaxHeight="340" MinHeight="150" Background="White" Padding="16" Focusable="True"><TextBlock Name="Details" TextWrapping="Wrap" Text="Checking the installed runtime, frozen definition and local protection. No assessment collection has started."/></ScrollViewer>
- <GroupBox Grid.Row="4" Header="Activity" Margin="0,14,0,14"><ListBox Name="Timeline" Background="White" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate></ListBox></GroupBox>
- <WrapPanel Grid.Row="5"><Button Name="Approve" Content="_Approve and start" IsEnabled="False"/><Button Name="Decline" Content="_Decline"/><Button Name="Cancel" Content="_Cancel assessment" IsEnabled="False"/><Button Name="OpenReport" Content="_Open report" IsEnabled="False"/><Button Name="SaveHtml" Content="_Save HTML for consultant" IsEnabled="False"/><Button Name="OpenExisting" Content="_Reopen encrypted results"/><Button Name="RecoverViews" Content="Recover _viewing residue"/><Button Name="SelectRecipient" Content="Select reci_pient before assessment"/><Button Name="SetupRecipient" Content="Recipient set_up"/><Button Name="Recover" Content="_Recover owned residue" Visibility="Collapsed"/><Button Name="Close" Content="C_lose"/></WrapPanel>
- <WrapPanel Grid.Row="6" Margin="0,12,0,0"><Button Name="ChangeChoices" Content="Change net_work / output"/><Button Name="Retry" Content="_New preparation / retry" IsEnabled="False"/><Button Name="Help" Content="_Help"/><Button Name="About" Content="A_bout"/></WrapPanel>
- </Grid></ScrollViewer>
+ <Window.Resources>
+  <Style TargetType="Button"><Setter Property="Margin" Value="0,0,0,10"/><Setter Property="Padding" Value="12,8"/><Setter Property="Background" Value="#E8EDF2"/><Setter Property="Foreground" Value="#203448"/><Setter Property="HorizontalAlignment" Value="Stretch"/></Style>
+ </Window.Resources>
+ <Grid Margin="26" KeyboardNavigation.TabNavigation="Continue">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <StackPanel><TextBlock Text="WIN-PCInfo" Foreground="#1765AE" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="Status desk · Advisory assessment of this Windows device" Margin="0,5,0,20"/></StackPanel>
+  <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,18">
+   <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="ASSESSMENT" FontWeight="Bold"/><TextBlock Name="ScopeFact" Text="Comprehensive Local Assessment" TextWrapping="Wrap"/></StackPanel></Border>
+   <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="AUTHORITY" FontWeight="Bold"/><TextBlock Name="AuthorityFact" Text="Frozen administrator and SYSTEM operations" TextWrapping="Wrap"/></StackPanel></Border>
+   <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="NETWORK" FontWeight="Bold"/><TextBlock Name="NetworkFact" Text="Preparing" TextWrapping="Wrap"/></StackPanel></Border>
+   <Border Background="White" Padding="12"><StackPanel><TextBlock Text="RESULTS" FontWeight="Bold"/><TextBlock Name="OutputFact" Text="Protected for the initiating user" TextWrapping="Wrap"/></StackPanel></Border>
+  </UniformGrid>
+  <Grid Grid.Row="2">
+   <Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="16" Margin="0,0,14,0">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+     <TextBlock Text="Run controls" FontSize="22" FontWeight="SemiBold" Foreground="#203448" Margin="0,0,0,12"/>
+     <TextBlock Name="Status" TextWrapping="Wrap" Text="Checking preparation…" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8"/>
+     <TextBlock Name="Elapsed" Text="Elapsed 00:00" Margin="0,0,0,16"/>
+     <Button Name="Approve" Content="_Approve and start" IsEnabled="False" Background="#1765AE" Foreground="White"/>
+     <Button Name="Decline" Content="_Decline"/>
+     <Button Name="Cancel" Content="_Cancel assessment" IsEnabled="False"/>
+     <Button Name="ChangeChoices" Content="Change net_work / output"/>
+     <Button Name="Retry" Content="_New preparation / retry" IsEnabled="False"/>
+     <Separator Margin="0,4,0,14"/>
+     <Button Name="SelectRecipient" Content="Select reci_pient before assessment"/>
+     <Button Name="SetupRecipient" Content="Recipient set_up"/>
+     <Button Name="OpenExisting" Content="_Reopen encrypted results"/>
+     <Button Name="RecoverViews" Content="Recover _viewing residue"/>
+     <Button Name="Recover" Content="_Recover owned residue" Visibility="Collapsed"/>
+     <Button Name="Close" Content="C_lose"/>
+    </StackPanel></ScrollViewer>
+   </Border>
+   <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <GroupBox Header="Preparation and activity"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="340" MinHeight="150" Background="White" Padding="16" Focusable="True"><TextBlock Name="Details" TextWrapping="Wrap" Text="Checking the installed runtime, frozen definition and local protection. No assessment collection has started."/></ScrollViewer></GroupBox>
+    <GroupBox Grid.Row="1" Header="Activity" Height="160" Margin="0,14,0,14"><ListBox Name="Timeline" Background="White" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate></ListBox></GroupBox>
+    <Border Grid.Row="2" Background="#E8EDF2" BorderBrush="#CBD3DA" BorderThickness="1" Padding="14"><StackPanel>
+     <TextBlock Text="Report actions" FontWeight="SemiBold" Margin="0,0,0,10"/>
+     <WrapPanel><Button Name="OpenReport" Content="_Open report" IsEnabled="False" Background="#1765AE" Foreground="White" Margin="0,0,10,10"/><Button Name="SaveHtml" Content="_Save HTML for consultant" IsEnabled="False" Margin="0,0,0,10"/></WrapPanel>
+    </StackPanel></Border>
+   </Grid></ScrollViewer>
+  </Grid>
+  <WrapPanel Grid.Row="3" Margin="0,14,0,0" HorizontalAlignment="Right"><Button Name="Help" Content="_Help" Margin="0,0,10,0"/><Button Name="About" Content="A_bout" Margin="0"/></WrapPanel>
+ </Grid>
 </Window>
 '@
     $window=[System.Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($layout))

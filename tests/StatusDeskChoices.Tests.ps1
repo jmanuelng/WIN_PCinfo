@@ -27,6 +27,25 @@ foreach($name in @('ChangeChoices','Retry','Help','About')){
     Assert-Equal $true ($null -ne $window.FindName($name)) "$name is discoverable without console input"
 }
 Assert-Equal $false $window.FindName('Retry').IsEnabled 'retry cannot interrupt active preparation'
+# #132 accepted Status desk structure, checked on the existing constructed WPF tree.
+# These layout assertions supplement the original workload; they are not client acceptance.
+$window.Content.Measure([System.Windows.Size]::new($window.Width,$window.Height))
+$window.Content.Arrange([System.Windows.Rect]::new(0,0,$window.Width,$window.Height))
+$approvalControl=$window.FindName('Approve')
+$detailsControl=$window.FindName('Details')
+$timelineControl=$window.FindName('Timeline')
+$openControl=$window.FindName('OpenReport')
+$saveControl=$window.FindName('SaveHtml')
+$approvalOrigin=$approvalControl.TranslatePoint([System.Windows.Point]::new(0,0),$window.Content)
+$detailsOrigin=$detailsControl.TranslatePoint([System.Windows.Point]::new(0,0),$window.Content)
+$timelineOrigin=$timelineControl.TranslatePoint([System.Windows.Point]::new(0,0),$window.Content)
+$openOrigin=$openControl.TranslatePoint([System.Windows.Point]::new(0,0),$window.Content)
+Assert-Equal $true ([object]::ReferenceEquals($approvalControl.Parent,$window.FindName('Status').Parent)) 'run controls and exposed state share the accepted left rail'
+Assert-Equal $true ($approvalOrigin.X+$approvalControl.ActualWidth -le $detailsOrigin.X) 'run controls are left of the main preparation and activity workspace'
+Assert-Equal $true ([object]::ReferenceEquals($openControl.Parent.Parent.Parent.Parent,$timelineControl.Parent.Parent)) 'report actions are adjacent to results in the same main workspace'
+Assert-Equal $true ($openOrigin.Y -ge $timelineOrigin.Y+$timelineControl.ActualHeight) 'report actions follow the main event timeline'
+Assert-Equal $true ($openControl.Background.Color.ToString() -eq '#FF1765AE' -and $saveControl.Background.Color -ne $openControl.Background.Color) 'Open report is the primary blue action and private HTML saving is secondary'
+Assert-Equal $true ([object]::ReferenceEquals($window.FindName('ScopeFact').Parent.Parent.Parent.Parent,$window.Content)) 'four preparation facts remain outside the scrolling work panes'
 $request=Get-AutomationRequest -LiteralPath (Join-Path $PSScriptRoot 'fixtures/automation-request.json') -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)
 $request.outputDestination=$repositoryRoot
 $original=$request | ConvertTo-Json -Depth 40 -Compress
