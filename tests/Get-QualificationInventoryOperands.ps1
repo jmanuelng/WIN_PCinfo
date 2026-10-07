@@ -20,13 +20,13 @@ foreach ($name in @('sourceIdentityKind', 'candidateSha256', 'harnessSha256')) {
 $candidateActual = (Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant()
 $harnessActual = Get-QualificationScriptIdentity -LiteralPath $HarnessPath
 $candidateDeclarationValid = $declared.candidateSha256 -is [string] -and
-    $declared.candidateSha256 -match '^[0-9a-f]{64}$'
+    $declared.candidateSha256 -cmatch '^[0-9a-f]{64}$'
 $harnessDeclarationValid = $declared.harnessSha256 -is [string] -and
-    $declared.harnessSha256 -match '^[0-9a-f]{64}$'
+    $declared.harnessSha256 -cmatch '^[0-9a-f]{64}$'
 $kindMatches = $declared.sourceIdentityKind -is [string] -and
     $declared.sourceIdentityKind -ceq 'CanonicalUtf8LfSha256'
-$candidateMatches = $candidateDeclarationValid -and $declared.candidateSha256 -eq $candidateActual
-$harnessMatches = $harnessDeclarationValid -and $declared.harnessSha256 -eq $harnessActual
+$candidateMatches = $candidateDeclarationValid -and $declared.candidateSha256 -ceq $candidateActual
+$harnessMatches = $harnessDeclarationValid -and $declared.harnessSha256 -ceq $harnessActual
 [pscustomobject][ordered]@{
     kind = 'QualificationInventoryOperandComparison'
     sourceIdentityKindMatches = [bool]$kindMatches

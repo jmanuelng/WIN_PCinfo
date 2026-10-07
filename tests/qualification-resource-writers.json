@@ -1,8 +1,8 @@
 {
   "kind": "ControlledAssessmentClosedDiskWriterInventory",
   "version": "1.2.0",
-  "candidateSha256": null,
-  "harnessSha256": "5cef1d5ee915beb234fbf774859a6634ccccd7728133afd5ca337aaeec298af2",
+  "candidateSha256": "a2e73c6a19c7fa05aaae272ed12ce997c614f1acc90960acb6c7ecaa58946ce0",
+  "harnessSha256": "d46b1c242bc44e63cd5e627a7970851e3c974db241bda1db41ae83bae2c90f89",
   "scope": "OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses",
   "writers": [
     "Write-RunRecoveryJournal",
@@ -142,7 +142,7 @@
     },
     {
       "path": "tests/QualificationCaseAdmission.ps1",
-      "sha256": "b310e9e9ca374b0341f15aa1f270e8d8a256e95228aad099f17dd3e55d4e3eec"
+      "sha256": "fb8fbc24375968a268e4e7e3f677ed135851cc6b676d2591a46931224bc6bf8c"
     },
     {
       "path": "tests/Invoke-TestFile.ps1",
@@ -162,7 +162,7 @@
     },
     {
       "path": "tests/QualificationFixtureProcess.ps1",
-      "sha256": "5536df57d5b40c1a7ab1e8151923ae4246d4726a079d0a68731314994c8c9358"
+      "sha256": "af5ba9438c3c28e8df133eae30b55daca9ee08bdff4e0f6bdea6c89558595978"
     },
     {
       "path": "tests/QualificationCapabilityProcess.ps1",
