@@ -188,51 +188,64 @@ function New-StatusDeskWindow {
     }
     Add-Type -AssemblyName PresentationFramework
     [xml] $layout = @'
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="WIN-PCInfo — Status desk" Width="1040" Height="800" MinWidth="760" MinHeight="600" Background="#F3F5F8" FontFamily="Segoe UI" FontSize="14" WindowStartupLocation="CenterScreen">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="WIN-PCInfo — Status desk" Width="1040" Height="800" MinWidth="760" MinHeight="600" Background="#E8EDF2" Foreground="#1F3447" FontFamily="Segoe UI" FontSize="14" WindowStartupLocation="CenterScreen">
  <Window.Resources>
-  <Style TargetType="Button"><Setter Property="Margin" Value="0,0,0,10"/><Setter Property="Padding" Value="12,8"/><Setter Property="Background" Value="#E8EDF2"/><Setter Property="Foreground" Value="#203448"/><Setter Property="HorizontalAlignment" Value="Stretch"/></Style>
+  <Style TargetType="Button"><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="Padding" Value="12,7"/><Setter Property="Background" Value="#E8EDF2"/><Setter Property="Foreground" Value="#203448"/><Setter Property="HorizontalAlignment" Value="Stretch"/></Style>
+  <Style TargetType="GroupBox">
+   <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#CBD3DA"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="14"/>
+   <Setter Property="HeaderTemplate"><Setter.Value><DataTemplate><TextBlock Text="{Binding}" FontSize="12" FontWeight="SemiBold" Foreground="#506773" Margin="0,0,0,10"/></DataTemplate></Setter.Value></Setter>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="GroupBox"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}"><DockPanel LastChildFill="True"><ContentPresenter DockPanel.Dock="Top" ContentSource="Header"/><ContentPresenter ContentSource="Content" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/></DockPanel></Border></ControlTemplate></Setter.Value></Setter>
+  </Style>
  </Window.Resources>
- <Grid Margin="26" KeyboardNavigation.TabNavigation="Continue">
+ <Grid Margin="20" Background="#E8EDF2" KeyboardNavigation.TabNavigation="Continue">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <StackPanel><TextBlock Text="WIN-PCInfo" Foreground="#1765AE" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="Status desk · Advisory assessment of this Windows device" Margin="0,5,0,20"/></StackPanel>
-  <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,18">
-   <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="ASSESSMENT" FontWeight="Bold"/><TextBlock Name="ScopeFact" Text="Comprehensive Local Assessment" TextWrapping="Wrap"/></StackPanel></Border>
-   <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="AUTHORITY" FontWeight="Bold"/><TextBlock Name="AuthorityFact" Text="Frozen administrator and SYSTEM operations" TextWrapping="Wrap"/></StackPanel></Border>
-   <Border Background="White" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="NETWORK" FontWeight="Bold"/><TextBlock Name="NetworkFact" Text="Preparing" TextWrapping="Wrap"/></StackPanel></Border>
-   <Border Background="White" Padding="12"><StackPanel><TextBlock Text="RESULTS" FontWeight="Bold"/><TextBlock Name="OutputFact" Text="Protected for the initiating user" TextWrapping="Wrap"/></StackPanel></Border>
+  <StackPanel><TextBlock Text="WIN-PCInfo" Foreground="#1765AE" FontSize="25" FontWeight="SemiBold"/><TextBlock Text="Status desk · Advisory assessment of this Windows device" Foreground="#526878" FontSize="12" Margin="0,4,0,12"/></StackPanel>
+  <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,12">
+   <Border Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="ASSESSMENT" Foreground="#687986" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/><TextBlock Name="ScopeFact" Text="Comprehensive Local Assessment" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel></Border>
+   <Border Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="AUTHORITY" Foreground="#687986" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/><TextBlock Name="AuthorityFact" Text="Frozen administrator and SYSTEM operations" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel></Border>
+   <Border Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="NETWORK" Foreground="#687986" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/><TextBlock Name="NetworkFact" Text="Preparing" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel></Border>
+   <Border Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="12"><StackPanel><TextBlock Text="RESULTS" Foreground="#687986" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/><TextBlock Name="OutputFact" Text="Protected for the initiating user" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel></Border>
   </UniformGrid>
   <Grid Grid.Row="2">
    <Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-   <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="16" Margin="0,0,14,0">
+   <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="16" Margin="0,0,12,0">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
      <TextBlock Text="Run controls" FontSize="22" FontWeight="SemiBold" Foreground="#203448" Margin="0,0,0,12"/>
      <TextBlock Name="Status" TextWrapping="Wrap" Text="Checking preparation…" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8"/>
-     <TextBlock Name="Elapsed" Text="Elapsed 00:00" Margin="0,0,0,16"/>
-     <Button Name="Approve" Content="_Approve and start" IsEnabled="False" Background="#1765AE" Foreground="White"/>
+     <TextBlock Name="Elapsed" Text="Elapsed 00:00" Foreground="#526878" FontSize="13" Margin="0,0,0,14"/>
+     <Button Name="Approve" Content="_Approve and start" IsEnabled="False" Background="#1765AE" Foreground="White" FontWeight="SemiBold"/>
      <Button Name="Decline" Content="_Decline"/>
      <Button Name="Cancel" Content="_Cancel assessment" IsEnabled="False"/>
-     <Button Name="ChangeChoices" Content="Change net_work / output"/>
-     <Button Name="Retry" Content="_New preparation / retry" IsEnabled="False"/>
-     <Separator Margin="0,4,0,14"/>
-     <Button Name="SelectRecipient" Content="Select reci_pient before assessment"/>
-     <Button Name="SetupRecipient" Content="Recipient set_up"/>
-     <Button Name="OpenExisting" Content="_Reopen encrypted results"/>
-     <Button Name="RecoverViews" Content="Recover _viewing residue"/>
-     <Button Name="Recover" Content="_Recover owned residue" Visibility="Collapsed"/>
-     <Button Name="Close" Content="C_lose"/>
+     <Separator Margin="0,6,0,12"/>
+     <TextBlock Text="Choices and recipients" FontSize="12" FontWeight="SemiBold" Foreground="#526878" Margin="0,0,0,10"/>
+     <Button Name="ChangeChoices" Content="Change net_work / output" FontSize="13" Padding="10,6"/>
+     <Button Name="Retry" Content="_New preparation / retry" IsEnabled="False" FontSize="13" Padding="10,6"/>
+     <Button Name="SelectRecipient" Content="Select reci_pient before assessment" FontSize="13" Padding="10,6"/>
+     <Button Name="SetupRecipient" Content="Recipient set_up" FontSize="13" Padding="10,6"/>
+     <Separator Margin="0,6,0,12"/>
+     <TextBlock Text="Results and recovery" FontSize="12" FontWeight="SemiBold" Foreground="#526878" Margin="0,0,0,10"/>
+     <Button Name="OpenExisting" Content="_Reopen encrypted results" FontSize="13" Padding="10,6"/>
+     <Button Name="RecoverViews" Content="Recover _viewing residue" FontSize="13" Padding="10,6"/>
+     <Button Name="Recover" Content="_Recover owned residue" Visibility="Collapsed" FontSize="13" Padding="10,6"/>
+     <Button Name="Close" Content="C_lose" FontSize="13" Padding="10,6"/>
     </StackPanel></ScrollViewer>
    </Border>
-   <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid>
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <GroupBox Header="Preparation and activity"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="340" MinHeight="150" Background="White" Padding="16" Focusable="True"><TextBlock Name="Details" TextWrapping="Wrap" Text="Checking the installed runtime, frozen definition and local protection. No assessment collection has started."/></ScrollViewer></GroupBox>
-    <GroupBox Grid.Row="1" Header="Activity" Height="160" Margin="0,14,0,14"><ListBox Name="Timeline" Background="White" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate></ListBox></GroupBox>
-    <Border Grid.Row="2" Background="#E8EDF2" BorderBrush="#CBD3DA" BorderThickness="1" Padding="14"><StackPanel>
-     <TextBlock Text="Report actions" FontWeight="SemiBold" Margin="0,0,0,10"/>
-     <WrapPanel><Button Name="OpenReport" Content="_Open report" IsEnabled="False" Background="#1765AE" Foreground="White" Margin="0,0,10,10"/><Button Name="SaveHtml" Content="_Save HTML for consultant" IsEnabled="False" Margin="0,0,0,10"/></WrapPanel>
+   <Grid Grid.Column="1"><Grid>
+    <Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <GroupBox Header="Preparation and activity"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="True"><StackPanel>
+     <TextBlock Name="CurrentActivity" Text="No structured activity received. No assessment collection has started." FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#1765AE" Margin="0,0,0,8"/>
+     <TextBlock Name="ControllerActivity" TextWrapping="Wrap" Foreground="#526878" FontSize="13" Margin="0,0,0,10"/>
+     <TextBlock Text="Preparation and result details" FontSize="12" FontWeight="SemiBold" Foreground="#526878" Margin="0,0,0,6"/>
+     <TextBlock Name="Details" TextWrapping="Wrap" Text="Checking the installed runtime, frozen definition and local protection. No assessment collection has started."/>
+    </StackPanel></ScrollViewer></GroupBox>
+    <GroupBox Grid.Row="1" Header="Event timeline" Background="#F5F7F9" BorderThickness="1,0,1,0"><ListBox Name="Timeline" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate></ListBox></GroupBox>
+    <Border Grid.Row="2" Background="#E1E7EC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="12"><StackPanel>
+     <TextBlock Text="Report actions" Foreground="#526878" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"/>
+     <WrapPanel><Button Name="OpenReport" Content="_Open report" IsEnabled="False" Background="#1765AE" Foreground="White" FontWeight="SemiBold" Margin="0,0,8,6"/><Button Name="SaveHtml" Content="_Save HTML for consultant" IsEnabled="False" Margin="0,0,0,6"/></WrapPanel>
     </StackPanel></Border>
-   </Grid></ScrollViewer>
+   </Grid></Grid>
   </Grid>
-  <WrapPanel Grid.Row="3" Margin="0,14,0,0" HorizontalAlignment="Right"><Button Name="Help" Content="_Help" Margin="0,0,10,0"/><Button Name="About" Content="A_bout" Margin="0"/></WrapPanel>
+  <WrapPanel Grid.Row="3" Margin="0,10,0,0" HorizontalAlignment="Right"><Button Name="Help" Content="_Help" Margin="0,0,10,0"/><Button Name="About" Content="A_bout" Margin="0"/></WrapPanel>
  </Grid>
 </Window>
 '@
@@ -413,7 +426,14 @@ function Show-StatusDeskReport {
         Add-Type -AssemblyName PresentationFramework
         $window = [System.Windows.Window]::new()
         $window.Title = 'WIN-PCInfo — Restricted offline report'
-        $window.Width = 1100; $window.Height = 800
+        # Match the existing main-window bounds in WPF device-independent units.
+        $workArea = [System.Windows.SystemParameters]::WorkArea
+        $window.MaxWidth = $workArea.Width; $window.MaxHeight = $workArea.Height
+        $window.Width = [Math]::Min(1100, $window.MaxWidth)
+        $window.Height = [Math]::Min(800, $window.MaxHeight)
+        $window.WindowStartupLocation = [System.Windows.WindowStartupLocation]::Manual
+        $window.Left = $workArea.Left + ($workArea.Width - $window.Width) / 2
+        $window.Top = $workArea.Top + ($workArea.Height - $window.Height) / 2
         if ($null -ne $Owner) { $window.Owner = $Owner }
         $panel = [System.Windows.Controls.DockPanel]::new()
         $close = [System.Windows.Controls.Button]::new()
@@ -552,7 +572,7 @@ function Invoke-StatusDesk {
     $window = New-StatusDeskWindow
     $controls = @{}
     foreach ($name in @('ScopeFact','AuthorityFact','NetworkFact','OutputFact','Elapsed','Status',
-        'Details','Timeline','Approve','Decline','Cancel','OpenReport','SaveHtml','OpenExisting',
+        'Details','CurrentActivity','ControllerActivity','Timeline','Approve','Decline','Cancel','OpenReport','SaveHtml','OpenExisting',
         'SelectRecipient','SetupRecipient','RecoverViews','Recover','Close','ChangeChoices','Retry','Help','About')) { $controls[$name] = $window.FindName($name) }
     $session = Start-StatusDeskSession -DefinitionInitializer $DefinitionInitializer -LaunchParameters $LaunchParameters
     $state = @{ Preparation=''; Closing=$false; TerminalShown=$false; ViewingCleanupFailed=$false; RecoveryRequested=$false
@@ -691,6 +711,7 @@ function Invoke-StatusDesk {
     })
     $timer.Add_Tick({
         $controls.Elapsed.Text='Elapsed ' + $watch.Elapsed.ToString('hh\:mm\:ss')
+        if ($state.TerminalShown -or $state.ViewingCleanupFailed) { $controls.ControllerActivity.Text='' }
         if ($session.Transport.State.Preparation -and -not $state.Preparation) {
             $state.Preparation=$session.Transport.State.Preparation
             $summary=$state.Preparation | ConvertFrom-Json
@@ -706,12 +727,21 @@ function Invoke-StatusDesk {
         for ($index=0; $index -lt 32 -and $session.Transport.Events.TryTake([ref]$json); $index++) {
             $record=$json | ConvertFrom-Json
             if ($record.recordType -eq 'win-pcinfo.progress') {
-                $null=$controls.Timeline.Items.Add($watch.Elapsed.ToString('hh\:mm\:ss') + ' · ' + (Get-StatusDeskActivityText -Record $record))
+                $activityText=$watch.Elapsed.ToString('hh\:mm\:ss') + ' · ' + (Get-StatusDeskActivityText -Record $record)
+                $null=$controls.Timeline.Items.Add($activityText)
+                if (-not $state.TerminalShown -and -not $state.ViewingCleanupFailed) {
+                    if ($record.state -eq 'Heartbeat') { $controls.ControllerActivity.Text=$activityText }
+                    else {
+                        $controls.CurrentActivity.Text=$activityText
+                        $controls.ControllerActivity.Text=''
+                    }
+                }
                 if ($controls.Timeline.Items.Count -gt 64) { $controls.Timeline.Items.RemoveAt(0) }
             }
         }
         if ((Complete-StatusDeskSession $session) -and -not $state.TerminalShown) {
             $state.TerminalShown=$true; $watch.Stop()
+            $controls.ControllerActivity.Text=''
             $terminal=$session.Transport.State.Terminal | ConvertFrom-Json
             if (-not $state.ViewingCleanupFailed) {
                 $controls.Status.Text=$terminal.outcome
