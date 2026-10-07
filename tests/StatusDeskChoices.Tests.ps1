@@ -100,8 +100,8 @@ if ([IO.Path]::GetDirectoryName($probeParent) -ine (Join-Path $repositoryRoot '.
     throw 'Modal evidence requires the original private suite evidence boundary.'
 }
 $probeDirectory=Join-Path $probeParent ('gui-modal-focus-'+[guid]::NewGuid().ToString('N'))
-$probeState=@{Owner=$window;Modal=$null;Timer=$null;Busy=$false;Next=0;AwaitReturn=$false;
-    Expected='';Trigger=$null;ModalEnds=$probeEnd;BodyError=$null;StopError=$null;
+$probeState=@{Owner=$window;Modal=$null;Timer=$null;ModalTimer=$null;TimerHandler=$null;ModalTimerHandler=$null;TimerRegistrationAttempted=$false;ModalTimerRegistrationAttempted=$false;TimerHandlerRemoved=$false;ModalTimerHandlerRemoved=$false;Busy=$false;Next=0;AwaitReturn=$false;
+    Expected='';Trigger=$null;ModalEnds=$probeEnd;BodyError=$null;StopError=$null;ModalStopError=$null;
     CloseErrors=[Collections.Generic.List[Exception]]::new();RetentionErrors=[Collections.Generic.List[Exception]]::new();
     EvidenceDirectory=$probeDirectory;DirectoryAllocationAttempted=$false;DirectoryCreated=$false;Frames=0;CaptureBytes=0L;
     Observations=[Collections.Generic.List[object]]::new();InitialObserved=$false;
@@ -301,8 +301,13 @@ try {
     $null=$window.FindName('Timeline').Items.Add('Synthetic activity text, not source progress.')
     $probeState.Timer=[System.Windows.Threading.DispatcherTimer]::new()
     $probeState.Timer.Interval=[TimeSpan]::FromMilliseconds(100)
-    $probeState.Timer.Add_Tick({
+    # A distinct timer can observe and cancel while the initiating Tick is inside
+    # the product's synchronous ShowDialog nested dispatcher frame.
+    $probeState.ModalTimer=[System.Windows.Threading.DispatcherTimer]::new()
+    $probeState.ModalTimer.Interval=[TimeSpan]::FromMilliseconds(100)
+    $probeState.ModalTimerHandler=[EventHandler]{
         try {
+            if ($null -ne $probeState.BodyError) {return}
             if ([DateTimeOffset]::UtcNow -ge $probeEnd) {throw 'Owned modal observation deadline expired.'}
             if ($probeState.Busy) {
                 if ([DateTimeOffset]::UtcNow -ge $probeState.ModalEnds) {throw 'Owned modal exceeded its twenty-second deadline.'}
@@ -326,15 +331,44 @@ try {
                 else {$modal.Close()}
                 return
             }
+        }
+        catch {
+            if ($null -eq $probeState.BodyError) {$probeState.BodyError=$_}
+            try {Write-ChoicesModalObservationRecord -Name 'callback-failure.json' -Value ([ordered]@{
+                type=$probeState.BodyError.Exception.GetType().FullName;case=$probeState.Next;
+                cleanupUnverified=(Test-QualificationCleanupUnverified $probeState.BodyError.Exception);
+                nativeDispositionPending=$true})} catch {$probeState.RetentionErrors.Add($_.Exception)}
+            try {$probeState.Timer.Stop()} catch {$probeState.StopError=$_;Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
+            try {if ($null -ne $probeState.ModalTimer) {$probeState.ModalTimer.Stop()}} catch {$probeState.ModalStopError=$_;Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
+            # Retain ambiguity: never close a modal we could not attribute.
+            if (Test-QualificationCleanupUnverified $probeState.BodyError.Exception) {
+                [Console]::Out.WriteLine('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED');[Console]::Out.Flush()
+            } else {
+                try {if ($null -ne $probeState.Modal -and $probeState.Modal.IsVisible) {$probeState.Modal.Close()}} catch {$probeState.CloseErrors.Add($_.Exception);Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
+                try {if ($window.OwnedWindows.Count -eq 0) {$window.Close()}} catch {$probeState.CloseErrors.Add($_.Exception);Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
+            }
+        }
+    }
+    $probeState.ModalTimerRegistrationAttempted=$true
+    try {$probeState.ModalTimer.Add_Tick($probeState.ModalTimerHandler)}
+    catch {Set-ChoicesModalOwnershipUnverified -Failure $_.Exception;throw}
+    $probeState.TimerHandler=[EventHandler]{
+        try {
+            if ($null -ne $probeState.BodyError) {return}
+            if ([DateTimeOffset]::UtcNow -ge $probeEnd) {throw 'Owned modal observation deadline expired.'}
+            if ($probeState.Busy) {return}
             if (-not $probeState.InitialObserved) {
                 Assert-Equal $true $window.FindName('ChangeChoices').IsKeyboardFocusWithin 'visible Status desk starts on Change choices'
                 foreach($name in @('ScopeFact','AuthorityFact','NetworkFact','OutputFact')) {
                     Assert-Equal $true $window.FindName($name).IsVisible 'the four persistent facts are rendered'
                 }
                 Observe-ChoicesOwnedWindow -ObservedWindow $window -Surface 'Owner' -Capture $true
+                if ($null -ne $probeState.BodyError) {return}
                 $window.Width=$window.MinWidth;$window.Height=$window.MinHeight
                 $window.UpdateLayout()
+                if ($null -ne $probeState.BodyError) {return}
                 Observe-ChoicesOwnedWindow -ObservedWindow $window -Surface 'OwnerMinimumSize' -Capture $false
+                if ($null -ne $probeState.BodyError) {return}
                 $probeState.InitialObserved=$true
             }
             if ($probeState.AwaitReturn) {
@@ -345,17 +379,19 @@ try {
             $case=$probeCases[$probeState.Next]
             $probeState.Trigger=$window.FindName($case.Trigger)
             $null=$probeState.Trigger.Focus()
+            if ($null -ne $probeState.BodyError) {return}
             Assert-Equal $true $probeState.Trigger.IsKeyboardFocusWithin 'the originating control is focused before opening its modal'
             $probeState.Expected=$case.Title;$probeState.Modal=$null;$probeState.Busy=$true
             $probeState.ModalEnds=[DateTimeOffset]::UtcNow.AddSeconds(20)
             $modalStart=[Diagnostics.Stopwatch]::StartNew()
             switch ($case.Name) {
-                'Choices' {$cancelled=Show-StatusDeskChoicesDialog -Owner $window -Request $request;Assert-Equal $true ($null -eq $cancelled) 'owned Choices cancel leaves the request unchanged'}
+                'Choices' {$cancelled=Show-StatusDeskChoicesDialog -Owner $window -Request $request;if ($null -ne $probeState.BodyError) {return};Assert-Equal $true ($null -eq $cancelled) 'owned Choices cancel leaves the request unchanged'}
                 'Help' {Show-StatusDeskHelp -Owner $window -Surface Help}
                 'About' {Show-StatusDeskHelp -Owner $window -Surface About}
-                'Selection' {$cancelled=Show-StatusDeskRecipientDialog -Owner $window -Purpose Selection;Assert-Equal $true ($null -eq $cancelled) 'owned selection cancels without provider activity'}
-                'Setup' {$cancelled=Show-StatusDeskRecipientDialog -Owner $window -Purpose Setup;Assert-Equal $true ($null -eq $cancelled) 'owned setup cancels without generating a key'}
+                'Selection' {$cancelled=Show-StatusDeskRecipientDialog -Owner $window -Purpose Selection;if ($null -ne $probeState.BodyError) {return};Assert-Equal $true ($null -eq $cancelled) 'owned selection cancels without provider activity'}
+                'Setup' {$cancelled=Show-StatusDeskRecipientDialog -Owner $window -Purpose Setup;if ($null -ne $probeState.BodyError) {return};Assert-Equal $true ($null -eq $cancelled) 'owned setup cancels without generating a key'}
             }
+            if ($null -ne $probeState.BodyError) {return}
             Assert-Equal $true ($modalStart.Elapsed.TotalSeconds -le 20) 'each controlled modal finishes within twenty seconds'
             Assert-Equal $original ($request | ConvertTo-Json -Depth 40 -Compress) 'owned modal observations never mutate the original request'
             $probeState.Busy=$false;$probeState.AwaitReturn=$true;$probeState.Next++
@@ -367,6 +403,7 @@ try {
                 cleanupUnverified=(Test-QualificationCleanupUnverified $probeState.BodyError.Exception);
                 nativeDispositionPending=$true})} catch {$probeState.RetentionErrors.Add($_.Exception)}
             try {$probeState.Timer.Stop()} catch {$probeState.StopError=$_;Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
+            try {if ($null -ne $probeState.ModalTimer) {$probeState.ModalTimer.Stop()}} catch {$probeState.ModalStopError=$_;Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
             # Retain ambiguity: never close a modal we could not attribute.
             if (Test-QualificationCleanupUnverified $probeState.BodyError.Exception) {
                 [Console]::Out.WriteLine('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED');[Console]::Out.Flush()
@@ -375,7 +412,11 @@ try {
                 try {if ($window.OwnedWindows.Count -eq 0) {$window.Close()}} catch {$probeState.CloseErrors.Add($_.Exception);Set-ChoicesModalOwnershipUnverified -Failure $_.Exception}
             }
         }
-    })
+    }
+    $probeState.TimerRegistrationAttempted=$true
+    try {$probeState.Timer.Add_Tick($probeState.TimerHandler)}
+    catch {Set-ChoicesModalOwnershipUnverified -Failure $_.Exception;throw}
+    $probeState.ModalTimer.Start()
     $probeState.Timer.Start()
     $null=$window.ShowDialog()
     if ($null -ne $probeState.BodyError) {throw $probeState.BodyError}
@@ -401,7 +442,37 @@ finally {
         if ($probeState.RetentionErrors.Count) {throw [AggregateException]::new('Callback error retention failed.',$probeState.RetentionErrors.ToArray())}
     } -Cleanup @(
         {
-            try {if ($null -ne $probeState.Timer) {$probeState.Timer.Stop()};if ($null -ne $probeState.StopError) {throw $probeState.StopError}}
+            try {
+                if ($null -ne $probeState.Timer) {$probeState.Timer.Stop();if ($probeState.Timer.IsEnabled) {throw 'Exact initiating timer remains enabled.'}}
+                if ($null -ne $probeState.StopError) {throw $probeState.StopError}
+            }
+            catch {Set-ChoicesModalOwnershipUnverified -Failure $_.Exception;throw}
+        },
+        {
+            try {
+                if ($probeState.TimerRegistrationAttempted) {
+                    if ($null -eq $probeState.Timer -or $null -eq $probeState.TimerHandler) {throw 'Exact initiating timer handler ownership is incomplete.'}
+                    $probeState.Timer.Remove_Tick($probeState.TimerHandler)
+                }
+                $probeState.TimerHandlerRemoved=$true;$probeState.TimerHandler=$null
+            }
+            catch {Set-ChoicesModalOwnershipUnverified -Failure $_.Exception;throw}
+        },
+        {
+            try {
+                if ($null -ne $probeState.ModalTimer) {$probeState.ModalTimer.Stop();if ($probeState.ModalTimer.IsEnabled) {throw 'Exact modal observation timer remains enabled.'}}
+                if ($null -ne $probeState.ModalStopError) {throw $probeState.ModalStopError}
+            }
+            catch {Set-ChoicesModalOwnershipUnverified -Failure $_.Exception;throw}
+        },
+        {
+            try {
+                if ($probeState.ModalTimerRegistrationAttempted) {
+                    if ($null -eq $probeState.ModalTimer -or $null -eq $probeState.ModalTimerHandler) {throw 'Exact modal observation timer handler ownership is incomplete.'}
+                    $probeState.ModalTimer.Remove_Tick($probeState.ModalTimerHandler)
+                }
+                $probeState.ModalTimerHandlerRemoved=$true;$probeState.ModalTimerHandler=$null
+            }
             catch {Set-ChoicesModalOwnershipUnverified -Failure $_.Exception;throw}
         },
         {
@@ -436,6 +507,14 @@ finally {
             catch {Set-ChoicesModalOwnershipUnverified -Failure $_.Exception;throw}
         }
     ) -RetainCleanupEvidence {
+        if (-not $probeState.TimerHandlerRemoved -or -not $probeState.ModalTimerHandlerRemoved -or
+            $null -ne $probeState.TimerHandler -or $null -ne $probeState.ModalTimerHandler -or
+            ($null -ne $probeState.Timer -and $probeState.Timer.IsEnabled) -or
+            ($null -ne $probeState.ModalTimer -and $probeState.ModalTimer.IsEnabled)) {
+            $failure=[InvalidOperationException]::new('Exact modal driver timer finalization remains unverified.')
+            Set-ChoicesModalOwnershipUnverified -Failure $failure
+            throw $failure
+        }
         Assert-ChoicesModalArtifactsFinalized
         $beforeFinalRecord=@(Get-ChoicesModalArtifactInventory)
         Write-ChoicesModalObservationRecord -Name 'windows-finalized.json' -Value ([ordered]@{ownerVisible=$window.IsVisible;
