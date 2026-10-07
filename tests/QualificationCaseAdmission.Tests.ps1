@@ -245,6 +245,17 @@ try {
     Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$opening,'-ColdProcess','-AuthorityEnds','synthetic') } 'Opening unknown authority flag refuses'
     $emptyRoot=[ordered]@{candidatePath='';preparedManifestPath='';preparedManifestSha256=''}
     Assert-CaseRefusal { ConvertTo-QualificationPreparedParameters -RootAdmission $emptyRoot -TestPath $opening -Parameters $openingInvocation.NamedParameters } 'explicit Opening child input cannot create a new unbound root'
+    # Read the authentic Inventory AST only; never invoke its test body here.
+    # openingRoot's metadata paths/hash are inert strings, not candidate evidence.
+    $inventoryLeaf=Join-Path $PSScriptRoot 'QualificationInventoryOperands.Tests.ps1'
+    foreach ($parameterlessLeaf in @($inventoryLeaf,$test)) {
+        foreach ($preparedRoot in @($emptyRoot,$openingRoot)) {
+            $emptyParameters=[ordered]@{}
+            $parameterlessBinding=ConvertTo-QualificationPreparedParameters -RootAdmission $preparedRoot -TestPath $parameterlessLeaf -Parameters $emptyParameters
+            Assert-CaseControl ($parameterlessBinding -is [Collections.IDictionary] -and $parameterlessBinding.Count -eq 0 -and $emptyParameters.Count -eq 0) 'empty param()/no ParamBlock stays empty under unbound/bound inert metadata'
+        }
+    }
+    Assert-CaseRefusal { ConvertTo-QualificationPreparedParameters -RootAdmission $openingRoot -TestPath $inventoryLeaf -Parameters ([ordered]@{Name='undeclared'}) } 'authentic empty Inventory ParamBlock still refuses nonempty undeclared parameters'
     # Disclosed pure native-result substitution verifies public compatibility;
     # actual File->Case->leaf ownership remains a separate root native gate.
     & {

@@ -40,10 +40,12 @@ $approvalOrigin=$approvalControl.TranslatePoint([System.Windows.Point]::new(0,0)
 $detailsOrigin=$detailsControl.TranslatePoint([System.Windows.Point]::new(0,0),$window.Content)
 $timelineOrigin=$timelineControl.TranslatePoint([System.Windows.Point]::new(0,0),$window.Content)
 $openOrigin=$openControl.TranslatePoint([System.Windows.Point]::new(0,0),$window.Content)
+$activityWorkspace=$window.FindName('ActivityWorkspace')
+$activityViewportOrigin=$activityWorkspace.TranslatePoint([System.Windows.Point]::new(0,0),$window.Content)
 Assert-Equal $true ([object]::ReferenceEquals($approvalControl.Parent,$window.FindName('Status').Parent)) 'run controls and exposed state share the accepted left rail'
 Assert-Equal $true ($approvalOrigin.X+$approvalControl.ActualWidth -le $detailsOrigin.X) 'run controls are left of the main preparation and activity workspace'
-Assert-Equal $true ([object]::ReferenceEquals($openControl.Parent.Parent.Parent.Parent,$timelineControl.Parent.Parent)) 'report actions are adjacent to results in the same main workspace'
-Assert-Equal $true ($openOrigin.Y -ge $timelineOrigin.Y+$timelineControl.ActualHeight) 'report actions follow the main event timeline'
+Assert-Equal $true ([object]::ReferenceEquals($openControl.Parent.Parent.Parent.Parent,$window.FindName('MainWorkspace')) -and [object]::ReferenceEquals($timelineControl.Parent.Parent.Parent,$activityWorkspace) -and [object]::ReferenceEquals($activityWorkspace.Parent,$window.FindName('MainWorkspace'))) 'report actions are adjacent to results in the same main workspace'
+Assert-Equal $true ($activityWorkspace -is [System.Windows.Controls.ScrollViewer] -and $activityWorkspace.ActualHeight -gt 0 -and $activityWorkspace.ViewportHeight -gt 0 -and $openOrigin.Y -ge $activityViewportOrigin.Y+$activityWorkspace.ActualHeight) 'report actions follow the main event timeline viewport'
 Assert-Equal $true ($openControl.Background.Color.ToString() -eq '#FF1765AE' -and $saveControl.Background.Color -ne $openControl.Background.Color) 'Open report is the primary blue action and private HTML saving is secondary'
 Assert-Equal $true ([object]::ReferenceEquals($window.FindName('ScopeFact').Parent.Parent.Parent.Parent,$window.Content)) 'four preparation facts remain outside the scrolling work panes'
 $request=Get-AutomationRequest -LiteralPath (Join-Path $PSScriptRoot 'fixtures/automation-request.json') -ConvertFromJsonCommand (Get-Command ConvertFrom-Json -CommandType Cmdlet)

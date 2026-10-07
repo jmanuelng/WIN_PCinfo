@@ -219,7 +219,7 @@ function ConvertTo-QualificationPreparedParameters {
         [Parameter(Mandatory)] $Parameters)
     $named=[ordered]@{}; foreach ($name in $Parameters.Keys) { $named[$name]=$Parameters[$name] }
     $ast=Assert-TestFileExecutableProtocol -Path $TestPath
-    $names=if ($null -ne $ast.ParamBlock) {@($ast.ParamBlock.Parameters.Name.VariablePath.UserPath)} else {@()}
+    $names=@(if ($null -ne $ast.ParamBlock) { foreach ($parameter in $ast.ParamBlock.Parameters) { $parameter.Name.VariablePath.UserPath } })
     $prepared=@('CandidatePath','PreparedManifestPath','PreparedManifestSha256')
     $count=@($prepared | Where-Object { $_ -in $names }).Count
     if ($count -ne 0 -and $count -ne 3) { throw 'Qualification leaf declares partial prepared input.' }

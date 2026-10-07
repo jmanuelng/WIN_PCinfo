@@ -190,7 +190,7 @@ function New-StatusDeskWindow {
     [xml] $layout = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="WIN-PCInfo — Status desk" Width="1040" Height="800" MinWidth="760" MinHeight="600" Background="#E8EDF2" Foreground="#1F3447" FontFamily="Segoe UI" FontSize="14" WindowStartupLocation="CenterScreen">
  <Window.Resources>
-  <Style TargetType="Button"><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="Padding" Value="12,7"/><Setter Property="Background" Value="#E8EDF2"/><Setter Property="Foreground" Value="#203448"/><Setter Property="HorizontalAlignment" Value="Stretch"/></Style>
+  <Style TargetType="Button"><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="Padding" Value="12,7"/><Setter Property="Background" Value="#E8EDF2"/><Setter Property="Foreground" Value="#203448"/><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="ContentTemplate"><Setter.Value><DataTemplate><AccessText Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center"/></DataTemplate></Setter.Value></Setter></Style>
   <Style TargetType="GroupBox">
    <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#CBD3DA"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="14"/>
    <Setter Property="HeaderTemplate"><Setter.Value><DataTemplate><TextBlock Text="{Binding}" FontSize="12" FontWeight="SemiBold" Foreground="#506773" Margin="0,0,0,10"/></DataTemplate></Setter.Value></Setter>
@@ -207,7 +207,7 @@ function New-StatusDeskWindow {
    <Border Background="White" BorderBrush="#CBD3DA" BorderThickness="1" Padding="12"><StackPanel><TextBlock Text="RESULTS" Foreground="#687986" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/><TextBlock Name="OutputFact" Text="Protected for the initiating user" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel></Border>
   </UniformGrid>
   <Grid Grid.Row="2">
-   <Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
    <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="16" Margin="0,0,12,0">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
      <TextBlock Text="Run controls" FontSize="22" FontWeight="SemiBold" Foreground="#203448" Margin="0,0,0,12"/>
@@ -230,8 +230,11 @@ function New-StatusDeskWindow {
      <Button Name="Close" Content="C_lose" FontSize="13" Padding="10,6"/>
     </StackPanel></ScrollViewer>
    </Border>
-   <Grid Grid.Column="1"><Grid>
-    <Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid Grid.Column="1"><Grid Name="MainWorkspace">
+    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <ScrollViewer Name="ActivityWorkspace" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False" Focusable="True">
+     <Grid MinHeight="300" Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+      <Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <GroupBox Header="Preparation and activity"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="True"><StackPanel>
      <TextBlock Name="CurrentActivity" Text="No structured activity received. No assessment collection has started." FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#1765AE" Margin="0,0,0,8"/>
      <TextBlock Name="ControllerActivity" TextWrapping="Wrap" Foreground="#526878" FontSize="13" Margin="0,0,0,10"/>
@@ -239,7 +242,9 @@ function New-StatusDeskWindow {
      <TextBlock Name="Details" TextWrapping="Wrap" Text="Checking the installed runtime, frozen definition and local protection. No assessment collection has started."/>
     </StackPanel></ScrollViewer></GroupBox>
     <GroupBox Grid.Row="1" Header="Event timeline" Background="#F5F7F9" BorderThickness="1,0,1,0"><ListBox Name="Timeline" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate></ListBox></GroupBox>
-    <Border Grid.Row="2" Background="#E1E7EC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="12"><StackPanel>
+     </Grid>
+    </ScrollViewer>
+    <Border Grid.Row="1" Background="#E1E7EC" BorderBrush="#CBD3DA" BorderThickness="1" Padding="12"><StackPanel>
      <TextBlock Text="Report actions" Foreground="#526878" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"/>
      <WrapPanel><Button Name="OpenReport" Content="_Open report" IsEnabled="False" Background="#1765AE" Foreground="White" FontWeight="SemiBold" Margin="0,0,8,6"/><Button Name="SaveHtml" Content="_Save HTML for consultant" IsEnabled="False" Margin="0,0,0,6"/></WrapPanel>
     </StackPanel></Border>
