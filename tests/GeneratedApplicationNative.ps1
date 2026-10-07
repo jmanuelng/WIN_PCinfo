@@ -273,6 +273,7 @@ function Complete-PortableBootstrapNativeBinding {
             {if ($null -ne $Binding.TargetStream) { $Binding.TargetStream.Dispose() }},
             {if ($null -ne $Binding.HostStream) { $Binding.HostStream.Dispose() }}
         )
+        $Binding.Closed=$true
     }
     catch {
         if (Test-QualificationCleanupUnverified -Exception $_.Exception) {
@@ -349,7 +350,7 @@ function Open-PortableBootstrapNativeBinding {
         $end=[DateTimeOffset]::ParseExact($context.Parent.Pending.authorityEnds,'o',[Globalization.CultureInfo]::InvariantCulture).
             AddMilliseconds(-[long]$context.Parent.Pending.cleanupReserveMs-2000)
         [pscustomobject]@{HostStream=$hostStream;TargetStream=$targetStream;ClearEnvironment=$clear;Environment=$map;AuthorityEnds=$end;
-            Record=[ordered]@{contract='win-pcinfo.portable-bootstrap-native/1.0.0';testPath=$testPath;
+            Closed=$false;Record=[ordered]@{contract='win-pcinfo.portable-bootstrap-native/1.0.0';testPath=$testPath;
                 parentPendingCanonicalSha256=(Get-TestNativeDigest -Value $context.Parent.Pending);
                 hostPath=$HostPath;hostSha256=$hostSha;targetPath=$target;targetSha256=$targetSha;
                 arguments=$Arguments;workingDirectory=$WorkingDirectory;environmentMode=$(if($clear){'ClearExact'}else{'Inherited'});
@@ -357,7 +358,7 @@ function Open-PortableBootstrapNativeBinding {
     }
     catch {
         Complete-PortableBootstrapNativeBinding -Binding ([pscustomobject]@{TargetStream=$targetStream;HostStream=$hostStream;
-            Phase='AdmissionFailedBeforeNativeCreation'}) -BodyError $_
+            Closed=$false;Phase='AdmissionFailedBeforeNativeCreation'}) -BodyError $_
     }
 }
 
@@ -376,7 +377,7 @@ function Invoke-GeneratedApplicationNative {
         [switch] $PortableBootstrap, [hashtable] $ExactEnvironment, [string] $InputLauncherOwnerDirectory,
         [AllowEmptyString()] [string] $PortableEntryCmdPackageRoot)
 
-    $portableBinding=$null; $cmdBinding=$null; $inputBinding=$null; $inputUseError=$null; $inputResult=$null; $portableSafe=$false; $startRequested=$false; $owner=$null
+    $scriptInput=$null; $scriptInputStream=$null; $portableConsumed=$null; $scriptConsumed=$null; $portableBinding=$null; $cmdBinding=$null; $inputBinding=$null; $inputUseError=$null; $inputResult=$null; $portableSafe=$false; $startRequested=$false; $owner=$null; $directory=$null
     $cmdRequested=$PSBoundParameters.ContainsKey('PortableEntryCmdPackageRoot')
     try {
     Assert-PortableEntryCmdAdmissionReady
@@ -473,7 +474,32 @@ function Invoke-GeneratedApplicationNative {
     # Raw argv, native streams and failure messages stay in this private test
     # directory. No inherited broad ACL is allowed when collection may start.
     $sid=Set-TestNativePrivateDirectory -Path $directory
+    if($NativeRole -ceq 'GeneratedApplication' -and -not $cmdRequested -and -not $PortableBootstrap -and
+        $Arguments.Count -ge 4 -and $Arguments[0] -ceq '-NoLogo' -and $Arguments[1] -ceq '-NoProfile' -and $Arguments[2] -ceq '-File'){
+        $scriptPath=[IO.Path]::GetFullPath($Arguments[3]);Assert-PortableEntryCmdOrdinaryPath -Path $scriptPath
+        $scriptInputStream=[IO.File]::Open($scriptPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+        $scriptHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($scriptInputStream)).ToLowerInvariant();$scriptInputStream.Position=0
+        $scriptInput=[ordered]@{path=$scriptPath;bytes=$scriptInputStream.Length;sha256=$scriptHash;rootCandidateReference=$false}
+        if($null -eq $inputBinding){
+            $scriptContext=Get-TestNativeAdmissionContext -RepositoryRoot $repository -SelfIdentity (Get-TestNativeSelfIdentity)
+            $rootCandidatePin=@($scriptContext.Root.Admission.inputs|Where-Object path -IEQ $scriptContext.Root.Admission.candidatePath)
+            if($rootCandidatePin.Count-eq1-and$scriptPath -ieq $rootCandidatePin[0].path-and$scriptInput.bytes-eq$rootCandidatePin[0].bytes-and$scriptHash -ceq $rootCandidatePin[0].sha256){$scriptInput.rootCandidateReference=$true}
+        }
+        if(-not $scriptInput.rootCandidateReference){$scriptConsumed=Save-GeneratedNativeConsumedInputs -Directory $directory -Streams @($scriptInputStream) -Kind OrdinaryScript -AuthorityEnds $budget.AuthorityEnds}
+    }
     $pendingPath=Join-Path $directory 'owned-pending.json'
+    $caseOutputAncestors=@()
+    if($NativeRole-ceq'QualificationCase'){
+        $caseOutput=Get-TestRecordOptionalProperty -Record $QualificationCaseAdmission.namedParameters -Name OutputPath
+        if($null-ne$caseOutput){
+            $caseParent=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($caseOutput))
+            foreach($literal in @([IO.Path]::GetDirectoryName($caseParent),$caseParent)){
+                $item=Get-Item -LiteralPath $literal -ErrorAction Stop
+                if(-not$item.PSIsContainer-or($item.Attributes-band[IO.FileAttributes]::ReparsePoint)-ne0){throw 'Original Case output ancestor differs before creation.'}
+                $caseOutputAncestors+=@([ordered]@{path=$item.FullName;directory=$true;attributes=[int]$item.Attributes;creationUtc=$item.CreationTimeUtc.ToString('o');capturedAtUtc=[DateTimeOffset]::UtcNow.ToString('o');observation='Original admitted native Case creator before Process.Start; no post-deletion absence claim.'})
+            }
+        }
+    }
     $parentIdentity=Get-TestNativeSelfIdentity
     $pending=[ordered]@{contract='win-pcinfo.test-owned-native/1.0.0'; nonce=$nonce; nativeRole=$NativeRole; admission=$admission;
         requestedAt=[DateTimeOffset]::UtcNow.ToString('o'); authorityEnds=$budget.AuthorityEnds.ToString('o');
@@ -481,7 +507,7 @@ function Invoke-GeneratedApplicationNative {
         parent=[ordered]@{pid=$parentIdentity.Pid; creationUtc=$parentIdentity.CreationUtc; ownerSid=$sid.Value; hostPath=$parentIdentity.HostPath; arguments=[Environment]::GetCommandLineArgs()};
         hostSha256=(Get-FileHash -LiteralPath $HostPath -Algorithm SHA256).Hash.ToLowerInvariant();
         supervisorSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'GeneratedApplicationNativeSupervisor.cs') -Algorithm SHA256).Hash.ToLowerInvariant();
-        childCreationRequested=$false; child=$null}
+        caseOutputAncestors=$caseOutputAncestors;consumedScriptInput=$scriptInput;childCreationRequested=$false; child=$null}
     $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($pending | ConvertTo-Json -Depth 8 -Compress))
     $file=[IO.File]::Open($pendingPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
     try { $file.Write($bytes); $file.Flush($true) } finally { $file.Dispose() }
@@ -552,8 +578,34 @@ function Invoke-GeneratedApplicationNative {
     if ($cmdRequested -and $null -ne $outcome -and $outcome.NativeTerminalObserved -and -not $outcome.OwnedCleanupUnverified -and $failures.Count -eq 0) {
         # Verify/release every immutable input before releasing the native hold.
         # A fallible binding finalizer cannot erase the original native outcome.
-        try { Complete-PortableEntryCmdBinding -Binding $cmdBinding }
-        catch { $failures.Add($_.Exception) }
+        try {
+            $portableStreams=@($cmdBinding.Files|ForEach-Object {$_.Stream})
+            $portableConsumed=Save-GeneratedNativeConsumedInputs -Directory $directory -Streams $portableStreams -Kind Cmd -AuthorityEnds $budget.AuthorityEnds
+            Complete-PortableEntryCmdBinding -Binding $cmdBinding
+            Save-GeneratedNativeInputClose -Directory $directory -Consumed $portableConsumed -Streams $portableStreams
+        }catch{$failures.Add($_.Exception)}
+    }
+    if($null -ne $portableBinding -and $null -ne $outcome -and $outcome.NativeTerminalObserved -and -not $outcome.OwnedCleanupUnverified -and $failures.Count -eq 0){
+        try {
+            $portableStreams=@($portableBinding.HostStream,$portableBinding.TargetStream)
+            $portableConsumed=Save-GeneratedNativeConsumedInputs -Directory $directory -Streams $portableStreams -Kind Bootstrap -AuthorityEnds $budget.AuthorityEnds
+            Complete-PortableBootstrapNativeBinding -Binding $portableBinding
+            Save-GeneratedNativeInputClose -Directory $directory -Consumed $portableConsumed -Streams $portableStreams
+        }catch{$failures.Add($_.Exception)}
+    }
+    if($null -ne $scriptInputStream -and $null -ne $outcome -and $outcome.NativeTerminalObserved -and -not $outcome.OwnedCleanupUnverified -and $failures.Count -eq 0){
+        try {
+            $scriptInputStream.Position=0
+            if([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($scriptInputStream)).ToLowerInvariant() -cne $scriptInput.sha256 -or $scriptInputStream.Length -ne $scriptInput.bytes){throw 'Consumed script changed.'}
+            $scriptInputStream.Dispose()
+            if($null -ne $scriptConsumed){Save-GeneratedNativeInputClose -Directory $directory -Consumed $scriptConsumed -Streams @($scriptInputStream)}
+            else {
+                Write-TestNativeNewRecord -Path (Join-Path $directory 'consumed-root-candidate-close.json') -Value ([ordered]@{
+                    contract='win-pcinfo.generated-native-root-candidate-close/1.0.0';input=$scriptInput;
+                    startupSha256=(Get-FileHash -LiteralPath (Join-Path $directory 'startup.json')).Hash.ToLowerInvariant();
+                    originalInputStreamClosed=(-not $scriptInputStream.CanRead);rawInputRetentionClaim=$false;nativeOutcomeReclassified=$false})
+            }
+        }catch{$failures.Add($_.Exception)}
     }
     try {
         $errorRecord=[ordered]@{startRequested=$startRequested; started=$owner.StartedIdentity.Started; original=$original;
@@ -576,6 +628,10 @@ function Invoke-GeneratedApplicationNative {
     }
     if (-not $safe) {
         if ($cmdRequested) { Retain-PortableEntryCmdBinding -Binding $cmdBinding }
+        if($null -ne $scriptInputStream -and $scriptInputStream.CanRead){
+            if($null -eq (Get-Variable GeneratedApplicationUnverifiedScriptInputs -Scope Script -ErrorAction SilentlyContinue)){$script:GeneratedApplicationUnverifiedScriptInputs=[Collections.Generic.List[object]]::new()}
+            $script:GeneratedApplicationUnverifiedScriptInputs.Add([pscustomobject]@{Stream=$scriptInputStream;Pin=$scriptInput;Directory=$directory})
+        }
         # Keep the original owner reachable if its native terminal is unknown.
         # Forced parent termination makes descendant cleanup unverified; this
         # helper never claims or kills descendants from an invented identity.
@@ -604,24 +660,75 @@ function Invoke-GeneratedApplicationNative {
     if ($null -ne $inputBinding) { $inputResult=$nativeResult } else { $nativeResult }
     }
     catch {
-        $inputUseError=$_
-        if (($PortableBootstrap -or $cmdRequested -or $null -ne $inputBinding) -and $startRequested -and -not $portableSafe -and
-            -not (Test-QualificationCleanupUnverified -Exception $_.Exception)) {
-            if ($cmdRequested) { Retain-PortableEntryCmdBinding -Binding $cmdBinding }
-            # Fallible post-start disposal/retention must not let the caller
-            # delete its package root while original ownership is uncertain.
-            $_.Exception.Data['OwnedCleanupUnverified']=$true
-            $_.Exception.Data['NativeEvidenceDirectory']=$directory
-            if ($null -ne $owner) {
-                if ($null -eq (Get-Variable GeneratedApplicationUnverifiedOwners -Scope Script -ErrorAction SilentlyContinue)) {
-                    $script:GeneratedApplicationUnverifiedOwners=[Collections.Generic.List[object]]::new()
+        $originalError=$_
+        $inputUseError=$originalError
+        $originalWasUnsafe=Test-QualificationCleanupUnverified -Exception $originalError.Exception
+        $scriptInputHeld=$null -ne $scriptInputStream -and $scriptInputStream.CanRead
+        $portableOwnershipUnsafe=($PortableBootstrap -or $cmdRequested -or $null -ne $inputBinding) -and
+            $startRequested -and -not $portableSafe
+        if ($scriptInputHeld -or $portableOwnershipUnsafe -or $originalWasUnsafe) {
+            # Mark the original before any fallible retention; each attempt is independent.
+            $originalError.Exception.Data['OwnedCleanupUnverified']=$true
+            if ($null -ne $directory) { $originalError.Exception.Data['NativeEvidenceDirectory']=$directory }
+            $retentionErrors=[Collections.Generic.List[Exception]]::new()
+            if ($scriptInputHeld) {
+                try {
+                    if ($null -eq (Get-Variable GeneratedApplicationUnverifiedScriptInputs -Scope Script -ErrorAction SilentlyContinue)) {
+                        $script:GeneratedApplicationUnverifiedScriptInputs=[Collections.Generic.List[object]]::new()
+                    }
+                    $script:GeneratedApplicationUnverifiedScriptInputs.Add([pscustomobject]@{
+                        Stream=$scriptInputStream;Pin=$scriptInput;Directory=$directory;nativeCreationRequested=$startRequested})
                 }
-                $script:GeneratedApplicationUnverifiedOwners.Add($owner)
+                catch { $retentionErrors.Add($_.Exception) }
+                try {
+                    if ($null -ne $directory -and -not [IO.File]::Exists((Join-Path $directory 'owned-pending.json'))) {
+                        Write-TestNativeNewRecord -Path (Join-Path $directory 'owned-pending.json') -Value ([ordered]@{
+                            contract='win-pcinfo.generated-input-preparation-blocked/1.0.0';nativeCreationRequested=$startRequested
+                            consumedScriptInput=$scriptInput;originalInputCloseUnverified=$true})
+                    }
+                }
+                catch { $retentionErrors.Add($_.Exception) }
             }
-            try { [IO.File]::WriteAllText((Get-QualificationCleanupBlockerPath),'{"state":"OwnedCleanupUnverified"}',[Text.UTF8Encoding]::new($false)) } catch { }
-            Write-Output 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'
+            if ($portableOwnershipUnsafe) {
+                if ($cmdRequested) {
+                    try { Retain-PortableEntryCmdBinding -Binding $cmdBinding }
+                    catch { $retentionErrors.Add($_.Exception) }
+                }
+                if ($null -ne $owner) {
+                    try {
+                        if ($null -eq (Get-Variable GeneratedApplicationUnverifiedOwners -Scope Script -ErrorAction SilentlyContinue)) {
+                            $script:GeneratedApplicationUnverifiedOwners=[Collections.Generic.List[object]]::new()
+                        }
+                        $script:GeneratedApplicationUnverifiedOwners.Add($owner)
+                    }
+                    catch { $retentionErrors.Add($_.Exception) }
+                }
+            }
+            try {
+                [IO.File]::WriteAllText((Get-QualificationCleanupBlockerPath),
+                    '{"state":"OwnedCleanupUnverified"}',[Text.UTF8Encoding]::new($false))
+            }
+            catch { $retentionErrors.Add($_.Exception) }
+            if ($portableOwnershipUnsafe -and -not $scriptInputHeld -and -not $originalWasUnsafe) {
+                Write-Output 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'
+            }
+            if ($retentionErrors.Count -gt 0) {
+                $allErrors=[Collections.Generic.List[Exception]]::new()
+                $allErrors.Add($originalError.Exception)
+                foreach ($retentionError in $retentionErrors) { $allErrors.Add($retentionError) }
+                $retentionFailure=[AggregateException]::new(
+                    'Original native failure and ownership retention failures.',$allErrors)
+                foreach ($key in $originalError.Exception.Data.Keys) {
+                    $retentionFailure.Data[$key]=$originalError.Exception.Data[$key]
+                }
+                $retentionFailure.Data['OwnedCleanupUnverified']=$true
+                if ($null -ne $directory) { $retentionFailure.Data['NativeEvidenceDirectory']=$directory }
+                $inputUseError=[Management.Automation.ErrorRecord]::new($retentionFailure,
+                    $originalError.FullyQualifiedErrorId,$originalError.CategoryInfo.Category,$originalError.TargetObject)
+                throw $inputUseError
+            }
         }
-        throw
+        throw $originalError
     }
     finally {
         if ($null -ne $cmdBinding -and -not $cmdBinding.Closed) {
@@ -637,7 +744,7 @@ function Invoke-GeneratedApplicationNative {
             }
             else { Close-InputLauncherNativeBinding -Binding $inputBinding -BodyError $inputUseError }
         }
-        if ($null -ne $portableBinding) {
+        if ($null -ne $portableBinding -and -not $portableBinding.Closed) {
             if ($startRequested -and -not $portableSafe) {
                 if ($null -eq (Get-Variable PortableBootstrapUnverifiedBindings -Scope Script -ErrorAction SilentlyContinue)) {
                     $script:PortableBootstrapUnverifiedBindings=[Collections.Generic.List[object]]::new()
@@ -963,4 +1070,35 @@ function Retain-PortableEntryCmdBinding {
         $script:PortableEntryCmdUnverifiedBindings=[Collections.Generic.List[object]]::new()
     }
     if (-not $script:PortableEntryCmdUnverifiedBindings.Contains($Binding)) { $script:PortableEntryCmdUnverifiedBindings.Add($Binding) }
+}
+
+function Save-GeneratedNativeConsumedInputs {
+    param([Parameter(Mandatory)][string]$Directory,[Parameter(Mandatory)][object[]]$Streams,[Parameter(Mandatory)][string]$Kind,[Parameter(Mandatory)][DateTimeOffset]$AuthorityEnds)
+    # Finite count/bytes come from actual held inputs; resource requalification includes these retained bytes.
+    $rows=[Collections.Generic.List[object]]::new();$index=0;$total=0L
+    foreach($stream in $Streams){
+        if($null -eq $stream -or -not $stream.CanRead -or -not $stream.CanSeek){throw 'Original consumed input unavailable.'}
+        $length=$stream.Length;$position=$stream.Position;$retained=Join-Path $Directory ('consumed-input-'+$index.ToString('D4')+'.retained');$index++
+        $target=[IO.File]::Open($retained,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+        try{
+            $stream.Position=0;$remaining=$length;$buffer=[byte[]]::new(81920)
+            while($remaining -gt 0){if(($AuthorityEnds-[DateTimeOffset]::UtcNow).TotalMilliseconds-lt2000){throw 'Consumed input retention exhausted unchanged native release reserve.'};$read=$stream.Read($buffer,0,[int][Math]::Min($remaining,$buffer.Length));if($read -lt 1){throw 'Consumed input ended early.'};$target.Write($buffer,0,$read);$remaining-=$read}
+            if($stream.ReadByte() -ne -1){throw 'Consumed input grew during retention.'};$target.Flush($true)
+        }finally{$target.Dispose();$stream.Position=$position}
+        $total+=$length;$rows.Add([ordered]@{path=$stream.Name;bytes=$length;sha256=(Get-FileHash -LiteralPath $retained).Hash.ToLowerInvariant();retainedPath=$retained})
+    }
+    $record=[ordered]@{contract='win-pcinfo.generated-native-consumed-inputs/1.0.0';kind=$Kind;directory=$Directory;inputCount=$rows.Count;totalBytes=$total;inputs=$rows.ToArray();nativeOutcomeReclassified=$false;processTreeAbsenceClaim=$false}
+    Write-TestNativeNewRecord -Path (Join-Path $Directory 'consumed-inputs.json') -Value $record
+    $record
+}
+function Save-GeneratedNativeInputClose {
+    param([Parameter(Mandatory)][string]$Directory,[Parameter(Mandatory)]$Consumed,[Parameter(Mandatory)][object[]]$Streams)
+    foreach($stream in $Streams){if($stream.CanRead){throw 'Consumed input remains open after original finalizer.'}}
+    foreach($pin in $Consumed.inputs){if((Get-Item -LiteralPath $pin.retainedPath).Length -ne $pin.bytes -or (Get-FileHash -LiteralPath $pin.retainedPath).Hash.ToLowerInvariant() -cne $pin.sha256){throw 'Retained input changed.'}}
+    Write-TestNativeNewRecord -Path (Join-Path $Directory 'consumed-input-close.json') -Value ([ordered]@{
+        contract='win-pcinfo.generated-native-input-close/1.0.0';kind=$Consumed.kind;
+        startupSha256=(Get-FileHash -LiteralPath (Join-Path $Directory 'startup.json')).Hash.ToLowerInvariant();
+        originalOutcomeSha256=(Get-FileHash -LiteralPath (Join-Path $Directory 'original-native-outcome.json')).Hash.ToLowerInvariant();
+        consumedInputsSha256=(Get-FileHash -LiteralPath (Join-Path $Directory 'consumed-inputs.json')).Hash.ToLowerInvariant();
+        originalInputStreamsClosed=$true;nativeOutcomeReclassified=$false;processTreeAbsenceClaim=$false})
 }

@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
     [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '',
     [switch] $DelayPrivilegeStartup,
@@ -36,7 +36,7 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
-    [switch] $RecoveryAuthorized, [string] $InterruptHandoffPath = '',
+    [switch] $RecoveryAuthorized, [string] $InterruptHandoffPath = '', [string] $RecoveryCreatorDirectory = '',
     [ValidateSet('None','Integrity','PreStartIntegrity','Cleanup')] [string] $FailureKind = 'None')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -456,6 +456,16 @@ if ($RequireRecoveryJournal) {
         '$script:StatusDeskTransport.State.JournalObserved=(Test-Path -LiteralPath $Parameters.Request.outputDestination) -and @(Get-ChildItem -LiteralPath $Parameters.Request.outputDestination -Filter WINPCInfo-Recovery-v1-* -Directory).Count -eq 1; $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
 }
 if ($InterruptHandoffPath) {
+    . (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
+    if([string]::IsNullOrEmpty($RecoveryCreatorDirectory)){throw 'Original interrupted recovery requires its creator retention directory.'}
+    $recoveryProtocol=Get-QualificationRecoveryCreatorProtocol
+    $recoveryProtocolHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($recoveryProtocol))).ToLowerInvariant()
+    $recoveryPrefix=$recoveryProtocol+[Environment]::NewLine+'$script:RecoveryOriginalProtocolSha256='''+$recoveryProtocolHash+''';'+[Environment]::NewLine
+    $moduleText += [Environment]::NewLine+$recoveryPrefix
+    $workerAnchor='try { $worker = [System.Diagnostics.Process]::Start($startInfo) }'
+    if(([regex]::Matches($moduleText,[regex]::Escape($workerAnchor))).Count -ne 1){throw 'Original recovery coordinator creation boundary changed.'}
+    $workerReplacement='try { $recoveryRequest=Begin-RecoveryOriginalCreation -Directory ''__OWNER__'' -Role StatusWorker -StartInfo $startInfo -WorkerConfiguration $workerConfiguration -WorkerTemplateSha256 $workerDigest; $worker = [System.Diagnostics.Process]::Start($startInfo); Save-RecoveryOriginalCreation -Request $recoveryRequest -Process $worker }'
+    $moduleText=$moduleText.Replace($workerAnchor,$workerReplacement.Replace('__OWNER__',$RecoveryCreatorDirectory.Replace("'","''")))
     # Only the controlled worker can witness creation of its nested child.
     # Rebind this synthetic fixture policy to its instrumented source.
     . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
@@ -468,7 +478,7 @@ function Get-PrivilegedCollectionWorkerSource {
     $source=Get-RecoveryOriginalPrivilegeWorkerSource
     $anchor='$null = [System.Diagnostics.Process]::Start($childStartInfo)'
     if(([regex]::Matches($source,[regex]::Escape($anchor))).Count -ne 1){throw 'Controlled recovery child boundary changed.'}
-    $source.Replace($anchor, '$recoveryChild = [System.Diagnostics.Process]::Start($childStartInfo); [IO.File]::WriteAllText(''__RECOVERY_WITNESS__'', ($PID.ToString() + '':'' + $recoveryChild.Id.ToString()))')
+    '__PROTOCOL_PREFIX__'+$source.Replace($anchor, '$recoveryRequest=Begin-RecoveryOriginalCreation -Directory ''__OWNER__'' -Role StatusNested -StartInfo $childStartInfo; $recoveryChild = [System.Diagnostics.Process]::Start($childStartInfo); Save-RecoveryOriginalCreation -Request $recoveryRequest -Process $recoveryChild; [IO.File]::WriteAllText(''__RECOVERY_WITNESS__'', ($PID.ToString() + '':'' + $recoveryChild.Id.ToString()))')
 }
 function Get-PrivilegedCollectionPlanPolicy {
     $policy=Get-RecoveryOriginalPrivilegePolicy
@@ -477,7 +487,7 @@ function Get-PrivilegedCollectionPlanPolicy {
     $policy
 }
 '@
-    $moduleText += "`n" + $instrumentation.Replace('__RECOVERY_WITNESS__', $InterruptHandoffPath.Replace("'", "''"))
+    $moduleText += "`n" + $instrumentation.Replace('__RECOVERY_WITNESS__', $InterruptHandoffPath.Replace("'", "''")).Replace('__OWNER__',$RecoveryCreatorDirectory.Replace("'","''")).Replace('__PROTOCOL_PREFIX__',$recoveryPrefix.Replace("'","''"))
 }
 if ($FailureKind -eq 'PreStartIntegrity') {
     $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',

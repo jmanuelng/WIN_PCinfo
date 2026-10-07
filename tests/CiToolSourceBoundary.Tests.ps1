@@ -5,11 +5,14 @@ $ErrorActionPreference='Stop'
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot 'src/PrivilegedCollectionPlan.ps1')
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 $hostPath=Resolve-WinPCInfoRuntime -ApplicationPath (Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1')
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseInput((Get-PrivilegedCollectionWorkerSource),[ref]$tokens,[ref]$errors)
 $node=$ast.Find({param($item) $item -is [Management.Automation.Language.FunctionDefinitionAst] -and $item.Name -eq 'Read-CiToolJson'},$false)
 $source=$node.Extent.Text.Replace('[IO.File]::Exists($path)','(Test-ControlledCiToolPath $path)').Replace('[IO.File]::GetAttributes($path)','[IO.FileAttributes]::Normal').Replace('[Diagnostics.Process]::Start($start)','(Start-ControlledCiTool $start)')
+$source=$source.Replace('$child.Kill($true)','$script:ciToolForced=$true;$child.Kill($true)')
+$source=$source.Replace('finally{$child.Dispose()}','finally{try{Save-QualificationOriginalCreatorTerminal -Owner $script:ciToolOwner -Disposition OriginalCiToolSourceBoundary -Forced $script:ciToolForced -RawStandardOutput $(if($length){[byte[]]$buffer[0..($length-1)]}else{[byte[]]@()}) -StreamContract RawStdoutBound65537OriginalStderrUnread}finally{$child.Dispose()};Complete-QualificationOriginalCreatorOwner $script:ciToolOwner}')
 . ([scriptblock]::Create($source))
 function Test-ControlledCiToolPath($Path){
     Assert-Equal ([IO.Path]::Combine([Environment]::SystemDirectory,'CiTool.exe')) $Path 'CiTool cannot resolve through PATH or caller input'
@@ -28,11 +31,16 @@ function Start-ControlledCiTool($Start){
     }
     $Start.FileName=$hostPath;$Start.ArgumentList.Clear()
     foreach($argument in @('-NoLogo','-NoProfile','-NonInteractive','-Command',$scriptText)){$Start.ArgumentList.Add($argument)}
-    $child=[Diagnostics.Process]::Start($Start);$children.Add($child.Id);$child
+    $script:ciToolOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile ('CiTool'+$case) -StartInfo $Start
+    Assert-QualificationOriginalCreatorCreation $script:ciToolOwner
+    $script:ciToolForced=$false
+    $child=[Diagnostics.Process]::Start($Start)
+    Register-QualificationFixtureProcess -Owner $script:ciToolOwner -Process $child
+    $children.Add($child.Id);$child
 }
 foreach($case in @('Valid','Bound','Denied','Timeout','NonUtf8')){
     $watch=[Diagnostics.Stopwatch]::StartNew();$failed=$false;$value=$null
-    try {$value=Read-CiToolJson}catch{$failed=$true}
+    try {$value=Read-CiToolJson}catch{if(Test-QualificationCleanupUnverified $_.Exception){throw};$failed=$true}
     Assert-Equal ($case -ne 'Valid') $failed 'native output, errors and deadlines remain bounded before parsing'
     if($case -eq 'Valid'){Assert-Equal '{"Policies":[]}' $value 'the native boundary preserves exact JSON bytes'}
     Assert-Equal $true ($watch.Elapsed.TotalSeconds -lt 5) 'native listing and cleanup stay within the operation budget'

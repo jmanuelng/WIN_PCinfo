@@ -204,3 +204,235 @@ function Remove-QualificationFixtureRoot {
     }
     if ([IO.Directory]::Exists($path) -or [IO.File]::Exists($path)) { throw 'Fixture root cleanup could not verify absence.' }
 }
+
+# Closed original creator observation. Native Start/Kill/Wait, Jobs and pipes
+# stay at their original test source seam; this API grants no launch authority.
+function New-QualificationOriginalCreatorOwner {
+    param([Parameter(Mandatory)][string]$RepositoryRoot,[Parameter(Mandatory)][string]$TestPath,
+        [Parameter(Mandatory)][ValidateSet('CiToolValid','CiToolBound','CiToolDenied','CiToolTimeout','CiToolNonUtf8',
+            'EvidenceCrash','RecoveryMetadata','RecoveryFixtureParent','StatusRecoveryParent','CleanupHandoff','CleanupPipe')][string]$Profile,
+        [Parameter(Mandatory)][Diagnostics.ProcessStartInfo]$StartInfo,[ValidatePattern('^[a-f0-9]{32}$')][string]$Nonce=[guid]::NewGuid().ToString('N'))
+    $admission=Get-QualificationFixtureAdmission -RepositoryRoot $RepositoryRoot
+    $context=Get-TestNativeAdmissionContext -RepositoryRoot $RepositoryRoot -SelfIdentity $admission.Creator
+    $testName=switch($Profile) {
+        {$_ -like 'CiTool*'} {'CiToolSourceBoundary.Tests.ps1'}
+        'EvidenceCrash' {'EvidenceWorkspaceRecovery.Tests.ps1'}
+        {$_ -like 'Recovery*'} {'RecoveryProcessOwnership.Tests.ps1'}
+        'StatusRecoveryParent' {'StatusDeskRecovery.Tests.ps1'}
+        {$_ -like 'Cleanup*'} {'QualificationCleanup.Tests.ps1'}
+    }
+    $test=[IO.Path]::GetFullPath((Join-Path $RepositoryRoot ('tests/'+$testName)))
+    if($TestPath -ine $test -or $context.Parent.Admission.testPath -ine $test -or
+        $StartInfo.UseShellExecute -or -not [string]::IsNullOrEmpty($StartInfo.UserName) -or
+        $StartInfo.FileName -ine $context.Root.Admission.hostPath -or -not [string]::IsNullOrEmpty($StartInfo.Arguments)){
+        throw 'Original creator observer differs from its closed source/host/current File or Case.'
+    }
+    # Inherit the actual finite File/Case deadline; retain every original workload.
+    # Individual source waits remain at their original closed bounds.
+    $clock=[Diagnostics.Stopwatch]::StartNew()
+    $maximum=[long][Math]::Floor(($admission.Ends-[DateTimeOffset]::UtcNow).TotalMilliseconds)
+    $budget=$maximum
+    if($budget -lt 7000){throw 'Original creator lacks finite creation/retention reserve.'}
+    $parent=Join-Path $RepositoryRoot '.test-output/original-creator'
+    $null=[IO.Directory]::CreateDirectory($parent)
+    foreach($entry in @($parent,(Split-Path -Parent $parent))){
+        if(((Get-Item -LiteralPath $entry).Attributes-band[IO.FileAttributes]::ReparsePoint)-ne 0){throw 'Original creator retention parent is redirected.'}
+    }
+    foreach($entry in @(Get-ChildItem -LiteralPath $parent -Directory -Force)){
+        if(($entry.Attributes-band[IO.FileAttributes]::ReparsePoint)-ne 0 -or [IO.File]::Exists((Join-Path $entry.FullName 'owned-pending.json'))){
+            throw 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: prior original creator remains pending.'
+        }
+    }
+    $nonce=$Nonce;$directory=Join-Path $parent $nonce
+    $null=New-Item -ItemType Directory -Path $directory -ErrorAction Stop;$null=Set-TestNativePrivateDirectory -Path $directory
+    Write-QualificationFixtureRecord -Path (Join-Path $directory 'owned-pending.json') -Value ([ordered]@{
+        contract='win-pcinfo.original-creator-preparation/1.0.0';nonce=$nonce;profile=$Profile;creator=$admission.Creator;nativeCreationRequested=$false})
+    $owner=[pscustomobject]@{Directory=$directory;Pending=$null;Clock=$clock;BudgetMs=$budget;
+        Process=$null;SafeHandle=$null;Identity=$null;InputStream=$null;NestedHeld=@{};Started=$false;TerminalVerified=$false;TerminalRetained=$false;Disposed=$false;Unsafe=$false}
+    if($null-eq(Get-Variable QualificationOriginalCreatorOwners -Scope Script -ErrorAction SilentlyContinue)){$script:QualificationOriginalCreatorOwners=[Collections.Generic.List[object]]::new()}
+    $script:QualificationOriginalCreatorOwners.Add($owner)
+    $inputStream=$null;$inputPin=$null
+    $arguments=@($StartInfo.ArgumentList)
+    if($arguments.Count -ge 4 -and $arguments[0] -ceq '-NoLogo' -and $arguments[1] -ceq '-NoProfile' -and $arguments[2] -ceq '-File'){
+        $inputPath=[IO.Path]::GetFullPath($arguments[3]);Assert-PortableEntryCmdOrdinaryPath -Path $inputPath
+        $inputStream=[IO.File]::Open($inputPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+        $owner.InputStream=$inputStream; $archive=Join-Path $directory 'original-consumed-script.retained'
+        $archiveStream=[IO.File]::Open($archive,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+        try{
+            $length=$inputStream.Length;$remaining=$length;$buffer=[byte[]]::new(81920)
+            while($remaining-gt0){if((Get-QualificationFixtureRemainingMs $owner)-lt2000){throw 'Original script retention lacks unchanged release reserve.'};$read=$inputStream.Read($buffer,0,[int][Math]::Min($remaining,$buffer.Length));if($read-lt1){throw 'Original consumed script ended early.'};$archiveStream.Write($buffer,0,$read);$remaining-=$read}
+            if($inputStream.ReadByte()-ne-1){throw 'Original consumed script grew.'};$archiveStream.Flush($true)
+        }catch{$owner.Unsafe=$true;$failure=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original creator preparation retains pending input.', $_.Exception);$failure.Data['OwnedCleanupUnverified']=$true;throw $failure}
+        finally{$archiveStream.Dispose();$inputStream.Position=0}
+        $inputPin=[ordered]@{path=$inputPath;bytes=$length;sha256=(Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant();retainedPath=$archive}
+    }
+    $pending=[ordered]@{contract='win-pcinfo.original-creator/1.0.0';nonce=$nonce;profile=$Profile;testPath=$test;
+        testSha256=(Get-FileHash -LiteralPath $test).Hash.ToLowerInvariant();repositoryRoot=$RepositoryRoot;directory=$directory;
+        creator=$admission.Creator;sidProvenance='Original creator Windows token; ProcessStartInfo supplies no alternate user.';parentNonce=$context.Parent.Pending.nonce;rootNonce=$context.Root.Pending.nonce;
+        parentPendingSha256=(Get-TestNativeDigest $context.Parent.Pending);cohortSha256=$context.Root.Admission.cohortSha256;
+        hostPath=$StartInfo.FileName;hostSha256=(Get-FileHash -LiteralPath $StartInfo.FileName).Hash.ToLowerInvariant();
+        arguments=@($StartInfo.ArgumentList);workingDirectory=$StartInfo.WorkingDirectory;inheritedWorkingDirectory=[Environment]::CurrentDirectory;
+        inputRedirected=$StartInfo.RedirectStandardInput;stdoutRedirected=$StartInfo.RedirectStandardOutput;stderrRedirected=$StartInfo.RedirectStandardError;
+        authorityEnds=$admission.Ends.ToString('o');localBudgetMs=$budget;localMaximumMs=$maximum;retentionReserveMs=1000;
+        consumedScriptInput=$inputPin;originalOperationPreserved=$true;processTreeAbsenceClaim=$false;ordinaryNativePassClaim=$false}
+    $owner.Pending=$pending
+    Write-QualificationFixtureRecord -Path (Join-Path $directory 'original-pending.json') -Value $pending
+    [IO.File]::WriteAllText((Join-Path $directory 'owned-pending.json'),($pending|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
+    $owner
+}
+
+function Save-QualificationOriginalCreatorTerminal {
+    param([Parameter(Mandatory)]$Owner,[Parameter(Mandatory)][string]$Disposition,[Parameter(Mandatory)][bool]$Forced,
+        [AllowNull()][string]$StandardOutput,[AllowNull()][string]$StandardError,[AllowNull()][byte[]]$RawStandardOutput,
+        [Parameter(Mandatory)][string]$StreamContract)
+    try {
+        if($Owner.TerminalRetained -or -not $Owner.Started -or $null -eq $Owner.SafeHandle -or
+            $Owner.SafeHandle.IsClosed -or $Owner.SafeHandle.IsInvalid -or (Get-QualificationFixtureRemainingMs $Owner)-lt 1000){
+            throw 'Original creator terminal lacks original handle or unchanged retention reserve.'
+        }
+        $terminal=$Owner.Process.WaitForExit(0)
+        if($terminal -isnot [bool] -or -not $terminal){throw 'Original creator native terminal remains unknown.'}
+        $exit=$Owner.Process.ExitCode;if($exit -isnot [int]){throw 'Original creator native exit is unknown.'}
+        $record=[ordered]@{contract='win-pcinfo.original-creator-terminal/1.0.0';identity=$Owner.Identity;
+            pendingSha256=(Get-FileHash -LiteralPath (Join-Path $Owner.Directory 'original-pending.json')).Hash.ToLowerInvariant();
+            disposition=$Disposition;forced=$Forced;nativeTerminalObserved=$true;nativeExitCode=$exit;disposed=$false;
+            streamContract=$StreamContract;standardOutput=$StandardOutput;standardError=$StandardError;
+            rawStandardOutput=$(if($null -eq $RawStandardOutput){$null}else{[Convert]::ToBase64String($RawStandardOutput)});
+            ordinaryNativePassClaim=$false;processTreeAbsenceClaim=$false}
+        Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory 'original-terminal.json') -Value $record
+        Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory 'terminal.json') -Value $record
+        $Owner.TerminalVerified=$true;$Owner.TerminalRetained=$true
+    }catch{$Owner.Unsafe=$true;$exception=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original creator terminal retention failed.', $_.Exception);$exception.Data['OwnedCleanupUnverified']=$true;throw $exception}
+}
+
+function Complete-QualificationOriginalCreatorOwner {
+    param([Parameter(Mandatory)]$Owner)
+    try {
+        if($Owner.Unsafe -or -not $Owner.TerminalVerified -or -not $Owner.TerminalRetained -or
+            $Owner.SafeHandle.IsClosed -isnot [bool] -or -not $Owner.SafeHandle.IsClosed -or
+            (Get-QualificationFixtureRemainingMs $Owner)-lt 1000){throw 'Original caller disposal/terminal/retention remains unverified.'}
+        if($null -ne $Owner.InputStream){
+            $Owner.InputStream.Position=0
+            $hash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($Owner.InputStream)).ToLowerInvariant()
+            if($Owner.InputStream.Length -ne $Owner.Pending.consumedScriptInput.bytes -or $hash -cne $Owner.Pending.consumedScriptInput.sha256){throw 'Original consumed script changed before release.'}
+            $Owner.InputStream.Dispose()
+            if($Owner.InputStream.CanRead){throw 'Original consumed script stream remains open.'}
+        }
+        $roles=switch($Owner.Pending.profile){'RecoveryFixtureParent'{@('RecoveryNested')}'StatusRecoveryParent'{@('StatusWorker','StatusNested')}default{@()}}
+        foreach($role in $roles){
+            foreach($suffix in @('request','creation','terminal','close')){
+                if(-not [IO.File]::Exists((Join-Path $Owner.Directory ('recovery-'+$role+'-'+$suffix+'.json')))){throw ('Original recovery '+$role+' '+$suffix+' is missing.')}
+            }
+        }
+        Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory 'original-close-proof.json') -Value ([ordered]@{
+            contract='win-pcinfo.original-creator-close/1.0.0';
+            originalTerminalSha256=(Get-FileHash -LiteralPath (Join-Path $Owner.Directory 'original-terminal.json')).Hash.ToLowerInvariant();
+            disposedOriginalHandle=$true;originalConsumedScriptClosed=$(if($null -eq $Owner.InputStream){$null}else{-not $Owner.InputStream.CanRead});ordinaryNativePassClaim=$false;processTreeAbsenceClaim=$false})
+        if((Get-QualificationFixtureRemainingMs $Owner)-lt 1000){throw 'Original close retention consumed release reserve.'}
+        [IO.File]::Delete((Join-Path $Owner.Directory 'owned-pending.json'))
+        if([IO.File]::Exists((Join-Path $Owner.Directory 'owned-pending.json'))){throw 'Original creator pending release failed.'}
+        $Owner.Disposed=$true
+    }catch{$Owner.Unsafe=$true;$exception=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original creator closure failed.', $_.Exception);$exception.Data['OwnedCleanupUnverified']=$true;throw $exception}
+}
+function Assert-QualificationOriginalCreatorCreation {
+    param([Parameter(Mandatory)]$Owner)
+    Assert-QualificationFixtureProcessAdmission $Owner
+    Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory 'original-creation-request.json') -Value ([ordered]@{
+        originalPendingSha256=(Get-FileHash -LiteralPath (Join-Path $Owner.Directory 'original-pending.json')).Hash.ToLowerInvariant();
+        creationRequested=$true;ordinaryNativePassClaim=$false;processTreeAbsenceClaim=$false})
+}
+function Get-QualificationRecoveryCreatorProtocol {
+    @'
+function Write-RecoveryOriginalRecord {
+    param([string]$Path,$Value)
+    $bytes=[Text.UTF8Encoding]::new($false,$true).GetBytes(($Value|ConvertTo-Json -Depth 12))
+    $stream=[IO.File]::Open($Path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+    try{$stream.Write($bytes);$stream.Flush($true)}finally{$stream.Dispose()}
+}
+function Begin-RecoveryOriginalCreation {
+    param([string]$Directory,[ValidateSet('RecoveryNested','StatusWorker','StatusNested')][string]$Role,[Diagnostics.ProcessStartInfo]$StartInfo,
+        [AllowNull()]$WorkerConfiguration,[AllowNull()][string]$WorkerTemplateSha256)
+    $pending=Get-Content -LiteralPath (Join-Path $Directory 'original-pending.json') -Raw|ConvertFrom-Json -AsHashtable
+    if($pending.contract -cne 'win-pcinfo.original-creator/1.0.0' -or
+        $pending.profile -cnotin @('RecoveryFixtureParent','StatusRecoveryParent') -or
+        $StartInfo.UseShellExecute -or $StartInfo.UserName -or $StartInfo.Arguments -or
+        $StartInfo.FileName -ine $pending.hostPath -or $script:RecoveryOriginalProtocolSha256 -cnotmatch '^[a-f0-9]{64}$'){throw 'Closed recovery creator binding differs.'}
+    $boundary=[IO.Path]::GetFullPath((Join-Path $pending.repositoryRoot ('.test-output/original-creator/'+$pending.nonce)))
+    if([IO.Path]::GetFullPath($Directory) -cne $boundary -or
+        ((Get-Item -LiteralPath $Directory).Attributes-band[IO.FileAttributes]::ReparsePoint)-ne 0){throw 'Recovery owner directory differs.'}
+    $end=[DateTimeOffset]::Parse($pending.authorityEnds)
+    if(($end-[DateTimeOffset]::UtcNow).TotalMilliseconds -lt 7000){throw 'Recovery creator has insufficient unchanged reserve.'}
+    $parentPath=if($Role -ceq 'StatusNested'){Join-Path $Directory 'recovery-StatusWorker-creation.json'}else{Join-Path $Directory 'original-identity.json'}
+    $watch=[Diagnostics.Stopwatch]::StartNew()
+    while(-not [IO.File]::Exists($parentPath)-and $watch.ElapsedMilliseconds-lt5000-and ($end-[DateTimeOffset]::UtcNow).TotalMilliseconds-ge7000){[Threading.Thread]::Sleep(10)}
+    $parent=Get-Content -LiteralPath $parentPath -Raw|ConvertFrom-Json -AsHashtable
+    $expected=if($Role -ceq 'StatusNested'){$parent.child}else{$parent.identity}
+    $self=[Diagnostics.Process]::GetCurrentProcess()
+    try{$creator=[ordered]@{pid=$self.Id;fullBirthUtc=$self.StartTime.ToUniversalTime().ToString('o');hostPath=$self.MainModule.FileName;ownerSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}}
+    finally{$self.Dispose()}
+    if($creator.pid -ne $expected.pid -or $creator.fullBirthUtc -cne $expected.fullBirthUtc -or $creator.hostPath -ine $pending.hostPath -or $creator.ownerSid -cne $pending.creator.OwnerSid){throw 'Original recovery creator does not match original parent custody.'}
+    $request=[ordered]@{contract='win-pcinfo.recovery-original-request/1.0.0';role=$Role;creator=$creator;
+        outerPendingSha256=(Get-FileHash -LiteralPath (Join-Path $Directory 'original-pending.json')).Hash.ToLowerInvariant();
+        parentOriginalCreationSha256=(Get-FileHash -LiteralPath $parentPath).Hash.ToLowerInvariant();protocolSha256=$script:RecoveryOriginalProtocolSha256;
+        hostPath=$StartInfo.FileName;hostSha256=(Get-FileHash -LiteralPath $StartInfo.FileName).Hash.ToLowerInvariant();
+        arguments=@($StartInfo.ArgumentList);workingDirectory=$StartInfo.WorkingDirectory;inheritedWorkingDirectory=[Environment]::CurrentDirectory;
+        stdoutRedirected=$StartInfo.RedirectStandardOutput;stderrRedirected=$StartInfo.RedirectStandardError;inputRedirected=$StartInfo.RedirectStandardInput;
+        environment=@($StartInfo.Environment.GetEnumerator()|ForEach-Object{[ordered]@{name=$_.Key;value=$_.Value}});
+        workerConfiguration=$WorkerConfiguration;workerTemplateSha256=$WorkerTemplateSha256;
+        authorityEnds=$pending.authorityEnds;creationRequested=$true;ordinaryNativePassClaim=$false;processTreeAbsenceClaim=$false}
+    Write-RecoveryOriginalRecord (Join-Path $Directory ('recovery-'+$Role+'-request.json')) $request
+    [pscustomobject]@{Directory=$Directory;Role=$Role;Request=$request;Ends=$end}
+}
+function Save-RecoveryOriginalCreation {
+    param($Request,[Diagnostics.Process]$Process)
+    if(($Request.Ends-[DateTimeOffset]::UtcNow).TotalMilliseconds-lt1000){throw 'Recovery original creation consumed retention reserve.'}
+    $handle=$Process.SafeHandle
+    if($handle.IsClosed-or $handle.IsInvalid){throw 'Original recovery Process.Start result unavailable.'}
+    $child=[ordered]@{pid=$Process.Id;fullBirthUtc=$Process.StartTime.ToUniversalTime().ToString('o');hostPath=$Process.MainModule.FileName;
+        ownerSid=$Request.Request.creator.ownerSid;originalSafeHandleValue=$handle.DangerousGetHandle().ToInt64();
+        sidProvenance='Original creator Windows token; ProcessStartInfo supplies no alternate user.';
+        handleProvenance='SafeHandle of the original Process.Start result; no PID reopen.'}
+    if($child.hostPath -ine $Request.Request.hostPath){throw 'Original recovery child image differs.'}
+    Write-RecoveryOriginalRecord (Join-Path $Request.Directory ('recovery-'+$Request.Role+'-creation.json')) ([ordered]@{
+        contract='win-pcinfo.recovery-original-creation/1.0.0';child=$child;creator=$Request.Request.creator;
+        requestSha256=(Get-FileHash -LiteralPath (Join-Path $Request.Directory ('recovery-'+$Request.Role+'-request.json'))).Hash.ToLowerInvariant();
+        originalHandleRetainedAtCreation=$true;creatorInterruptionPermitted=$true;ordinaryNativePassClaim=$false;processTreeAbsenceClaim=$false})
+    if($null-eq(Get-Variable RecoveryOriginalCreatorHandles -Scope Script -ErrorAction SilentlyContinue)){$script:RecoveryOriginalCreatorHandles=[Collections.Generic.List[object]]::new()}
+    $script:RecoveryOriginalCreatorHandles.Add([pscustomobject]@{Process=$Process;SafeHandle=$handle;Request=$Request;Identity=$child})
+}
+'@
+}
+
+function Save-QualificationRecoveryOriginalTerminal {
+    param([Parameter(Mandatory)]$Owner,[Parameter(Mandatory)][ValidateSet('RecoveryNested','StatusWorker','StatusNested')][string]$Role,
+        [Parameter(Mandatory)][Diagnostics.Process]$Process,[Parameter(Mandatory)][Diagnostics.Process]$CreatorProcess,
+        [Parameter(Mandatory)][ValidateSet('ParentOnlyStopThenSeparateHeldChildStop','OriginalProductJobClosureAfterParentLoss')][string]$Disposition)
+    try {
+        $creationPath=Join-Path $Owner.Directory ('recovery-'+$Role+'-creation.json')
+        $creation=Get-Content -LiteralPath $creationPath -Raw|ConvertFrom-Json -AsHashtable
+        $handle=$Process.SafeHandle
+        if($handle.IsClosed-or$handle.IsInvalid-or(Get-QualificationFixtureRemainingMs $Owner)-lt1000-or
+            $Process.Id -ne $creation.child.pid-or$Process.StartTime.ToUniversalTime().ToString('o')-cne$creation.child.fullBirthUtc-or
+            $CreatorProcess.Id-ne$creation.creator.pid-or$CreatorProcess.StartTime.ToUniversalTime().ToString('o')-cne$creation.creator.fullBirthUtc-or
+            -not$Process.WaitForExit(0)-or-not$CreatorProcess.WaitForExit(0)){throw 'Retained original creator and previously admitted recovery terminal custody differ.'}
+        $record=[ordered]@{contract='win-pcinfo.recovery-original-terminal/1.0.0';role=$Role;
+            originalCreationSha256=(Get-FileHash -LiteralPath $creationPath).Hash.ToLowerInvariant();
+            originalChild=$creation.child;originalCreator=$creation.creator;disposition=$Disposition;
+            observedNativeTerminal=$true;observedCreatorNativeTerminal=$true;nativeExitCode=$Process.ExitCode;
+            recoverySafeHandleValue=$handle.DangerousGetHandle().ToInt64();disposedRecoveryHandle=$false;
+            terminalCustody='Previously admitted recovery handle; not original creator SafeHandle.';
+            originalCreatorInterruptionExpected=$true;ordinaryNativePassClaim=$false;appCleanupAcceptanceClaim=$false;processTreeAbsenceClaim=$false}
+        Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory ('recovery-'+$Role+'-terminal.json')) -Value $record
+        $Owner.NestedHeld[$Role]=$handle
+    }catch{$Owner.Unsafe=$true;$failure=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original recovery creator/terminal retention failed.', $_.Exception);$failure.Data['OwnedCleanupUnverified']=$true;throw $failure}
+}
+function Complete-QualificationRecoveryOriginalTerminal {
+    param([Parameter(Mandatory)]$Owner,[Parameter(Mandatory)][ValidateSet('RecoveryNested','StatusWorker','StatusNested')][string]$Role)
+    try {
+        if(-not$Owner.NestedHeld.ContainsKey($Role)-or-not$Owner.NestedHeld[$Role].IsClosed-or(Get-QualificationFixtureRemainingMs $Owner)-lt1000){throw 'Previously admitted recovery handle disposal remains unverified.'}
+        Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory ('recovery-'+$Role+'-close.json')) -Value ([ordered]@{
+            contract='win-pcinfo.recovery-original-close/1.0.0';role=$Role;
+            terminalSha256=(Get-FileHash -LiteralPath (Join-Path $Owner.Directory ('recovery-'+$Role+'-terminal.json'))).Hash.ToLowerInvariant();
+            disposedRecoveryHandle=$true;originalCreatorHandleDisposalClaim=$false;ordinaryNativePassClaim=$false;appCleanupAcceptanceClaim=$false})
+    }catch{$Owner.Unsafe=$true;$failure=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: recovery observer close retention failed.', $_.Exception);$failure.Data['OwnedCleanupUnverified']=$true;throw $failure}
+}

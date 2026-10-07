@@ -3,6 +3,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 
 # Replay the actual harness finalization boundary, substituting only its expensive
 # assessment body and controlled worker adapter. No generated application starts.
@@ -491,10 +492,15 @@ exit 1
     $ownedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new(); $recoveryBodyError=$null
     $recoveryCleanup=@{childOutputVerified=$false;descendantsAbsent=$false}; $interrupted=$false
     try {
+        $handoffOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile CleanupHandoff -StartInfo $start
+        Assert-QualificationOriginalCreatorCreation $handoffOwner
         $child=[Diagnostics.Process]::Start($start)
+        Register-QualificationFixtureProcess -Owner $handoffOwner -Process $child
         $childOutput=$child.StandardOutput.ReadToEndAsync(); $childError=$child.StandardError.ReadToEndAsync()
         Assert-Equal $true $child.WaitForExit(5000) 'controlled child completes without a live application'
         $handoffFixtureCleanup.childAbsent=$true
+        if(-not $childOutput.Wait(5000) -or -not $childError.Wait(5000)){throw 'Original handoff streams lack their unchanged drain bound.'}
+        Save-QualificationOriginalCreatorTerminal -Owner $handoffOwner -Disposition ExpectedUnsafeHandoffNative1 -Forced $false -StandardOutput $childOutput.GetAwaiter().GetResult() -StandardError $childError.GetAwaiter().GetResult() -StreamContract OriginalReadToEndStrings
         Assert-Equal $true ([IO.File]::Exists($handoffPath)) 'controlled child creates its handoff before failing'
         $expectedHandoff=@{failure=$null}
         # Confine the intentionally unsafe signal to this fixture's owned root.
@@ -539,7 +545,15 @@ exit 1
                 $handoffFixtureCleanup.errorClosed=$true
             },
             {
-                if ($null -ne $child) {$child.Dispose()}
+                if ($null -ne $child) {
+                    try {
+                        if(-not $handoffOwner.TerminalRetained){
+                            if($null-eq$childOutput-or$null-eq$childError-or-not$childOutput.IsCompletedSuccessfully-or-not$childError.IsCompletedSuccessfully){$handoffOwner.Unsafe=$true;throw 'Original handoff drains did not complete; preserve pending evidence.'}
+                            Save-QualificationOriginalCreatorTerminal -Owner $handoffOwner -Disposition FailedOriginalHandoffFixture -Forced $true -StandardOutput $childOutput.GetAwaiter().GetResult() -StandardError $childError.GetAwaiter().GetResult() -StreamContract OriginalReadToEndStrings
+                        }
+                    }finally{$child.Dispose()}
+                    Complete-QualificationOriginalCreatorOwner $handoffOwner
+                }
                 $handoffFixtureCleanup.handleDisposed=$true
             },
             {
@@ -600,7 +614,10 @@ __BOUNDARY__
     $pipeFixtureBodyError=$null
     $pipeFixtureCleanup=@{stopCompleted=$false;childAbsent=$false;outputClosed=$false;errorClosed=$false;handleDisposed=$false}
     try {
+        $pipeOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile CleanupPipe -StartInfo $start
+        Assert-QualificationOriginalCreatorCreation $pipeOwner
         $repro=[Diagnostics.Process]::Start($start)
+        Register-QualificationFixtureProcess -Owner $pipeOwner -Process $repro
         $output=$repro.StandardOutput.ReadToEndAsync(); $errorOutput=$repro.StandardError.ReadToEndAsync()
         Assert-Equal $true $repro.WaitForExit(8000) 'exited child with incomplete output reaches bounded cleanup instead of hanging before finally'
         $pipeFixtureCleanup.childAbsent=$true
@@ -638,7 +655,13 @@ __BOUNDARY__
                 $pipeFixtureCleanup.errorClosed=$true
             },
             {
-                if ($null -ne $repro) {$repro.Dispose()}
+                if ($null -ne $repro) {
+                    try {
+                        if($null-eq$output-or$null-eq$errorOutput-or-not$output.IsCompletedSuccessfully-or-not$errorOutput.IsCompletedSuccessfully){$pipeOwner.Unsafe=$true;throw 'Original pipe fixture drains did not complete; preserve pending evidence.'}
+                        Save-QualificationOriginalCreatorTerminal -Owner $pipeOwner -Disposition OriginalIncompletePipeRefusalNative0 -Forced $false -StandardOutput $output.GetAwaiter().GetResult() -StandardError $errorOutput.GetAwaiter().GetResult() -StreamContract OriginalReadToEndStrings
+                    }finally{$repro.Dispose()}
+                    Complete-QualificationOriginalCreatorOwner $pipeOwner
+                }
                 $pipeFixtureCleanup.handleDisposed=$true
             },
             {
