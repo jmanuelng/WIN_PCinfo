@@ -31,6 +31,8 @@ Assert-Equal $false $window.FindName('Retry').IsEnabled 'retry cannot interrupt 
 # These layout assertions supplement the original workload; they are not client acceptance.
 $window.Content.Measure([System.Windows.Size]::new($window.Width,$window.Height))
 $window.Content.Arrange([System.Windows.Rect]::new(0,0,$window.Width,$window.Height))
+# Publish the arranged ScrollViewer viewport before reading layout geometry.
+$window.Content.UpdateLayout()
 $approvalControl=$window.FindName('Approve')
 $detailsControl=$window.FindName('Details')
 $timelineControl=$window.FindName('Timeline')

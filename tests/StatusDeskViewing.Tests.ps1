@@ -85,7 +85,23 @@ try {
                     & $markViewingUnsafe $failure
                     throw $failure
                 }
-                $state.ReportClosedHandler=[EventHandler]({$state.ReportClosed=$true}.GetNewClosure())
+                # Capture a local reference at this nested closure boundary.
+                $reportClosedFixtureState=$state
+                $state.ReportClosedHandler=[EventHandler]({
+                    param($closedSender,$closedArgs)
+                    try {
+                        if(-not [object]::ReferenceEquals($closedSender,$reportClosedFixtureState.Report)){
+                            throw [InvalidOperationException]::new('Report Closed callback sender differs from its exact registered report.')
+                        }
+                        $reportClosedFixtureState.ReportClosed=$true
+                    }
+                    catch {
+                        if($null -eq $reportClosedFixtureState.CallbackError){$reportClosedFixtureState.CallbackError=$_}
+                        $reportClosedFixtureState.Unsafe=$true
+                        $_.Exception.Data['OwnedCleanupUnverified']=$true
+                        $_.Exception.Data['ViewingFixtureOwners']=$reportClosedFixtureState
+                    }
+                }.GetNewClosure())
                 $state.ReportHandlerAttempted=$true
                 $state.Report.Add_Closed($state.ReportClosedHandler)
             }
