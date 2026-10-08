@@ -12,12 +12,13 @@ $hostPath=Get-TestAdmittedRuntimeHost
 if($CreatorPrerequisite -cne 'All'){
     $proofContext=Get-TestNativeAdmissionContext -RepositoryRoot $repositoryRoot -SelfIdentity (Get-TestNativeSelfIdentity)
     $proofAdmission=$proofContext.Parent.Admission
+    $proofParameters=ConvertFrom-TestNamedParameterRecord -Parameters $proofAdmission.namedParameters
     if($proofContext.Depth -ne 0 -or $proofAdmission.scope -cne 'FocusedTestFile' -or
         $proofAdmission.testPath -ine $PSCommandPath -or
-        $proofAdmission.namedParameters -isnot [Collections.IDictionary] -or
-        $proofAdmission.namedParameters.Count -ne 1 -or
-        -not $proofAdmission.namedParameters.Contains('CreatorPrerequisite') -or
-        $proofAdmission.namedParameters.CreatorPrerequisite -cne $CreatorPrerequisite){
+        $proofParameters -isnot [Collections.IDictionary] -or
+        $proofParameters.Count -ne 1 -or
+        -not $proofParameters.Contains('CreatorPrerequisite') -or
+        $proofParameters.CreatorPrerequisite -cne $CreatorPrerequisite){
         throw 'Creator prerequisite requires the exact original focused File and one admitted selector.'
     }
 }
