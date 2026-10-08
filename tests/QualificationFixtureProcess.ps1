@@ -291,6 +291,7 @@ function Save-QualificationOriginalCreatorTerminal {
     $retentionStage='ValidateOriginalHandleAndReserve'
     $observedTerminal=$null;$observedExit=$null
     $originalWaitResult=$null;$originalWaitResultType=$null;$expectedOriginalProcessReferenceMatches=$null
+    $boundedWaitRemainingBeforeMs=$null;$boundedWaitMilliseconds=$null;$boundedWaitResult=$null;$boundedWaitResultType=$null;$terminalRemainingAfterObservationMs=$null
     try {
         if($Owner.TerminalRetained -or -not $Owner.Started -or $null -eq $Owner.SafeHandle -or
             $Owner.SafeHandle.IsClosed -or $Owner.SafeHandle.IsInvalid -or (Get-QualificationFixtureRemainingMs $Owner)-lt 1000){
@@ -304,13 +305,31 @@ function Save-QualificationOriginalCreatorTerminal {
         $terminal=$Owner.Process.WaitForExit(0)
         $originalWaitResult=$terminal
         if($null -ne $terminal){$originalWaitResultType=$terminal.GetType().FullName}
+        if($terminal -isnot [bool]){throw 'Original creator native terminal observation is not Boolean.'}
+        if(-not $terminal){
+            # Observe the same original Process within existing authority; HasExited is not a substitute.
+            $retentionStage='AwaitOriginalTerminalWithinReserve'
+            $boundedWaitRemainingBeforeMs=Get-QualificationFixtureRemainingMs $Owner
+            if($boundedWaitRemainingBeforeMs -le 1000){throw 'Original creator terminal wait has no unchanged retention reserve.'}
+            $boundedWaitMilliseconds=[int][Math]::Min(1000,$boundedWaitRemainingBeforeMs-1000)
+            $boundedWaitResult=$Owner.Process.WaitForExit($boundedWaitMilliseconds)
+            if($null -ne $boundedWaitResult){$boundedWaitResultType=$boundedWaitResult.GetType().FullName}
+            $terminal=$boundedWaitResult
+        }
+        $terminalRemainingAfterObservationMs=Get-QualificationFixtureRemainingMs $Owner
         if($terminal -isnot [bool] -or -not $terminal){throw 'Original creator native terminal remains unknown.'}
+        if($terminalRemainingAfterObservationMs -lt 1000){throw 'Original creator terminal observation exhausted its unchanged retention reserve.'}
         $observedTerminal=$true;$retentionStage='ReadOriginalNativeExit'
         $exit=$Owner.Process.ExitCode;if($exit -isnot [int]){throw 'Original creator native exit is unknown.'}
         $observedExit=$exit;$retentionStage='BuildOriginalTerminalRecord'
         $record=[ordered]@{contract='win-pcinfo.original-creator-terminal/1.0.0';identity=$Owner.Identity;
             pendingSha256=(Get-FileHash -LiteralPath (Join-Path $Owner.Directory 'original-pending.json')).Hash.ToLowerInvariant();
             disposition=$Disposition;forced=$Forced;nativeTerminalObserved=$true;nativeExitCode=$exit;disposed=$false;
+            originalWaitResultType=$originalWaitResultType;
+            originalWaitResultBoolean=$(if($originalWaitResult -is [bool]){$originalWaitResult}else{$null});
+            boundedWaitRemainingBeforeMs=$boundedWaitRemainingBeforeMs;boundedWaitMilliseconds=$boundedWaitMilliseconds;
+            boundedWaitResultType=$boundedWaitResultType;boundedWaitResultBoolean=$(if($boundedWaitResult -is [bool]){$boundedWaitResult}else{$null});
+            terminalRemainingAfterObservationMs=$terminalRemainingAfterObservationMs;
             streamContract=$StreamContract;standardOutput=$StandardOutput;standardError=$StandardError;
             rawStandardOutput=$(if($null -eq $RawStandardOutput){$null}else{[Convert]::ToBase64String($RawStandardOutput)});
             ordinaryNativePassClaim=$false;processTreeAbsenceClaim=$false}
@@ -349,6 +368,9 @@ function Save-QualificationOriginalCreatorTerminal {
                 actualTerminalObserved=$observedTerminal;actualNativeExit=$observedExit;
                 originalWaitResultType=$originalWaitResultType;
                 originalWaitResultBoolean=$(if($originalWaitResult -is [bool]){$originalWaitResult}else{$null});
+                boundedWaitRemainingBeforeMs=$boundedWaitRemainingBeforeMs;boundedWaitMilliseconds=$boundedWaitMilliseconds;
+                boundedWaitResultType=$boundedWaitResultType;boundedWaitResultBoolean=$(if($boundedWaitResult -is [bool]){$boundedWaitResult}else{$null});
+                terminalRemainingAfterObservationMs=$terminalRemainingAfterObservationMs;
                 expectedOriginalProcessSupplied=($null -ne $ExpectedOriginalProcess);expectedOriginalProcessReferenceMatches=$expectedOriginalProcessReferenceMatches;
                 callerHasExitedObservation=$(if($CallerHasExitedObservation -is [bool]){$CallerHasExitedObservation}else{$null});callerHasExitedObservationIsBoolean=($CallerHasExitedObservation -is [bool]);
                 forcedRequested=$Forced;originalCallerErrorViews=$callerErrorViews.ToArray();
@@ -370,6 +392,10 @@ function Save-QualificationOriginalCreatorTerminal {
         $exception.Data['OriginalErrorRecord']=$originalRetentionError
         $exception.Data['CallerBodyErrorRecord']=$CallerBodyErrorRecord;$exception.Data['CallerCleanupErrorRecord']=$CallerCleanupErrorRecord
         $exception.Data['RetentionStage']=$retentionStage
+        $exception.Data['OriginalWaitResult']=$originalWaitResult;$exception.Data['OriginalWaitResultType']=$originalWaitResultType
+        $exception.Data['BoundedWaitRemainingBeforeMs']=$boundedWaitRemainingBeforeMs;$exception.Data['BoundedWaitMilliseconds']=$boundedWaitMilliseconds
+        $exception.Data['BoundedWaitResult']=$boundedWaitResult;$exception.Data['BoundedWaitResultType']=$boundedWaitResultType
+        $exception.Data['TerminalRemainingAfterObservationMs']=$terminalRemainingAfterObservationMs
         $exception.Data['DiagnosticRetentionFailures']=$diagnosticFailures.ToArray()
         $exception.Data['DiagnosticPath']=$diagnosticPath
         $exception.Data['DiagnosticDisposeUncertain']=$diagnosticDisposeUncertain
