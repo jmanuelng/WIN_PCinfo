@@ -77,17 +77,33 @@ $children=[Collections.Generic.List[int]]::new()
 function Start-ControlledCiTool($Start){
     Assert-Equal '-lp,-json' ($Start.ArgumentList -join ',') 'only the fixed JSON inventory switches may execute'
     Assert-Equal $false $Start.UseShellExecute 'listing uses the owned direct process path'
-    $scriptText=switch($case){
-        Valid {'[Console]::Write(''{"Policies":[]}'')'}
-        Bound {'[Console]::Write((''x''*65537))'}
-        Denied {'exit 5'}
-        Timeout {'[Threading.Thread]::Sleep(10000)'}
-        NonUtf8 {'[Console]::OpenStandardOutput().WriteByte(255)'}
-    }
     $Start.FileName=$hostPath;$Start.ArgumentList.Clear()
-    foreach($argument in @('-NoLogo','-NoProfile','-NonInteractive','-Command',$scriptText)){$Start.ArgumentList.Add($argument)}
-    $script:ciToolOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile ('CiTool'+$case) -StartInfo $Start
-    Assert-QualificationOriginalCreatorCreation $script:ciToolOwner
+    foreach($argument in $script:ciToolPreparedArguments){$Start.ArgumentList.Add($argument)}
+    # Preparation is outside the product operation clock; actual Start and
+    # immediate registration remain inside its original protected caller.
+    if($null -eq $script:ciToolOwner -or $script:ciToolPreparedCase -cne $case -or
+        $script:ciToolOwner.Pending.profile -cne ('CiTool'+$case) -or
+        $script:ciToolOwner.Pending.testPath -ine $PSCommandPath -or
+        $script:ciToolOwner.Pending.hostPath -ine $hostPath -or $Start.FileName -ine $hostPath -or
+        (ConvertTo-Json -InputObject @($Start.ArgumentList) -Compress) -cne $script:ciToolPreparedArgumentsJson -or
+        (ConvertTo-Json -InputObject @($script:ciToolOwner.Pending.arguments) -Compress) -cne $script:ciToolPreparedArgumentsJson -or
+        $Start.CreateNoWindow -ne $true -or $Start.RedirectStandardOutput -ne $true -or
+        $Start.RedirectStandardError -ne $true -or $Start.RedirectStandardInput -ne $false -or
+        -not [string]::IsNullOrEmpty($Start.UserName) -or -not [string]::IsNullOrEmpty($Start.Arguments) -or
+        $Start.WorkingDirectory -cne $script:ciToolOwner.Pending.workingDirectory){
+        if($null -ne $script:ciToolOwner){$script:ciToolOwner.Unsafe=$true}
+        $failure=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: prepared original creator does not match its exact case and StartInfo.')
+        $failure.Data['OwnedCleanupUnverified']=$true;$failure.Data['StrongOriginalCreatorOwner']=$script:ciToolOwner
+        throw $failure
+    }
+    try{Assert-QualificationFixtureProcessAdmission -Owner $script:ciToolOwner}catch{
+        $preparedAdmissionError=$_;$script:ciToolOwner.Unsafe=$true
+        $failure=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: prepared original creator admission is no longer valid.', $preparedAdmissionError.Exception)
+        $failure.Data['OriginalErrorRecord']=$preparedAdmissionError
+        $failure.Data['StrongOriginalCreatorOwner']=$script:ciToolOwner
+        $failure.Data['OwnedCleanupUnverified']=$true
+        throw $failure
+    }
     $script:ciToolForced=$false
     $child=[Diagnostics.Process]::Start($Start)
     Register-QualificationFixtureProcess -Owner $script:ciToolOwner -Process $child
@@ -95,6 +111,38 @@ function Start-ControlledCiTool($Start){
 }
 $cases=if($CreatorPrerequisite -ceq 'All'){@('Valid','Bound','Denied','Timeout','NonUtf8')}else{@('Valid')}
 foreach($case in $cases){
+    # Keep fixture admission/ACL/durable preparation out of the unchanged
+    # 2000ms native operation. No child is started by this preparation.
+    $script:ciToolOwner=$null;$script:ciToolPreparationError=$null
+    $script:ciToolPreparedCase=$case
+    $scriptText=switch($case){
+        Valid {'[Console]::Write(''{"Policies":[]}'')'}
+        Bound {'[Console]::Write((''x''*65537))'}
+        Denied {'exit 5'}
+        Timeout {'[Threading.Thread]::Sleep(10000)'}
+        NonUtf8 {'[Console]::OpenStandardOutput().WriteByte(255)'}
+    }
+    $script:ciToolPreparedArguments=[string[]]@('-NoLogo','-NoProfile','-NonInteractive','-Command',$scriptText)
+    # The string snapshot is immutable even if an argument array is changed.
+    $script:ciToolPreparedArgumentsJson=ConvertTo-Json -InputObject @($script:ciToolPreparedArguments) -Compress
+    $preparedStart=[Diagnostics.ProcessStartInfo]::new($hostPath)
+    $preparedStart.UseShellExecute=$false;$preparedStart.CreateNoWindow=$true
+    $preparedStart.RedirectStandardOutput=$true;$preparedStart.RedirectStandardError=$true
+    foreach($argument in $script:ciToolPreparedArguments){$preparedStart.ArgumentList.Add($argument)}
+    try{
+        $script:ciToolOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile ('CiTool'+$case) -StartInfo $preparedStart
+        Assert-QualificationOriginalCreatorCreation $script:ciToolOwner
+    }catch{
+        $script:ciToolPreparationError=$_
+        if($null -ne $script:ciToolOwner){$script:ciToolOwner.Unsafe=$true}
+        $failure=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original creator preparation failed before the operation.', $_.Exception)
+        $failure.Data['OriginalErrorRecord']=$script:ciToolPreparationError
+        $failure.Data['StrongOriginalCreatorOwner']=$script:ciToolOwner
+        $preparedOwners=Get-Variable QualificationOriginalCreatorOwners -Scope Script -ErrorAction SilentlyContinue
+        if($null -ne $preparedOwners){$failure.Data['StrongOriginalCreatorOwners']=$preparedOwners.Value}
+        $failure.Data['OwnedCleanupUnverified']=$true
+        throw $failure
+    }
     $watch=[Diagnostics.Stopwatch]::StartNew();$failed=$false;$value=$null
     try {$value=Read-CiToolJson}catch{
         if($CreatorPrerequisite -ceq 'ValidCloseRetentionFailure' -and $null -ne $script:ciToolFaultSetupError){
