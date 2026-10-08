@@ -739,6 +739,8 @@ else {
                 Set-Item -LiteralPath ('Function:script:' + $name) -Value $Bindings[$name]
             }
         } $measureWorkloadBindings
+        # Capture the self-contained original assertion before the driver creates its callback module.
+        $assertEqualWpfDriver = ${function:Assert-Equal}
         $driver.Add_Tick({
             if ($QualificationPath -and ($qualityWatch.ElapsedMilliseconds - $quality.lastSampleMilliseconds) -ge 1000) { & $measureWorkload }
             $window=$uiState.Window
@@ -761,7 +763,7 @@ else {
                 $ActivePrivilegeBoundary -eq 'BeforeExecution' -and
                 -not $uiState.Session.Transport.State.ContainsKey('ControlledWorkerStarted') -and
                 [IO.File]::Exists($preStartWitness)) {
-                Assert-Equal 'SyntheticBeforeWorkerHello' ([IO.File]::ReadAllText($preStartWitness)) 'actual worker reached its bounded pre-admission witness'
+                & $assertEqualWpfDriver 'SyntheticBeforeWorkerHello' ([IO.File]::ReadAllText($preStartWitness)) 'actual worker reached its bounded pre-admission witness'
                 $uiState.Session.Transport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp()
             }
             if ($ActiveAction -ne 'None' -and -not $uiState.ActionSent -and

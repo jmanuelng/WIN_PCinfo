@@ -27,7 +27,30 @@ $ast=[Management.Automation.Language.Parser]::ParseInput((Get-PrivilegedCollecti
 $node=$ast.Find({param($item) $item -is [Management.Automation.Language.FunctionDefinitionAst] -and $item.Name -eq 'Read-CiToolJson'},$false)
 $source=$node.Extent.Text.Replace('[IO.File]::Exists($path)','(Test-ControlledCiToolPath $path)').Replace('[IO.File]::GetAttributes($path)','[IO.FileAttributes]::Normal').Replace('[Diagnostics.Process]::Start($start)','(Start-ControlledCiTool $start)')
 $source=$source.Replace('$child.Kill($true)','$script:ciToolForced=$true;$child.Kill($true)')
-$source=$source.Replace('finally{$child.Dispose()}','finally{try{Save-QualificationOriginalCreatorTerminal -Owner $script:ciToolOwner -Disposition OriginalCiToolSourceBoundary -Forced $script:ciToolForced -RawStandardOutput $(if($length){[byte[]]$buffer[0..($length-1)]}else{[byte[]]@()}) -StreamContract RawStdoutBound65537OriginalStderrUnread}finally{$child.Dispose()};Complete-QualificationOriginalCreatorOwner $script:ciToolOwner}')
+# Preserve original caller causes before finalization; waits and operation bounds remain unchanged.
+$originalCiToolFinalizer='try {if(-not $child.HasExited){$script:ciToolForced=$true;$child.Kill($true);if(-not $child.WaitForExit(1000)){throw ''CiTool termination unverified.''}}}finally{$child.Dispose()}'
+$retainedCiToolFinalizer='try {$script:ciToolObservedHasExited=$child.HasExited;if(-not $script:ciToolObservedHasExited){$script:ciToolForced=$true;$child.Kill($true);if(-not $child.WaitForExit(1000)){throw ''CiTool termination unverified.''}}}catch{$script:ciToolCallerCleanupError=$_;throw}finally{
+    $ciToolRetentionError=$null;$ciToolDisposeError=$null;$ciToolCompletionError=$null
+    try{Save-QualificationOriginalCreatorTerminal -Owner $script:ciToolOwner -Disposition OriginalCiToolSourceBoundary -Forced $script:ciToolForced -RawStandardOutput $(if($length){[byte[]]$buffer[0..($length-1)]}else{[byte[]]@()}) -StreamContract RawStdoutBound65537OriginalStderrUnread -ExpectedOriginalProcess $child -CallerHasExitedObservation $script:ciToolObservedHasExited -CallerBodyErrorRecord $script:ciToolOperationError -CallerCleanupErrorRecord $script:ciToolCallerCleanupError}catch{$ciToolRetentionError=$_;$script:ciToolOwner.Unsafe=$true}
+    try{$child.Dispose()}catch{$ciToolDisposeError=$_;$script:ciToolOwner.Unsafe=$true}
+    if($null -eq $ciToolRetentionError -and $null -eq $ciToolDisposeError -and $null -eq $script:ciToolCallerCleanupError){try{Complete-QualificationOriginalCreatorOwner $script:ciToolOwner}catch{$ciToolCompletionError=$_;$script:ciToolOwner.Unsafe=$true}}
+    if($null -ne $script:ciToolCallerCleanupError -or $null -ne $ciToolRetentionError -or $null -ne $ciToolDisposeError -or $null -ne $ciToolCompletionError){
+        $script:ciToolOwner.Unsafe=$true
+        $ciToolFailureRecords=[Collections.Generic.List[Management.Automation.ErrorRecord]]::new()
+        foreach($ciToolFailureRecord in @($script:ciToolOperationError,$script:ciToolCallerCleanupError,$ciToolRetentionError,$ciToolDisposeError,$ciToolCompletionError)){if($null -ne $ciToolFailureRecord){$ciToolFailureRecords.Add($ciToolFailureRecord)}}
+        $ciToolFailureCauses=[Collections.Generic.List[Exception]]::new();foreach($ciToolFailureRecord in $ciToolFailureRecords){$ciToolFailureCauses.Add($ciToolFailureRecord.Exception)}
+        $ciToolFailure=[AggregateException]::new(''QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original CiTool caller and finalization failures retained.'',$ciToolFailureCauses.ToArray())
+        $ciToolFailure.Data[''OriginalErrorRecord'']=$ciToolFailureRecords[0];$ciToolFailure.Data[''OriginalBodyErrorRecord'']=$script:ciToolOperationError;$ciToolFailure.Data[''CallerCleanupErrorRecord'']=$script:ciToolCallerCleanupError
+        $ciToolFailure.Data[''TerminalRetentionErrorRecord'']=$ciToolRetentionError;$ciToolFailure.Data[''DisposeErrorRecord'']=$ciToolDisposeError;$ciToolFailure.Data[''CompletionErrorRecord'']=$ciToolCompletionError;$ciToolFailure.Data[''OrderedErrorRecords'']=$ciToolFailureRecords.ToArray()
+        $ciToolFailure.Data[''StrongOriginalCreatorOwner'']=$script:ciToolOwner;$ciToolFailure.Data[''StrongOriginalProcessReference'']=$child;$ciToolFailure.Data[''OwnedCleanupUnverified'']=$true;$ciToolFailure.Data[''RetentionCleanupUncertain'']=($null -ne $ciToolDisposeError)
+        throw $ciToolFailure
+    }
+}'
+if($source.Split([string[]]@($originalCiToolFinalizer),[StringSplitOptions]::None).Count -ne 2){throw 'Exact original CiTool cleanup/disposal clause differs.'}
+$source=$source.Replace($originalCiToolFinalizer,$retainedCiToolFinalizer)
+$originalCiToolBodyFinally='} finally {'
+if($source.Split([string[]]@($originalCiToolBodyFinally),[StringSplitOptions]::None).Count -ne 2){throw 'Exact original CiTool protected body/finally differs.'}
+$source=$source.Replace($originalCiToolBodyFinally,'} catch {$script:ciToolOperationError=$_;throw} finally {')
 if($CreatorPrerequisite -ceq 'ValidCloseRetentionFailure'){
     $script:ciToolFaultSetupError=$null
     # Install the fault only after the original caller has acquired its child,
@@ -143,6 +166,7 @@ foreach($case in $cases){
         $failure.Data['OwnedCleanupUnverified']=$true
         throw $failure
     }
+    $script:ciToolOperationError=$null;$script:ciToolCallerCleanupError=$null;$script:ciToolObservedHasExited=$null
     $watch=[Diagnostics.Stopwatch]::StartNew();$failed=$false;$value=$null
     try {$value=Read-CiToolJson}catch{
         if($CreatorPrerequisite -ceq 'ValidCloseRetentionFailure' -and $null -ne $script:ciToolFaultSetupError){

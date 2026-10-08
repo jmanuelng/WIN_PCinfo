@@ -284,16 +284,26 @@ function New-QualificationOriginalCreatorOwner {
 function Save-QualificationOriginalCreatorTerminal {
     param([Parameter(Mandatory)]$Owner,[Parameter(Mandatory)][string]$Disposition,[Parameter(Mandatory)][bool]$Forced,
         [AllowNull()][string]$StandardOutput,[AllowNull()][string]$StandardError,[AllowNull()][byte[]]$RawStandardOutput,
-        [Parameter(Mandatory)][string]$StreamContract)
+        [Parameter(Mandatory)][string]$StreamContract,
+        [AllowNull()]$ExpectedOriginalProcess,[AllowNull()]$CallerHasExitedObservation,
+        [AllowNull()][Management.Automation.ErrorRecord]$CallerBodyErrorRecord,
+        [AllowNull()][Management.Automation.ErrorRecord]$CallerCleanupErrorRecord)
     $retentionStage='ValidateOriginalHandleAndReserve'
     $observedTerminal=$null;$observedExit=$null
+    $originalWaitResult=$null;$originalWaitResultType=$null;$expectedOriginalProcessReferenceMatches=$null
     try {
         if($Owner.TerminalRetained -or -not $Owner.Started -or $null -eq $Owner.SafeHandle -or
             $Owner.SafeHandle.IsClosed -or $Owner.SafeHandle.IsInvalid -or (Get-QualificationFixtureRemainingMs $Owner)-lt 1000){
             throw 'Original creator terminal lacks original handle or unchanged retention reserve.'
         }
+        if($null -ne $ExpectedOriginalProcess){
+            $expectedOriginalProcessReferenceMatches=[object]::ReferenceEquals($Owner.Process,$ExpectedOriginalProcess)
+            if(-not $expectedOriginalProcessReferenceMatches){throw 'Original terminal owner differs from the exact caller Process reference.'}
+        }
         $retentionStage='ObserveOriginalTerminal'
         $terminal=$Owner.Process.WaitForExit(0)
+        $originalWaitResult=$terminal
+        if($null -ne $terminal){$originalWaitResultType=$terminal.GetType().FullName}
         if($terminal -isnot [bool] -or -not $terminal){throw 'Original creator native terminal remains unknown.'}
         $observedTerminal=$true;$retentionStage='ReadOriginalNativeExit'
         $exit=$Owner.Process.ExitCode;if($exit -isnot [int]){throw 'Original creator native exit is unknown.'}
@@ -319,6 +329,16 @@ function Save-QualificationOriginalCreatorTerminal {
             $message=[string]$originalRetentionError.Exception.Message
             $errorId=[string]$originalRetentionError.FullyQualifiedErrorId
             $stack=[string]$originalRetentionError.ScriptStackTrace
+            $callerErrorViews=[Collections.Generic.List[object]]::new()
+            foreach($callerRole in @('Body','Cleanup')){
+                $callerRecord=if($callerRole -ceq 'Body'){$CallerBodyErrorRecord}else{$CallerCleanupErrorRecord}
+                if($null -ne $callerRecord){
+                    $callerMessage=[string]$callerRecord.Exception.Message;$callerId=[string]$callerRecord.FullyQualifiedErrorId;$callerStack=[string]$callerRecord.ScriptStackTrace
+                    $callerErrorViews.Add([ordered]@{role=$callerRole;errorType=$callerRecord.Exception.GetType().FullName;
+                        message=$callerMessage.Substring(0,[Math]::Min(1024,$callerMessage.Length));fullyQualifiedErrorId=$callerId.Substring(0,[Math]::Min(256,$callerId.Length));scriptStackTrace=$callerStack.Substring(0,[Math]::Min(2048,$callerStack.Length));
+                        messageTruncated=($callerMessage.Length -gt 1024);errorIdTruncated=($callerId.Length -gt 256);stackTruncated=($callerStack.Length -gt 2048);originalErrorRecordGraphRetained=$false})
+                }
+            }
             $view=[ordered]@{
                 contract='win-pcinfo.original-creator-terminal-retention-error/1.0.0';
                 stage=$retentionStage;profile=$Owner.Pending.profile;identity=$Owner.Identity;
@@ -327,6 +347,11 @@ function Save-QualificationOriginalCreatorTerminal {
                 fullyQualifiedErrorId=$errorId.Substring(0,[Math]::Min(512,$errorId.Length));
                 scriptStackTrace=$stack.Substring(0,[Math]::Min(4096,$stack.Length));
                 actualTerminalObserved=$observedTerminal;actualNativeExit=$observedExit;
+                originalWaitResultType=$originalWaitResultType;
+                originalWaitResultBoolean=$(if($originalWaitResult -is [bool]){$originalWaitResult}else{$null});
+                expectedOriginalProcessSupplied=($null -ne $ExpectedOriginalProcess);expectedOriginalProcessReferenceMatches=$expectedOriginalProcessReferenceMatches;
+                callerHasExitedObservation=$(if($CallerHasExitedObservation -is [bool]){$CallerHasExitedObservation}else{$null});callerHasExitedObservationIsBoolean=($CallerHasExitedObservation -is [bool]);
+                forcedRequested=$Forced;originalCallerErrorViews=$callerErrorViews.ToArray();
                 originalTerminalRetentionAccepted=$false;originalClosureAccepted=$false;
                 ownedCleanupUnverified=$true;originalErrorRecordGraphRetained=$false;
                 messageTruncated=($message.Length -gt 4096);errorIdTruncated=($errorId.Length -gt 512);
@@ -343,6 +368,7 @@ function Save-QualificationOriginalCreatorTerminal {
         }
         $exception=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original creator terminal retention failed.', $originalRetentionError.Exception)
         $exception.Data['OriginalErrorRecord']=$originalRetentionError
+        $exception.Data['CallerBodyErrorRecord']=$CallerBodyErrorRecord;$exception.Data['CallerCleanupErrorRecord']=$CallerCleanupErrorRecord
         $exception.Data['RetentionStage']=$retentionStage
         $exception.Data['DiagnosticRetentionFailures']=$diagnosticFailures.ToArray()
         $exception.Data['DiagnosticPath']=$diagnosticPath
