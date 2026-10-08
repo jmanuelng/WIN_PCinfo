@@ -34,7 +34,7 @@ $dialogDriver.Interval=[TimeSpan]::FromMilliseconds(100)
 $entryAssertEqual=${function:Assert-Equal}
 $entryCompleteHarness=${function:Complete-QualificationHarness}
 $entryWindowOwners=[Collections.Generic.List[object]]::new()
-$entryOwnerState=@{CallbackError=$null;BodyError=$null;Unsafe=$false;CloseErrors=[Collections.Generic.List[Exception]]::new();InvocationErrors=[Collections.Generic.List[Exception]]::new()}
+$entryOwnerState=@{CallbackError=$null;BodyError=$null;Unsafe=$false;ChangeSourcePair=$null;CloseErrors=[Collections.Generic.List[Exception]]::new();InvocationErrors=[Collections.Generic.List[Exception]]::new()}
 $markEntryOwnerUnverified={
     param([Exception]$Failure)
     $entryOwnerState.Unsafe=$true
@@ -130,6 +130,9 @@ if($Choices) {
             foreach($pair in $entryWindowOwners.ToArray()) {
                 $window=$pair.Window
                 if(-not $window.IsVisible){continue}
+                # Change choices may leave its source owner visible until product cleanup closes it.
+                # The changed-plan decline belongs to a distinct registered replacement owner.
+                if($entryTest.Changed -and [object]::ReferenceEquals($pair,$entryOwnerState.ChangeSourcePair)){continue}
                 $window.Opacity=0;$window.ShowInTaskbar=$false
                 $entryTest.LastStatus=$window.FindName('Status').Text
                 $entryTest.Reason=([regex]::Match($window.FindName('Details').Text,'Reason: ([A-Z0-9_.]+)')).Value
@@ -140,6 +143,7 @@ if($Choices) {
                         return
                     }
                     if(-not $entryTest.Changed){
+                        $entryOwnerState.ChangeSourcePair=$pair
                         $entryTest.Changed=$true
                         $window.FindName('ChangeChoices').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
                         return
@@ -329,8 +333,8 @@ if($Choices){
     Assert-Equal $true $entryTest.Retried 'declined preparation can start fresh after cleanup'
     Assert-Equal $true $entryTest.HelpSeen 'the real Help button opens passive local guidance'
 }
-if($Choices){Write-Output 'PASS: generated GUI Help, changed preparation and retry require fresh approval and decline without collection.'}
-else{Write-Output 'PASS: unchanged generated Gui entry displays frozen preparation and declines without collection.'}
 }
 catch { $candidateUseError=$_ }
 finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+if($Choices){Write-Output 'PASS: generated GUI Help, changed preparation and retry require fresh approval and decline without collection.'}
+else{Write-Output 'PASS: unchanged generated Gui entry displays frozen preparation and declines without collection.'}
