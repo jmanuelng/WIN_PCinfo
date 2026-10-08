@@ -285,24 +285,73 @@ function Save-QualificationOriginalCreatorTerminal {
     param([Parameter(Mandatory)]$Owner,[Parameter(Mandatory)][string]$Disposition,[Parameter(Mandatory)][bool]$Forced,
         [AllowNull()][string]$StandardOutput,[AllowNull()][string]$StandardError,[AllowNull()][byte[]]$RawStandardOutput,
         [Parameter(Mandatory)][string]$StreamContract)
+    $retentionStage='ValidateOriginalHandleAndReserve'
+    $observedTerminal=$null;$observedExit=$null
     try {
         if($Owner.TerminalRetained -or -not $Owner.Started -or $null -eq $Owner.SafeHandle -or
             $Owner.SafeHandle.IsClosed -or $Owner.SafeHandle.IsInvalid -or (Get-QualificationFixtureRemainingMs $Owner)-lt 1000){
             throw 'Original creator terminal lacks original handle or unchanged retention reserve.'
         }
+        $retentionStage='ObserveOriginalTerminal'
         $terminal=$Owner.Process.WaitForExit(0)
         if($terminal -isnot [bool] -or -not $terminal){throw 'Original creator native terminal remains unknown.'}
+        $observedTerminal=$true;$retentionStage='ReadOriginalNativeExit'
         $exit=$Owner.Process.ExitCode;if($exit -isnot [int]){throw 'Original creator native exit is unknown.'}
+        $observedExit=$exit;$retentionStage='BuildOriginalTerminalRecord'
         $record=[ordered]@{contract='win-pcinfo.original-creator-terminal/1.0.0';identity=$Owner.Identity;
             pendingSha256=(Get-FileHash -LiteralPath (Join-Path $Owner.Directory 'original-pending.json')).Hash.ToLowerInvariant();
             disposition=$Disposition;forced=$Forced;nativeTerminalObserved=$true;nativeExitCode=$exit;disposed=$false;
             streamContract=$StreamContract;standardOutput=$StandardOutput;standardError=$StandardError;
             rawStandardOutput=$(if($null -eq $RawStandardOutput){$null}else{[Convert]::ToBase64String($RawStandardOutput)});
             ordinaryNativePassClaim=$false;processTreeAbsenceClaim=$false}
+        $retentionStage='WriteOriginalTerminal'
         Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory 'original-terminal.json') -Value $record
+        $retentionStage='WriteTerminalMirror'
         Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory 'terminal.json') -Value $record
         $Owner.TerminalVerified=$true;$Owner.TerminalRetained=$true
-    }catch{$Owner.Unsafe=$true;$exception=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original creator terminal retention failed.', $_.Exception);$exception.Data['OwnedCleanupUnverified']=$true;throw $exception}
+    }catch{
+        $originalRetentionError=$_;$Owner.Unsafe=$true
+        $diagnosticFailures=[Collections.Generic.List[Management.Automation.ErrorRecord]]::new()
+        $diagnosticPath=Join-Path $Owner.Directory 'original-terminal-retention-error.json'
+        $diagnosticStream=$null;$diagnosticDisposeUncertain=$false
+        try{
+            # Bounded diagnostic views are not serialized original ErrorRecords.
+            $message=[string]$originalRetentionError.Exception.Message
+            $errorId=[string]$originalRetentionError.FullyQualifiedErrorId
+            $stack=[string]$originalRetentionError.ScriptStackTrace
+            $view=[ordered]@{
+                contract='win-pcinfo.original-creator-terminal-retention-error/1.0.0';
+                stage=$retentionStage;profile=$Owner.Pending.profile;identity=$Owner.Identity;
+                errorType=$originalRetentionError.Exception.GetType().FullName;
+                message=$message.Substring(0,[Math]::Min(4096,$message.Length));
+                fullyQualifiedErrorId=$errorId.Substring(0,[Math]::Min(512,$errorId.Length));
+                scriptStackTrace=$stack.Substring(0,[Math]::Min(4096,$stack.Length));
+                actualTerminalObserved=$observedTerminal;actualNativeExit=$observedExit;
+                originalTerminalRetentionAccepted=$false;originalClosureAccepted=$false;
+                ownedCleanupUnverified=$true;originalErrorRecordGraphRetained=$false;
+                messageTruncated=($message.Length -gt 4096);errorIdTruncated=($errorId.Length -gt 512);
+                stackTruncated=($stack.Length -gt 4096)
+            }
+            $diagnosticBytes=[Text.UTF8Encoding]::new($false,$true).GetBytes(($view|ConvertTo-Json -Depth 6))
+            if($diagnosticBytes.Length -gt 32768){throw 'Original creator diagnostic exceeds its closed byte bound.'}
+            $diagnosticStream=[IO.File]::Open($diagnosticPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+            $diagnosticStream.Write($diagnosticBytes);$diagnosticStream.Flush($true)
+        }catch{$diagnosticFailures.Add($_)}
+        if($null -ne $diagnosticStream){
+            try{$diagnosticStream.Dispose()}
+            catch{$diagnosticDisposeUncertain=$true;$diagnosticFailures.Add($_)}
+        }
+        $exception=[InvalidOperationException]::new('QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: original creator terminal retention failed.', $originalRetentionError.Exception)
+        $exception.Data['OriginalErrorRecord']=$originalRetentionError
+        $exception.Data['RetentionStage']=$retentionStage
+        $exception.Data['DiagnosticRetentionFailures']=$diagnosticFailures.ToArray()
+        $exception.Data['DiagnosticPath']=$diagnosticPath
+        $exception.Data['DiagnosticDisposeUncertain']=$diagnosticDisposeUncertain
+        if($diagnosticDisposeUncertain){$exception.Data['StrongDiagnosticStreamReference']=$diagnosticStream}
+        $exception.Data['StrongOriginalCreatorOwner']=$Owner
+        $exception.Data['OwnedCleanupUnverified']=$true
+        throw $exception
+    }
 }
 
 function Complete-QualificationOriginalCreatorOwner {

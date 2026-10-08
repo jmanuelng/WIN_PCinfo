@@ -720,6 +720,25 @@ else {
             }
         }.GetNewClosure())
         $measureWorkload = ${function:Measure-QualificationWorkload}.GetNewClosure()
+        # GetNewClosure copies variables, so bind the original script-local
+        # sampler helpers into this same callback module before the timer runs.
+        $measureWorkloadBindings = [ordered]@{
+            'Register-QualificationWorkspaceDirectoryIdentities' = ${function:Register-QualificationWorkspaceDirectoryIdentities}
+            'Test-QualificationWorkspaceDirectoryDisappeared' = ${function:Test-QualificationWorkspaceDirectoryDisappeared}
+            'Get-QualificationWorkspaceNativeErrorCode' = ${function:Get-QualificationWorkspaceNativeErrorCode}
+            'Get-EvidenceWorkspaceFileSystemIdentity' = ${function:Get-EvidenceWorkspaceFileSystemIdentity}
+            'Initialize-EvidenceWorkspaceNative' = ${function:Initialize-EvidenceWorkspaceNative}
+        }
+        if ($RequireQualityBudgets) {
+            $measureWorkloadBindings['Get-QualificationMemorySnapshot'] = ${function:Get-QualificationMemorySnapshot}
+            $measureWorkloadBindings['Initialize-QualificationNativeMemory'] = ${function:Initialize-QualificationNativeMemory}
+        }
+        & $measureWorkload.Module {
+            param([Collections.IDictionary]$Bindings)
+            foreach ($name in $Bindings.Keys) {
+                Set-Item -LiteralPath ('Function:script:' + $name) -Value $Bindings[$name]
+            }
+        } $measureWorkloadBindings
         $driver.Add_Tick({
             if ($QualificationPath -and ($qualityWatch.ElapsedMilliseconds - $quality.lastSampleMilliseconds) -ge 1000) { & $measureWorkload }
             $window=$uiState.Window
