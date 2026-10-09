@@ -23,7 +23,7 @@ $regions=[regex]::Matches($initializer.Ast.Extent.Text,
 Assert-Equal 39 $regions.Count 'all original definition regions remain inside the parsed initializer'
 Assert-Equal 0 @($regions | Where-Object {$_.Groups[1].Value -in @('ApplicationHeader.ps1','ApplicationMain.ps1')}).Count 'entry parameters and application execution remain outside initialization'
 $expectedFunctions=@($initializer.Ast.EndBlock.Statements | Where-Object {$_ -is [Management.Automation.Language.FunctionDefinitionAst]})
-Assert-Equal 702 $expectedFunctions.Count 'the complete original definition inventory is retained'
+Assert-Equal 707 $expectedFunctions.Count 'the complete original definition inventory is retained'
 $initializationOutput=@(. $initializer)
 Assert-Equal 0 $initializationOutput.Count 'initialization emits no records and authorizes no collection'
 
