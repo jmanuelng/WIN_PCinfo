@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string] $CandidatePath = '')
+param([string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 # Pure controls extract the actual harness seam; no engine, native worker,
