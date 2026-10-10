@@ -1,11 +1,15 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 . (Join-Path $repositoryRoot 'build/Start-WIN-PCInfo.ps1')
-$application = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateUseError = $null
+try {
+$application = $candidateContext.Path
 $hostPath = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 $starting = 'Starting WIN-PCInfo - verifying application trust and runtime. No assessment has started.'
 $opening = 'Opening guided window - preparation and approval are pending.'
@@ -88,4 +92,7 @@ finally {
     $output.Dispose()
     $feedback.Dispose()
 }
+}
+catch { $candidateUseError = $_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
 Write-Output 'PASS: GUI startup stderr precedes trust, discovery, runtime and launch without changing authority or stdout.'
