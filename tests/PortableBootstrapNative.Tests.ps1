@@ -192,7 +192,7 @@ try {
     function Open-PortableBootstrapNativeBinding {
         param($RepositoryRoot,$HostPath,$WorkingDirectory,$Arguments,$ExactEnvironment)
         $script:retentionBinding=[pscustomobject]@{HostStream=[IO.File]::OpenRead($HostPath);TargetStream=[IO.File]::OpenRead($Arguments[3]);
-            ClearEnvironment=$false;Environment=$null;AuthorityEnds=[DateTimeOffset]::UtcNow.AddMinutes(2);
+            Closed=$false;ClearEnvironment=$false;Environment=$null;AuthorityEnds=[DateTimeOffset]::UtcNow.AddMinutes(2);
             Record=[ordered]@{contract='disclosed-pure-binding';processTreeAbsenceClaim=$false}}
         $script:retentionBinding
     }
