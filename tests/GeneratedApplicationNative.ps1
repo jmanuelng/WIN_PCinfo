@@ -582,6 +582,9 @@ function Invoke-GeneratedApplicationNative {
     elseif ($NativeRole -eq 'TestFile') {
         $null=Confirm-TestFileNativeRetention -RepositoryRoot $repository -Directory $directory -Nonce $nonce -Admission $admission -NativeIdentity $owner.StartedIdentity -NativeOutcome $outcome -Failures $failures
     }
+    if ($null -ne $outcome -and $outcome.NativeTerminalObserved -and -not $outcome.OwnedCleanupUnverified -and $failures.Count -eq 0) {
+        try { $owner.Dispose() } catch { $failures.Add($_.Exception) }
+    }
     if ($cmdRequested -and $null -ne $outcome -and $outcome.NativeTerminalObserved -and -not $outcome.OwnedCleanupUnverified -and $failures.Count -eq 0) {
         # Verify/release every immutable input before releasing the native hold.
         # A fallible binding finalizer cannot erase the original native outcome.
@@ -654,7 +657,6 @@ function Invoke-GeneratedApplicationNative {
         Write-Output 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'
         throw $exception
     }
-    $owner.Dispose()
     $portableSafe=$true
     # Natural nonzero exits are part of the existing negative-test contract.
     # Behavior assertions, including JSON parsing, run only after ownership is
