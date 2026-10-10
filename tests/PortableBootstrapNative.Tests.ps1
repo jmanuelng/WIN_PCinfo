@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('None','IgnoreEnvironmentClear','AllowChangedTarget','SuppressUnsafeOutcome','SkipIndependentDisposal')] [string] $BootstrapFault='None')
+param([ValidateSet('None','IgnoreEnvironmentClear','AllowChangedTarget','SuppressUnsafeOutcome','SkipIndependentDisposal','OmitCallerBodyError')] [string] $BootstrapFault='None')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'GeneratedApplicationNative.ps1')
@@ -230,6 +230,64 @@ try {
         Assert-BootstrapControl ($script:retentionBinding.TargetStream.CanRead -eq $unsafe -and $script:retentionBinding.HostStream.CanRead -eq $unsafe) 'Unsafe original binding locks were released, or safe locks leaked.'
         $script:retentionBinding.TargetStream.Dispose();$script:retentionBinding.HostStream.Dispose()
         $controls+=4
+    }
+
+    # Actual caller regression: budget failure after disclosed binding opens,
+    # before owner construction/Start/Wait. Both fake disposals retain exact causes.
+    $savedCallerBudget=${function:Get-GeneratedApplicationNativeBudget}
+    $savedCallerOpen=${function:Open-PortableBootstrapNativeBinding}
+    $savedCallerFactory=${function:New-PureBootstrapOwner}
+    $savedRetentionBinding=$script:retentionBinding;$savedRetentionOwner=$script:retentionOwner
+    try {
+        $pureNativeRoot=Join-Path $workRoot 'pure-native-caller-bodyerror'
+        $null=[IO.Directory]::CreateDirectory($pureNativeRoot)
+        $script:callerBudgetCalls=0;$script:callerBindingOpened=$false;$script:callerOwnerConstructed=$false
+        $callerOriginalCause=[InvalidOperationException]::new('Disclosed original caller cause after portable binding opens.')
+        $script:callerOriginalError=[Management.Automation.ErrorRecord]::new($callerOriginalCause,'SyntheticCallerBodyError',[Management.Automation.ErrorCategory]::OperationStopped,$pureNativeRoot)
+        $callerTarget=[pscustomobject]@{Attempts=0;Failure=[InvalidOperationException]::new('Disclosed caller Target disposal failure.')}
+        $callerHost=[pscustomobject]@{Attempts=0;Failure=[InvalidOperationException]::new('Disclosed caller Host disposal failure.')}
+        foreach ($fake in @($callerTarget,$callerHost)) { $fake | Add-Member ScriptMethod Dispose { $this.Attempts++;throw $this.Failure } }
+        $script:callerBinding=[pscustomobject]@{TargetStream=$callerTarget;HostStream=$callerHost;Closed=$false;AuthorityEnds=[DateTimeOffset]::UtcNow.AddMinutes(1)}
+        function Get-GeneratedApplicationNativeBudget {
+            param($TimeoutMs,$CleanupReserveMs,$AuthorityEnds)
+            $script:callerBudgetCalls++
+            if ($script:callerBudgetCalls -eq 1) { return [pscustomobject]@{AuthorityEnds=[DateTimeOffset]::UtcNow.AddMinutes(2)} }
+            if ($script:callerBudgetCalls -eq 2) { throw $script:callerOriginalError }
+            throw 'Caller regression escaped its second-budget pre-start seam.'
+        }
+        function Open-PortableBootstrapNativeBinding {
+            param($RepositoryRoot,$HostPath,$WorkingDirectory,$Arguments,$ExactEnvironment)
+            $script:callerBindingOpened=$true;$script:callerBinding
+        }
+        function New-PureBootstrapOwner { $script:callerOwnerConstructed=$true;throw 'Caller regression reached forbidden owner construction.' }
+        function Test-BootstrapCallerCause {
+            param([AllowNull()][Exception]$Actual,[Exception]$Expected)
+            if ($null -eq $Actual) { return $false }
+            if ([object]::ReferenceEquals($Actual,$Expected)) { return $true }
+            if ($Actual -is [AggregateException]) { foreach ($inner in $Actual.InnerExceptions) { if (Test-BootstrapCallerCause $inner $Expected) { return $true } } }
+            if ($null -ne $Actual.InnerException) { return (Test-BootstrapCallerCause $Actual.InnerException $Expected) }
+            return $false
+        }
+        $callerReplay=$nativeReplay
+        if ($BootstrapFault -eq 'OmitCallerBodyError') {
+            $callerText=$nativeReplay.ToString();$forwarded='else { Complete-PortableBootstrapNativeBinding -Binding $portableBinding -BodyError $inputUseError }'
+            Assert-BootstrapControl (@([regex]::Matches($callerText,[regex]::Escape($forwarded))).Count -eq 1) 'Caller red control lost its exact one-argument seam.'
+            $callerReplay=[scriptblock]::Create($callerText.Replace($forwarded,'else { Complete-PortableBootstrapNativeBinding -Binding $portableBinding }'))
+        }
+        $callerObserved=$null
+        try { & $callerReplay -HostPath $hostPath -WorkingDirectory $package -Arguments $arguments -PortableBootstrap -TimeoutMs 60000 -CleanupReserveMs 10000 | Out-Null } catch { $callerObserved=$_ }
+        Assert-BootstrapControl ($script:callerBindingOpened -and $script:callerBudgetCalls -eq 2 -and -not $script:callerOwnerConstructed) 'Actual caller regression escaped the pre-start binding/budget seam.'
+        Assert-BootstrapControl ($null -ne $callerObserved -and (Test-BootstrapCallerCause $callerObserved.Exception $callerOriginalCause)) 'Actual caller finalizer replaced the original body cause.'
+        Assert-BootstrapControl ($callerTarget.Attempts -eq 1 -and $callerHost.Attempts -eq 1 -and (Test-BootstrapCallerCause $callerObserved.Exception $callerTarget.Failure) -and (Test-BootstrapCallerCause $callerObserved.Exception $callerHost.Failure)) 'Actual caller finalizer lost independent Target/Host attempts or exact disposal causes.'
+        Assert-BootstrapControl ((Test-QualificationCleanupUnverified -Exception $callerObserved.Exception) -and -not $script:callerBinding.Closed) 'Actual caller cleanup uncertainty or unclosed binding was erased.'
+        Assert-BootstrapControl (@($script:PortableBootstrapUnverifiedBindings | Where-Object {[object]::ReferenceEquals($_,$script:callerBinding)}).Count -eq 1) 'Actual caller lost the strong uncertain binding reference.'
+        $controls+=5
+    }
+    finally {
+        Set-Item Function:Get-GeneratedApplicationNativeBudget -Value $savedCallerBudget
+        Set-Item Function:Open-PortableBootstrapNativeBinding -Value $savedCallerOpen
+        Set-Item Function:New-PureBootstrapOwner -Value $savedCallerFactory
+        $script:retentionBinding=$savedRetentionBinding;$script:retentionOwner=$savedRetentionOwner
     }
 
     # Load the actual Windows PowerShell adapter function without any package

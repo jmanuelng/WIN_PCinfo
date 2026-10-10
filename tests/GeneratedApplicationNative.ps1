@@ -760,7 +760,7 @@ function Invoke-GeneratedApplicationNative {
                 }
                 $script:PortableBootstrapUnverifiedBindings.Add($portableBinding)
             }
-            else { Complete-PortableBootstrapNativeBinding -Binding $portableBinding }
+            else { Complete-PortableBootstrapNativeBinding -Binding $portableBinding -BodyError $inputUseError }
         }
     }
     if ($null -ne $inputResult) { $inputResult }
