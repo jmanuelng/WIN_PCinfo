@@ -162,7 +162,7 @@
     },
     {
       "path": "tests/QualificationFixtureProcess.ps1",
-      "sha256": "685eff1aec401ae29aa86bc4612e8ad65a730779923d0ea9fb79da73643180bc"
+      "sha256": "8a1858fd52d6e383eb71983316c9eeed1db4d841d5ffd23f542f431e49275b17"
     },
     {
       "path": "tests/QualificationCapabilityProcess.ps1",

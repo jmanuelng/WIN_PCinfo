@@ -453,7 +453,7 @@ function Write-RecoveryOriginalRecord {
 function Begin-RecoveryOriginalCreation {
     param([string]$Directory,[ValidateSet('RecoveryNested','StatusWorker','StatusNested')][string]$Role,[Diagnostics.ProcessStartInfo]$StartInfo,
         [AllowNull()]$WorkerConfiguration,[AllowNull()][string]$WorkerTemplateSha256)
-    $pending=Get-Content -LiteralPath (Join-Path $Directory 'original-pending.json') -Raw|ConvertFrom-Json -AsHashtable
+    $pending=Get-Content -LiteralPath (Join-Path $Directory 'original-pending.json') -Raw|ConvertFrom-Json -AsHashtable -DateKind String
     if($pending.contract -cne 'win-pcinfo.original-creator/1.0.0' -or
         $pending.profile -cnotin @('RecoveryFixtureParent','StatusRecoveryParent') -or
         $StartInfo.UseShellExecute -or $StartInfo.UserName -or $StartInfo.Arguments -or
@@ -466,7 +466,7 @@ function Begin-RecoveryOriginalCreation {
     $parentPath=if($Role -ceq 'StatusNested'){Join-Path $Directory 'recovery-StatusWorker-creation.json'}else{Join-Path $Directory 'original-identity.json'}
     $watch=[Diagnostics.Stopwatch]::StartNew()
     while(-not [IO.File]::Exists($parentPath)-and $watch.ElapsedMilliseconds-lt5000-and ($end-[DateTimeOffset]::UtcNow).TotalMilliseconds-ge7000){[Threading.Thread]::Sleep(10)}
-    $parent=Get-Content -LiteralPath $parentPath -Raw|ConvertFrom-Json -AsHashtable
+    $parent=Get-Content -LiteralPath $parentPath -Raw|ConvertFrom-Json -AsHashtable -DateKind String
     $expected=if($Role -ceq 'StatusNested'){$parent.child}else{$parent.identity}
     $self=[Diagnostics.Process]::GetCurrentProcess()
     try{$creator=[ordered]@{pid=$self.Id;fullBirthUtc=$self.StartTime.ToUniversalTime().ToString('o');hostPath=$self.MainModule.FileName;ownerSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}}
@@ -510,7 +510,7 @@ function Save-QualificationRecoveryOriginalTerminal {
         [Parameter(Mandatory)][ValidateSet('ParentOnlyStopThenSeparateHeldChildStop','OriginalProductJobClosureAfterParentLoss')][string]$Disposition)
     try {
         $creationPath=Join-Path $Owner.Directory ('recovery-'+$Role+'-creation.json')
-        $creation=Get-Content -LiteralPath $creationPath -Raw|ConvertFrom-Json -AsHashtable
+        $creation=Get-Content -LiteralPath $creationPath -Raw|ConvertFrom-Json -AsHashtable -DateKind String
         $handle=$Process.SafeHandle
         if($handle.IsClosed-or$handle.IsInvalid-or(Get-QualificationFixtureRemainingMs $Owner)-lt1000-or
             $Process.Id -ne $creation.child.pid-or$Process.StartTime.ToUniversalTime().ToString('o')-cne$creation.child.fullBirthUtc-or
