@@ -134,7 +134,7 @@
     },
     {
       "path": "tests/GeneratedApplicationNativeSupervisor.cs",
-      "sha256": "c934d341318d3f3ed96b002b982dcc1beae2344d5b5c014d8b5e2fd2e18ff258"
+      "sha256": "0274b9581df6877f89f066e045926f99e624afb42a5225c9b42fa805036028c8"
     },
     {
       "path": "tests/QualificationCleanup.ps1",

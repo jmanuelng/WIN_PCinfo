@@ -76,6 +76,7 @@ public sealed class WinPCInfoTestGeneratedApplicationNativeSupervisor : IDisposa
    StartedIdentity.EnvironmentMode="ClearExact";
   }
   process.StartInfo.RedirectStandardInput=redirectStandardInput;
+  if(!redirectStandardInput)process.StartInfo.StandardInputEncoding=null;
   StartedIdentity.RedirectStandardInput=redirectStandardInput;
  }
  // Closed test-only CMD Help profile. No public raw-arguments or host override.
