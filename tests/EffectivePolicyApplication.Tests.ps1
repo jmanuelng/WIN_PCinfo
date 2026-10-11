@@ -85,7 +85,32 @@ function Test-EffectivePolicyPublicOutputPrivacy {
         'appLockerGpCollectionCount','appLockerCspCollectionCount')
     foreach ($line in [regex]::Matches($StandardOutput,'(?m)^[^\r\n]+')) {
         if ($line.Value -notmatch '5985|5986') { continue }
-        try { $record=ConvertFrom-Json -InputObject $line.Value -Depth 20 -DateKind String }
+        try {
+            $privacyDoc=$null
+            try {
+                $privacyOptions=[Text.Json.JsonDocumentOptions]::new()
+                $privacyOptions.MaxDepth=20
+                $privacyDoc=[Text.Json.JsonDocument]::Parse([string]$line.Value,$privacyOptions)
+                function Test-PrivacyDuplicateDecodedMember($Element) {
+                    if ($Element.ValueKind -eq [Text.Json.JsonValueKind]::Object) {
+                        $names=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                        foreach ($property in $Element.EnumerateObject()) {
+                            if (-not $names.Add($property.Name)) { return $true }
+                            if (Test-PrivacyDuplicateDecodedMember $property.Value) { return $true }
+                        }
+                    }
+                    elseif ($Element.ValueKind -eq [Text.Json.JsonValueKind]::Array) {
+                        foreach ($elementItem in $Element.EnumerateArray()) {
+                            if (Test-PrivacyDuplicateDecodedMember $elementItem) { return $true }
+                        }
+                    }
+                    return $false
+                }
+                if (Test-PrivacyDuplicateDecodedMember $privacyDoc.RootElement) { return $true }
+            }
+            finally { if ($null -ne $privacyDoc) { $privacyDoc.Dispose() } }
+            $record=ConvertFrom-Json -InputObject $line.Value -Depth 20 -DateKind String
+        }
         catch { return $true }
         $typeProperty=$record.PSObject.Properties['recordType']
         $versionProperty=$record.PSObject.Properties['contractVersion']

@@ -195,4 +195,37 @@ $summary.plan.integrity.applicationResources[0].port=5985
 if (-not (Test-EffectivePolicyPublicOutputPrivacy -StandardOutput (Convert-PrivacyControlRecord $summary) -Pattern $pattern)) {
     throw 'Preparation digest exceptions waived restricted sibling fields.'
 }
+# Duplicate JSON members must be checked before PowerShell's projection can
+# overwrite them. These are raw JSON strings, not hashtable serialization.
+foreach ($port in @(5985,5986)) {
+    foreach ($rawTemplate in @(
+        '{"recordType":"synthetic.public-record","port":5985,"port":0}',
+        '{"recordType":"synthetic.public-record","port":0,"port":5985}',
+        '{"recordType":"synthetic.public-record","port":"5985","port":"safe"}',
+        '{"recordType":"synthetic.public-record","port":"safe","port":"5985"}',
+        '{"recordType":"synthetic.public-record","nested":{"port":5985,"port":0}}',
+        '{"recordType":"synthetic.public-record","nested":{"port":0,"port":5985}}',
+        '{"recordType":"synthetic.public-record","items":[{"port":5985,"port":0}]}',
+        '{"recordType":"synthetic.public-record","items":[{"port":0,"port":5985}]}',
+        '{"recordType":"synthetic.public-record","port":5985,"p\u006frt":0}',
+        '{"recordType":"synthetic.public-record","p\u006frt":0,"port":5985}',
+        '{"recordType":"synthetic.public-record","items":[{"p\u006frt":5985,"port":0}]}',
+        '{"recordType":"synthetic.public-record","items":[{"port":0,"p\u006frt":5985}]}',
+        '{"recordType":"win-pcinfo.progress","contractVersion":"1.0.0","sequence":5985,"sequence":0}',
+        '{"recordType":"win-pcinfo.progress","contractVersion":"1.0.0","sequence":0,"sequence":5985}',
+        '{"recordType":"synthetic.public-record","port":5985}'
+    )) {
+        $rawControl=$rawTemplate.Replace('5985',[string]$port)
+        if (-not (Test-EffectivePolicyPublicOutputPrivacy -StandardOutput $rawControl -Pattern $pattern)) {
+            throw 'Raw duplicate-member or unique restricted-port output was not rejected.'
+        }
+    }
+    # The member-name set belongs to each object. Identical decoded names in
+    # separate objects must not reject an otherwise legitimate metadata count.
+    $separateObjects='{"recordType":"win-pcinfo.progress","contractVersion":"1.0.0","sequence":5985,"items":[{"port":0},{"p\u006frt":0}]}'
+    $separateObjects=$separateObjects.Replace('5985',[string]$port)
+    if (Test-EffectivePolicyPublicOutputPrivacy -StandardOutput $separateObjects -Pattern $pattern) {
+        throw 'Decoded member names in separate objects became duplicate members.'
+    }
+}
 Write-Output 'PASS: actual producer metadata controls are red under the original assertion and green under exact ownership checks; restricted ports, invalid shapes/owners and every original non-port alternative remain rejected.'
