@@ -1,11 +1,14 @@
 ﻿[CmdletBinding()]
-param()
+param([string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateUseError=$null
+try {
 $generated = [IO.File]::ReadAllText($candidate)
 $regions = [regex]::Matches($generated,
     '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
@@ -142,3 +145,6 @@ foreach ($faultCase in @(
     Assert-Equal $true $fakeSession.Completed 'retry completes after both exact-owned disposals are verified'
 }
 Write-Output 'PASS: completion preserves primary failure, attempts independent disposal and safely retries exact-owned handles.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

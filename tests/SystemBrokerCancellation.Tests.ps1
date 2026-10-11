@@ -1,11 +1,15 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),'(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
 $testRoot=[IO.Path]::GetFullPath((Join-Path $repositoryRoot ('.test-output/broker-cancel-'+[guid]::NewGuid().ToString('N'))))
@@ -45,4 +49,9 @@ finally {
     Remove-Variable AssessmentRunJournalPath -Scope Script -ErrorAction SilentlyContinue
     if([IO.Directory]::Exists($testRoot)){Remove-Item -LiteralPath $testRoot -Recurse -Force}
 }
-Write-Output 'PASS: cancellation before SYSTEM intent proves absence without a false cleanup failure.'
+$candidateSuccessMessages.Add('PASS: cancellation before SYSTEM intent proves absence without a false cleanup failure.')
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

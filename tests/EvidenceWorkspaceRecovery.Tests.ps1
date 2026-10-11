@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 . (Join-Path $repositoryRoot 'src/Contracts.ps1')
 . (Join-Path $repositoryRoot 'src/ContractValidator.ps1')
 . (Join-Path $repositoryRoot 'src/EvidenceWorkspace.ps1')
@@ -63,7 +64,10 @@ try {
     $null = $start.ArgumentList.Add($crashCaseRoot)
     $null = $start.ArgumentList.Add('-HandoffPath')
     $null = $start.ArgumentList.Add($handoffPath)
+    $crashOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile EvidenceCrash -StartInfo $start
+    Assert-QualificationOriginalCreatorCreation $crashOwner
     $crashProcess = [System.Diagnostics.Process]::Start($start)
+    Register-QualificationFixtureProcess -Owner $crashOwner -Process $crashProcess
     try {
         $handoffDeadline = [System.Diagnostics.Stopwatch]::StartNew()
         while (-not [System.IO.File]::Exists($handoffPath) -and
@@ -74,14 +78,17 @@ try {
             throw 'The crash-injection child did not reach the registered-before-write seam.'
         }
         $crashProcess.Kill($true)
-        $crashProcess.WaitForExit()
+        if (-not $crashProcess.WaitForExit(5000)) { throw 'Original crash child terminal remains unverified.' }
     }
     finally {
         if (-not $crashProcess.HasExited) {
             $crashProcess.Kill($true)
-            $crashProcess.WaitForExit()
+            if (-not $crashProcess.WaitForExit(5000)) { throw 'Original crash child terminal remains unverified.' }
         }
-        $crashProcess.Dispose()
+        try {
+            Save-QualificationOriginalCreatorTerminal -Owner $crashOwner -Disposition DeliberateCrashRecovery -Forced $true -StreamContract NoRedirectedChannels
+        }finally{$crashProcess.Dispose()}
+        Complete-QualificationOriginalCreatorOwner $crashOwner
     }
     $interrupted = Get-Content -LiteralPath $handoffPath -Raw | ConvertFrom-Json
     Assert-Equal 0 ([System.IO.FileInfo]::new([string] $interrupted.temporaryPath).Length) `
@@ -221,6 +228,9 @@ try {
         'the journal cannot disappear while a registered cleanup target survives'
 }
 finally {
+    if ($null -ne (Get-Variable crashOwner -ErrorAction SilentlyContinue) -and $null -ne $crashOwner -and (-not $crashOwner.Disposed -or $crashOwner.Unsafe)) {
+        throw 'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED: preserve crash fixture and original creator receipts.'
+    }
     if ([System.IO.Directory]::Exists($testRoot)) {
         [System.IO.Directory]::Delete($testRoot, $true)
     }

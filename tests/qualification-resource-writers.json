@@ -1,8 +1,8 @@
 {
   "kind": "ControlledAssessmentClosedDiskWriterInventory",
   "version": "1.2.0",
-  "candidateSha256": "53a04d684281ec50677e4a9f4a53d6ba00703ea0bbba9dff7b8abf1aeea1902a",
-  "harnessSha256": "094492518edabba193901f48d2950447bfaf6d984c48f9a2caee1e08405b46ba",
+  "candidateSha256": "94f25c170b665b85d8e6304eb72343788c7ab1832a63caf3968ed986caa5ad18",
+  "harnessSha256": "9493ce59258d1e9ff10122b0f2520db092c97466348992aeb2a3f59b86db670c",
   "scope": "OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses",
   "writers": [
     "Write-RunRecoveryJournal",
@@ -27,7 +27,7 @@
     },
     {
       "path": "tests/TestHarness.ps1",
-      "sha256": "33ca49ffed78f32ecb677029e9a797ef77f2e8033caf980e583cafbdce6792d0"
+      "sha256": "88a145ad825b953a2c72f13281e28cb0064f54e6b01d8c70ea369759bb6837e5"
     },
     {
       "path": "tests/AdditionalScopeSourceAdapters.ps1",
@@ -87,7 +87,7 @@
     },
     {
       "path": "tests/QualificationDiskBounds.ps1",
-      "sha256": "4749fd855fe5c3a7f59e15dbb9b25ba7e844982c0f39789938532a8aef490bb8"
+      "sha256": "f75811c52b92869ce9c9f1b231718d63e4cfeff62d5980b3ad7c8c4d2b377ed6"
     },
     {
       "path": "tests/QualificationWorkspaceSampling.ps1",
@@ -123,6 +123,70 @@
       "encodingBound": "Utf8IncludingOptionalThreeByteBom",
       "maximumLaunches": 1,
       "reservationBytes": 28
+    }
+  ],
+  "bindingContract": "win-pcinfo.qualification-resource-inputs/1.0.0",
+  "executorInputScope": "ExternalQualificationExecutionAndRetentionOutsideMeasuredApplicationWorkspace",
+  "executorInputs": [
+    {
+      "path": "tests/GeneratedApplicationNative.ps1",
+      "sha256": "1fe559845c938a8615ea5e87afc1bde89447c1a0cfe57d09bb917dac06860530"
+    },
+    {
+      "path": "tests/GeneratedApplicationNativeSupervisor.cs",
+      "sha256": "0274b9581df6877f89f066e045926f99e624afb42a5225c9b42fa805036028c8"
+    },
+    {
+      "path": "tests/QualificationCleanup.ps1",
+      "sha256": "f705545d8a6e37c63b32fe137844759e60ede3c5aa0efede28fabdb468686dbd"
+    },
+    {
+      "path": "tests/QualificationCaseAdmission.ps1",
+      "sha256": "7d9a715e0af19a3ccbbd2f1a1216da746529ead5eccf0d7b4ea020750aaae55d"
+    },
+    {
+      "path": "tests/Invoke-TestFile.ps1",
+      "sha256": "55c139c161c4d9cdc5d7afa7f737be2f9f459ba9833ffa4d9f637f8d6e309834"
+    },
+    {
+      "path": "tests/Invoke-QualificationCase.ps1",
+      "sha256": "a87009e06a095ff3a884db491eb5408e8e17d318a4f2725c7ded554b4652f4da"
+    },
+    {
+      "path": "tests/Invoke-FocusedTest.ps1",
+      "sha256": "23b413d70f4c298f88e650f19c9d3329df05d70ad606c6c7438d07dd34ad7a8d"
+    },
+    {
+      "path": "tests/Run-Tests.ps1",
+      "sha256": "577578e77a36b6398b6ece166886b3cb7ec90091eb22bba43ed2324b74e7e815"
+    },
+    {
+      "path": "tests/QualificationFixtureProcess.ps1",
+      "sha256": "8a1858fd52d6e383eb71983316c9eeed1db4d841d5ffd23f542f431e49275b17"
+    },
+    {
+      "path": "tests/QualificationCapabilityProcess.ps1",
+      "sha256": "511028cbd5e120212558cfeb5905adaec701687ac2690ca7d438c294becbbabb"
+    },
+    {
+      "path": "tests/QualificationInlineRepresentation.ps1",
+      "sha256": "b0d85668b3f962432380c7501b713caacf21194368ea32f2acf1497b42414f2c"
+    },
+    {
+      "path": "tests/QualificationRecipientViewingInterruption.ps1",
+      "sha256": "a70f05980c92211250756e77881f9fba4d3a27b38ba7a424b7901b275b97cd3a"
+    },
+    {
+      "path": "tests/QualificationResourceBounds.ps1",
+      "sha256": "5fdae9a7658a255a089c7393bbbdbabfd3408e3a7b8e9f01fd745f1fd4d04bc9"
+    },
+    {
+      "path": "tests/Invoke-AssessmentSafetyQualification.ps1",
+      "sha256": "e7ee503c118a07085772f289bce2fa096b20cb5e6de13572f194c3e538acb480"
+    },
+    {
+      "path": "tests/QualificationInputLauncher.ps1",
+      "sha256": "563624f25eca4ecb54e4d91264495fc3856177b074a0ddcbd763edfe56853cd8"
     }
   ]
 }

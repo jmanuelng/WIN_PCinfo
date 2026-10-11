@@ -1,20 +1,30 @@
 [CmdletBinding()]
-param([switch]$StaChild, [ValidateSet('RecoveryEarly','RecoveryReady','Viewing','Export')][string]$Scenario='RecoveryEarly')
+param([switch]$StaChild, [ValidateSet('RecoveryEarly','RecoveryReady','Viewing','Export')][string]$Scenario='RecoveryEarly',
+    [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+$repositoryRoot=Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateUseError=$null
+try {
 if(-not $StaChild){
+    if (-not $candidateContext.Prepared) {
+        $PreparedManifestPath=Join-Path $candidateContext.OwnedDirectory 'prepared-test-candidate.json'
+        [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+        $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
     foreach($case in @('RecoveryEarly','RecoveryReady','Viewing','Export')){
-        & (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -STA -File $PSCommandPath -StaChild -Scenario $case
+        Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-STA','-File',$PSCommandPath,'-StaChild','-Scenario',$case,
+            '-CandidatePath',$candidateContext.Path,'-PreparedManifestPath',$PreparedManifestPath,'-PreparedManifestSha256',$PreparedManifestSha256)
         if($LASTEXITCODE -ne 0){throw "Status desk cleanup gate failed: $case"}
     }
     return
 }
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
-$repositoryRoot=Split-Path -Parent $PSScriptRoot
-. (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidate=$candidateContext.Path
 $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),'(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 $moduleText=($regions | ForEach-Object {$_.Groups[2].Value}) -join "`n"
 foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
@@ -180,3 +190,6 @@ finally {
     if([IO.Directory]::Exists($resolved)){[IO.Directory]::Delete($resolved,$true)}
 }
 Write-Output "PASS: $Scenario blocks collection after cleanup failure while preserving recovery and close."
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

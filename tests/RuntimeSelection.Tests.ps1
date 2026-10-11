@@ -1,12 +1,16 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 
 # Inventory is an OS boundary. Repeated application matches must still reach
 # the generated application through one literal executable, without profiles.
@@ -41,4 +45,9 @@ try {
 }
 finally { Remove-Item Function:\Get-Command }
 
-Write-Output 'PASS: multiple host matches reach generated application execution.'
+$candidateSuccessMessages.Add('PASS: multiple host matches reach generated application execution.')
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

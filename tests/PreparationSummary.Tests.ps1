@@ -1,16 +1,19 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationFixturePath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateUseError=$null
+try {
 
 $guidedAccepted = Invoke-GeneratedApplication -CandidatePath $candidatePath `
     -Arguments @('-Mode', 'Guided', '-PreparationFixturePath', $preparationFixturePath) -StandardInput "APPROVE`n"
@@ -123,3 +126,6 @@ Assert-Equal 0 @($automationSummary.plan.integrity.applicationResources |
     'every modular source, build, schema, and release resource has an exact digest'
 
 Write-Output 'PASS: one immutable Preparation Summary gates accepted and declined generated-app paths.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

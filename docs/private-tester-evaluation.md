@@ -27,6 +27,36 @@ separate; approval never covers unknown future bytes. Follow
 [exact-candidate signing and package verification](personal-evaluation-certificates.md#freeze-sign-and-verify-the-portable-candidate).
 An unsigned source build is not an ordinary assessment delivery.
 
+## Before the Windows 11 user test
+
+The available Windows 11 PC is approved for user-run validation. A prepared
+checklist or an unsigned development build does not establish readiness to run
+an assessment. Wait for the maintainer's exact qualified package, verification
+record and admitted test session. The current Server engineering host is outside
+the live client assessment scope.
+
+Use the [current readiness checkpoint and ordered user test matrix](validation/issue-161-session-packet.md#current-readiness-and-retained-history).
+The maintainer fills the final source/archive/launcher/application identities,
+private result and evidence destinations, protection/recipient prerequisites and
+required approvals before activation. Historical candidate tables are retained
+evidence, not instructions to run those bytes.
+
+Qualification for user testing means the current automated gate, applicable GUI
+checks, independent source reviews and final artifact verification passed. The
+user's actual report, cancellation, recovery, privilege, display and cleanup
+checks are still pending. Successful user testing and accepted private delivery
+are subsequent outcomes; public Preview qualification/publication remain separate.
+No Azure account, developer checkout or test-fixture option is needed for the
+delivered package. Complete any disclosed Windows prompts personally.
+
+For your first session, record the package identity privately, verify and launch,
+decline once, prepare afresh and run Comprehensive Local Only. Inspect the real
+report and close viewing explicitly. Then follow the matrix for separate Cancel
+and active-window Close runs, protected reopening, deliberate export/refusal,
+recovery and the separately approved connectivity choice. Stop on an integrity
+or cleanup failure and retain the protected results and ownership records for
+the maintainer; do not guess at cleanup or bypass admission.
+
 ## Review and consent to user trust
 
 Trust applies to the signer: other code signed by the same certificate can also

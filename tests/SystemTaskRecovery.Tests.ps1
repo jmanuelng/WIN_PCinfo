@@ -1,17 +1,24 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateError = $null
+try {
+$candidate = $candidateContext.Path
 $regions = [regex]::Matches([IO.File]::ReadAllText($candidate), '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach ($region in $regions) { . ([scriptblock]::Create($region.Groups[2].Value)) }
 $testRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot ('.test-output/task-recovery-' + [guid]::NewGuid().ToString('N'))))
 $allowedRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
 if (-not $testRoot.StartsWith($allowedRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid synthetic recovery root.' }
-$null = [IO.Directory]::CreateDirectory($testRoot)
+$null = New-Item -ItemType Directory -Path $testRoot -ErrorAction Stop
+$testRootCreated = $true
+$fixtureOwner = $null
+$bodyError = $null
 $script:taskDefinition = [pscustomobject]@{
     RegistrationInfo=[pscustomobject]@{ Description='Synthetic owned SYSTEM task' }
     Principal=[pscustomobject]@{ UserId='SYSTEM'; LogonType=5; RunLevel=1 }
@@ -41,15 +48,22 @@ try {
     $engineStart=[Diagnostics.ProcessStartInfo]::new()
     $engineStart.FileName=Join-Path $PSHOME 'pwsh.exe'; $engineStart.UseShellExecute=$false; $engineStart.CreateNoWindow=$true
     foreach($argument in @('-NoLogo','-NoProfile','-Command','[Threading.Thread]::Sleep(30000)')) { $engineStart.ArgumentList.Add($argument) }
-    $engine=[Diagnostics.Process]::Start($engineStart)
+    $fixtureOwner=New-QualificationFixtureProcessOwner -RepositoryRoot $repositoryRoot -StartInfo $engineStart
+    $engine=$null
+    $fixtureError=$null
     try {
+        Assert-QualificationFixtureProcessAdmission -Owner $fixtureOwner
+        $engine=[Diagnostics.Process]::Start($engineStart)
+        Register-QualificationFixtureProcess -Owner $fixtureOwner -Process $engine
         $script:taskPresent=$false
         $missing=Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
         Assert-Equal 'CleanupIncomplete' $missing.outcome 'interrupted deletion without a durable engine-absence witness retains uncertainty'
         Assert-Equal $true ([IO.File]::Exists($context.Journal.journalPath)) 'registration absence alone cannot retire the journal while a controlled engine survives'
         Assert-Equal $false $engine.HasExited 'recovery never guesses which unregistered engine to kill'
     }
-    finally { if(-not $engine.HasExited){$engine.Kill();$null=$engine.WaitForExit(5000)}; $engine.Dispose(); $script:taskPresent=$true }
+    catch { $fixtureError=$_ }
+    finally { Complete-QualificationFixtureProcess -Owner $fixtureOwner -Process $engine -BodyError $fixtureError }
+    $script:taskPresent=$true
     $script:taskDefinition.RegistrationInfo.Description='Foreign replacement'
     $foreign=Invoke-StaleRunRecovery -JournalPath $context.Journal.journalPath
     Assert-Equal 'CleanupIncomplete' $foreign.outcome 'a replaced SYSTEM task is never guessed as owned'
@@ -99,5 +113,11 @@ try {
     Assert-Equal $true (Invoke-StaleRunRecovery -JournalPath $alternate.Journal.journalPath).cleanup.verified 'the durably authenticated alternate administrator task remains recoverable by the initiator'
     Assert-Equal $true $script:taskDeleted 'exact alternate-administrator ownership permits cleanup'
 }
-finally { if ([IO.Directory]::Exists($testRoot)) { Remove-Item -LiteralPath $testRoot -Recurse -Force } }
+catch { $bodyError=$_ }
+finally { Complete-QualificationHarness -BodyError $bodyError -Cleanup @({
+    Remove-QualificationFixtureRoot -Root $testRoot -AllowedRoot $allowedRoot -Created $testRootCreated -Owner $fixtureOwner -BodyError $bodyError
+}) }
+}
+catch { $candidateError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateError }
 Write-Output 'PASS: generated stale recovery preserves foreign SYSTEM tasks and verifies exact owned task absence before retiring its journal.'

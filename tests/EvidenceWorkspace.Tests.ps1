@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 . (Join-Path $repositoryRoot 'src/Contracts.ps1')
 . (Join-Path $repositoryRoot 'src/ContractValidator.ps1')
 . (Join-Path $repositoryRoot 'src/EvidenceWorkspace.ps1')
@@ -18,7 +19,10 @@ if (-not $testRoot.StartsWith($allowedRoot + [System.IO.Path]::DirectorySeparato
     [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'The isolated Evidence Workspace test root escaped .test-output.'
 }
-$null = [System.IO.Directory]::CreateDirectory($testRoot)
+$null = New-Item -ItemType Directory -Path $testRoot -ErrorAction Stop
+$testRootCreated = $true
+$fixtureOwner = $null
+$bodyError = $null
 
 try {
     $eligibleBase = Join-Path $testRoot 'eligible'
@@ -136,8 +140,13 @@ try {
     $null = $start.ArgumentList.Add('-NoProfile')
     $null = $start.ArgumentList.Add('-Command')
     $null = $start.ArgumentList.Add('[System.Threading.Thread]::Sleep(30000)')
-    $otherOwner = [System.Diagnostics.Process]::Start($start)
+    $fixtureOwner = New-QualificationFixtureProcessOwner -RepositoryRoot $repositoryRoot -StartInfo $start
+    $otherOwner = $null
+    $fixtureError = $null
     try {
+        Assert-QualificationFixtureProcessAdmission -Owner $fixtureOwner
+        $otherOwner = [System.Diagnostics.Process]::Start($start)
+        Register-QualificationFixtureProcess -Owner $fixtureOwner -Process $otherOwner
         $ownerMismatchJournal = Read-RunRecoveryJournal -LiteralPath $journalResult.journalPath
         $ownerMismatchJournal.owner.processId = $otherOwner.Id
         $ownerMismatchJournal.owner.processStartUtc = `
@@ -155,18 +164,14 @@ try {
         Assert-Equal $true ([System.IO.File]::Exists($ownerMismatchTemporary.literalPath)) `
             'owner mismatch leaves evidence registered for cleanup rather than exposing it'
     }
-    finally {
-        if (-not $otherOwner.HasExited) {
-            $otherOwner.Kill($true)
-            $otherOwner.WaitForExit()
-        }
-        $otherOwner.Dispose()
-    }
+    catch { $fixtureError = $_ }
+    finally { Complete-QualificationFixtureProcess -Owner $fixtureOwner -Process $otherOwner -BodyError $fixtureError }
 }
+catch { $bodyError = $_ }
 finally {
-    if ([System.IO.Directory]::Exists($testRoot)) {
-        [System.IO.Directory]::Delete($testRoot, $true)
-    }
+    Complete-QualificationHarness -BodyError $bodyError -Cleanup @({
+        Remove-QualificationFixtureRoot -Root $testRoot -AllowedRoot $allowedRoot -Created $testRootCreated -Owner $fixtureOwner -BodyError $bodyError
+    })
 }
 
 Write-Output 'PASS: eligible workspaces receive an exact protected ACL and unsafe destinations fail with a safe alternative.'

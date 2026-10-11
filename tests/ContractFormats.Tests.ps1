@@ -1,12 +1,15 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 . (Join-Path $PSScriptRoot 'ContractFormatTestSupport.ps1')
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
-$candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateUseError=$null
+try {
 $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),
     '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
@@ -51,3 +54,6 @@ try {
     [cultureinfo]::CurrentCulture=$savedCulture
     [cultureinfo]::CurrentUICulture=$savedUiCulture
 }
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

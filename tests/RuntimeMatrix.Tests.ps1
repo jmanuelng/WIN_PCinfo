@@ -1,23 +1,27 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationFixturePath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 $testOutput = Join-Path $repositoryRoot '.test-output/runtime-matrix'
 $fixtureDirectory = Join-Path $testOutput 'fixtures'
 $workingDirectory = Join-Path $testOutput 'work'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 $null = New-Item -ItemType Directory -Path $fixtureDirectory -Force
 $null = New-Item -ItemType Directory -Path $workingDirectory -Force
 $sentinelPath = Join-Path $workingDirectory 'pre-existing-sentinel.txt'
 [System.IO.File]::WriteAllText($sentinelPath, 'pre-existing test-owned content', [System.Text.UTF8Encoding]::new($false))
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
 
 $eligibleFacts = [ordered]@{
     hostPresent = $true
@@ -91,4 +95,9 @@ foreach ($case in $matrix) {
     }
 }
 
-Write-Output "PASS: generated application enforced $($matrix.Count) runtime fixtures without collection or working-directory mutation."
+$candidateSuccessMessages.Add("PASS: generated application enforced $($matrix.Count) runtime fixtures without collection or working-directory mutation.")
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

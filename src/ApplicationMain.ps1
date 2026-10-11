@@ -709,6 +709,7 @@ if ($Workflow -eq 'SignAndVerifyCandidate') {
         catch {
             $sessionRemoved = $true
             $signingFailure = $_.Exception
+            $smokeCleanupUnverified = Test-ReleaseSmokeOwnershipUnverified -Exception $signingFailure
             while ($null -ne $signingFailure) {
                 $removal = $signingFailure.Data['SigningSessionCapabilityRemoved']
                 if ($removal -is [bool]) {
@@ -718,7 +719,7 @@ if ($Workflow -eq 'SignAndVerifyCandidate') {
                 $signingFailure = $signingFailure.InnerException
             }
             $signingResult = New-SigningBoundaryResult -State Rejected `
-                -ReasonCode $(if ($sessionRemoved) { 'SIGNING.REQUEST_INVALID' } else { 'SIGNING.CLEANUP_INCOMPLETE' }) `
+                -ReasonCode $(if (Test-ReleaseHelpSmokeOrigin -Exception $_.Exception) { 'SIGNING.SMOKE_OWNERSHIP_UNVERIFIED' } elseif ($sessionRemoved -and -not $smokeCleanupUnverified) { 'SIGNING.REQUEST_INVALID' } else { 'SIGNING.CLEANUP_INCOMPLETE' }) `
                 -SessionCapabilityRemoved $sessionRemoved
         }
     }
@@ -735,7 +736,7 @@ if ($Workflow -eq 'SignAndVerifyCandidate') {
     $terminal = New-TerminalRecord -ReasonCode $signingResult.reasonCode `
         -Phase SigningBoundary
     $exitCode = 20
-    if (-not $signingResult.sessionCapabilityRemoved) {
+    if (-not $signingResult.sessionCapabilityRemoved -or $signingResult.reasonCode -in @('SIGNING.CLEANUP_INCOMPLETE','SIGNING.SMOKE_OWNERSHIP_UNVERIFIED')) {
         $terminal.outcome = 'CleanupIncomplete'
         $terminal.exitCode = 60
         $terminal.cleanup.required = $true
@@ -849,8 +850,10 @@ if ($Workflow -eq 'QualifyPreviewCandidate') {
             }
         }
         catch {
+            $smokeCleanupUnverified = Test-ReleaseSmokeOwnershipUnverified -Exception $_.Exception
             $qualifyEvaluation = Get-PreviewQualificationRejectedEvaluation `
-                -ReasonCode 'QUALIFY.REQUEST_INVALID' -Policy $qualifyPolicy
+                -ReasonCode $(if (Test-ReleaseHelpSmokeOrigin -Exception $_.Exception) { 'QUALIFY.SMOKE_OWNERSHIP_UNVERIFIED' } elseif ($smokeCleanupUnverified) { 'QUALIFY.CLEANUP_INCOMPLETE' } else { 'QUALIFY.REQUEST_INVALID' }) `
+                -Policy $qualifyPolicy -CleanupVerified:(-not $smokeCleanupUnverified)
         }
     }
     $qualifySucceeded = $qualifyEvaluation.State -in @('Approved', 'Denied') -and
@@ -964,8 +967,10 @@ if ($Workflow -eq 'PublishPreviewRelease') {
             }
         }
         catch {
+            $smokeCleanupUnverified = Test-ReleaseSmokeOwnershipUnverified -Exception $_.Exception
             $publishEvaluation = Get-PreviewPublicationRejectedEvaluation `
-                -ReasonCode 'PUBLISH.REQUEST_INVALID' -Policy $publishPolicy
+                -ReasonCode $(if (Test-ReleaseHelpSmokeOrigin -Exception $_.Exception) { 'PUBLISH.SMOKE_OWNERSHIP_UNVERIFIED' } elseif ($smokeCleanupUnverified) { 'PUBLISH.CLEANUP_INCOMPLETE' } else { 'PUBLISH.REQUEST_INVALID' }) `
+                -Policy $publishPolicy -CleanupVerified:(-not $smokeCleanupUnverified)
         }
     }
     $publishSucceeded = $publishEvaluation.State -in @(

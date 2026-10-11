@@ -17,6 +17,7 @@ function Assert-RunEqual {
 }
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'QualificationCapabilityProcess.ps1')
 . (Join-Path $repositoryRoot 'src/Contracts.ps1')
 . (Join-Path $repositoryRoot 'src/ContractValidator.ps1')
 . (Join-Path $repositoryRoot 'src/ProcessSupervisor.ps1')
@@ -427,14 +428,18 @@ $lockReadyName = "Local\WINPCInfo-Lifecycle-Ready-$([System.Guid]::NewGuid().ToS
 $lockReleaseName = "Local\WINPCInfo-Lifecycle-Release-$([System.Guid]::NewGuid().ToString('N'))"
 [bool] $createdReady = $false
 [bool] $createdRelease = $false
-$lockReady = [System.Threading.EventWaitHandle]::new(
-    $false, [System.Threading.EventResetMode]::ManualReset, $lockReadyName, [ref] $createdReady
-)
-$lockRelease = [System.Threading.EventWaitHandle]::new(
-    $false, [System.Threading.EventResetMode]::ManualReset, $lockReleaseName, [ref] $createdRelease
-)
+$lockReady = $null
+$lockRelease = $null
 $lockOwner = $null
+$lockOwnerObservation = $null
+$lockBodyError = $null
 try {
+    $lockReady = [System.Threading.EventWaitHandle]::new(
+        $false, [System.Threading.EventResetMode]::ManualReset, $lockReadyName, [ref] $createdReady
+    )
+    $lockRelease = [System.Threading.EventWaitHandle]::new(
+        $false, [System.Threading.EventResetMode]::ManualReset, $lockReleaseName, [ref] $createdRelease
+    )
     $ownerScript = @"
 `$mutex = [System.Threading.Mutex]::new(`$false, 'Global\WINPCInfo-AssessmentRun-v1')
 `$owned = `$mutex.WaitOne(0)
@@ -457,7 +462,10 @@ if (-not `$owned -or -not `$signalled) { exit 1 }
     $null = $startInfo.ArgumentList.Add('-NonInteractive')
     $null = $startInfo.ArgumentList.Add('-EncodedCommand')
     $null = $startInfo.ArgumentList.Add($ownerPayload)
+    $lockOwnerObservation = New-QualificationCapabilityProcessOwner -RepositoryRoot $repositoryRoot -Profile RunLifecycleLiveMutex -StartInfo $startInfo
+    Assert-QualificationCapabilityCreation -Owner $lockOwnerObservation
     $lockOwner = [System.Diagnostics.Process]::Start($startInfo)
+    Register-QualificationCapabilityProcess -Owner $lockOwnerObservation -Process $lockOwner
     if (-not $lockReady.WaitOne(2000)) { throw 'The synthetic live lock owner did not become ready.' }
 
     $concurrent = Invoke-AssessmentRun -RunId 'run:synthetic:lifecycle-concurrent' `
@@ -475,30 +483,36 @@ if (-not `$owned -or -not `$signalled) { exit 1 }
     Assert-RunEqual 'None' $concurrent.Terminal.lock.interference `
         'the second launch neither signals nor terminates the owner'
 }
+catch { $lockBodyError = $_ }
 finally {
-    $null = $lockRelease.Set()
-    if ($null -ne $lockOwner) {
-        if (-not $lockOwner.WaitForExit(3000)) { throw 'The synthetic lock owner did not exit.' }
-        Assert-RunEqual 0 $lockOwner.ExitCode 'the second launch did not disrupt the live owner'
-        $lockOwner.Dispose()
-    }
-    $lockReady.Dispose()
-    $lockRelease.Dispose()
+    Complete-QualificationCapabilityProcess -Owner $lockOwnerObservation -Process $lockOwner -BodyError $lockBodyError -Cleanup @(
+        { if ($null -ne $lockRelease) { $null = $lockRelease.Set() } },
+        { if ($null -ne $lockOwner) {
+            Wait-QualificationCapabilityTerminal -Owner $lockOwnerObservation
+            Assert-RunEqual 0 $lockOwner.ExitCode 'the second launch did not disrupt the live owner'
+        } },
+        { if ($null -ne $lockReady) { $lockReady.Dispose() } },
+        { if ($null -ne $lockRelease) { $lockRelease.Dispose() } }
+    )
 }
 
 Write-Output 'PASS: a concurrent launch neither joins nor disrupts the live device-wide run owner.'
 
 $abandonedReadyName = "Local\WINPCInfo-Lifecycle-Abandoned-$([System.Guid]::NewGuid().ToString('N'))"
 [bool] $createdAbandonedReady = $false
-$abandonedReady = [System.Threading.EventWaitHandle]::new(
-    $false, [System.Threading.EventResetMode]::ManualReset,
-    $abandonedReadyName, [ref] $createdAbandonedReady
-)
-$abandonedProbe = [System.Threading.Mutex]::new(
-    $false, 'Global\WINPCInfo-AssessmentRun-v1'
-)
+$abandonedReady = $null
+$abandonedProbe = $null
 $abandonedOwner = $null
+$abandonedOwnerObservation = $null
+$abandonedBodyError = $null
 try {
+    $abandonedReady = [System.Threading.EventWaitHandle]::new(
+        $false, [System.Threading.EventResetMode]::ManualReset,
+        $abandonedReadyName, [ref] $createdAbandonedReady
+    )
+    $abandonedProbe = [System.Threading.Mutex]::new(
+        $false, 'Global\WINPCInfo-AssessmentRun-v1'
+    )
     $abandonedScript = @"
 `$mutex = [System.Threading.Mutex]::new(`$false, 'Global\WINPCInfo-AssessmentRun-v1')
 `$owned = `$mutex.WaitOne(0)
@@ -520,9 +534,12 @@ exit 0
     )) {
         $null = $abandonedStartInfo.ArgumentList.Add($argument)
     }
+    $abandonedOwnerObservation = New-QualificationCapabilityProcessOwner -RepositoryRoot $repositoryRoot -Profile RunLifecycleAbandonedMutex -StartInfo $abandonedStartInfo
+    Assert-QualificationCapabilityCreation -Owner $abandonedOwnerObservation
     $abandonedOwner = [System.Diagnostics.Process]::Start($abandonedStartInfo)
+    Register-QualificationCapabilityProcess -Owner $abandonedOwnerObservation -Process $abandonedOwner
     if (-not $abandonedReady.WaitOne(2000)) { throw 'The synthetic abandoned owner did not become ready.' }
-    if (-not $abandonedOwner.WaitForExit(2000)) { throw 'The synthetic abandoned owner did not exit.' }
+    Wait-QualificationCapabilityTerminal -Owner $abandonedOwnerObservation
     Assert-RunEqual 0 $abandonedOwner.ExitCode 'the synthetic owner reached the crash boundary'
 
     $recovery = Invoke-AssessmentRun -RunId 'run:synthetic:lifecycle-recovery' `
@@ -540,10 +557,12 @@ exit 0
     Assert-RunEqual $true $recovery.Terminal.cleanup.verified `
         'recovery returns only after registered synthetic residue is verified absent'
 }
+catch { $abandonedBodyError = $_ }
 finally {
-    if ($null -ne $abandonedOwner) { $abandonedOwner.Dispose() }
-    $abandonedProbe.Dispose()
-    $abandonedReady.Dispose()
+    Complete-QualificationCapabilityProcess -Owner $abandonedOwnerObservation -Process $abandonedOwner -BodyError $abandonedBodyError -Cleanup @(
+        { if ($null -ne $abandonedProbe) { $abandonedProbe.Dispose() } },
+        { if ($null -ne $abandonedReady) { $abandonedReady.Dispose() } }
+    )
 }
 
 Write-Output 'PASS: an abandoned run enters cleanup-only recovery and never resumes collection.'

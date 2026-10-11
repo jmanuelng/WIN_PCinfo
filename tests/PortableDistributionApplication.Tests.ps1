@@ -22,50 +22,31 @@ function Invoke-WindowsPowerShellFile {
     )
 
     $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $windowsPowerShell
-    $startInfo.WorkingDirectory = Split-Path -Parent $FilePath
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
+    $nativeArguments=@{HostPath=[IO.Path]::GetFullPath($windowsPowerShell);
+        WorkingDirectory=[IO.Path]::GetFullPath((Split-Path -Parent $FilePath));
+        Arguments=(@('-NoLogo','-NoProfile','-File',$FilePath)+$Arguments);
+        PortableBootstrap=$true;TimeoutMs=60000;CleanupReserveMs=10000}
     if ($PSBoundParameters.ContainsKey('Environment')) {
-        $startInfo.Environment.Clear()
-        foreach ($key in $Environment.Keys) {
-            $startInfo.Environment[$key] = [string] $Environment[$key]
-        }
+        $nativeArguments.ExactEnvironment=$Environment
     }
-    foreach ($argument in @('-NoLogo', '-NoProfile', '-File', $FilePath) + $Arguments) {
-        $null = $startInfo.ArgumentList.Add($argument)
-    }
-    $process = [System.Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    try {
-        $null = $process.Start()
-        $standardOutput = $process.StandardOutput.ReadToEnd()
-        $standardError = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
-        $records = @(
-            $standardOutput -split "`r?`n" | Where-Object { $_ } | ForEach-Object {
-                $_ | ConvertFrom-Json -Depth 20
-            }
-        )
-        [pscustomobject]@{
-            ExitCode = $process.ExitCode
-            Records = $records
-            StandardOutput = $standardOutput
-            StandardError = $standardError
-        }
-    }
-    finally {
-        $process.Dispose()
+    $native=Invoke-GeneratedApplicationNative @nativeArguments
+    [pscustomobject]@{
+        ExitCode=$native.ExitCode
+        Records=@($native.StandardOutput -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json -Depth 20 })
+        StandardOutput=$native.StandardOutput
+        StandardError=$native.StandardError
     }
 }
 
-$workRoot = Join-Path $repositoryRoot '.test-output/portable-distribution-application'
-if (Test-Path -LiteralPath $workRoot) {
-    Remove-Item -LiteralPath $workRoot -Recurse -Force
-}
-$null = New-Item -ItemType Directory -Path $workRoot -Force
+$workRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot ('.test-output/portable-distribution-application-'+[guid]::NewGuid().ToString('N'))))
+$allowedRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
+if (-not $workRoot.StartsWith($allowedRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'Portable fixture root escaped .test-output.' }
+$workRootCreated=$false
+$workError=$null
+try {
+$null = New-Item -ItemType Directory -Path $workRoot -ErrorAction Stop
+$workRootCreated=$true
+$null=Set-TestNativePrivateDirectory -Path $workRoot
 
 $appPath = Join-Path $workRoot 'WIN-PCInfo.ps1'
 $build = & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $appPath
@@ -306,3 +287,19 @@ Assert-Equal 'https://learn.microsoft.com/powershell/scripting/install/installin
 Assert-Equal $false $isolated.Records[-1].collectionStarted 'the helper never starts collection'
 
 Write-Output 'PASS: extracted portable package authenticates resources and launches through eligible and ineligible hosts.'
+}
+catch { $workError=$_ }
+finally {
+    Complete-QualificationHarness -BodyError $workError -Cleanup @({
+        if (-not $workRootCreated -or ($null -ne $workError -and (Test-QualificationCleanupUnverified -Exception $workError.Exception))) { return }
+        $path=[IO.Path]::GetFullPath($workRoot)
+        if (-not $path.StartsWith($allowedRoot,[StringComparison]::OrdinalIgnoreCase) -or
+            [IO.Path]::GetFileName($path) -cnotmatch '^portable-distribution-application-[a-f0-9]{32}$') { throw 'Portable cleanup root escaped its exact owned boundary.' }
+        if ([IO.Directory]::Exists($path)) {
+            if (((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                @(Get-ChildItem -LiteralPath $path -Recurse -Force | Where-Object {($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0}).Count) { throw 'Portable cleanup cannot traverse a reparse point.' }
+            [IO.Directory]::Delete($path,$true)
+        }
+        if ([IO.Directory]::Exists($path) -or [IO.File]::Exists($path)) { throw 'Portable fixture absence is unverified.' }
+    })
+}

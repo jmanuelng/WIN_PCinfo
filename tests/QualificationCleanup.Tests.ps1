@@ -1,8 +1,9 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 
 # Replay the actual harness finalization boundary, substituting only its expensive
 # assessment body and controlled worker adapter. No generated application starts.
@@ -392,54 +393,55 @@ function Test-StatusDeskCleanupProjection {
 Test-StatusDeskCleanupProjection
 Test-StatusDeskCleanupProjection -Recovery
 
-function Test-NativeCleanupFailure {
-    $nativeRoot=Join-Path (Split-Path $PSScriptRoot) ('.test-output/native-cleanup-'+[guid]::NewGuid().ToString('N'))
-    $nativeTests=Join-Path $nativeRoot 'tests'; $null=[IO.Directory]::CreateDirectory($nativeTests)
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'QualificationCleanup.ps1') -Destination $nativeTests
-    $childPath=Join-Path $nativeTests 'child.ps1'
-    [IO.File]::WriteAllText($childPath, @'
-$ErrorActionPreference='Stop'
-. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
-# A file in place of the parent makes marker retention fail without leaving a
-# marker file or marker directory. No application or worker process is started.
-$nativeOutput=Join-Path (Split-Path $PSScriptRoot) '.test-output'
-$null=[IO.Directory]::CreateDirectory($nativeOutput)
-[IO.File]::WriteAllText((Join-Path $nativeOutput 'blocked-parent'),'synthetic parent collision')
-function Get-QualificationCleanupBlockerPath { Join-Path (Split-Path $PSScriptRoot) '.test-output/blocked-parent/marker.json' }
-Complete-QualificationHarness -Cleanup @({throw 'Synthetic native cleanup failure'})
-'@)
+function Test-QualificationResultPropagation {
+    param([string] $TestDirectory=$PSScriptRoot)
+    . (Join-Path $TestDirectory 'Invoke-TestFile.ps1')
+    # Disclosed pure native-result substitution. The former dynamic child
+    # scripts emitted deliberate unsafe signals and erased their repository;
+    # finite native owners preserve those holds for separate root recovery.
+    # Actual startup/drain/marker failure certification remains a root gate.
+    $fixture=Join-Path (Split-Path $TestDirectory) ('.test-output/result-propagation-'+[guid]::NewGuid().ToString('N'))
+    $tests=Join-Path $fixture 'tests'; $null=[IO.Directory]::CreateDirectory($tests)
+    Copy-Item -LiteralPath (Join-Path $TestDirectory 'QualificationCleanup.ps1') -Destination $tests
+    Copy-Item -LiteralPath (Join-Path $TestDirectory 'CertificateSourceApplication.Tests.ps1') -Destination (Join-Path $tests 'A.Tests.ps1')
+    $harness=@('. (Join-Path $PSScriptRoot ''QualificationCleanup.ps1'')','function Get-TestAdmittedRuntimeHost { Join-Path $PSHOME ''pwsh.exe'' }') -join "`n"
+    [IO.File]::WriteAllText((Join-Path $tests 'TestHarness.ps1'),$harness)
+    $syntheticCaseUnsafe=$true
+    function Invoke-OwnedQualificationCase {
+        $code=if ($syntheticCaseUnsafe) {1} else {0}
+        $line=if ($syntheticCaseUnsafe) {'QUALIFICATION.OWNED_CLEANUP_UNVERIFIED'} else {'PASS: Synthetic child assessment boundary'}
+        [pscustomobject]@{ExitCode=$code; StreamRecords=@([pscustomobject]@{Sequence=1; Stream='stdout'; Text=$line})}
+    }
     try {
         $failure=$null
-        try { Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-File',$childPath) | Out-Null }
-        catch { $failure=$_ }
-        Assert-Equal $true ($null -ne $failure) 'a native cleanup failure cannot become a passing case'
-        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'native cleanup state propagates even when no stop marker can be retained'
-
-        # Exercise an existing wrapper and the actual suite runner, substituting
-        # only build/runtime discovery and the child assessment boundary.
-        Copy-Item -LiteralPath $childPath -Destination (Join-Path $nativeTests 'StatusDeskEngine.Tests.ps1')
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CertificateSourceApplication.Tests.ps1') -Destination (Join-Path $nativeTests 'A.Tests.ps1')
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Run-Tests.ps1') -Destination $nativeTests
-        [IO.File]::WriteAllText((Join-Path $nativeTests 'TestHarness.ps1'), @'
-. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
-Assert-QualificationCleanupReady
-function Resolve-WinPCInfoRuntime { param($ApplicationPath) Join-Path $PSHOME 'pwsh.exe' }
-'@)
-        $nativeBuild=Join-Path $nativeRoot 'build'; $null=[IO.Directory]::CreateDirectory($nativeBuild)
-        [IO.File]::WriteAllText((Join-Path $nativeBuild 'Build.ps1'),'param($OutputPath)')
-        [IO.File]::WriteAllText((Join-Path $nativeTests 'B.Tests.ps1'),"Write-Output 'SYNTHETIC_NEXT_WRAPPER_EXECUTED'")
-        $suiteOutput=& (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -File (Join-Path $nativeTests 'Run-Tests.ps1') 2>&1
-        Assert-Equal $true ($LASTEXITCODE -ne 0) 'unsafe cleanup from an existing wrapper fails the suite'
-        Assert-Equal $false (($suiteOutput -join "`n").Contains('SYNTHETIC_NEXT_WRAPPER_EXECUTED')) 'an existing native wrapper blocks the next suite test despite unavailable marker persistence'
-        [IO.File]::WriteAllText((Join-Path $nativeTests 'StatusDeskEngine.Tests.ps1'),"Write-Output 'PASS: Synthetic child assessment boundary'")
-        $suiteOutput=& (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -File (Join-Path $nativeTests 'Run-Tests.ps1') 2>&1
-        Assert-Equal 0 $LASTEXITCODE 'the existing wrapper still completes successful native cases'
-        Assert-Equal $true (($suiteOutput -join "`n").Contains('SYNTHETIC_NEXT_WRAPPER_EXECUTED')) 'verified native completion permits subsequent suite tests'
+        try { Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('synthetic') | Out-Null } catch { $failure=$_ }
+        Assert-Equal $true ($null -ne $failure) 'a cleanup failure cannot become a passing case'
+        Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'cleanup signal propagates without relying on stop marker persistence'
+        $wrapperFailure=$null
+        try { & (Join-Path $tests 'A.Tests.ps1') | Out-Null } catch { $wrapperFailure=$_ }
+        Assert-Equal $true ($null -ne $wrapperFailure -and (Test-QualificationCleanupUnverified -Exception $wrapperFailure.Exception)) 'existing wrapper retains the supplied unsafe native-result signal'
+        $runnerAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $TestDirectory 'Run-Tests.ps1'),[ref]$null,[ref]$null)
+        $runnerCore=$runnerAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-TestSuiteFiles'},$true)
+        . ([scriptblock]::Create($runnerCore.Extent.Text))
+        $pins=@([pscustomobject]@{file='A.Tests.ps1'; sha256=('a'*64)},[pscustomobject]@{file='B.Tests.ps1'; sha256=('b'*64)})
+        $unsafeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Fail'; elapsedMilliseconds=1; nativeExitCode=1; completed=$true; cleanupVerified=$false}}
+        $unsafeSuite=Invoke-TestSuiteFiles -Inventory $pins -InvokeFile $unsafeStub -RetainResults {param($Rows,$Final)}
+        Assert-Equal $true $unsafeSuite.Stopped 'unsafe cleanup from an existing wrapper fails the suite'
+        Assert-Equal 'Blocked' $unsafeSuite.Results[1].result 'unsafe wrapper blocks the next suite file despite unavailable marker persistence'
+        $syntheticCaseUnsafe=$false
+        & (Join-Path $tests 'A.Tests.ps1') | Out-Null
+        $safeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Pass'; elapsedMilliseconds=1; nativeExitCode=0; completed=$true; cleanupVerified=$true}}
+        $safeSuite=Invoke-TestSuiteFiles -Inventory $pins -InvokeFile $safeStub -RetainResults {param($Rows,$Final)}
+        Assert-Equal $false $safeSuite.Stopped 'existing wrapper completes successful supplied native cases'
+        Assert-Equal 'Pass' $safeSuite.Results[1].result 'verified supplied completion permits subsequent suite files'
     }
-    finally { if ([IO.Directory]::Exists($nativeRoot)) { [IO.Directory]::Delete($nativeRoot,$true) } }
+    finally {
+        $allowed=[IO.Path]::GetFullPath((Join-Path (Split-Path $TestDirectory) '.test-output'))+[IO.Path]::DirectorySeparatorChar
+        if (-not [IO.Path]::GetFullPath($fixture).StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected result fixture cleanup path.' }
+        if ([IO.Directory]::Exists($fixture)) { [IO.Directory]::Delete($fixture,$true) }
+    }
 }
-Test-NativeCleanupFailure
-
+Test-QualificationResultPropagation
 function Test-RecoveryParentCleanupFailure {
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $allowedRoot=[IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))+[IO.Path]::DirectorySeparatorChar
@@ -490,10 +492,15 @@ exit 1
     $ownedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new(); $recoveryBodyError=$null
     $recoveryCleanup=@{childOutputVerified=$false;descendantsAbsent=$false}; $interrupted=$false
     try {
+        $handoffOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile CleanupHandoff -StartInfo $start
+        Assert-QualificationOriginalCreatorCreation $handoffOwner
         $child=[Diagnostics.Process]::Start($start)
+        Register-QualificationFixtureProcess -Owner $handoffOwner -Process $child
         $childOutput=$child.StandardOutput.ReadToEndAsync(); $childError=$child.StandardError.ReadToEndAsync()
         Assert-Equal $true $child.WaitForExit(5000) 'controlled child completes without a live application'
         $handoffFixtureCleanup.childAbsent=$true
+        if(-not $childOutput.Wait(5000) -or -not $childError.Wait(5000)){throw 'Original handoff streams lack their unchanged drain bound.'}
+        Save-QualificationOriginalCreatorTerminal -Owner $handoffOwner -Disposition ExpectedUnsafeHandoffNative1 -Forced $false -StandardOutput $childOutput.GetAwaiter().GetResult() -StandardError $childError.GetAwaiter().GetResult() -StreamContract OriginalReadToEndStrings
         Assert-Equal $true ([IO.File]::Exists($handoffPath)) 'controlled child creates its handoff before failing'
         $expectedHandoff=@{failure=$null}
         # Confine the intentionally unsafe signal to this fixture's owned root.
@@ -538,7 +545,15 @@ exit 1
                 $handoffFixtureCleanup.errorClosed=$true
             },
             {
-                if ($null -ne $child) {$child.Dispose()}
+                if ($null -ne $child) {
+                    try {
+                        if(-not $handoffOwner.TerminalRetained){
+                            if($null-eq$childOutput-or$null-eq$childError-or-not$childOutput.IsCompletedSuccessfully-or-not$childError.IsCompletedSuccessfully){$handoffOwner.Unsafe=$true;throw 'Original handoff drains did not complete; preserve pending evidence.'}
+                            Save-QualificationOriginalCreatorTerminal -Owner $handoffOwner -Disposition FailedOriginalHandoffFixture -Forced $true -StandardOutput $childOutput.GetAwaiter().GetResult() -StandardError $childError.GetAwaiter().GetResult() -StreamContract OriginalReadToEndStrings
+                        }
+                    }finally{$child.Dispose()}
+                    Complete-QualificationOriginalCreatorOwner $handoffOwner
+                }
                 $handoffFixtureCleanup.handleDisposed=$true
             },
             {
@@ -599,7 +614,10 @@ __BOUNDARY__
     $pipeFixtureBodyError=$null
     $pipeFixtureCleanup=@{stopCompleted=$false;childAbsent=$false;outputClosed=$false;errorClosed=$false;handleDisposed=$false}
     try {
+        $pipeOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile CleanupPipe -StartInfo $start
+        Assert-QualificationOriginalCreatorCreation $pipeOwner
         $repro=[Diagnostics.Process]::Start($start)
+        Register-QualificationFixtureProcess -Owner $pipeOwner -Process $repro
         $output=$repro.StandardOutput.ReadToEndAsync(); $errorOutput=$repro.StandardError.ReadToEndAsync()
         Assert-Equal $true $repro.WaitForExit(8000) 'exited child with incomplete output reaches bounded cleanup instead of hanging before finally'
         $pipeFixtureCleanup.childAbsent=$true
@@ -637,7 +655,13 @@ __BOUNDARY__
                 $pipeFixtureCleanup.errorClosed=$true
             },
             {
-                if ($null -ne $repro) {$repro.Dispose()}
+                if ($null -ne $repro) {
+                    try {
+                        if($null-eq$output-or$null-eq$errorOutput-or-not$output.IsCompletedSuccessfully-or-not$errorOutput.IsCompletedSuccessfully){$pipeOwner.Unsafe=$true;throw 'Original pipe fixture drains did not complete; preserve pending evidence.'}
+                        Save-QualificationOriginalCreatorTerminal -Owner $pipeOwner -Disposition OriginalIncompletePipeRefusalNative0 -Forced $false -StandardOutput $output.GetAwaiter().GetResult() -StandardError $errorOutput.GetAwaiter().GetResult() -StreamContract OriginalReadToEndStrings
+                    }finally{$repro.Dispose()}
+                    Complete-QualificationOriginalCreatorOwner $pipeOwner
+                }
                 $pipeFixtureCleanup.handleDisposed=$true
             },
             {

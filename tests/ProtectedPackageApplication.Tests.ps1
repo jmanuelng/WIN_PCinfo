@@ -1,14 +1,18 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
-$candidatePath=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath=Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath=Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 
 function Get-PackageValidationResidue {
     $root=Join-Path (Split-Path -Parent $candidatePath) '.protected-package-validation'
@@ -60,4 +64,9 @@ foreach($case in $cases){
     }
     if($result.StandardError){throw "$($case.Scenario) wrote stderr: $($result.StandardError)"}
 }
-Write-Output 'PASS: the generated application exposes all ten Protected Package scenarios without residue.'
+$candidateSuccessMessages.Add('PASS: the generated application exposes all ten Protected Package scenarios without residue.')
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

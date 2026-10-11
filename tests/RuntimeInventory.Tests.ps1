@@ -1,12 +1,16 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$application=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 . (Join-Path $repositoryRoot 'build/Start-WIN-PCInfo.ps1')
-$application = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $application | Out-Null
 $hostPath = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 $work = Join-Path $repositoryRoot ('.test-output/runtime-inventory-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $work
@@ -34,7 +38,7 @@ $script:probeExecution = {
 }
 $probeAdapter = {
     param($Executable, $ApplicationPath)
-    if ($Executable -eq $hostPath) { return (Invoke-WinPCInfoRuntimeProbe -Executable $Executable -ApplicationPath $ApplicationPath) }
+    if ($Executable -eq $hostPath) { return (Invoke-TestRuntimeProbe -Executable $Executable -ApplicationPath $ApplicationPath) }
     Invoke-WinPCInfoRuntimeProbe -Executable $Executable -ApplicationPath $ApplicationPath `
         -ReadSignature $script:hostSignature -RunProbe $script:probeExecution
 }
@@ -81,4 +85,9 @@ Assert-Equal $false $result.Records[-1].collectionStarted 'selection test does n
 $ownedRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output')) + [IO.Path]::DirectorySeparatorChar
 if (-not [IO.Path]::GetFullPath($work).StartsWith($ownedRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe cleanup target.' }
 Remove-Item -LiteralPath $work -Recurse -Force
-Write-Output 'PASS: portable inventory selection translates actual generated runtime rejection.'
+$candidateSuccessMessages.Add('PASS: portable inventory selection translates actual generated runtime rejection.')
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

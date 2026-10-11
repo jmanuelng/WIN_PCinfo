@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version Latest
+Set-StrictMode -Version Latest
 
 function Add-QualificationDiskReservation {
     param([string] $Path, [long] $Bytes, [string] $Kind)
@@ -34,6 +34,171 @@ function Get-QualificationScriptIdentity {
     $cr=[string][char]13; $lf=[string][char]10
     $canonical=$text.Replace($cr+$lf,$lf).Replace($cr,$lf)
     [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant()
+}
+
+function Assert-QualificationInventoryObject {
+    param($Value, [string[]] $Keys)
+    if ($Value -isnot [Collections.IDictionary] -or $Value.Count -ne $Keys.Count) {
+        throw 'Qualification inventory object is not closed.'
+    }
+    foreach ($key in $Keys) {
+        if (@($Value.Keys | Where-Object { $_ -is [string] -and $_ -ceq $key }).Count -ne 1) {
+            throw 'Qualification inventory property is missing or changed.'
+        }
+    }
+}
+
+function Get-QualificationInventoryInputPaths {
+    # These are the original twenty controlled application adapters. Executor
+    # evidence is bound separately and never added to application reservations.
+    @(
+        'tests/AssessmentQualificationSupport.ps1', 'tests/SoftwareReportAssertions.ps1',
+        'tests/TestHarness.ps1', 'tests/AdditionalScopeSourceAdapters.ps1',
+        'tests/CertificateSourceAdapters.ps1', 'tests/ConnectivitySourceAdapters.ps1',
+        'tests/IdentitySourceAdapters.ps1', 'tests/NetworkSourceAdapters.ps1',
+        'tests/PlatformSourceAdapters.ps1', 'tests/PolicySourceAdapters.ps1',
+        'tests/ReadinessSourceAdapters.ps1', 'tests/RemoteSourceAdapters.ps1',
+        'tests/ResourceSourceAdapters.ps1', 'tests/ResourceSourceBoundary.ps1',
+        'tests/SecuritySourceAdapters.ps1', 'tests/SoftwareSourceAdapters.ps1',
+        'tests/SoftwareSourceBoundary.ps1', 'tests/QualificationDiskBounds.ps1',
+        'tests/QualificationWorkspaceSampling.ps1', 'tests/QualificationRecoveryFixtureProof.ps1'
+    )
+}
+
+function Get-QualificationInventoryExecutorPaths {
+    @(
+        'tests/GeneratedApplicationNative.ps1', 'tests/GeneratedApplicationNativeSupervisor.cs',
+        'tests/QualificationCleanup.ps1', 'tests/QualificationCaseAdmission.ps1',
+        'tests/Invoke-TestFile.ps1', 'tests/Invoke-QualificationCase.ps1',
+        'tests/Invoke-FocusedTest.ps1', 'tests/Run-Tests.ps1',
+        'tests/QualificationFixtureProcess.ps1', 'tests/QualificationCapabilityProcess.ps1',
+        'tests/QualificationInlineRepresentation.ps1', 'tests/QualificationRecipientViewingInterruption.ps1',
+        'tests/QualificationResourceBounds.ps1', 'tests/Invoke-AssessmentSafetyQualification.ps1',
+        'tests/QualificationInputLauncher.ps1'
+    )
+}
+
+function Get-QualificationInventoryPathAttributes {
+    param([Parameter(Mandatory)] [string] $LiteralPath)
+    [IO.File]::GetAttributes($LiteralPath)
+}
+
+function Assert-QualificationInventoryPhysicalFile {
+    param([Parameter(Mandatory)] [string] $LiteralPath)
+    $path=[IO.Path]::GetFullPath($LiteralPath)
+    if (-not [IO.File]::Exists($path)) { throw 'Qualification inventory physical input is missing.' }
+    $ancestor=$path
+    while (-not [string]::IsNullOrEmpty($ancestor)) {
+        if ((Get-QualificationInventoryPathAttributes -LiteralPath $ancestor) -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'Qualification inventory physical input traverses a reparse point.'
+        }
+        $ancestor=[IO.Path]::GetDirectoryName($ancestor)
+    }
+}
+
+function Get-QualificationInventoryInputEvidence {
+    param($Entries, [string[]] $ExpectedPaths, [string] $RepositoryRoot)
+    if ($Entries -isnot [object[]] -or $Entries.Count -ne $ExpectedPaths.Count) {
+        throw 'Qualification inventory input set is not closed.'
+    }
+    $records=[Collections.Generic.List[object]]::new()
+    for ($index=0; $index -lt $ExpectedPaths.Count; $index++) {
+        $entry=$Entries[$index]
+        Assert-QualificationInventoryObject -Value $entry -Keys @('path','sha256')
+        if ($entry.path -isnot [string] -or $entry.path -cne $ExpectedPaths[$index] -or
+            $entry.sha256 -isnot [string] -or $entry.sha256 -cnotmatch '\A[0-9a-f]{64}\z') {
+            throw 'Qualification inventory input path or digest is malformed or changed.'
+        }
+        $path=[IO.Path]::GetFullPath((Join-Path $RepositoryRoot $entry.path))
+        Assert-QualificationInventoryPhysicalFile -LiteralPath $path
+        $canonical=Get-QualificationScriptIdentity -LiteralPath $path
+        if ($entry.sha256 -cne $canonical) { throw 'Qualification inventory input digest does not match its source.' }
+        $records.Add([ordered]@{path=$entry.path;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()})
+    }
+    $records.ToArray()
+}
+
+function Assert-QualificationResourceInventoryBinding {
+    param(
+        [Parameter(Mandatory)] [string] $CandidatePath,
+        [Parameter(Mandatory)] [string] $HarnessPath,
+        [string] $RepositoryRoot=(Split-Path -Parent $PSScriptRoot)
+    )
+    $RepositoryRoot=[IO.Path]::GetFullPath($RepositoryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $manifestPath=Join-Path $RepositoryRoot 'tests/qualification-resource-writers.json'
+    $operands=[ordered]@{candidateIdentityKind='RawByteSha256';harnessIdentityKind='CanonicalUtf8LfSha256';
+        declaredCandidateSha256=$null;actualCandidateSha256=$null;declaredHarnessSha256=$null;actualHarnessSha256=$null}
+    try {
+        if (-not [IO.Directory]::Exists($RepositoryRoot) -or
+            ([IO.File]::GetAttributes($RepositoryRoot) -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Qualification inventory repository is missing or ambiguous.'
+        }
+        Assert-QualificationInventoryPhysicalFile -LiteralPath $manifestPath
+        $manifest=[IO.File]::ReadAllText($manifestPath,[Text.UTF8Encoding]::new($false,$true)) | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        Assert-QualificationInventoryObject -Value $manifest -Keys @(
+            'kind','version','candidateSha256','harnessSha256','scope','writers','emptyCreators','excluded',
+            'inputs','sourceIdentityKind','privilegedFaultWitnesses','bindingContract','executorInputScope','executorInputs'
+        )
+        $expectedMetadata=[ordered]@{
+            kind='ControlledAssessmentClosedDiskWriterInventory';version='1.2.0';
+            scope='OrdinaryControlledAssessmentWpfViewingAndFinitePrivilegedFaultWitnesses';sourceIdentityKind='CanonicalUtf8LfSha256';
+            bindingContract='win-pcinfo.qualification-resource-inputs/1.0.0';
+            executorInputScope='ExternalQualificationExecutionAndRetentionOutsideMeasuredApplicationWorkspace';
+            excluded='Maintainer signing, publication, qualification, Azure and explicit product validation-fixture writers are outside this ordinary assessment path. RecoveryDestination and InterruptHandoffPath configurations remain inadmissible; only the three closed finite privileged fault witnesses below are admitted.'
+        }
+        foreach ($key in $expectedMetadata.Keys) {
+            if ($manifest[$key] -isnot [string] -or $manifest[$key] -cne $expectedMetadata[$key]) {
+                throw 'Qualification inventory metadata or scope is not admitted.'
+            }
+        }
+        foreach ($key in @('candidateSha256','harnessSha256')) {
+            if ($manifest[$key] -isnot [string] -or $manifest[$key] -cnotmatch '\A[0-9a-f]{64}\z') {
+                throw 'Qualification inventory operand digest is malformed.'
+            }
+        }
+        $operands.declaredCandidateSha256=$manifest.candidateSha256
+        $operands.declaredHarnessSha256=$manifest.harnessSha256
+        if ([IO.Path]::GetFullPath($HarnessPath) -cne [IO.Path]::GetFullPath((Join-Path $RepositoryRoot 'tests/StatusDeskEngine.Tests.ps1'))) {
+            throw 'Qualification candidate or exact canonical harness file is missing or ambiguous.'
+        }
+        Assert-QualificationInventoryPhysicalFile -LiteralPath $CandidatePath
+        Assert-QualificationInventoryPhysicalFile -LiteralPath $HarnessPath
+        # Observe both operands before either comparison. The private exception
+        # data exposes which comparison failed without printing raw evidence.
+        $operands.actualCandidateSha256=(Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+        $operands.actualHarnessSha256=Get-QualificationScriptIdentity -LiteralPath $HarnessPath
+        if ($operands.declaredCandidateSha256 -cne $operands.actualCandidateSha256) {
+            throw 'Qualification inventory candidate raw-byte digest does not match.'
+        }
+        if ($operands.declaredHarnessSha256 -cne $operands.actualHarnessSha256) {
+            throw 'Qualification inventory canonical harness digest does not match.'
+        }
+        $expectedWriters=@('Write-RunRecoveryJournal','Write-RegisteredEvidenceArtifact','Write-ProtectedPackageEnvelope',
+            'Write-RecipientProfileDocument','Export-RestrictedAssessmentReport')
+        $expectedEmpty=@('New-RegisteredEvidenceArtifact','New-EvidenceWorkspaceOwnedWriteStream')
+        foreach ($pair in @(@{key='writers';expected=$expectedWriters},@{key='emptyCreators';expected=$expectedEmpty})) {
+            $entries=$manifest[$pair.key]
+            if ($entries -isnot [object[]] -or $entries.Count -ne $pair.expected.Count) { throw 'Qualification writer inventory is not closed.' }
+            for ($index=0; $index -lt $entries.Count; $index++) {
+                if ($entries[$index] -isnot [string] -or $entries[$index] -cne $pair.expected[$index]) { throw 'Qualification writer inventory changed.' }
+            }
+        }
+        if ($manifest.privilegedFaultWitnesses -isnot [object[]]) { throw 'Qualification witness inventory is not an array.' }
+        foreach ($entry in $manifest.privilegedFaultWitnesses) {
+            Assert-QualificationInventoryObject -Value $entry -Keys @('fault','relativePath','content','encodingBound','maximumLaunches','reservationBytes')
+            foreach ($key in @('fault','relativePath','content','encodingBound')) {
+                if ($entry[$key] -isnot [string]) { throw 'Qualification witness identity must be a string.' }
+            }
+        }
+        # Reuse the original descriptor owner for exact count, values and bounds.
+        $null=New-QualificationWitnessDescriptor -Fault '' -Root $RepositoryRoot -Manifest $manifest
+        $actualSources=@(Get-QualificationInventoryInputEvidence -Entries $manifest.inputs -ExpectedPaths (Get-QualificationInventoryInputPaths) -RepositoryRoot $RepositoryRoot)
+        $actualExecutors=@(Get-QualificationInventoryInputEvidence -Entries $manifest.executorInputs -ExpectedPaths (Get-QualificationInventoryExecutorPaths) -RepositoryRoot $RepositoryRoot)
+        [pscustomobject]@{Manifest=$manifest;Operands=$operands;SourceInputs=$actualSources;ExecutorInputs=$actualExecutors}
+    } catch {
+        $_.Exception.Data['QualificationInventoryOperands']=$operands
+        throw
+    }
 }
 
 function New-QualificationWitnessDescriptor {
@@ -151,21 +316,11 @@ function Get-QualificationFunctionDefinition {
 function New-QualificationDiskInstrumentation {
     param([string] $ModuleText,[string] $Root,[string] $CandidatePath,[string] $HarnessPath, [string] $WitnessFault = '')
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
-    $manifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'qualification-resource-writers.json') -Raw|ConvertFrom-Json
-    if($manifest.sourceIdentityKind-cne'CanonicalUtf8LfSha256' -or
-        $manifest.candidateSha256-ne(Get-FileHash -LiteralPath $CandidatePath -Algorithm SHA256).Hash.ToLowerInvariant() -or
-        $manifest.harnessSha256-ne(Get-QualificationScriptIdentity -LiteralPath $HarnessPath)){
-        throw 'Qualification write inventory does not match this exact candidate and harness.'
-    }
+    $binding=Assert-QualificationResourceInventoryBinding -CandidatePath $CandidatePath -HarnessPath $HarnessPath -RepositoryRoot $repositoryRoot
+    $manifest=$binding.Manifest
     $actualSourceInputs=[Collections.Generic.List[object]]::new()
     $actualSourceInputs.Add([ordered]@{path='tests/StatusDeskEngine.Tests.ps1';sha256=(Get-FileHash -LiteralPath $HarnessPath -Algorithm SHA256).Hash.ToLowerInvariant()})
-    foreach($input in $manifest.inputs){
-        $inputPath=Join-Path $repositoryRoot $input.path
-        if($input.sha256-ne(Get-QualificationScriptIdentity -LiteralPath $inputPath)){
-            throw 'Qualification write inventory does not match a controlled adapter.'
-        }
-        $actualSourceInputs.Add([ordered]@{path=[string]$input.path;sha256=(Get-FileHash -LiteralPath $inputPath -Algorithm SHA256).Hash.ToLowerInvariant()})
-    }
+    foreach ($input in $binding.SourceInputs) { $actualSourceInputs.Add($input) }
     $fullRoot=[IO.Path]::GetFullPath($Root)
     if([IO.File]::Exists($fullRoot) -or
         ([IO.Directory]::Exists($fullRoot) -and [IO.Directory]::EnumerateFileSystemEntries($fullRoot).GetEnumerator().MoveNext())){
@@ -238,5 +393,5 @@ function New-QualificationDiskInstrumentation {
     # Derive every writer and launch seam before creating the owned root.
     $null=[IO.Directory]::CreateDirectory($fullRoot)
     [pscustomobject]@{ModuleText=$ModuleText;DefinitionInitializer=$definitionInitializer;ControllerDefinitions=($controllerDefinitions -join [Environment]::NewLine);
-        ControllerOriginalDefinitions=($originalDefinitions -join [Environment]::NewLine);ControllerWorker=$start;Ledger=$ledger;actualSourceInputs=$actualSourceInputs.ToArray();sourceIdentityKind=$manifest.sourceIdentityKind;instrumentationSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1') -Algorithm SHA256).Hash.ToLowerInvariant();inventorySha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'qualification-resource-writers.json')).Hash.ToLowerInvariant()}
+        ControllerOriginalDefinitions=($originalDefinitions -join [Environment]::NewLine);ControllerWorker=$start;Ledger=$ledger;actualSourceInputs=$actualSourceInputs.ToArray();actualExecutorInputs=$binding.ExecutorInputs;inventoryOperands=$binding.Operands;sourceIdentityKind=$manifest.sourceIdentityKind;instrumentationSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1') -Algorithm SHA256).Hash.ToLowerInvariant();inventorySha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'qualification-resource-writers.json')).Hash.ToLowerInvariant()}
 }
