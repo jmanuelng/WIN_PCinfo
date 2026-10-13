@@ -462,6 +462,29 @@ function New-ReleaseHelpPrivateDirectory {
     }
     if ([IO.Directory]::Exists($Path) -or [IO.File]::Exists($Path)) { throw 'Inner Help uncertainty directory already exists.' }
     $null=[IO.Directory]::CreateDirectory($Path)
+    # Retain no inner outcome until the actual directory boundary is private.
+    $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+    try { $expectedSid=$identity.User.Value } finally { $identity.Dispose() }
+    $writtenSid=Set-TestNativePrivateDirectory -Path $Path
+    if ($writtenSid -isnot [Security.Principal.SecurityIdentifier] -or $writtenSid.Value -cne $expectedSid) {
+        throw 'Inner Help evidence directory setter identity differs.'
+    }
+    $acl=Get-Acl -LiteralPath $Path -ErrorAction Stop
+    $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+    if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -cne $expectedSid -or
+        -not $acl.AreAccessRulesProtected -or -not $acl.AreAccessRulesCanonical -or $rules.Count -ne 2) {
+        throw 'Inner Help evidence directory ACL differs from its private boundary.'
+    }
+    foreach ($allowedSid in @($expectedSid,'S-1-5-18')) {
+        $allowedRules=@($rules | Where-Object { $_.IdentityReference.Value -ceq $allowedSid })
+        if ($allowedRules.Count -ne 1 -or $allowedRules[0].IsInherited -or
+            $allowedRules[0].AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+            $allowedRules[0].FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl -or
+            $allowedRules[0].InheritanceFlags -ne ([Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit) -or
+            $allowedRules[0].PropagationFlags -ne [Security.AccessControl.PropagationFlags]::None) {
+            throw 'Inner Help evidence directory ACL differs from its private boundary.'
+        }
+    }
 }
 
 function Assert-ReleaseHelpInnerOutcome {

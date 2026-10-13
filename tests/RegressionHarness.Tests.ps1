@@ -9,6 +9,118 @@ $runnerCore=$runnerAst.Find({param($node) $node -is [Management.Automation.Langu
 . ([scriptblock]::Create($runnerCore.Extent.Text))
 $root = Join-Path (Split-Path $PSScriptRoot) ('.test-output/harness-' + [guid]::NewGuid().ToString('N'))
 try {
+    # Actual Windows ACLs on new synthetic children; no inner Help/native outcome is fabricated.
+    $innerAclRoot=Join-Path $root 'inner-help-private-directory'
+    $null=[IO.Directory]::CreateDirectory($innerAclRoot)
+    $innerIdentity=[Security.Principal.WindowsIdentity]::GetCurrent()
+    try { $innerSid=$innerIdentity.User } finally { $innerIdentity.Dispose() }
+    $systemSid=[Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+    $actualPrivateSetter=(Get-Command Set-TestNativePrivateDirectory -CommandType Function).ScriptBlock
+    function New-HarnessInnerHelpParent {
+        param([string] $Name,[bool] $Broad)
+        $parent=Join-Path $innerAclRoot $Name
+        $null=[IO.Directory]::CreateDirectory($parent)
+        $parentAcl=[Security.AccessControl.DirectorySecurity]::new()
+        $parentAcl.SetAccessRuleProtection($true,$false)
+        $parentAcl.SetOwner($innerSid)
+        foreach ($principal in @($innerSid,$systemSid)) {
+            $null=$parentAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($principal,'FullControl','ContainerInherit,ObjectInherit','None','Allow'))
+        }
+        if ($Broad) {
+            $null=$parentAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new('S-1-1-0'),'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow'))
+        }
+        Set-Acl -LiteralPath $parent -AclObject $parentAcl
+        $parent
+    }
+    foreach ($broad in @($true,$false)) {
+        $parent=New-HarnessInnerHelpParent -Name ('positive-'+$broad) -Broad $broad
+        $child=Join-Path $parent 'child'
+        New-ReleaseHelpPrivateDirectory -Path $child
+        $childAcl=Get-Acl -LiteralPath $child
+        $childRules=@($childAcl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+        Assert-Equal $innerSid.Value ($childAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value) 'inner Help directory is owned by the initiating user'
+        Assert-Equal $true $childAcl.AreAccessRulesProtected 'inner Help directory drops inherited broad permissions'
+        Assert-Equal $true $childAcl.AreAccessRulesCanonical 'actual private directory DACL is canonical'
+        Assert-Equal 2 $childRules.Count 'only initiating user and SYSTEM receive directory grants'
+        foreach ($allowed in @($innerSid.Value,'S-1-5-18')) {
+            $grants=@($childRules | Where-Object { $_.IdentityReference.Value -ceq $allowed })
+            Assert-Equal 1 $grants.Count 'each exact allowed principal has one grant'
+            Assert-Equal $false $grants[0].IsInherited 'directory grants are explicit'
+            Assert-Equal ([Security.AccessControl.AccessControlType]::Allow) $grants[0].AccessControlType 'directory grant is Allow'
+            Assert-Equal ([Security.AccessControl.FileSystemRights]::FullControl) $grants[0].FileSystemRights 'directory grant is full control'
+            Assert-Equal 3 ([int]$grants[0].InheritanceFlags) 'private child records inherit both directory and file grants'
+            Assert-Equal 0 ([int]$grants[0].PropagationFlags) 'private grants propagate normally'
+        }
+        # A harmless record is written only after the real directory helper returned.
+        Write-ReleaseHelpPrivateRecord -Path (Join-Path $child 'synthetic.json') -Record @{synthetic=$true}
+        $recordAcl=Get-Acl -LiteralPath (Join-Path $child 'synthetic.json')
+        $recordRules=@($recordAcl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+        Assert-Equal 2 $recordRules.Count 'new private record inherits only the allowed principal domain'
+        Assert-Equal $true (@($recordRules | Where-Object { $_.IdentityReference.Value -cne $innerSid.Value -and $_.IdentityReference.Value -cne 'S-1-5-18' }).Count -eq 0) 'no broad principal can read the synthetic private record'
+        Write-Output ('INNER_HELP_DIRECTORY_CONTROL_PASS: private-parent-'+$broad)
+    }
+    foreach ($mode in @('BroadGrant','MissingSystem','WrongOwner','InheritedBroadGrant','UnprotectedExactDomain','WrongRights','WrongInheritance','WrongPropagation')) {
+        $parent=New-HarnessInnerHelpParent -Name ('negative-'+$mode) -Broad ($mode -eq 'InheritedBroadGrant')
+        $child=Join-Path $parent 'child'
+        & {
+            param([scriptblock] $RealSetter,[string] $Child,[string] $Mode)
+            $injection=@{applied=$false;actualAcl=$null}
+            # Substitute only the setter at this owned test boundary. Get-Acl remains real.
+            function Set-TestNativePrivateDirectory {
+                param([string] $Path)
+                $sid=& $RealSetter -Path $Path
+                $changed=Get-Acl -LiteralPath $Path
+                switch ($Mode) {
+                    'BroadGrant' { $null=$changed.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new('S-1-1-0'),'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow')) }
+                    'MissingSystem' {
+                        foreach ($grant in @($changed.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]) | Where-Object { $_.IdentityReference.Value -ceq 'S-1-5-18' })) { $null=$changed.RemoveAccessRuleSpecific($grant) }
+                    }
+                    'WrongOwner' { $changed.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')) }
+                    'InheritedBroadGrant' { $changed.SetAccessRuleProtection($false,$false) }
+                    'UnprotectedExactDomain' { $changed.SetAccessRuleProtection($false,$false) }
+                    'WrongRights' { $changed.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow')) }
+                    'WrongInheritance' { $changed.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'FullControl','ContainerInherit','None','Allow')) }
+                    'WrongPropagation' { $changed.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'FullControl','ContainerInherit,ObjectInherit','NoPropagateInherit','Allow')) }
+                }
+                Set-Acl -LiteralPath $Path -AclObject $changed
+                $injection.actualAcl=Get-Acl -LiteralPath $Path
+                $injection.applied=$true
+                $sid
+            }
+            $caught=$null
+            try { New-ReleaseHelpPrivateDirectory -Path $Child } catch { $caught=$_.Exception }
+            Assert-Equal $true $injection.applied 'the fault is an actually written and observed Windows ACL, not a setter exception'
+            $actualRules=@($injection.actualAcl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+            switch ($Mode) {
+                'BroadGrant' { Assert-Equal 1 @($actualRules | Where-Object { $_.IdentityReference.Value -ceq 'S-1-1-0' }).Count 'broad permission mutation exists' }
+                'MissingSystem' { Assert-Equal 0 @($actualRules | Where-Object { $_.IdentityReference.Value -ceq 'S-1-5-18' }).Count 'SYSTEM grant was actually removed' }
+                'WrongOwner' { Assert-Equal 'S-1-5-32-544' ($injection.actualAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value) 'wrong owner was actually applied' }
+                'InheritedBroadGrant' { Assert-Equal $true (@($actualRules | Where-Object IsInherited).Count -gt 0) 'actual inherited grants reach this child' }
+                'UnprotectedExactDomain' { Assert-Equal $false $injection.actualAcl.AreAccessRulesProtected 'actual DACL is unprotected'; Assert-Equal 0 @($actualRules | Where-Object { $_.IdentityReference.Value -cne $innerSid.Value -and $_.IdentityReference.Value -cne 'S-1-5-18' }).Count 'unprotected negative retains the same allowed SID domain' }
+                'WrongRights' { Assert-Equal 1 @($actualRules | Where-Object { $_.IdentityReference.Value -ceq $innerSid.Value -and $_.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl }).Count 'wrong rights were actually applied' }
+                'WrongInheritance' { Assert-Equal 1 @($actualRules | Where-Object { $_.IdentityReference.Value -ceq $innerSid.Value -and [int]$_.InheritanceFlags -eq 1 }).Count 'wrong inheritance flags were actually applied' }
+                'WrongPropagation' { Assert-Equal 1 @($actualRules | Where-Object { $_.IdentityReference.Value -ceq $innerSid.Value -and [int]$_.PropagationFlags -eq 1 }).Count 'wrong propagation flags were actually applied' }
+            }
+            Assert-Equal $true ($null -ne $caught) 'directory helper refuses the actual faulty ACL'
+            Assert-Equal 'Inner Help evidence directory ACL differs from its private boundary.' $caught.Message 'failure is the readback boundary, not a fixture setup error'
+            Assert-Equal 0 ([IO.Directory]::GetFiles($Child).Length) 'no outcome or hold record exists before private-boundary verification'
+        } $actualPrivateSetter $child $mode
+        Write-Output ('INNER_HELP_DIRECTORY_CONTROL_PASS: reject-'+$mode)
+    }
+    $existingParent=New-HarnessInnerHelpParent -Name 'existing-paths' -Broad $false
+    foreach ($kind in @('Directory','File')) {
+        $existing=Join-Path $existingParent $kind
+        if ($kind -eq 'Directory') { $null=[IO.Directory]::CreateDirectory($existing) }
+        else { [IO.File]::WriteAllText($existing,'synthetic existing file') }
+        $beforeAcl=(Get-Acl -LiteralPath $existing).GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::All)
+        $caught=$null
+        try { New-ReleaseHelpPrivateDirectory -Path $existing } catch { $caught=$_.Exception }
+        Assert-Equal $true ($null -ne $caught) 'existing path remains a refusal'
+        Assert-Equal 'Inner Help uncertainty directory already exists.' $caught.Message 'existing refusal precedes the private setter'
+        Assert-Equal $beforeAcl ((Get-Acl -LiteralPath $existing).GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::All)) 'refused original ACL remains unchanged'
+        if ($kind -eq 'File') { Assert-Equal 'synthetic existing file' ([IO.File]::ReadAllText($existing)) 'refused file bytes remain unchanged' }
+        Write-Output ('INNER_HELP_DIRECTORY_CONTROL_PASS: existing-'+$kind)
+    }
     $testDirectory = Join-Path $root 'tests'
     $null = [IO.Directory]::CreateDirectory($testDirectory)
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Run-Tests.ps1') -Destination $testDirectory
