@@ -1021,6 +1021,7 @@ function Open-PortableEntryCmdBinding {
         }
         $app=@($binding.Files|Where-Object Path -IEQ (Join-Path $PackageRoot 'WIN-PCInfo.ps1'))[0]
         if ($app.Sha256 -cne $binding.Candidate.Sha256 -or $app.Bytes -ne $binding.Candidate.Stream.Length) { throw 'CMD Help extracted application differs from the root candidate.' }
+        . (Join-Path $root 'build/PortableDistribution.ps1')
         $expected=@{ 'Start-WIN-PCInfo.ps1'=(Get-PortableBootstrapSourceBytes -RepositoryRoot $root);
             'Start-WIN-PCInfo.cmd'=(ConvertTo-PortableScriptBytes -Text ([IO.File]::ReadAllText((Join-Path $root 'build/Start-WIN-PCInfo.cmd')))) }
         foreach ($name in $expected.Keys) {
