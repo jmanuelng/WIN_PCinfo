@@ -240,6 +240,7 @@ function Test-StatusDeskRetentionFailure {
     param([ValidateSet('Write','Sampling','Serialization','Worker')] [string] $Fault = 'Write')
     # Match the actual harness's ordinary plan-fault parameter default.
     $QualificationPlanFault=''
+    $controlledRunLockAdmission=$null
     $ActiveAction='None'; $ActiveWorker='Privilege'; $CancelDuringPrivilege=$false
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $testRoot=Join-Path $repositoryRoot ('.test-output/cleanup-negative-'+[guid]::NewGuid().ToString('N'))
@@ -377,6 +378,7 @@ function Test-StatusDeskCleanupProjection {
     param([switch] $Recovery)
     # Match the actual harness's ordinary plan-fault parameter default.
     $QualificationPlanFault=''
+    $controlledRunLockAdmission=$null
     $ActiveAction='None'; $ActiveWorker='Privilege'; $CancelDuringPrivilege=$false
     $repositoryRoot=Split-Path -Parent $PSScriptRoot
     $testRoot=Join-Path $repositoryRoot ('.test-output/projection-'+[guid]::NewGuid().ToString('N'))
