@@ -116,6 +116,79 @@ if ($Mode -eq 'Pure') {
         if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($fixture)) -cne $expected) { throw 'Pure fixture cleanup is outside its owned boundary.' }
         [IO.Directory]::Delete($fixture,$true)
     }
+    # Runtime membership must preserve refusal order and exotic-shape fallback.
+    $script:runtimeIndexFixture=@{Base=(Get-TestPreparedRuntimeDependencies -HashFiles|ConvertTo-Json -Depth 14 -Compress);Reads=0;Checks=0;Later=$null;Bytes=0L}
+    function New-RuntimeIndexFixture {
+      $runtimeIndexFixtureInput=$script:runtimeIndexFixture.Base|ConvertFrom-Json -Depth 14 -DateKind String
+      @{Dependencies=$runtimeIndexFixtureInput;Pins=[Collections.Generic.List[object]]::new([object[]]@($runtimeIndexFixtureInput.inputs|ForEach-Object{[pscustomobject]@{path=$_.path;bytes=$_.bytes;sha256=$_.sha256}}))}
+    }
+    function Assert-RuntimeIndexFixture {
+      param($runtimeIndexFixtureInput,[string]$runtimeIndexFixtureExpected='')
+      $runtimeIndexFixtureObserved=$null
+      try{Assert-TestPreparedRuntimeDependencies -Dependencies $runtimeIndexFixtureInput.Dependencies -VerifiedInputPins ($runtimeIndexFixtureInput.Pins.ToArray())}catch{$runtimeIndexFixtureObserved=$_}
+      Assert-NativeFixture $(if($runtimeIndexFixtureExpected){$null-ne$runtimeIndexFixtureObserved-and$runtimeIndexFixtureObserved.Exception.Message-ceq$runtimeIndexFixtureExpected}else{$null-eq$runtimeIndexFixtureObserved}) 'runtime member admission preserves its intended outcome'
+      $script:runtimeIndexFixture.Checks++
+    }
+    try{
+      $script:runtimeIndexFixture.CohortError='Test file cohort omits or changes a prepared runtime input.'
+      Assert-RuntimeIndexFixture (New-RuntimeIndexFixture)
+      foreach($runtimeIndexFixtureCase in @('Extra','UnrelatedDuplicate','Hashtable','Adapted','ArrayPath')){
+          $runtimeIndexFixtureInput=New-RuntimeIndexFixture
+          $runtimeIndexFixturePin=$runtimeIndexFixtureInput.Pins[0]
+          switch($runtimeIndexFixtureCase){
+              'Extra'{$runtimeIndexFixtureInput.Pins.Add([pscustomobject]@{path='Z:\runtime-index-fixture';bytes=0L;sha256=('0'*64)})}
+              'UnrelatedDuplicate'{foreach($runtimeIndexFixtureRepeat in 1..2){$runtimeIndexFixtureInput.Pins.Add([pscustomobject]@{path='Z:\runtime-index-fixture';bytes=0L;sha256=('0'*64)})}}
+              'Hashtable'{$runtimeIndexFixtureInput.Pins[0]=@{path=$runtimeIndexFixturePin.path;bytes=$runtimeIndexFixturePin.bytes;sha256=$runtimeIndexFixturePin.sha256}}
+              'Adapted'{
+                  $runtimeIndexFixtureAdapted=[IO.FileInfo]::new($runtimeIndexFixturePin.path)
+                  foreach($runtimeIndexFixtureName in @('path','bytes','sha256')){Add-Member -InputObject $runtimeIndexFixtureAdapted NoteProperty $runtimeIndexFixtureName $runtimeIndexFixturePin.$runtimeIndexFixtureName}
+                  $runtimeIndexFixtureInput.Pins[0]=$runtimeIndexFixtureAdapted
+              }
+              'ArrayPath'{$runtimeIndexFixturePin.path=@($runtimeIndexFixturePin.path,'Z:\other-runtime-index-fixture')}
+          }
+          Assert-RuntimeIndexFixture $runtimeIndexFixtureInput
+      }
+      foreach($runtimeIndexFixtureCase in @('Missing','Duplicate','CaseDuplicate','Bytes','Sha','ShaCase')){
+          $runtimeIndexFixtureInput=New-RuntimeIndexFixture
+          $runtimeIndexFixturePin=$runtimeIndexFixtureInput.Pins[0]
+          switch($runtimeIndexFixtureCase){
+              'Missing'{$runtimeIndexFixtureInput.Pins.RemoveAt(0)}
+              'Duplicate'{$runtimeIndexFixtureInput.Pins.Add($runtimeIndexFixturePin)}
+              'CaseDuplicate'{$runtimeIndexFixtureInput.Pins.Add([pscustomobject]@{path=$runtimeIndexFixturePin.path.ToUpperInvariant();bytes=$runtimeIndexFixturePin.bytes;sha256=$runtimeIndexFixturePin.sha256})}
+              'Bytes'{$runtimeIndexFixturePin.bytes++}
+              'Sha'{$runtimeIndexFixturePin.sha256=('0'*64)}
+              'ShaCase'{$runtimeIndexFixturePin.sha256=$runtimeIndexFixturePin.sha256.ToUpperInvariant()}
+          }
+          Assert-RuntimeIndexFixture $runtimeIndexFixtureInput $script:runtimeIndexFixture.CohortError
+      }
+      foreach($runtimeIndexFixtureCase in @('Metadata','Role','Member')){
+          $runtimeIndexFixtureInput=New-RuntimeIndexFixture
+          $script:runtimeIndexFixture.Reads=0
+          $runtimeIndexFixtureInput.Pins[-1].PSObject.Properties.Remove('path')
+          Add-Member -InputObject $runtimeIndexFixtureInput.Pins[-1] ScriptProperty path {$script:runtimeIndexFixture.Reads++;throw 'UNEXPECTED_RUNTIME_INDEX_GETTER'}
+          switch($runtimeIndexFixtureCase){
+              'Metadata'{$runtimeIndexFixtureInput.Dependencies.contract='invalid';$runtimeIndexFixtureExpected='Prepared runtime dependency inventory is missing or differs.'}
+              'Role'{$runtimeIndexFixtureInput.Dependencies.roles[0].name='invalid';$runtimeIndexFixtureExpected='Prepared runtime loaded implementation identity changed.'}
+              'Member'{$runtimeIndexFixtureInput.Dependencies.inputs[0].bytes++;$runtimeIndexFixtureExpected='Prepared runtime physical/default-reference member changed.'}
+          }
+          Assert-RuntimeIndexFixture $runtimeIndexFixtureInput $runtimeIndexFixtureExpected
+          Assert-NativeFixture ($script:runtimeIndexFixture.Reads-eq0) 'earlier rejection never invokes the later throwing getter'
+          $script:runtimeIndexFixture.Checks++
+      }
+      $runtimeIndexFixtureInput=New-RuntimeIndexFixture
+      $script:runtimeIndexFixture.Reads=0;$script:runtimeIndexFixture.Later=$runtimeIndexFixtureInput.Pins[-1]
+      $script:runtimeIndexFixture.Bytes=$runtimeIndexFixtureInput.Dependencies.inputs[1].bytes
+      $runtimeIndexFixtureInput.Dependencies.inputs[1].PSObject.Properties.Remove('bytes')
+      Add-Member -InputObject $runtimeIndexFixtureInput.Dependencies.inputs[1] ScriptProperty bytes {
+          $script:runtimeIndexFixture.Reads++;$script:runtimeIndexFixture.Later.path='Z:\moved-runtime-index-fixture';$script:runtimeIndexFixture.Bytes
+      }
+      Assert-RuntimeIndexFixture $runtimeIndexFixtureInput $script:runtimeIndexFixture.CohortError
+      Assert-NativeFixture ($script:runtimeIndexFixture.Reads-gt0) 'actual declared getter executes and later missing identity is rejected'
+      $script:runtimeIndexFixture.Checks++
+    }finally{
+      $checks+=$script:runtimeIndexFixture.Checks
+      Remove-Variable runtimeIndexFixture -Scope Script
+    }
     [pscustomobject]@{mode='Pure'; checks=$checks; nativeStarts=0; nativeQueries=0}
     return
 }

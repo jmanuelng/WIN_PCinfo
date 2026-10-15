@@ -130,7 +130,7 @@
   "executorInputs": [
     {
       "path": "tests/GeneratedApplicationNative.ps1",
-      "sha256": "1c49827a6f836f2068cdf0804c1d769713dd4b978883e012e8e9668ec2d162d1"
+      "sha256": "c59d3e85e83170b4940c1170c1218ed41a937a25abb4f4effb45d9ceffc2dba9"
     },
     {
       "path": "tests/GeneratedApplicationNativeSupervisor.cs",

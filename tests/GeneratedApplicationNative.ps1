@@ -867,6 +867,24 @@ function Assert-TestPreparedRuntimeDependencies {
         if ($declared.role -isnot [string] -or $declared.role -cne $role.role -or $declared.name -isnot [string] -or
             $declared.name -cne $role.name -or $declared.path -isnot [string] -or $declared.path -ine $role.path) { throw 'Prepared runtime loaded implementation identity changed.' }
     }
+    $allowIndex=$Dependencies -is [Management.Automation.PSCustomObject]
+    $declaredMember=$Dependencies.PSObject.Properties['inputs']
+    if ($null -eq $declaredMember -or $declaredMember.GetType() -ne [Management.Automation.PSNoteProperty]) { $allowIndex=$false }
+    if ($allowIndex) {
+        foreach ($entry in $declaredMember.Value) {
+            if ($null -eq $entry -or $entry.PSObject.BaseObject -isnot [Management.Automation.PSCustomObject]) { $allowIndex=$false; break }
+            foreach ($name in @('relativePath','path','bytes','sha256')) {
+                $member=$entry.PSObject.Properties[$name]
+                if ($null -eq $member -or $member.GetType() -ne [Management.Automation.PSNoteProperty]) { $allowIndex=$false; break }
+                if ($name -eq 'bytes') {
+                    if ($member.Value -isnot [int] -and $member.Value -isnot [long]) { $allowIndex=$false; break }
+                }
+                elseif ($member.Value -isnot [string]) { $allowIndex=$false; break }
+            }
+            if (-not $allowIndex) { break }
+        }
+    }
+    $lookupBuilt=$false; $useIndex=$false; $pinIndex=$null
     for ($index=0; $index -lt $actual.inputs.Count; $index++) {
         $declared=$Dependencies.inputs[$index]; $inputPin=$actual.inputs[$index]
         if ($declared.relativePath -isnot [string] -or $declared.relativePath -cne $inputPin.relativePath -or
@@ -874,10 +892,35 @@ function Assert-TestPreparedRuntimeDependencies {
             ($declared.bytes -isnot [int] -and $declared.bytes -isnot [long]) -or $declared.bytes -ne $inputPin.bytes -or
             $declared.sha256 -isnot [string] -or $declared.sha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Prepared runtime physical/default-reference member changed.' }
         if ($verified) {
-            # The File guard already hashed this exact full cohort. Do not hash
-            # every runtime file again on every recursive Case validation.
-            $pins=@($VerifiedInputPins | Where-Object path -IEQ $declared.path)
-            if ($pins.Count -ne 1 -or $pins[0].bytes -ne $declared.bytes -or $pins[0].sha256 -cne $declared.sha256) { throw 'Test file cohort omits or changes a prepared runtime input.' }
+            if (-not $lookupBuilt) {
+                $lookupBuilt=$true; $useIndex=$allowIndex
+                $pinIndex=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::InvariantCultureIgnoreCase)
+                foreach ($entry in $VerifiedInputPins) {
+                    if (-not $useIndex) { break }
+                    if ($null -eq $entry) { $useIndex=$false; break }
+                    if ($entry.PSObject.BaseObject -isnot [Management.Automation.PSCustomObject]) { $useIndex=$false; break }
+                    $pathMember=$entry.PSObject.Properties['path']; $bytesMember=$entry.PSObject.Properties['bytes']; $shaMember=$entry.PSObject.Properties['sha256']
+                    foreach ($member in @($pathMember,$bytesMember,$shaMember)) {
+                        if ($null -eq $member -or $member.GetType() -ne [Management.Automation.PSNoteProperty]) { $useIndex=$false; break }
+                    }
+                    if (-not $useIndex) { break }
+                    if ($pathMember.Value -isnot [string] -or $shaMember.Value -isnot [string] -or
+                        ($bytesMember.Value -isnot [int] -and $bytesMember.Value -isnot [long])) { $useIndex=$false; break }
+                    $key=$pathMember.Value; $bucket=$null
+                    if ($pinIndex.TryGetValue($key,[ref]$bucket)) { $bucket.Count++ }
+                    else { $pinIndex.Add($key,[pscustomobject]@{Count=1;First=$entry}) }
+                }
+                if (-not $useIndex) { $pinIndex=$null }
+            }
+            if ($useIndex) {
+                $bucket=$null
+                if (-not $pinIndex.TryGetValue($declared.path,[ref]$bucket) -or $bucket.Count -ne 1 -or
+                    $bucket.First.bytes -ne $declared.bytes -or $bucket.First.sha256 -cne $declared.sha256) { throw 'Test file cohort omits or changes a prepared runtime input.' }
+            }
+            else {
+                $pins=@($VerifiedInputPins | Where-Object path -IEQ $declared.path)
+                if ($pins.Count -ne 1 -or $pins[0].bytes -ne $declared.bytes -or $pins[0].sha256 -cne $declared.sha256) { throw 'Test file cohort omits or changes a prepared runtime input.' }
+            }
         }
         elseif ($declared.sha256 -cne $inputPin.sha256) { throw 'Prepared runtime file identity changed.' }
     }
