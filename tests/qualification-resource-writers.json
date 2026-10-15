@@ -27,7 +27,7 @@
     },
     {
       "path": "tests/TestHarness.ps1",
-      "sha256": "88a145ad825b953a2c72f13281e28cb0064f54e6b01d8c70ea369759bb6837e5"
+      "sha256": "84e217d0824b8dd291e22ce3686bfb748031c0bf2f00c01617e79921bca429e9"
     },
     {
       "path": "tests/AdditionalScopeSourceAdapters.ps1",
@@ -130,7 +130,7 @@
   "executorInputs": [
     {
       "path": "tests/GeneratedApplicationNative.ps1",
-      "sha256": "1fe559845c938a8615ea5e87afc1bde89447c1a0cfe57d09bb917dac06860530"
+      "sha256": "1c49827a6f836f2068cdf0804c1d769713dd4b978883e012e8e9668ec2d162d1"
     },
     {
       "path": "tests/GeneratedApplicationNativeSupervisor.cs",
