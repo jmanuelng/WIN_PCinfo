@@ -431,12 +431,24 @@ function Test-QualificationResultPropagation {
         [pscustomobject]@{ExitCode=$code; StreamRecords=@([pscustomobject]@{Sequence=1; Stream='stdout'; Text=$line})}
     }
     try {
+        # The copied wrapper owns a real prepared candidate stream. Its inert
+        # bytes exercise input ownership only; the case provider remains the
+        # disclosed synthetic result above and never executes this candidate.
+        foreach($name in @('src','build','schemas','docs','.test-output')){
+            $null=[IO.Directory]::CreateDirectory((Join-Path $fixture $name))
+        }
+        Initialize-GeneratedApplicationNativeSupervisor
+        $fixtureCandidate=Join-Path $fixture '.test-output/synthetic-never-executed.ps1'
+        [IO.File]::WriteAllText($fixtureCandidate,'# Synthetic result-propagation input only; never executed.')
+        $fixtureManifest=Join-Path $fixture '.test-output/synthetic-prepared-manifest.json'
+        [IO.File]::WriteAllText($fixtureManifest,((New-PreparedTestCandidateManifest -RepositoryRoot $fixture -CandidatePath $fixtureCandidate)|ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+        $fixtureManifestSha256=(Get-FileHash -LiteralPath $fixtureManifest).Hash.ToLowerInvariant()
         $failure=$null
         try { Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('synthetic') | Out-Null } catch { $failure=$_ }
         Assert-Equal $true ($null -ne $failure) 'a cleanup failure cannot become a passing case'
         Assert-Equal $true (Test-QualificationCleanupUnverified -Exception $failure.Exception) 'cleanup signal propagates without relying on stop marker persistence'
         $wrapperFailure=$null
-        try { & (Join-Path $tests 'A.Tests.ps1') | Out-Null } catch { $wrapperFailure=$_ }
+        try { & (Join-Path $tests 'A.Tests.ps1') -CandidatePath $fixtureCandidate -PreparedManifestPath $fixtureManifest -PreparedManifestSha256 $fixtureManifestSha256 | Out-Null } catch { $wrapperFailure=$_ }
         Assert-Equal $true ($null -ne $wrapperFailure -and (Test-QualificationCleanupUnverified -Exception $wrapperFailure.Exception)) 'existing wrapper retains the supplied unsafe native-result signal'
         $runnerAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $TestDirectory 'Run-Tests.ps1'),[ref]$null,[ref]$null)
         $runnerCore=$runnerAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-TestSuiteFiles'},$true)
@@ -446,8 +458,18 @@ function Test-QualificationResultPropagation {
         $unsafeSuite=Invoke-TestSuiteFiles -Inventory $pins -InvokeFile $unsafeStub -RetainResults {param($Rows,$Final)}
         Assert-Equal $true $unsafeSuite.Stopped 'unsafe cleanup from an existing wrapper fails the suite'
         Assert-Equal 'Blocked' $unsafeSuite.Results[1].result 'unsafe wrapper blocks the next suite file despite unavailable marker persistence'
+        # This expected fault creates no native process. Prove the real stream
+        # closed before retiring only this owned fixture's exact stop record.
+        $proof=[IO.File]::Open($fixtureCandidate,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+        try { $null=$proof.Length } finally { $proof.Dispose() }
+        $expectedBlocker=Join-Path $fixture '.test-output/qualification-cleanup-blocked.json'
+        if([IO.File]::Exists($expectedBlocker)){
+            if([IO.File]::ReadAllText($expectedBlocker)-cne'{"state":"OwnedCleanupUnverified"}'){throw 'Unexpected synthetic blocker bytes.'}
+            [IO.File]::Delete($expectedBlocker)
+        }
+        if([IO.File]::Exists($expectedBlocker)){throw 'Synthetic expected-fault blocker remains.'}
         $syntheticCaseUnsafe=$false
-        & (Join-Path $tests 'A.Tests.ps1') | Out-Null
+        & (Join-Path $tests 'A.Tests.ps1') -CandidatePath $fixtureCandidate -PreparedManifestPath $fixtureManifest -PreparedManifestSha256 $fixtureManifestSha256 | Out-Null
         $safeStub={param($Expected) [ordered]@{file=$Expected.file; sha256=$Expected.sha256; result='Pass'; elapsedMilliseconds=1; nativeExitCode=0; completed=$true; cleanupVerified=$true}}
         $safeSuite=Invoke-TestSuiteFiles -Inventory $pins -InvokeFile $safeStub -RetainResults {param($Rows,$Final)}
         Assert-Equal $false $safeSuite.Stopped 'existing wrapper completes successful supplied native cases'
