@@ -2,7 +2,8 @@
 param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256,
     [DateTimeOffset] $AuthorityEnds=[DateTimeOffset]::MinValue,
     [long] $TimeoutMs=25200000, [long] $CleanupReserveMs=120000,
-    [string] $FocusedRequestPath, [string] $FocusedRequestSha256)
+    [string] $FocusedRequestPath, [string] $FocusedRequestSha256,
+    [ValidateRange(1,2)] [int] $FileParallelism=2, [switch] $ReviewedPairOnly)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -10,12 +11,19 @@ $ErrorActionPreference='Stop'
 
 function Invoke-TestSuiteFiles {
     param([Parameter(Mandatory)] [object[]] $Inventory,
-        [Parameter(Mandatory)] [scriptblock] $InvokeFile, [Parameter(Mandatory)] [scriptblock] $RetainResults)
+        [Parameter(Mandatory)] [scriptblock] $InvokeFile, [Parameter(Mandatory)] [scriptblock] $RetainResults,
+        [hashtable] $PreviouslyExecuted=@{})
     $results=[Collections.Generic.List[object]]::new()
     $stop=$false
     $retentionFailures=[Collections.Generic.List[Exception]]::new()
     foreach ($expected in $Inventory) {
-        if ($stop) {
+        if ($PreviouslyExecuted.ContainsKey($expected.file)) {
+            # A sibling already executed before a stop retains its actual row.
+            # Only files that never started can become Blocked.
+            $row=$PreviouslyExecuted[$expected.file]
+            if (-not $row.completed -or -not $row.cleanupVerified) { $stop=$true }
+        }
+        elseif ($stop) {
             $row=[ordered]@{file=$expected.file; result='Blocked'; elapsedMilliseconds=0; sha256=$expected.sha256;
                 completed=$false; cleanupVerified=$false; nativeExitCode=$null}
         }
@@ -32,6 +40,7 @@ function Invoke-TestSuiteFiles {
             # operations. Integrity failures cannot delete or replace it.
             if (-not $row.completed -or -not $row.cleanupVerified) { $stop=$true }
         }
+        if ((Get-TestRecordOptionalProperty -Record $row -Name 'stopDispatch') -eq $true) { $stop=$true }
         $results.Add($row)
         try { Assert-TestSuiteAccounting -Inventory $Inventory -Results $results.ToArray() }
         catch { $stop=$true; $retentionFailures.Add($_.Exception) }
@@ -210,15 +219,23 @@ if (-not [string]::IsNullOrEmpty($env:WINPCINFO_TEST_AUTHORITY_ENDS_UTC)) {
 }
 $testFiles=@(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.Tests.ps1' -File | Sort-Object Name)
 if ($testFiles.Count -eq 0) { throw 'No test files were found.' }
-$fullDiscovery=@($testFiles | ForEach-Object { [pscustomobject]@{file=$_.Name; path=$_.FullName; sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()} })
+$fullDiscovery=@($testFiles | ForEach-Object { [pscustomobject]@{file=$_.Name; path=$_.FullName; bytes=$_.Length; sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()} })
 $scope='Full'; $focused=$null
 if (-not [string]::IsNullOrEmpty($FocusedRequestPath) -or -not [string]::IsNullOrEmpty($FocusedRequestSha256)) {
+    if ($ReviewedPairOnly) { throw 'Reviewed pair selection cannot change another focused request.' }
     $focused=Read-FocusedTestRequest -RepositoryRoot $repository -Path $FocusedRequestPath -Sha256 $FocusedRequestSha256
     $scope=$focused.Scope
     $testFiles=@(Get-Item -LiteralPath $focused.TestPath)
 }
+if ($ReviewedPairOnly) {
+    $scope='ReviewedFilePair'
+    $testFiles=@(Get-TestFilePairSelection -Inventory $fullDiscovery | ForEach-Object { Get-Item -LiteralPath $_.path })
+}
 $inventory=@($testFiles | ForEach-Object { [pscustomobject][ordered]@{file=$_.Name; path=$_.FullName;
     bytes=$_.Length; sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()} })
+$filePairEnabled=$FileParallelism -eq 2 -and $scope -in @('Full','ReviewedFilePair')
+$filePairSelection=if ($filePairEnabled) {@(Get-TestFilePairSelection -Inventory $inventory)} else {@()}
+$filePairRows=@{}
 $inputInventory=@(Get-TestFileInventory -RepositoryRoot $repository)
 $outputRoot=Join-Path $repository '.test-output'
 if ([IO.Directory]::Exists($outputRoot) -and ((Get-Item -LiteralPath $outputRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Suite evidence cannot use a redirected output root.' }
@@ -270,19 +287,33 @@ try {
     }
     $closedInputs=@($inputs | Sort-Object path -CaseSensitive)
     $cohort=Get-TestNativeDigest -Value $closedInputs
-    $invoke={
+    $createFileAdmission={
         param($Expected)
-        [Console]::Out.WriteLine(('RUN: '+$Expected.file))
-        $fileWatch=[Diagnostics.Stopwatch]::StartNew()
-        $admission=[ordered]@{contract='win-pcinfo.test-file-admission/1.0.0'; repositoryRoot=$repository;
+        [ordered]@{contract='win-pcinfo.test-file-admission/1.0.0'; repositoryRoot=$repository;
             testPath=$Expected.path; testSha256=$Expected.sha256; bootstrapPath=(Join-Path $PSScriptRoot 'Invoke-TestFile.ps1');
             hostPath=(Join-Path $PSHOME 'pwsh.exe'); inventoryPath=$inventoryPath; suiteEvidenceRoot=$evidenceRoot;
             candidatePath=$CandidatePath; preparedManifestPath=$PreparedManifestPath; preparedManifestSha256=$PreparedManifestSha256;
             scope=$scope; namedParameters=$(if ($null -ne $focused) {$focused.NamedParameters} else {[ordered]@{}});
             focusedRequestPath=$FocusedRequestPath; focusedRequestSha256=$FocusedRequestSha256;
             inputs=$closedInputs; cohortSha256=$cohort}
+    }
+    $invokeAdmittedFile={
+        param($FileAdmission,$PairReference,$AfterAcknowledged,$ObservePeerStartup)
+        $admission=Copy-TestFilePairAdmissionCore -Admission $FileAdmission
+        if ($null -ne $PairReference) { $admission.filePair=$PairReference }
+        $fileName=[IO.Path]::GetFileName($admission.testPath)
+        [Console]::Out.WriteLine(('RUN: '+$fileName))
+        $fileWatch=[Diagnostics.Stopwatch]::StartNew()
         Assert-TestFileAdmissionInputs -Admission $admission
-        $native=Invoke-GeneratedApplicationNative -NativeRole TestFile -TestFileAdmission $admission -HostPath $admission.hostPath -WorkingDirectory $repository -Arguments @('-NoLogo','-NoProfile','-File',$admission.bootstrapPath) -TimeoutMs $TimeoutMs -CleanupReserveMs 10000 -AuthorityEnds $budget.AuthorityEnds.AddMilliseconds(-$CleanupReserveMs)
+        $fileNativeParameters=@{}
+        $fileEnds=$budget.AuthorityEnds.AddMilliseconds(-$CleanupReserveMs)
+        if ($null -ne $PairReference) {
+            $pairDescriptor=Read-TestNativeRecord -Path $PairReference.path
+            $fileEnds=[DateTimeOffset]::Parse($pairDescriptor.authorityEnds)
+        }
+        if ($null -ne $AfterAcknowledged) { $fileNativeParameters.AfterTestFileAcknowledged=$AfterAcknowledged }
+        if ($null -ne $ObservePeerStartup) { $fileNativeParameters.ObserveStartup=$ObservePeerStartup }
+        $native=Invoke-GeneratedApplicationNative -NativeRole TestFile -TestFileAdmission $admission -HostPath $admission.hostPath -WorkingDirectory $repository -Arguments @('-NoLogo','-NoProfile','-File',$admission.bootstrapPath) -TimeoutMs $TimeoutMs -CleanupReserveMs 10000 -AuthorityEnds $fileEnds @fileNativeParameters
         try {
             $completion=Read-TestNativeRecord -Path (Join-Path $native.EvidenceDirectory 'file-result.json')
             Assert-TestFileCompletion -Completion $completion -Admission $admission -Nonce $native.Nonce -NativeOutcome $native.NativeOutcome
@@ -295,10 +326,31 @@ try {
         }
         # Test streams and assertion messages remain in protected native
         # evidence. Public progress contains only file and outcome.
-        [Console]::Out.WriteLine(($completion.result.ToUpperInvariant()+': '+$Expected.file))
-        [ordered]@{file=$Expected.file; result=$completion.result; elapsedMilliseconds=$fileWatch.ElapsedMilliseconds;
-            sha256=$Expected.sha256; nativeExitCode=$native.ExitCode; completed=$completion.completed;
+        [Console]::Out.WriteLine(($completion.result.ToUpperInvariant()+': '+$fileName))
+        $row=[ordered]@{file=$fileName; result=$completion.result; elapsedMilliseconds=$fileWatch.ElapsedMilliseconds;
+            sha256=$admission.testSha256; nativeExitCode=$native.ExitCode; completed=$completion.completed;
             cleanupVerified=$completion.cleanupVerified; nativeEvidence=$native.EvidenceDirectory}
+        if ($null -ne $PairReference) { [pscustomobject]@{Row=$row; Native=$native} } else { $row }
+    }
+    $invoke={
+        param($Expected)
+        if ($filePairEnabled -and $Expected.file -ceq $filePairSelection[0].file) {
+            $pairAdmissions=@($filePairSelection | ForEach-Object { & $createFileAdmission $_ })
+            $filePairContext=New-TestFilePairContext -Admissions $pairAdmissions -AuthorityEnds $budget.AuthorityEnds.AddMilliseconds(-$CleanupReserveMs) -TimeoutMs $TimeoutMs -CleanupReserveMs 10000
+            $filePairResult=Invoke-TestFilePair -Context $filePairContext -InvokeMember $invokeAdmittedFile
+            foreach ($member in $filePairResult.Results) {
+                if ($null -ne $member) { $filePairRows.Add($member.Row.file,$member.Row) }
+            }
+            if (-not $filePairRows.ContainsKey($Expected.file)) { throw 'File pair lost its original first-member row; retained coordinator requires recovery.' }
+            if ($filePairResult.Stopped) {
+                $filePairRows[$Expected.file].stopDispatch=$true
+                $filePairRows[$Expected.file].pairCoordinatorFailures=@($filePairResult.Failures | ForEach-Object Message)
+                $filePairRows[$Expected.file].pairCoordinatorEvidence=[ordered]@{
+                    descriptor=$filePairResult.Context.DescriptorPin; outcomes=$filePairResult.Context.OutcomePin; errors=$filePairResult.ErrorPin}
+            }
+            $filePairRows[$Expected.file]
+        }
+        else { & $invokeAdmittedFile (& $createFileAdmission $Expected) $null $null }
     }
     $retain={
         param($Rows,$Final)
@@ -314,7 +366,7 @@ try {
         }
         if ($failures.Count) { throw [AggregateException]::new('Suite result retention failed.', $failures.ToArray()) }
     }
-    $suite=Invoke-TestSuiteFiles -Inventory $inventory -InvokeFile $invoke -RetainResults $retain
+    $suite=Invoke-TestSuiteFiles -Inventory $inventory -InvokeFile $invoke -RetainResults $retain -PreviouslyExecuted $filePairRows
     $current=@(Get-TestFileInventory -RepositoryRoot $repository)
     if ((Get-TestNativeDigest -Value $current) -cne (Get-TestNativeDigest -Value $inputInventory)) { throw 'Full test input inventory changed during execution.' }
     if ((Get-TestNativeDigest -Value @(Get-TestCandidateInputInventory -RepositoryRoot $repository)) -cne (Get-TestNativeDigest -Value $sourceInputs)) { throw 'Full source and packaged input inventory changed during execution.' }

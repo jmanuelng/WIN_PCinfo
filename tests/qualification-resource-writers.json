@@ -27,7 +27,7 @@
     },
     {
       "path": "tests/TestHarness.ps1",
-      "sha256": "84e217d0824b8dd291e22ce3686bfb748031c0bf2f00c01617e79921bca429e9"
+      "sha256": "77daf8d4574f7698475c6a776b5cdac5d7d9523ac85e2d582086bce8bddf9904"
     },
     {
       "path": "tests/AdditionalScopeSourceAdapters.ps1",
@@ -87,7 +87,7 @@
     },
     {
       "path": "tests/QualificationDiskBounds.ps1",
-      "sha256": "f75811c52b92869ce9c9f1b231718d63e4cfeff62d5980b3ad7c8c4d2b377ed6"
+      "sha256": "2a93938c6b63b293049bbe410834260d4ac2fcdbb86e5f7d4433c78f4e2b2045"
     },
     {
       "path": "tests/QualificationWorkspaceSampling.ps1",
@@ -130,7 +130,7 @@
   "executorInputs": [
     {
       "path": "tests/GeneratedApplicationNative.ps1",
-      "sha256": "c59d3e85e83170b4940c1170c1218ed41a937a25abb4f4effb45d9ceffc2dba9"
+      "sha256": "c13d414d82ca1ceb6c6b3fe6928a2bccbd54f938d62f34cf2cb0961cb9c42d0e"
     },
     {
       "path": "tests/GeneratedApplicationNativeSupervisor.cs",
@@ -158,7 +158,7 @@
     },
     {
       "path": "tests/Run-Tests.ps1",
-      "sha256": "577578e77a36b6398b6ece166886b3cb7ec90091eb22bba43ed2324b74e7e815"
+      "sha256": "0db5ac223507c7a369aef6b0f2cffdb95cd98d6adec5741574917bb49de51d9a"
     },
     {
       "path": "tests/QualificationFixtureProcess.ps1",
@@ -187,6 +187,10 @@
     {
       "path": "tests/QualificationInputLauncher.ps1",
       "sha256": "563624f25eca4ecb54e4d91264495fc3856177b074a0ddcbd763edfe56853cd8"
+    },
+    {
+      "path": "tests/TestFilePartition.ps1",
+      "sha256": "5d15df965bdf927dffe8ccca9639e9a118186f597e269051160f0892b615267f"
     }
   ]
 }

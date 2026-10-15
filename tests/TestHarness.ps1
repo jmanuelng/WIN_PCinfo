@@ -34,7 +34,7 @@ function Get-TestCandidateInputInventory {
         'tests/TestHarness.ps1','tests/StatusDeskEngine.Tests.ps1','tests/Invoke-AssessmentSafetyQualification.ps1',
         'tests/QualificationDiskBounds.ps1','tests/qualification-resource-writers.json',
         'tests/GeneratedApplicationNative.ps1','tests/GeneratedApplicationNativeSupervisor.cs',
-        'tests/Invoke-TestFile.ps1','tests/Run-Tests.ps1','tests/QualificationCleanup.ps1',
+        'tests/Invoke-TestFile.ps1','tests/Run-Tests.ps1','tests/TestFilePartition.ps1','tests/QualificationCleanup.ps1',
         'tests/QualificationCaseAdmission.ps1','tests/Invoke-QualificationCase.ps1','tests/Invoke-FocusedTest.ps1',
         'tests/QualificationFixtureProcess.ps1','tests/QualificationCapabilityProcess.ps1',
         'tests/QualificationInlineRepresentation.ps1','tests/QualificationRecipientViewingInterruption.ps1',

@@ -74,7 +74,7 @@ function Get-QualificationInventoryExecutorPaths {
         'tests/QualificationFixtureProcess.ps1', 'tests/QualificationCapabilityProcess.ps1',
         'tests/QualificationInlineRepresentation.ps1', 'tests/QualificationRecipientViewingInterruption.ps1',
         'tests/QualificationResourceBounds.ps1', 'tests/Invoke-AssessmentSafetyQualification.ps1',
-        'tests/QualificationInputLauncher.ps1'
+        'tests/QualificationInputLauncher.ps1', 'tests/TestFilePartition.ps1'
     )
 }
 
