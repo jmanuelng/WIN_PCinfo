@@ -174,7 +174,7 @@
     },
     {
       "path": "tests/QualificationRecipientViewingInterruption.ps1",
-      "sha256": "a70f05980c92211250756e77881f9fba4d3a27b38ba7a424b7901b275b97cd3a"
+      "sha256": "023aa84dfac0c379a1566377b615a61673932862f9b7f8b7c04f502dad1a7c74"
     },
     {
       "path": "tests/QualificationResourceBounds.ps1",

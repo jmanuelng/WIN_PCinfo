@@ -10,6 +10,7 @@ $script:controls=0;$script:budget=60000;$script:writeFault=''
 $originalFileLease=$env:WINPCINFO_TEST_FILE_LEASE;$originalCaseLease=$env:WINPCINFO_TEST_CASE_LEASE;$originalAuthority=$env:WINPCINFO_TEST_AUTHORITY_ENDS_UTC
 $script:childSelf=$null;$script:childArguments=@();$script:expireAtClose=$null
 $script:denyParent=$false;$script:admissionEnds=$null
+$script:journalRepresentation='Default'
 function Assert-RecipientControl {param([bool]$Condition,[string]$Message);if(-not $Condition){throw $Message};$script:controls++}
 function Write-RecipientResidualControlObservation {
     param([string]$Name,$Observation)
@@ -48,7 +49,17 @@ function Get-QualificationFixtureAdmission {param($RepositoryRoot);[pscustomobje
 function Get-TestNativeAdmissionContext {param($RepositoryRoot,$SelfIdentity);if($script:denyParent){throw 'Disclosed missing authenticated parent.'};$script:context}
 function Set-TestNativePrivateDirectory {param($Path);'synthetic-pure-sid'}
 function Get-QualificationFixtureOriginalIdentity {param($Process);[pscustomobject]@{Handle=$Process.SafeHandle;Record=[ordered]@{pid=456;fullBirthUtc='2030-01-01T00:00:00.1234567Z';originalSafeHandleValue=789}}}
-function Read-RunRecoveryJournal {param($LiteralPath);[IO.File]::ReadAllText($LiteralPath)|ConvertFrom-Json -DateKind String}
+function Read-RunRecoveryJournal {
+    param($LiteralPath)
+    $json=[IO.File]::ReadAllText($LiteralPath)
+    # Default matches the product reader, including its typed DateTime values.
+    $journal=if($script:journalRepresentation -ceq 'String'){$json|ConvertFrom-Json -DateKind String}else{$json|ConvertFrom-Json}
+    if($script:journalRepresentation -ceq 'Offset'){
+        $raw=$json|ConvertFrom-Json -DateKind String
+        $journal.owner.processStartUtc=[DateTimeOffset]::Parse($raw.owner.processStartUtc).ToOffset([TimeSpan]::FromMinutes(330))
+    }
+    $journal
+}
 $actualRecordWriter=${function:Write-QualificationFixtureRecord}
 function Write-QualificationFixtureRecord {param($Path,$Value);if([IO.Path]::GetFileName($Path) -ceq $script:writeFault){throw 'Disclosed private retention failure.'};& $actualRecordWriter -Path $Path -Value $Value;if([IO.Path]::GetFileName($Path) -ceq 'original-close-proof.json' -and $null -ne $script:expireAtClose){$script:expireAtClose.BudgetMs=0}}
 function New-RecipientControlFixture {
@@ -189,6 +200,24 @@ try{
     }
     $script:budget=29999;$caught=$null;try{$null=New-RecipientControlFixture}catch{$caught=$_};$script:budget=60000
     Assert-RecipientControl ($null -ne $caught) 'Creation without complete finite reserve must refuse.'
+    foreach($representation in @('Default','String','Offset')){
+        $script:journalRepresentation=$representation
+        try{
+            $fixture=New-RecipientControlFixture;$ready=Wait-RecipientViewingInterruptionReady $fixture.Owner
+            Assert-RecipientControl ($fixture.Owner.Ready -eq $ready -and -not $fixture.Owner.Unsafe) 'Typed DateTime, exact string and equivalent-offset journal births preserve all original owner ticks.'
+        }finally{$script:journalRepresentation='Default'}
+    }
+    foreach($fault in @('OneTickDifferent','MalformedStart','WrongTypeStart')){
+        $fixture=New-RecipientControlFixture;$journal=Read-RunRecoveryJournal $fixture.Ready.journalPath
+        switch($fault){
+            OneTickDifferent{$journal.owner.processStartUtc=$journal.owner.processStartUtc.AddTicks(1)}
+            MalformedStart{$journal.owner.processStartUtc='malformed-owner-start'}
+            WrongTypeStart{$journal.owner.processStartUtc=@{unexpected='type'}}
+        }
+        [IO.File]::WriteAllText($fixture.Ready.journalPath,($journal|ConvertTo-Json -Depth 8))
+        $caught=$null;try{$null=Wait-RecipientViewingInterruptionReady $fixture.Owner}catch{$caught=$_}
+        Assert-RecipientControl ($null -ne $caught -and $fixture.Owner.Unsafe -and -not $fixture.Process.Killed -and $null -eq $fixture.Owner.Ready) 'A one-tick owner mismatch, malformed start or wrong-typed start cannot authorize interruption.'
+    }
     $fixture=New-RecipientControlFixture;$ready=Wait-RecipientViewingInterruptionReady $fixture.Owner
     Assert-RecipientControl ([IO.File]::Exists($ready.artifactPath) -and $fixture.Owner.Ready -eq $ready) 'Actual readiness binds the existing registered plaintext and original process journal.'
     Interrupt-RecipientViewingOriginalProcess $fixture.Owner

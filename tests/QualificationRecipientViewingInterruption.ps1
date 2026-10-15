@@ -184,8 +184,15 @@ function Wait-RecipientViewingInterruptionReady {
         $journal=Read-RunRecoveryJournal -LiteralPath $ready.journalPath
         $artifact=@($journal.artifacts|Where-Object{ $_.kind -ceq 'EvidenceViewingArtifact' -and $_.artifactId -ceq $ready.artifactId -and $_.path -ceq $ready.artifactPath -and $_.cleanupAction -ceq 'Remove'})
         $workspace=@($journal.artifacts|Where-Object{ $_.kind -ceq 'Workspace' -and $_.path -ceq $ready.workspacePath})
+        $journalOwnerStartTicks=if($journal.owner.processStartUtc -is [DateTime]){
+            ([DateTime]$journal.owner.processStartUtc).ToUniversalTime().Ticks
+        }elseif($journal.owner.processStartUtc -is [DateTimeOffset]){
+            ([DateTimeOffset]$journal.owner.processStartUtc).UtcTicks
+        }else{
+            [DateTimeOffset]::Parse([string]$journal.owner.processStartUtc,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).UtcTicks
+        }
         if($journal.phase -cne 'Viewing' -or $journal.owner.processId -ne $Owner.Identity.pid -or
-            [DateTimeOffset]::Parse($journal.owner.processStartUtc).UtcTicks -ne [DateTimeOffset]::Parse($Owner.Identity.fullBirthUtc).UtcTicks -or
+            $journalOwnerStartTicks -ne [DateTimeOffset]::Parse($Owner.Identity.fullBirthUtc).UtcTicks -or
             $journal.owner.initiatingUserSid -cne $Owner.Pending.creator.OwnerSid -or $journal.planDigest -cne $Owner.Pending.packageSha256 -or
             $artifact.Count -ne 1 -or $workspace.Count -ne 1 -or -not [IO.File]::Exists($ready.artifactPath)){throw 'Recipient readiness journal does not identify its original child, package and real plaintext.'}
         Write-QualificationFixtureRecord -Path (Join-Path $Owner.Directory 'original-ready.json') -Value $ready
