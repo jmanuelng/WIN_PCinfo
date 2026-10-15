@@ -673,7 +673,7 @@ if ($Workflow -eq 'SignAndVerifyCandidate') {
                     -RelativePath 'docs/spec/releases/2.0.0-preview.1-signing-boundary.json'
                 if (-not [string]::IsNullOrWhiteSpace($signingPolicyPath)) {
                     $signingRepositoryRoot = [System.IO.Path]::GetFullPath(
-                        (Join-Path (Split-Path -Parent $signingPolicyPath) '..\..')
+                        (Join-Path (Split-Path -Parent $signingPolicyPath) '..\..\..')
                     )
                 }
                 $signingRequestSchema = Get-SigningBoundaryCatalogPath `

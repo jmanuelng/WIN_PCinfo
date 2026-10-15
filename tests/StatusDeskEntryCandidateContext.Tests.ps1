@@ -73,9 +73,18 @@ foreach($name in @('StatusDeskEntry.Tests.ps1','StatusDeskChoices.Tests.ps1')){
     Assert-EntryContext ($candidate.Count -eq 1) 'GUI must consume admitted candidate path.'
     $start=$candidate[0].Extent.EndOffset
     $end=$outer[0].Body.Extent.EndOffset-1
+    $source=$ast.Extent.Text
     if($name -eq 'StatusDeskChoices.Tests.ps1'){
         $calls=@($outer[0].Body.Statements|Where-Object{$_ -is [Management.Automation.Language.PipelineAst] -and $_.Extent.Text.StartsWith('Invoke-QualificationTestProcess ',[StringComparison]::Ordinal)})
         Assert-EntryContext ($calls.Count -eq 1) 'Choices must retain one coupled Entry launch.'
+        $guards=@($outer[0].Body.Statements|Where-Object{$_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text -ceq "if(`$LASTEXITCODE -ne 0){throw 'Generated GUI choice replacement and retry failed.'}"})
+        $suffix=@($outer[0].Body.Statements|Where-Object{$_.Extent.Text -ceq 'Assert-TestNativeRoleReady -NativeRole GeneratedApplication -RepositoryRoot $repositoryRoot'})
+        Assert-EntryContext ($guards.Count -eq 1 -and $suffix.Count -eq 1) 'Choices must retain its actual coupled exit guard and identify the later native GUI suffix.'
+        Assert-EntryContext ($guards[0].Extent.StartOffset -gt $calls[0].Extent.EndOffset -and $suffix[0].Extent.StartOffset -gt $guards[0].Extent.EndOffset) 'Only the GUI suffix after the coupled Entry result may be substituted.'
+        # Keep the actual coupled launch, exit guard and candidate finalizer.
+        # Later modal/native-role observations belong to the whole Choices test.
+        $suffixStart=$suffix[0].Extent.StartOffset
+        $source=$source.Remove($suffixStart,$end-$suffixStart).Insert($suffixStart,"# Later modal/native GUI workload substituted by this pure fixture.`n")
         $end=$calls[0].Extent.StartOffset
     }
     $workload=@'
@@ -84,7 +93,7 @@ foreach($name in @('StatusDeskEntry.Tests.ps1','StatusDeskChoices.Tests.ps1')){
     if($candidateContext.id -eq $probe.depth -and $probe.mode -in @('WorkFailure','Unsafe')){throw $probe.bodyFailure}
 
 '@
-    $source=$ast.Extent.Text.Remove($start,$end-$start).Insert($start,$workload.Replace('__SOURCE__',$(if($name -eq 'StatusDeskEntry.Tests.ps1'){'Entry'}else{'Choices'}))).
+    $source=$source.Remove($start,$end-$start).Insert($start,$workload.Replace('__SOURCE__',$(if($name -eq 'StatusDeskEntry.Tests.ps1'){'Entry'}else{'Choices'}))).
         Replace($imports[0].Extent.Text,'# Pure TestHarness APIs inherited from this fixture.')
     $replayTokens=$null;$replayErrors=$null
     $replayAst=[Management.Automation.Language.Parser]::ParseInput($source,$path,[ref]$replayTokens,[ref]$replayErrors)
