@@ -12,7 +12,23 @@ function Get-HarnessFinalization {
     $tokens=$null; $errors=$null
     $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $File),[ref]$tokens,[ref]$errors)
     if ($errors.Count) { throw 'Qualification harness did not parse.' }
-    $statement=@($ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.TryStatementAst] -and $null -ne $_.Finally })[-1]
+    # Candidate ownership adds an outer try/finally. Replay only the inner
+    # harness owner; a nested callback must not qualify a different boundary.
+    $statements=@($ast.FindAll({
+        param($node)
+        if ($node -isnot [Management.Automation.Language.TryStatementAst] -or $null -eq $node.Finally) { return $false }
+        $owners=0
+        foreach ($pipeline in $node.Finally.Statements) {
+            if ($pipeline -isnot [Management.Automation.Language.PipelineAst]) { continue }
+            foreach ($command in $pipeline.PipelineElements) {
+                if ($command -is [Management.Automation.Language.CommandAst] -and
+                    $command.GetCommandName() -ceq 'Complete-QualificationHarness') { $owners++ }
+            }
+        }
+        return $owners -eq 1
+    }, $true))
+    if ($statements.Count -ne 1) { throw 'Exactly one qualification harness finalization owner is required.' }
+    $statement=$statements[0]
     $source=$statement.Extent.Text
     $offset=$statement.Body.Extent.StartOffset-$statement.Extent.StartOffset
     [scriptblock]::Create($source.Remove($offset,$statement.Body.Extent.Text.Length).Insert($offset,'{'+$Body+'}'))
