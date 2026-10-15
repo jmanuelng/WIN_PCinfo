@@ -134,6 +134,12 @@ try {
     Assert-CaseControl $true 'only exact validated chain holds coexist'
     $unrelated=Join-Path $caseParent ('f'*32); $null=[IO.Directory]::CreateDirectory($unrelated); [IO.File]::WriteAllText((Join-Path $unrelated 'owned-pending.json'),'{}')
     Assert-CaseRefusal { Assert-GeneratedApplicationNativeReady -EvidenceParent $caseParent -AllowedPendingPaths $context.AllowedCasePendingPaths } 'unrelated active case hold refuses'
+    $parameterlessCase=Join-Path $repository 'tests/QualificationFixtureFinalizers.Tests.ps1'
+    [IO.File]::WriteAllText($parameterlessCase,'param()')
+    $emptyTailInvocation=ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$parameterlessCase)
+    Assert-CaseControl ($emptyTailInvocation.NamedParameters -is [Collections.IDictionary] -and $emptyTailInvocation.NamedParameters.Count -eq 0) 'original parameterless profile retains an empty named object with no argument tail'
+    Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$parameterlessCase,'-Unexpected','value') } 'parameterless profile still rejects an unknown named tail'
+    Assert-CaseRefusal { ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$parameterlessCase,'value') } 'parameterless profile still rejects a positional tail'
     $binding=ConvertTo-QualificationCaseInvocation -RepositoryRoot $repository -Arguments @('-NoLogo','-NoProfile','-File',$leaf,'-Choices:false','-Name','','-Items','one')
     $typed=$binding.NamedParameters
     $bound=& {param([switch]$Choices,[string]$Name,[string[]]$Items) [pscustomobject]@{Present=$PSBoundParameters.ContainsKey('Choices'); Value=[bool]$Choices; Name=$Name; Items=$Items}} @typed

@@ -142,7 +142,7 @@
     },
     {
       "path": "tests/QualificationCaseAdmission.ps1",
-      "sha256": "7d9a715e0af19a3ccbbd2f1a1216da746529ead5eccf0d7b4ea020750aaae55d"
+      "sha256": "a752f32f325a318e60642bbc7226fb6f7e31a696c2f8c8b3b7a848299f23f58f"
     },
     {
       "path": "tests/Invoke-TestFile.ps1",

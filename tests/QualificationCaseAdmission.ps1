@@ -87,7 +87,7 @@ function ConvertTo-QualificationCaseInvocation {
     $profile=Get-QualificationCaseProfile -RepositoryRoot $RepositoryRoot -Path $Arguments[$fileIndex+1]
     if (($profile.Apartment -eq 'Sta' -and -not $sta) -or ($profile.Apartment -eq 'NoSta' -and $sta)) { throw 'Qualification apartment differs from its enumerated profile.' }
     $ast=Assert-TestFileExecutableProtocol -Path $profile.Path
-    $tail=if ($Arguments.Count -gt $fileIndex+2) {@($Arguments[($fileIndex+2)..($Arguments.Count-1)])} else {@()}
+    $tail=@(if ($Arguments.Count -gt $fileIndex+2) { $Arguments[($fileIndex+2)..($Arguments.Count-1)] })
     $named=ConvertTo-TestNamedParameters -Ast $ast -Arguments $tail
     switch ($profile.RelativePath) {
         'build/Build.ps1' {
