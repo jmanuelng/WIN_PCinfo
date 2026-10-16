@@ -3,6 +3,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 . (Join-Path $PSScriptRoot 'RecoveryProcessOwnership.ps1')
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $testRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot ('.test-output/status-recovery-' + [guid]::NewGuid().ToString('N'))))
@@ -53,6 +54,8 @@ function Assert-GeneratedRecovery {
     if ($LASTEXITCODE -ne 0) { throw 'Generated recovery failed its terminal/no-collection assertions.' }
 }
 try {
+    $statusNonce=[guid]::NewGuid().ToString('N');$statusDirectory=Join-Path $repositoryRoot ('.test-output/original-creator/'+$statusNonce)
+    $statusContext=Get-TestNativeAdmissionContext -RepositoryRoot $repositoryRoot -SelfIdentity (Get-TestNativeSelfIdentity)
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = Join-Path $PSHOME 'pwsh.exe'
     $start.UseShellExecute = $false
@@ -60,8 +63,12 @@ try {
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
     foreach ($argument in @('-NoLogo','-NoProfile','-File',(Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1'),
-        '-RecoveryDestination',$destination,'-InterruptHandoffPath',$handoffPath)) { $start.ArgumentList.Add($argument) }
+        '-RecoveryDestination',$destination,'-InterruptHandoffPath',$handoffPath,'-RecoveryCreatorDirectory',$statusDirectory,
+        '-CandidatePath',$statusContext.Root.Admission.candidatePath,'-PreparedManifestPath',$statusContext.Root.Admission.preparedManifestPath,'-PreparedManifestSha256',$statusContext.Root.Admission.preparedManifestSha256)) { $start.ArgumentList.Add($argument) }
+    $statusOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot $repositoryRoot -TestPath $PSCommandPath -Profile StatusRecoveryParent -StartInfo $start -Nonce $statusNonce
+    Assert-QualificationOriginalCreatorCreation $statusOwner
     $child = [Diagnostics.Process]::Start($start)
+    Register-QualificationFixtureProcess -Owner $statusOwner -Process $child
     $null = $child.Handle
     $childOutput = $child.StandardOutput.ReadToEndAsync()
     $childError = $child.StandardError.ReadToEndAsync()
@@ -140,6 +147,8 @@ finally {
                 if (-not $child.WaitForExit(5000)) { throw 'Owned recovery application remains active.' }
                 if (-not $childOutput.Wait(5000) -or -not $childError.Wait(5000)) { throw 'Owned child output did not close within its finalization bound.' }
                 $finalOutput=@($childOutput.GetAwaiter().GetResult(),$childError.GetAwaiter().GetResult())
+                $retainedStatusOwner=Get-Variable statusOwner -ValueOnly -ErrorAction SilentlyContinue
+                if($null-ne$retainedStatusOwner){Save-QualificationOriginalCreatorTerminal -Owner $statusOwner -Disposition OriginalJobClosureRecovery -Forced $interrupted -StandardOutput $finalOutput[0] -StandardError $finalOutput[1] -StreamContract OriginalReadToEndStrings}
                 Assert-QualificationCleanupSignal -Output $finalOutput
                 if (-not $interrupted) { Assert-QualificationTestProcessResult -Output $finalOutput -ExitCode $child.ExitCode }
             }
@@ -152,23 +161,39 @@ finally {
             if (-not $recoveryCleanup.observationComplete) {
                 throw 'Preserve recovery state because exact-owned descendant observation was incomplete.'
             }
+            $retainedStatusOwner=Get-Variable statusOwner -ValueOnly -ErrorAction SilentlyContinue
+            if($null-ne$retainedStatusOwner){
+            Save-QualificationRecoveryOriginalTerminal -Owner $statusOwner -Role StatusWorker -Process $worker[0] -CreatorProcess $child -Disposition OriginalProductJobClosureAfterParentLoss
+            Save-QualificationRecoveryOriginalTerminal -Owner $statusOwner -Role StatusNested -Process $nested[0] -CreatorProcess $worker[0] -Disposition OriginalProductJobClosureAfterParentLoss
+            $unmapped=@($ownedProcesses|Where-Object {$_.Id-ne$worker[0].Id-and$_.Id-ne$nested[0].Id}|ForEach-Object{[ordered]@{pid=$_.Id;fullBirthUtc=$_.StartTime.ToUniversalTime().ToString('o');source='Original OS helper creator custody unavailable; recovery observation only.'}})
+            Write-QualificationFixtureRecord -Path (Join-Path $statusOwner.Directory 'recovery-extra-observations.json') -Value ([ordered]@{contract='win-pcinfo.recovery-observation-coverage/1.0.0';observations=$unmapped;originalCreatorClaim=$false})
+            }
             $recoveryCleanup.descendantsAbsent=$true
         },
         {
-            if (-not $recoveryCleanup.childOutputVerified -or -not $recoveryCleanup.descendantsAbsent) { throw 'Preserve recovery state until child output and descendant absence are verified.' }
-            if ($null -ne $recoveryBodyError -and (Test-QualificationCleanupUnverified -Exception $recoveryBodyError.Exception)) { throw 'Preserve unverified child recovery state.' }
             if ($null -ne $child -and -not $child.HasExited) { throw 'Preserve active application recovery state.' }
             foreach ($process in $ownedProcesses) {
                 if (-not $process.HasExited) { throw 'Preserve active descendant recovery state.' }
             }
+            if ($null -ne $child) { $child.Dispose() }
+            foreach ($process in $ownedProcesses) { $process.Dispose() }
+            $retainedStatusOwner=Get-Variable statusOwner -ValueOnly -ErrorAction SilentlyContinue
+            if($null-ne$retainedStatusOwner){
+                Complete-QualificationRecoveryOriginalTerminal -Owner $statusOwner -Role StatusWorker
+                Complete-QualificationRecoveryOriginalTerminal -Owner $statusOwner -Role StatusNested
+                Complete-QualificationOriginalCreatorOwner $statusOwner
+            }
+        },
+        {
+            $retainedStatusOwner=Get-Variable statusOwner -ValueOnly -ErrorAction SilentlyContinue
+            if ($null-ne$retainedStatusOwner-and(-not $retainedStatusOwner.Disposed -or $retainedStatusOwner.Unsafe)) { throw 'Preserve original crash custody before fixture deletion.' }
+            if (-not $recoveryCleanup.childOutputVerified -or -not $recoveryCleanup.descendantsAbsent) { throw 'Preserve recovery state until child output and descendant absence are verified.' }
+            if ($null -ne $recoveryBodyError -and (Test-QualificationCleanupUnverified -Exception $recoveryBodyError.Exception)) { throw 'Preserve unverified child recovery state.' }
+
             $resolved=[IO.Path]::GetFullPath($testRoot)
             if (-not $resolved.StartsWith($allowedRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'Recovery cleanup escaped its owned parent.' }
             if ([IO.Directory]::Exists($resolved)) { Remove-Item -LiteralPath $resolved -Recurse -Force }
             if ([IO.Directory]::Exists($resolved)) { throw 'Owned recovery directory absence remains unverified.' }
-        },
-        {
-            if ($null -ne $child) { $child.Dispose() }
-            foreach ($process in $ownedProcesses) { $process.Dispose() }
         }
     )
 }

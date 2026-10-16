@@ -1,20 +1,30 @@
 [CmdletBinding()]
-param([switch]$StaChild, [ValidateSet('RecoveryEarly','RecoveryReady','Viewing','Export')][string]$Scenario='RecoveryEarly')
+param([switch]$StaChild, [ValidateSet('RecoveryEarly','RecoveryReady','Viewing','Export')][string]$Scenario='RecoveryEarly',
+    [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+$repositoryRoot=Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateUseError=$null
+try {
 if(-not $StaChild){
+    if (-not $candidateContext.Prepared) {
+        $PreparedManifestPath=Join-Path $candidateContext.OwnedDirectory 'prepared-test-candidate.json'
+        [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+        $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
     foreach($case in @('RecoveryEarly','RecoveryReady','Viewing','Export')){
-        & (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -STA -File $PSCommandPath -StaChild -Scenario $case
+        Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @('-NoLogo','-NoProfile','-STA','-File',$PSCommandPath,'-StaChild','-Scenario',$case,
+            '-CandidatePath',$candidateContext.Path,'-PreparedManifestPath',$PreparedManifestPath,'-PreparedManifestSha256',$PreparedManifestSha256)
         if($LASTEXITCODE -ne 0){throw "Status desk cleanup gate failed: $case"}
     }
     return
 }
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
-$repositoryRoot=Split-Path -Parent $PSScriptRoot
-. (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidate=$candidateContext.Path
 $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),'(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 $moduleText=($regions | ForEach-Object {$_.Groups[2].Value}) -join "`n"
 foreach($region in $regions){. ([scriptblock]::Create($region.Groups[2].Value))}
@@ -58,6 +68,8 @@ $moduleText='[Threading.Thread]::Sleep(1200)' + "`n" + $moduleText
 $root=Join-Path ([IO.Path]::GetTempPath()) ('winpcinfo-cleanup-gate-'+[guid]::NewGuid().ToString('N'))
 $null=[IO.Directory]::CreateDirectory($root)
 $test=@{Window=$null;Session=$null;Lock=$null;Failure='';ActionSent=$false;ActionFinished=$false;Checked=$false;Ticks=0;SawView=$false}
+# Capture the actual harness assertion before dispatcher closures create their dynamic modules.
+$cleanupGateAssertEqual=${function:Assert-Equal}
 $watch=[Diagnostics.Stopwatch]::StartNew()
 $driver=[System.Windows.Threading.DispatcherTimer]::new()
 $driver.Interval=[TimeSpan]::FromMilliseconds(100)
@@ -110,7 +122,7 @@ try {
             $test.SawView=$true
             if($Scenario -eq 'Viewing' -and $null -eq $test.Lock){
                 $paths=@([IO.Directory]::EnumerateFiles($root,'*.view',[IO.SearchOption]::AllDirectories))
-                Assert-Equal 1 $paths.Count 'the existing package exposes only one temporary report'
+                & $cleanupGateAssertEqual 1 $paths.Count 'the existing package exposes only one temporary report'
                 $path=$paths[0]
                 $test.Lock=[IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
             }
@@ -127,9 +139,9 @@ try {
                 $action=if($Scenario -like 'Recovery*'){'RecoverViews'}else{'OpenExisting'}
                 $window.FindName($action).RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
                 if($Scenario -eq 'Export'){$window.FindName('SaveHtml').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))}
-                Assert-Equal $true ($window.FindName('Status').Text -like 'CleanupIncomplete*') ('the failed action reports cleanup uncertainty: '+$window.FindName('Status').Text+'; view observed: '+$test.SawView)
+                & $cleanupGateAssertEqual $true ($window.FindName('Status').Text -like 'CleanupIncomplete*') ('the failed action reports cleanup uncertainty: '+$window.FindName('Status').Text+'; view observed: '+$test.SawView)
                 foreach($name in @('Approve','SelectRecipient','SetupRecipient','OpenExisting','OpenReport','SaveHtml','ChangeChoices','Retry')){
-                    Assert-Equal $false $window.FindName($name).IsEnabled "$name cannot start new work after cleanup failure"
+                    & $cleanupGateAssertEqual $false $window.FindName($name).IsEnabled "$name cannot start new work after cleanup failure"
                 }
                 # Routed clicks cannot bypass disabled new-work controls.
                 foreach($name in @('ChangeChoices','Retry')){$window.FindName($name).RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))}
@@ -138,17 +150,17 @@ try {
             }
             $test.Ticks++
             if($test.Ticks -lt 20){return}
-            Assert-Equal $false $window.FindName('Approve').IsEnabled 'later preparation and terminal ticks cannot reopen approval'
-            Assert-Equal $true ($window.FindName('Status').Text -like 'CleanupIncomplete*') 'cleanup failure remains the truthful visible terminal state'
-            Assert-Equal $false $test.Session.Transport.State.CollectionStarted 'no collection starts even to another destination'
-            Assert-Equal $true $window.FindName('RecoverViews').IsEnabled 'deliberate cleanup recovery stays available'
-            Assert-Equal $true $window.FindName('Close').IsEnabled 'application close stays available'
+            & $cleanupGateAssertEqual $false $window.FindName('Approve').IsEnabled 'later preparation and terminal ticks cannot reopen approval'
+            & $cleanupGateAssertEqual $true ($window.FindName('Status').Text -like 'CleanupIncomplete*') 'cleanup failure remains the truthful visible terminal state'
+            & $cleanupGateAssertEqual $false $test.Session.Transport.State.CollectionStarted 'no collection starts even to another destination'
+            & $cleanupGateAssertEqual $true $window.FindName('RecoverViews').IsEnabled 'deliberate cleanup recovery stays available'
+            & $cleanupGateAssertEqual $true $window.FindName('Close').IsEnabled 'application close stays available'
             if($Scenario -eq 'RecoveryEarly'){
-                Assert-Equal $true ([IO.File]::Exists($view.artifactPath)) 'failed recovery retains registered plaintext for deliberate cleanup'
+                & $cleanupGateAssertEqual $true ([IO.File]::Exists($view.artifactPath)) 'failed recovery retains registered plaintext for deliberate cleanup'
                 $test.Lock.Dispose();$test.Lock=$null
                 $window.FindName('RecoverViews').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent))
-                Assert-Equal $false ([IO.File]::Exists($view.artifactPath)) 'the preserved recovery action can remove the unlocked owned plaintext'
-                Assert-Equal $false $window.FindName('Approve').IsEnabled 'successful recovery still requires a fresh invocation before assessment'
+                & $cleanupGateAssertEqual $false ([IO.File]::Exists($view.artifactPath)) 'the preserved recovery action can remove the unlocked owned plaintext'
+                & $cleanupGateAssertEqual $false $window.FindName('Approve').IsEnabled 'successful recovery still requires a fresh invocation before assessment'
             }
             $test.Checked=$true
             $window.Close()
@@ -180,3 +192,6 @@ finally {
     if([IO.Directory]::Exists($resolved)){[IO.Directory]::Delete($resolved,$true)}
 }
 Write-Output "PASS: $Scenario blocks collection after cleanup failure while preserving recovery and close."
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

@@ -1,17 +1,27 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'QualificationCleanup.ps1')
+. (Join-Path $PSScriptRoot 'TestHarness.ps1')
 Assert-QualificationCleanupReady
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $root = Join-Path $repositoryRoot ('.test-output/assessment-safety-' + [guid]::NewGuid().ToString('N'))
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateUseError=$null
+try {
+if (-not $candidateContext.Prepared) {
+    $PreparedManifestPath=Join-Path $candidateContext.OwnedDirectory 'prepared-test-candidate.json'
+    [IO.File]::WriteAllText($PreparedManifestPath,((New-PreparedTestCandidateManifest -RepositoryRoot $repositoryRoot -CandidatePath $candidateContext.Path) | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+    $PreparedManifestSha256=(Get-FileHash -LiteralPath $PreparedManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+$preparedInput=@{CandidatePath=$candidateContext.Path; PreparedManifestPath=$PreparedManifestPath; PreparedManifestSha256=$PreparedManifestSha256}
 $bodyError = $null
 try {
-    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Safety -ResultDirectory $root
-    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Workers -ResultDirectory $root
-    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Sources -ResultDirectory $root
-    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Cultures -ResultDirectory $root
+    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Safety -ResultDirectory $root @preparedInput
+    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Workers -ResultDirectory $root @preparedInput
+    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Sources -ResultDirectory $root @preparedInput
+    & (Join-Path $PSScriptRoot 'Invoke-AssessmentSafetyQualification.ps1') -Mode Cultures -ResultDirectory $root @preparedInput
 }
 catch { $bodyError = $_ }
 finally {
@@ -32,3 +42,6 @@ finally {
     if ([IO.Directory]::Exists($resolved)) { throw 'Assessment safety owned directory absence could not be verified.' }
     })
 }
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

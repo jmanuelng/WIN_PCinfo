@@ -33,6 +33,7 @@ $ownershipToken = [guid]::NewGuid().ToString('N')
 function Invoke-SigningBoundarySmoke { param($SignedScriptPath,$PowerShellPath) $true }
 $originalTrailer=(Get-Command New-SigningBoundarySyntheticTrailer).ScriptBlock
 . (Join-Path $writer 'src/Contracts.ps1')
+. (Join-Path $writer 'src/ProcessSupervisor.ps1')
 $main = Join-Path $writer 'src/ApplicationMain.ps1'
 $tokens=$null;$parseErrors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($main,[ref]$tokens,[ref]$parseErrors)

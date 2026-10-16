@@ -1,16 +1,22 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
-$hostPath = Resolve-WinPCInfoRuntime -ApplicationPath $candidate
-$root = Join-Path $repositoryRoot ('.test-output/contract-cultures-' + [guid]::NewGuid().ToString('N'))
-$null = [IO.Directory]::CreateDirectory($root)
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateUseError=$null
 try {
+$hostPath = Resolve-TestRuntime -ApplicationPath $candidate
+$root = Join-Path $repositoryRoot ('.test-output/contract-cultures-' + [guid]::NewGuid().ToString('N'))
+$fixtureRootCreated=$false
+$fixtureBodyError=$null
+try {
+    $null=New-Item -ItemType Directory -Path $root -ErrorAction Stop
+    $fixtureRootCreated=$true
     $record = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'fixtures/contract-positive.json') -Raw | ConvertFrom-Json -Depth 30
     $record.observations[0].value = 'Español | 日本語 | العربية | İı | 🔒 | é | "quoted"'
     $positive = Join-Path $root 'unicode.json'
@@ -49,8 +55,18 @@ exit $LASTEXITCODE
         Write-Output "PASS: $culture redirected UTF-8/Unicode JSON, ANSI exclusion and prohibited-marker transforms."
     }
 }
+catch { $fixtureBodyError=$_ }
 finally {
+    Complete-QualificationHarness -BodyError $fixtureBodyError -Cleanup @({
+    if ($null -ne $fixtureBodyError -and (Test-QualificationCleanupUnverified -Exception $fixtureBodyError.Exception)) { throw 'Preserve culture fixtures until owned cleanup is verified.' }
+    if (-not $fixtureRootCreated) { return }
     $resolved = [IO.Path]::GetFullPath($root)
     if ([IO.Path]::GetDirectoryName($resolved) -ne [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))) { throw 'Culture test cleanup escaped its parent.' }
+    if ([IO.Directory]::Exists($resolved) -and ([IO.File]::GetAttributes($resolved) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Culture fixture root identity is ambiguous.' }
     if ([IO.Directory]::Exists($resolved)) { [IO.Directory]::Delete($resolved, $true) }
+    if ([IO.Directory]::Exists($resolved)) { throw 'Owned culture fixture absence remains unverified.' }
+    })
 }
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

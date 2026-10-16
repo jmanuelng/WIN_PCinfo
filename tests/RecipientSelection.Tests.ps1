@@ -1,12 +1,17 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 . (Join-Path $repositoryRoot 'src/Contracts.ps1')
 . (Join-Path $repositoryRoot 'src/ContractValidator.ps1')
 . (Join-Path $repositoryRoot 'src/EvidenceWorkspace.ps1')
@@ -74,7 +79,6 @@ try {
         [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($recordBytes)
         [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($reportBytes)
     }
-    & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
     $result = Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
         '-Mode', 'Automation', '-RequestPath', $requestPath,
         '-PreparationFixturePath', $preparationPath
@@ -154,4 +158,9 @@ finally {
 
 Assert-Equal $false ([System.IO.Directory]::Exists($testRoot)) `
     'recipient selection validation removes every synthetic profile and request'
-Write-Output 'PASS: zero or one fingerprint-confirmed recipient is frozen before collection.'
+$candidateSuccessMessages.Add('PASS: zero or one fingerprint-confirmed recipient is frozen before collection.')
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

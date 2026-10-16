@@ -9156,7 +9156,18 @@
       "defectRetest": [],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-2",
@@ -9277,7 +9288,18 @@
       "nextOwner": "#200/#155; #160/#161/#163 live and release",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-3",
@@ -9414,7 +9436,18 @@
       "nextOwner": "#200/#155; #160/#161/#163 live and release",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-4",
@@ -9487,7 +9520,18 @@
       "defectRetest": [],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-5",
@@ -9579,7 +9623,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-6",
@@ -9652,7 +9707,18 @@
       "defectRetest": [],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-7",
@@ -9758,7 +9824,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-8",
@@ -9850,7 +9927,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-9",
@@ -9950,7 +10038,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-10",
@@ -10053,7 +10152,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-11",
@@ -10135,7 +10245,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-12",
@@ -10247,7 +10368,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-13",
@@ -10473,7 +10605,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-14",
@@ -10667,7 +10810,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-15",
@@ -10877,7 +11031,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-16",
@@ -11105,7 +11270,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-17",
@@ -11297,7 +11473,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-18",
@@ -11360,7 +11547,18 @@
       "defectRetest": [],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-19",
@@ -11567,7 +11765,18 @@
       ],
       "nextOwner": "root / bounded owning correction; then #158/#161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-20",
@@ -11952,7 +12161,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-21",
@@ -12337,7 +12557,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-22",
@@ -12470,7 +12701,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-23",
@@ -12603,7 +12845,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-24",
@@ -12819,7 +13072,18 @@
       ],
       "nextOwner": "root / bounded owning correction; then #158/#161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-25",
@@ -13057,7 +13321,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-26",
@@ -13239,7 +13514,18 @@
       "nextOwner": "Remaining accountable slices; #160/#161 live; #191/#158 resource/aggregate",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-27",
@@ -13458,7 +13744,18 @@
       "nextOwner": "#200/#155; #160/#161/#163 live and release",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-28",
@@ -13687,7 +13984,18 @@
       "nextOwner": "#200/#155; #160/#161/#163 live and release",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-29",
@@ -13751,7 +14059,18 @@
       "defectRetest": [],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-30",
@@ -13816,7 +14135,18 @@
       "defectRetest": [],
       "nextOwner": "T23",
       "nextAction": "Complete allocated implementation and external gates; private handoff is independent of public release work.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-31",
@@ -13885,7 +14215,18 @@
       "defectRetest": [],
       "nextOwner": "T23, T28, T29",
       "nextAction": "Complete allocated implementation and external gates; private handoff is independent of public release work.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-32",
@@ -14078,7 +14419,18 @@
       "nextOwner": "#200/#155; #160/#161/#163 live and release",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "GUI134-33",
@@ -14162,7 +14514,18 @@
       ],
       "nextOwner": "T22, T23, T28, T29",
       "nextAction": "Complete allocated implementation and external gates; private handoff is independent of public release work.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "CAP-0001",
@@ -21092,7 +21455,7 @@
     {
       "id": "ID37-31",
       "kind": "ImplementationDecision",
-      "requirement": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate\u2014not an unbundled developer execution\u2014is the artifact validated and published.",
+      "requirement": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate—not an unbundled developer execution—is the artifact validated and published.",
       "accountableTickets": [
         "T21"
       ],
@@ -21107,7 +21470,7 @@
           "state": "Blocked",
           "execution": "NotStarted",
           "method": "Exact admitted delivered candidate, actual source/workflow/cleanup observation; session packet row and family crosswalk.",
-          "expected": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate\u2014not an unbundled developer execution\u2014is the artifact validated and published.",
+          "expected": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate—not an unbundled developer execution—is the artifact validated and published.",
           "observed": "No live operation performed in #158.",
           "evidence": "issue-161-session-packet.md",
           "owner": "#161 and applicable #162/#163/#164",
@@ -21117,7 +21480,7 @@
           "state": "Pass",
           "execution": "Executed",
           "method": "Existing full repository suite; controlled generated-app sources and exported safety seams. Exact checks and historical evidence resolve through accountableTickets.",
-          "expected": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate\u2014not an unbundled developer execution\u2014is the artifact validated and published.",
+          "expected": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate—not an unbundled developer execution—is the artifact validated and published.",
           "observed": "8 assigned files Pass; 0 Fail; 0 NotRun. These are scoped synthetic/exported checks; actual live/final-release clauses remain pending. The integrated gate cannot pass with F158-1.",
           "evidence": "issue-158-integrated-results.json",
           "owner": "#158",
@@ -21139,7 +21502,7 @@
           "candidate": "C158-AFK207",
           "sourceRevision": "e0e3aaaf732dbaa1cb7ecd2477254af726f42f72",
           "method": "Actual full207 functional tests plus current scope/state witnesses; owner-qualified evidence is independent of whole-requirement acceptance.",
-          "expected": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate\u2014not an unbundled developer execution\u2014is the artifact validated and published.",
+          "expected": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate—not an unbundled developer execution—is the artifact validated and published.",
           "observed": "All referenced current functional files pass. T20 automated slice passes; #155 negative witnesses remain open where T21 is allocated. Live, aggregate, quality and release clauses are not inferred from fixture results.",
           "evidence": "afk-full207-functional-gate.json",
           "exactFiles": [
@@ -21162,7 +21525,7 @@
           "candidate": "C158-R1",
           "sourceRevision": "621f95f3fa65004a62252e4f4edb350dcb505d45",
           "method": "Complete current gate after all owning corrections; separate affected sampler/readiness checks are available",
-          "expected": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate\u2014not an unbundled developer execution\u2014is the artifact validated and published.",
+          "expected": "Distribution: Keep source modular and generate one deterministic primary PowerShell application for release. Supporting schemas, catalogs, definitions, presentation resources, and approved helpers remain explicit authenticated package resources. The generated candidate—not an unbundled developer execution—is the artifact validated and published.",
           "observed": "The complete c5d7 gate failed and is preserved under frozenGate. Corrected harness input hashes prevent relabeling those passes current. See only the exact affected checks in the correction evidence.",
           "evidence": "issue-158-harness-correction.json",
           "owner": "root / owning correction and final qualification",
@@ -22059,7 +22422,7 @@
     {
       "id": "TD37-1",
       "kind": "TestingDecision",
-      "requirement": "Primary seam: Test the complete Assessment Run through the generated public application and its documented request/progress/terminal interfaces. Assertions target observable scope, consent, side effects, progress, evidence, reports, package behavior, cleanup, and exit outcomes\u2014not internal function calls.",
+      "requirement": "Primary seam: Test the complete Assessment Run through the generated public application and its documented request/progress/terminal interfaces. Assertions target observable scope, consent, side effects, progress, evidence, reports, package behavior, cleanup, and exit outcomes—not internal function calls.",
       "accountableTickets": [
         "T24",
         "T27"
@@ -22076,7 +22439,7 @@
           "state": "Blocked",
           "execution": "NotStarted",
           "method": "Exact admitted delivered candidate, actual source/workflow/cleanup observation; session packet row and family crosswalk.",
-          "expected": "Primary seam: Test the complete Assessment Run through the generated public application and its documented request/progress/terminal interfaces. Assertions target observable scope, consent, side effects, progress, evidence, reports, package behavior, cleanup, and exit outcomes\u2014not internal function calls.",
+          "expected": "Primary seam: Test the complete Assessment Run through the generated public application and its documented request/progress/terminal interfaces. Assertions target observable scope, consent, side effects, progress, evidence, reports, package behavior, cleanup, and exit outcomes—not internal function calls.",
           "observed": "No live operation performed in #158.",
           "evidence": "issue-161-session-packet.md",
           "owner": "#161; #160 first milestone",
@@ -22086,7 +22449,7 @@
           "state": "Fail",
           "execution": "Executed",
           "method": "Existing full repository suite; controlled generated-app sources and exported safety seams. Exact checks and historical evidence resolve through accountableTickets.",
-          "expected": "Primary seam: Test the complete Assessment Run through the generated public application and its documented request/progress/terminal interfaces. Assertions target observable scope, consent, side effects, progress, evidence, reports, package behavior, cleanup, and exit outcomes\u2014not internal function calls.",
+          "expected": "Primary seam: Test the complete Assessment Run through the generated public application and its documented request/progress/terminal interfaces. Assertions target observable scope, consent, side effects, progress, evidence, reports, package behavior, cleanup, and exit outcomes—not internal function calls.",
           "observed": "175 assigned files Pass; 9 Fail; 0 NotRun. These are scoped synthetic/exported checks; actual live/final-release clauses remain pending. The integrated gate cannot pass with F158-1.",
           "evidence": "issue-158-integrated-results.json",
           "owner": "#158",
@@ -22284,7 +22647,7 @@
           "candidate": "C158-R1",
           "sourceRevision": "621f95f3fa65004a62252e4f4edb350dcb505d45",
           "method": "Complete current gate after all owning corrections; separate affected sampler/readiness checks are available",
-          "expected": "Primary seam: Test the complete Assessment Run through the generated public application and its documented request/progress/terminal interfaces. Assertions target observable scope, consent, side effects, progress, evidence, reports, package behavior, cleanup, and exit outcomes\u2014not internal function calls.",
+          "expected": "Primary seam: Test the complete Assessment Run through the generated public application and its documented request/progress/terminal interfaces. Assertions target observable scope, consent, side effects, progress, evidence, reports, package behavior, cleanup, and exit outcomes—not internal function calls.",
           "observed": "The complete c5d7 gate failed and is preserved under frozenGate. Corrected harness input hashes prevent relabeling those passes current. See only the exact affected checks in the correction evidence.",
           "evidence": "issue-158-harness-correction.json",
           "owner": "root / owning correction and final qualification",
@@ -26716,7 +27079,7 @@
     {
       "id": "TD37-24",
       "kind": "TestingDecision",
-      "requirement": "Release artifact: Validate the exact final signed or attested artifact\u2014not only modular source\u2014for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
+      "requirement": "Release artifact: Validate the exact final signed or attested artifact—not only modular source—for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
       "accountableTickets": [
         "T21",
         "T27",
@@ -26735,7 +27098,7 @@
           "state": "Blocked",
           "execution": "NotStarted",
           "method": "Exact admitted delivered candidate, actual source/workflow/cleanup observation; session packet row and family crosswalk.",
-          "expected": "Release artifact: Validate the exact final signed or attested artifact\u2014not only modular source\u2014for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
+          "expected": "Release artifact: Validate the exact final signed or attested artifact—not only modular source—for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
           "observed": "No live operation performed in #158.",
           "evidence": "issue-161-session-packet.md",
           "owner": "#161 and applicable #162/#163/#164",
@@ -26745,7 +27108,7 @@
           "state": "Pass",
           "execution": "Executed",
           "method": "Existing full repository suite; controlled generated-app sources and exported safety seams. Exact checks and historical evidence resolve through accountableTickets.",
-          "expected": "Release artifact: Validate the exact final signed or attested artifact\u2014not only modular source\u2014for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
+          "expected": "Release artifact: Validate the exact final signed or attested artifact—not only modular source—for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
           "observed": "8 assigned files Pass; 0 Fail; 0 NotRun. These are scoped synthetic/exported checks; actual live/final-release clauses remain pending. The integrated gate cannot pass with F158-1.",
           "evidence": "issue-158-integrated-results.json",
           "owner": "#158",
@@ -26767,7 +27130,7 @@
           "candidate": "C158-AFK207",
           "sourceRevision": "e0e3aaaf732dbaa1cb7ecd2477254af726f42f72",
           "method": "Actual full207 functional tests plus current scope/state witnesses; owner-qualified evidence is independent of whole-requirement acceptance.",
-          "expected": "Release artifact: Validate the exact final signed or attested artifact\u2014not only modular source\u2014for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
+          "expected": "Release artifact: Validate the exact final signed or attested artifact—not only modular source—for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
           "observed": "All referenced current functional files pass. T20 automated slice passes; #155 negative witnesses remain open where T21 is allocated. Live, aggregate, quality and release clauses are not inferred from fixture results.",
           "evidence": "afk-full207-functional-gate.json",
           "exactFiles": [
@@ -26790,7 +27153,7 @@
           "candidate": "C158-R1",
           "sourceRevision": "621f95f3fa65004a62252e4f4edb350dcb505d45",
           "method": "Complete current gate after all owning corrections; separate affected sampler/readiness checks are available",
-          "expected": "Release artifact: Validate the exact final signed or attested artifact\u2014not only modular source\u2014for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
+          "expected": "Release artifact: Validate the exact final signed or attested artifact—not only modular source—for provenance, resource digests, dependency inventory, runtime compatibility, launch, collection, package protection/opening, reporting, cleanup, capability matrix, and beginner documentation.",
           "observed": "The complete c5d7 gate failed and is preserved under frozenGate. Corrected harness input hashes prevent relabeling those passes current. See only the exact affected checks in the correction evidence.",
           "evidence": "issue-158-harness-correction.json",
           "owner": "root / owning correction and final qualification",
@@ -32006,7 +32369,18 @@
       "defectRetest": [],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "ID134-2",
@@ -32347,7 +32721,18 @@
       ],
       "nextOwner": "root / bounded owning correction; then #158/#161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "ID134-3",
@@ -32473,7 +32858,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "ID134-4",
@@ -32596,7 +32992,18 @@
       "nextOwner": "#200/#155; #160/#161/#163 live and release",
       "nextAction": "Preserve historical failures and complete the explicitly recorded remaining owner acceptance; current T20 evidence does not close the whole requirement.",
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "ID134-5",
@@ -32715,7 +33122,18 @@
       ],
       "nextOwner": "#158 then #161",
       "nextAction": "Qualify current automated evidence, resolve defects in their owners, then collect actual delivered-app acceptance.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "ID134-6",
@@ -33034,7 +33452,18 @@
       ],
       "nextOwner": "root / bounded owning correction; then #158/#161",
       "nextAction": "Root reconciles expected Failed versus observed TlsAuthenticationFailed without bypassing certificate rejection or weakening typed outcomes.",
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "APP134-1",
@@ -33370,7 +33799,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "APP134-2",
@@ -33704,7 +34144,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "APP134-3",
@@ -34273,7 +34724,18 @@
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "APP134-4",
@@ -34361,7 +34823,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "APP134-5",
@@ -34912,7 +35385,18 @@
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "APP134-6",
@@ -35236,7 +35720,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "APP134-7",
@@ -35568,7 +36063,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "APP134-8",
@@ -35898,7 +36404,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "LIVE134-1",
@@ -36013,7 +36530,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "LIVE134-2",
@@ -36227,7 +36755,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "LIVE134-3",
@@ -36555,7 +37094,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "LIVE134-4",
@@ -36673,7 +37223,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "LIVE134-5",
@@ -36775,7 +37336,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "LIVE134-6",
@@ -37010,7 +37582,18 @@
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
       "frozenCandidate": "C158",
-      "currentEngineeringCandidate": "C158-AFK207"
+      "currentEngineeringCandidate": "C158-AFK207",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "LIVE134-7",
@@ -37103,7 +37686,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "LIVE134-8",
@@ -37191,7 +37785,18 @@
         "nextAction": "Resolve measured budget failure and measurement boundaries without threshold waiver or environmental reclassification.",
         "sourceRevision": "c5d7e9ad1dbdc3857c9eb55ae51e414bbe6aa6f7"
       },
-      "frozenCandidate": "C158"
+      "frozenCandidate": "C158",
+      "currentPreparation": {
+        "sourceBaseline": "d3847ded77e596527b21b617b7501290df3b5ebc",
+        "integratedSourceRevision": null,
+        "candidate": null,
+        "state": "PendingQualification",
+        "execution": "NotStarted",
+        "method": "Documentation preparation and static cross-reference inspection only",
+        "evidence": "issue-161-session-packet.md",
+        "owner": "#158 preparation; #160/#161 actual client acceptance",
+        "nextAction": "Bind the repaired integrated cohort and exact final signed package; satisfy packet readiness conditions, then execute applicable LIVE134 checks with private ownership/timing/source evidence. Preserve all historical results and unperformed live/release clauses."
+      }
     },
     {
       "id": "CMP-0001",
@@ -45207,5 +45812,26 @@
     "clientAcceptance": false,
     "deliveredApplicationAccepted": false
   },
-  "currentAfkDeadlineUtc": "2026-10-04T01:38:27Z"
+  "currentAfkDeadlineUtc": "2026-10-04T01:38:27Z",
+  "renewedEngineeringCheckpoint": {
+    "authorityStartedUtc": "2026-10-06T04:58:52Z",
+    "authorityExpiresUtc": "2026-10-11T04:58:52Z",
+    "earlierStop": "Qualified application with approved GUI ready for user Windows 11 testing",
+    "preRegisterIntegrationRevision": "e67e9b01be0203a85a638172ff3150e0d68ae68f",
+    "state": "ParallelImplementationAndControlledDiagnosis",
+    "originalFullSuite": "213 executed, 210 Pass, 3 Fail; candidate drift and unsafe outcome preserved",
+    "scopedRecovery": "Exact old task retired; original unsafe holds retained byte-for-byte under historical names; no original acceptance change",
+    "currentIntegratedQualification": "Pending",
+    "controlledAuditPolicy": "One scoped pass; historical privacy failure cause remains unresolved",
+    "actualClientGuiAcceptance": "NotStarted",
+    "privateHandoff": "Pending exact final artifact readiness and applicable signing/admission",
+    "owners": {
+      "orchestration": "#158",
+      "candidateIsolation": "#209",
+      "policyInventoryDiagnosis": "#210",
+      "clientAcceptance": "#160/#161"
+    },
+    "evidence": "issue-161-session-packet.md",
+    "historicalOwnerSummaryAndDeadline": "Existing currentAfkOwnerSummary/currentAfkDeadlineUtc fields describe earlier authority; this renewed checkpoint supersedes their operational instructions only."
+  }
 }

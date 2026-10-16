@@ -119,6 +119,13 @@ namespace WinPCInfo.ProcessSupervisor
     public sealed class NativeRunResult
     {
         public bool Started { get; set; }
+        public bool ProcessCreated { get; set; }
+        public uint OriginalProcessId { get; set; }
+        public long OriginalCreationFileTime { get; set; }
+        public bool OriginalTerminalObserved { get; set; }
+        public bool RetainedOwnedHandles { get; set; }
+        public bool ForcedOwnedCleanup { get; set; }
+        public bool UnknownJobAccounting { get; set; }
         public int ExitCode { get; set; }
         public NativeFailureStage FailureStage { get; set; }
         public int NativeError { get; set; }
@@ -171,6 +178,17 @@ namespace WinPCInfo.ProcessSupervisor
     public static class NativeRunner
     {
         private const uint CREATE_SUSPENDED = 0x00000004;
+        private static readonly object releaseHelpGate = new object();
+        private static readonly List<IntPtr[]> retainedReleaseHelpOwners = new List<IntPtr[]>();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetStdHandle(int selector);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr source,
+            IntPtr targetProcess, out IntPtr copy, uint access, bool inherit, uint options);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetProcessTimes(IntPtr process, out long creation,
+            out long exit, out long kernel, out long user);
         private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
         private const uint CREATE_NO_WINDOW = 0x08000000;
         private const uint STARTF_USESTDHANDLES = 0x00000100;
@@ -427,12 +445,49 @@ namespace WinPCInfo.ProcessSupervisor
             int cancellationGraceMilliseconds, int terminationVerificationMilliseconds,
             bool simulateJobIncompatible)
         {
+            return RunCore(executable, arguments, workingDirectory, environment, deadlineMilliseconds,
+                standardOutputLimit, standardErrorLimit, cancellationToken, cancellationEvent,
+                cancellationGraceMilliseconds, terminationVerificationMilliseconds, simulateJobIncompatible, false);
+        }
+
+        // This is a closed release Help operation, not a collector operation or
+        // an arbitrary argument/environment gateway. Existing collector Run is unchanged.
+        public static NativeRunResult RunReleaseHelp(string executable, string candidate)
+        {
+            if (!System.Threading.Monitor.TryEnter(releaseHelpGate))
+                throw new InvalidOperationException("Release Help already has an active owner.");
+            try
+            {
+                if (retainedReleaseHelpOwners.Count != 0)
+                {
+                    var exception = new InvalidOperationException("Release Help ownership remains unverified.");
+                    exception.Data["OwnedCleanupUnverified"] = true;
+                    exception.Data["ReleaseHelpSmokeOwnershipUnverified"] = true;
+                    throw exception;
+                }
+                return RunCore(executable, new[] { "-NoLogo", "-NoProfile", "-File", candidate,
+                    "-Workflow", "Help" }, null, null, 15000, 16777216, 16777216,
+                    System.Threading.CancellationToken.None, null, 0, 2000, false, true);
+            }
+            finally { System.Threading.Monitor.Exit(releaseHelpGate); }
+        }
+
+        private static NativeRunResult RunCore(
+            string executable, string[] arguments, string workingDirectory,
+            IDictionary<string, string> environment, int deadlineMilliseconds,
+            int standardOutputLimit, int standardErrorLimit,
+            System.Threading.CancellationToken cancellationToken,
+            System.Threading.EventWaitHandle cancellationEvent,
+            int cancellationGraceMilliseconds, int terminationVerificationMilliseconds,
+            bool simulateJobIncompatible, bool releaseHelp)
+        {
             var result = new NativeRunResult { FailureStage = NativeFailureStage.None, ExitCode = -1,
                 StandardOutput = Array.Empty<byte>(), StandardError = Array.Empty<byte>(),
                 CancellationMode = NativeCancellationMode.None };
             IntPtr job = IntPtr.Zero, stdoutRead = IntPtr.Zero, stdoutWrite = IntPtr.Zero;
             IntPtr stderrRead = IntPtr.Zero, stderrWrite = IntPtr.Zero, environmentBlock = IntPtr.Zero;
             PROCESS_INFORMATION process = new PROCESS_INFORMATION();
+            IntPtr inheritedInput = IntPtr.Zero;
             int peakActive = 0;
             try
             {
@@ -459,16 +514,37 @@ namespace WinPCInfo.ProcessSupervisor
                     !SetHandleInformation(stderrRead, HANDLE_FLAG_INHERIT, 0))
                 { result.FailureStage = NativeFailureStage.CreateOutputPipes; result.NativeError = Marshal.GetLastWin32Error(); return result; }
 
+                if (releaseHelp)
+                {
+                    IntPtr input = GetStdHandle(-10);
+                    if (input != IntPtr.Zero && input != new IntPtr(-1) &&
+                        !DuplicateHandle(new IntPtr(-1), input, new IntPtr(-1), out inheritedInput, 0, true, 2))
+                    { result.FailureStage = NativeFailureStage.CreateOutputPipes; result.NativeError = Marshal.GetLastWin32Error(); return result; }
+                }
                 var startup = new STARTUPINFO { cb = Marshal.SizeOf<STARTUPINFO>(),
-                    dwFlags = STARTF_USESTDHANDLES, hStdInput = IntPtr.Zero,
+                    dwFlags = STARTF_USESTDHANDLES, hStdInput = inheritedInput,
                     hStdOutput = stdoutWrite, hStdError = stderrWrite };
                 var commandLine = new StringBuilder(QuoteArgument(executable));
                 foreach (string argument in arguments) commandLine.Append(' ').Append(QuoteArgument(argument));
-                environmentBlock = CreateEnvironmentBlock(environment);
-                uint flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
+                if (!releaseHelp) environmentBlock = CreateEnvironmentBlock(environment);
+                uint flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | (releaseHelp ? 0 : CREATE_NO_WINDOW);
                 if (!CreateProcess(executable, commandLine, IntPtr.Zero, IntPtr.Zero, true, flags,
                     environmentBlock, workingDirectory, ref startup, out process))
                 { result.FailureStage = NativeFailureStage.CreateProcess; result.NativeError = Marshal.GetLastWin32Error(); return result; }
+                result.ProcessCreated = true;
+                result.OriginalProcessId = process.dwProcessId;
+                if (releaseHelp)
+                {
+                    long creation, exited, kernel, user;
+                    if (!GetProcessTimes(process.hProcess, out creation, out exited, out kernel, out user))
+                    {
+                        result.FailureStage = NativeFailureStage.CreateProcess;
+                        result.NativeError = Marshal.GetLastWin32Error();
+                        result.CompleteOwnedTreeAbsent = TerminateProcessWithin(process.hProcess, terminationVerificationMilliseconds);
+                        return result;
+                    }
+                    result.OriginalCreationFileTime = creation;
+                }
                 if (simulateJobIncompatible)
                 {
                     // The conformance fixture models the documented Windows
@@ -601,17 +677,35 @@ namespace WinPCInfo.ProcessSupervisor
                 }
 
                 uint exitCode;
-                if (GetExitCodeProcess(process.hProcess, out exitCode)) result.ExitCode = unchecked((int)exitCode);
+                if (releaseHelp)
+                {
+                    result.OriginalTerminalObserved = WaitForSingleObject(process.hProcess, 0) == WAIT_OBJECT_0;
+                    if (result.OriginalTerminalObserved && GetExitCodeProcess(process.hProcess, out exitCode))
+                        result.ExitCode = unchecked((int)exitCode);
+                    else if (result.FailureStage == NativeFailureStage.None)
+                    { result.FailureStage = NativeFailureStage.WaitForProcess; result.NativeError = Marshal.GetLastWin32Error(); }
+                }
+                else if (GetExitCodeProcess(process.hProcess, out exitCode)) result.ExitCode = unchecked((int)exitCode);
 
                 // A successful root may still have descendants. Terminating the
                 // job after the root exits is deliberate: collectors return data,
                 // not background services. The accounting query is the kernel's
                 // proof that every process assigned to this owned tree is gone.
+                if (releaseHelp)
+                {
+                    // A naturally exited Help root is insufficient when Job
+                    // accounting is unknown or descendants still require force.
+                    // Keep that original disposition even if final accounting is zero.
+                    uint remaining = ActiveProcessCount(job);
+                    if (remaining == UInt32.MaxValue) result.UnknownJobAccounting = true;
+                    else if (remaining != 0) result.ForcedOwnedCleanup = true;
+                }
                 TerminateJobObject(job, 0xee);
                 int accountingAttempts = Math.Max(1, terminationVerificationMilliseconds / 10);
                 for (int attempt = 0; attempt < accountingAttempts; attempt++)
                 {
                     uint active = ActiveProcessCount(job);
+                    if (releaseHelp && active == UInt32.MaxValue) result.UnknownJobAccounting = true;
                     if (active != UInt32.MaxValue) peakActive = Math.Max(peakActive, (int)active);
                     if (active == 0) { result.CompleteOwnedTreeAbsent = true; break; }
                     System.Threading.Thread.Sleep(10);
@@ -643,8 +737,27 @@ namespace WinPCInfo.ProcessSupervisor
                 result.StandardErrorExceeded = stderr.Exceeded;
                 return result;
             }
+            catch (Exception failure)
+            {
+                if (releaseHelp)
+                {
+                    failure.Data["OwnedCleanupUnverified"] = true;
+                    failure.Data["ReleaseHelpSmokeOwnershipUnverified"] = true;
+                    failure.Data["ReleaseSmokeOriginalNativeOutcome"] = result;
+                }
+                throw;
+            }
             finally
             {
+                if (releaseHelp && result.ProcessCreated && !result.CompleteOwnedTreeAbsent)
+                {
+                    // Retain the original handles on uncertainty. Do not reopen
+                    // by PID or dispose a live owner to make another smoke pass.
+                    retainedReleaseHelpOwners.Add(new[] { process.hProcess, process.hThread, job });
+                    process.hProcess = IntPtr.Zero; process.hThread = IntPtr.Zero; job = IntPtr.Zero;
+                    result.RetainedOwnedHandles = true;
+                }
+                if (inheritedInput != IntPtr.Zero) CloseHandle(inheritedInput);
                 if (environmentBlock != IntPtr.Zero) Marshal.FreeHGlobal(environmentBlock);
                 if (stdoutRead != IntPtr.Zero) CloseHandle(stdoutRead);
                 if (stdoutWrite != IntPtr.Zero) CloseHandle(stdoutWrite);
@@ -1680,4 +1793,127 @@ function Enter-AssessmentCollectionStageIfActive {
     [GC]::Collect(2, [GCCollectionMode]::Aggressive, $true, $true)
     Enter-AssessmentCollectionStage -Stage $Stage
     $true
+}
+
+
+function Test-ReleaseSmokeOwnershipUnverified {
+    param([AllowNull()] [Exception] $Exception)
+    if ($null -eq $Exception) { return $false }
+    if ($Exception.Data['OwnedCleanupUnverified'] -is [bool] -and $Exception.Data['OwnedCleanupUnverified']) { return $true }
+    if ($Exception -is [AggregateException]) {
+        foreach ($inner in $Exception.InnerExceptions) {
+            if (Test-ReleaseSmokeOwnershipUnverified -Exception $inner) { return $true }
+        }
+    }
+    Test-ReleaseSmokeOwnershipUnverified -Exception $Exception.InnerException
+}
+
+function Test-ReleaseHelpSmokeOrigin {
+    param([AllowNull()] [Exception] $Exception)
+    if ($null -eq $Exception) { return $false }
+    if ($Exception.Data['OwnedCleanupUnverified'] -is [bool] -and $Exception.Data['OwnedCleanupUnverified'] -and
+        $Exception.Data['ReleaseHelpSmokeOwnershipUnverified'] -is [bool] -and $Exception.Data['ReleaseHelpSmokeOwnershipUnverified']) { return $true }
+    if ($Exception -is [AggregateException]) {
+        foreach ($inner in $Exception.InnerExceptions) { if (Test-ReleaseHelpSmokeOrigin -Exception $inner) { return $true } }
+    }
+    Test-ReleaseHelpSmokeOrigin -Exception $Exception.InnerException
+}
+
+function Invoke-ReleaseHelpSmokeNative {
+    param([Parameter(Mandatory)] [string] $CandidatePath, [Parameter(Mandatory)] [string] $PowerShellPath)
+    Initialize-ProcessSupervisorNativeType
+    [WinPCInfo.ProcessSupervisor.NativeRunner]::RunReleaseHelp($PowerShellPath, $CandidatePath)
+}
+
+function Copy-ReleaseSmokeNativeOutcome {
+    param([Parameter(Mandatory)] $Native)
+    $copy = [ordered]@{}
+    foreach ($property in $Native.PSObject.Properties) {
+        $value = $property.Value
+        if ($value -is [byte[]]) {
+            if ($value.LongLength -gt 16777216) { throw 'Release Help private output exceeds its admitted capture bound.' }
+            $copy[$property.Name] = [byte[]] $value.Clone()
+        }
+        else { $copy[$property.Name] = $value }
+    }
+    [pscustomobject] $copy
+}
+
+function Invoke-ReleaseHelpSmokeProcess {
+    param([Parameter(Mandatory)] [string] $CandidatePath, [Parameter(Mandatory)] [string] $PowerShellPath)
+    $native = $null
+    $original = $null
+    try {
+        $native = Invoke-ReleaseHelpSmokeNative -CandidatePath $CandidatePath -PowerShellPath $PowerShellPath
+        foreach ($name in @('Started','ProcessCreated','OriginalTerminalObserved','CompleteOwnedTreeAbsent','StandardOutputExceeded','StandardErrorExceeded','RetainedOwnedHandles','ForcedOwnedCleanup','UnknownJobAccounting')) {
+            if ($native.$name -isnot [bool]) { throw 'Release Help native accounting is malformed.' }
+        }
+        if ($native.ExitCode -isnot [int] -or $native.StandardOutput -isnot [byte[]] -or $native.StandardError -isnot [byte[]]) {
+            throw 'Release Help native outcome is malformed.'
+        }
+        if ($native.StandardOutputBytes -isnot [long] -or $native.StandardErrorBytes -isnot [long] -or
+            $native.StandardOutputBytes -ne $native.StandardOutput.LongLength -or
+            $native.StandardErrorBytes -ne $native.StandardError.LongLength) {
+            throw 'Release Help captured stream accounting is incomplete.'
+        }
+        if ($native.Started -and (-not $native.ProcessCreated -or $native.OriginalProcessId -isnot [uint32] -or
+            $native.OriginalProcessId -eq 0 -or $native.OriginalCreationFileTime -isnot [long] -or $native.OriginalCreationFileTime -le 0)) {
+            throw 'Release Help original creation identity is malformed.'
+        }
+        $stage = [string] $native.FailureStage
+        if ($native.RetainedOwnedHandles -or $native.ForcedOwnedCleanup -or $native.UnknownJobAccounting -or
+            ($native.ProcessCreated -and -not $native.CompleteOwnedTreeAbsent) -or
+            ($native.Started -and (-not $native.OriginalTerminalObserved -or $stage -ne 'None')) -or
+            $native.StandardOutputExceeded -or $native.StandardErrorExceeded) {
+            throw 'Release Help transport or owned cleanup remains unverified.'
+        }
+        if (-not $native.Started) { return [pscustomobject]@{Started=$false;ExitCode=$native.ExitCode;StandardOutput=''} }
+        # Match the original Process.StandardOutput default text decoder. The
+        # generated application already configures its output encoding; this
+        # adds no child environment/codepage override or public raw diagnostic.
+        $memory = [IO.MemoryStream]::new($native.StandardOutput, $false)
+        $reader = [IO.StreamReader]::new($memory, [Console]::OutputEncoding, $true)
+        try { $output = $reader.ReadToEnd() } finally { $reader.Dispose(); $memory.Dispose() }
+        [pscustomobject]@{Started=$true;ExitCode=$native.ExitCode;StandardOutput=$output}
+    }
+    catch {
+        $failure = $_.Exception
+        $failure.Data['OwnedCleanupUnverified'] = $true
+        $failure.Data['ReleaseHelpSmokeOwnershipUnverified'] = $true
+        $original = $native
+        if ($null -eq $original) {
+            $cursor = $failure
+            while ($null -ne $cursor) {
+                if ($null -ne $cursor.Data['ReleaseSmokeOriginalNativeOutcome']) {
+                    $original = $cursor.Data['ReleaseSmokeOriginalNativeOutcome']
+                    break
+                }
+                $cursor = $cursor.InnerException
+            }
+        }
+        if ($null -ne $original) {
+            try {
+                # Exception retention owns an independent bounded snapshot.
+                # Clearing the consumed transport buffers must not alter this proof.
+                $failure.Data['ReleaseSmokeOriginalNativeOutcome'] = Copy-ReleaseSmokeNativeOutcome -Native $original
+            }
+            catch {
+                $aggregate = [AggregateException]::new('Release Help original outcome retention failed.',
+                    [Exception[]] @($failure, $_.Exception))
+                $aggregate.Data['OwnedCleanupUnverified'] = $true
+                $aggregate.Data['ReleaseHelpSmokeOwnershipUnverified'] = $true
+                $aggregate.Data['OriginalNativeOutcomeRetained'] = $false
+                throw $aggregate
+            }
+        }
+        throw
+    }
+    finally {
+        foreach ($consumed in @($native,$original)) {
+            if ($null -ne $consumed) {
+                if ($consumed.StandardOutput -is [byte[]]) { [Array]::Clear($consumed.StandardOutput,0,$consumed.StandardOutput.Length) }
+                if ($consumed.StandardError -is [byte[]]) { [Array]::Clear($consumed.StandardError,0,$consumed.StandardError.Length) }
+            }
+        }
+    }
 }

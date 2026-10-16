@@ -1,10 +1,20 @@
 [CmdletBinding()]
-param()
+param(
+    [string] $CandidatePath,
+    [string] $PreparedManifestPath,
+    [string] $PreparedManifestSha256
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-. (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1')
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateUseError=$null
+try {
+. (Join-Path $PSScriptRoot 'QualificationDiskBounds.ps1')
+$null=Assert-QualificationResourceInventoryBinding -CandidatePath $candidate -HarnessPath (Join-Path $PSScriptRoot 'StatusDeskEngine.Tests.ps1') -RepositoryRoot $repositoryRoot
 . (Join-Path $repositoryRoot 'src/PrivilegedCollectionPlan.ps1')
 . (Join-Path $repositoryRoot 'src/StatusDesk.ps1')
 . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
@@ -163,7 +173,6 @@ try {
             Assert-Equal $canonicalMode $projection.canonical 'transformation, lifecycle and inventory consume the same canonical fault'
         }
     }
-    $candidate=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
     $regions=[regex]::Matches([IO.File]::ReadAllText($candidate),
         '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
     Assert-Equal $true ($regions.Count -gt 0) 'actual pinned candidate has generated production module regions'
@@ -270,4 +279,8 @@ finally {
         }
     )
 }
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
 Write-Output 'PASS: finite privileged witness inventory reserves before one launch, validates actual emitted source, and independently rejects tampering and repeat admission.'

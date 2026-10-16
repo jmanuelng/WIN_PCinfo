@@ -1,13 +1,59 @@
 # Exact-candidate private acceptance packet (#158 → #161)
 
-**Prepared; live execution NotStarted.** Root owns private binding, exact-byte
-signing approval, admission and session activation. This packet grants no live
+**Packet preparation in progress; current qualification and live execution pending.**
+Root owns private binding, exact-byte signing approval, admission and session
+activation. This packet grants no live
 assessment, UAC, observer/calibration, trust, certificate, key, cloud or publication
 authority. #158's integrated gate is recorded separately; a failed automated gate
 does not qualify the source for private artifact preparation. #160–#164 and
 parents #134/#37 remain open. The handoff cutoff is September 7, 2026, 05:00 UTC
 (September 7 00:00 CDT); this deadline was missed. Source qualification and
-private/live handoff were not achieved by the cutoff.
+private/live handoff were not achieved by the cutoff. The renewed engineering
+window runs from October 6, 2026, 04:58:52 UTC through October 11, 2026,
+04:58:52 UTC, or ends earlier when the application is qualified for Windows 11
+user testing. This finite window does not reset the missed delivery deadline,
+authorize client execution or establish application acceptance.
+
+## Current readiness and retained history
+
+The implementation baseline for this packet revision is
+`d3847ded77e596527b21b617b7501290df3b5ebc`. It is an unqualified source baseline,
+not the identity of a final generated, signed or delivered candidate. The next
+integrated source, test inventory, candidate and evidence bindings are pending.
+Do not launch or sign from historical identities in this packet.
+
+| Checkpoint | Disposition and evidence boundary |
+| --- | --- |
+| Historical C158 / C158-R1 below | Original 184-file gate and focused harness correction; retained history only. |
+| Merged October source | [Full207](afk-full207-functional-gate.json) qualifies only its recorded source and inputs; it does not qualify draft #205. |
+| Original d3847 FULL213 | [Failed gate](https://github.com/jmanuelng/WIN_PCinfo/issues/208#issuecomment-6004634169): 213 executed, 210 Pass, 3 Fail, zero unexecuted. EffectivePolicyApplication failed its public-output privacy assertion; QualificationResourceBounds and QualificationWitnessInventory failed candidate/harness inventory checks. The messages alone do not establish causes. |
+| Original candidate drift | Admitted primary SHA-256 `53a04d684281ec50677e4a9f4a53d6ba00703ea0bbba9dff7b8abf1aeea1902a`; observed `5af1d20e317c6d94386520e068da4c7f4ca19c1c9269d3661222dbe8396780b4`. Unsafe/cleanup-unverified disposition and all original evidence/hold records remain preserved. No restoration, pass-picked result or unchanged retry qualifies that run. |
+| Separately admitted recovery | Coordinator recovery and independent post-recovery audit passed before isolated documentation work was admitted. Their scope is recovery of the old shared boundary; they do not change the failed gate, prove previously unrecorded descendant lifetimes or qualify an application. Exact operational records remain private with root. |
+| New qualifying cohort | Pending root integration, frozen input/output identities, complete current gate, applicable GUI/resource checks and independent Spec/Standards review. No future candidate ID or test-file count is assigned here. |
+| Windows 11 user testing | NotStarted; available PC is approved for user-run validation. Current Server execution host is excluded from live client assessment. Exact signed package, session activation and user decisions remain pending. |
+| Selected tester route | [#193 opt-in decision](https://github.com/jmanuelng/WIN_PCinfo/issues/193#issuecomment-5964595509) permits the existing public signer in each consenting tester's CurrentUser stores; actual consent, trust installation, signature admission and delivery are separate pending facts. |
+
+### Qualification for Windows 11 user testing
+
+Root records each readiness condition against one current cohort. Preparing the
+steps below is not a Pass. A failed or blocked mandatory condition prevents the
+"qualified for user testing" claim; it does not stop independent authorized
+engineering. Actual live rows stay NotStarted until performed.
+
+| Readiness condition | Required proof / current disposition |
+| --- | --- |
+| Complete current automated gate | All discovered required files have actual terminal results; no missing/duplicate rows, unexplained failure, input drift or unsafe cleanup. Pending. |
+| GUI and quality evidence | Applicable generated GUI/engine, cancellation, startup, culture and controlled resource checks on the current cohort; historical results retained with their narrow scope. Actual client/aggregate measurements remain live requirements. Pending. |
+| Independent source review | Separate final Spec and Standards dispositions on the fixed integrated source; findings corrected and invalidated evidence refreshed. Pending. |
+| Final artifact binding | Qualified unsigned inputs, separately approved exact helper/primary signing, signature verification, final archive/resource inventory, fresh extraction and affected final-artifact smoke checks. Signing changes to embedded resources require corresponding revalidation. Pending. |
+| User session packet | Private environment/destinations, protector/recipient readiness, per-user consent/admission, named operator and supervisor, observer authority, expected outcomes and cleanup/stop plan resolved. Pending. |
+| Claim boundary | Mark package qualified for user testing only after the above conditions pass. All unperformed LIVE134 and APP134 acceptance clauses stay pending; private delivery, public Preview qualification and publication are separate. |
+
+No client observation, secure-desktop UAC automation, trust mutation, signing,
+Azure spend or tester contact is authorized by this packet. The operator handles
+required Windows prompts personally. A clean ordinary-user profile and separate
+approved client remain #193's independent-user acceptance requirements; one
+maintainer Windows 11 session cannot silently satisfy both environments.
 
 ## Choose: identify the build and purpose
 
@@ -17,7 +63,10 @@ a finding interprets admitted evidence; a recommendation suggests later work.
 An Indeterminate finding identifies missing context. The application does not
 certify compliance, assess a tenant, or perform remediation.
 
-The frozen unsigned precursor is **C158**:
+### Historical C158 identity record
+
+The following unsigned precursor was **C158**. Preserve its evidence identities;
+use root's new private final binding for the next test session:
 
 | Identity | Value |
 | --- | --- |
@@ -37,8 +86,9 @@ The frozen unsigned precursor is **C158**:
 The original integrated gate executed all 184 files with nine failures. Its
 sanitized evidence is historical at c5d7; the corrected harness has only the
 separately listed [affected checks](issue-158-harness-correction.json).
-Current full qualification remains blocked by the retained owning failures and
-quality overruns. An unchanged primary hash does not make old test inputs current.
+Qualification at that historical checkpoint remained blocked by the retained
+owning failures and quality overruns. An unchanged primary hash does not make old
+test inputs current.
 
 The generated portable archive includes `Start-WIN-PCInfo.cmd`, its PowerShell
 launcher, the primary script and authenticated resources. The archive and every
@@ -47,11 +97,16 @@ Root must privately bind the final archive, signed launcher and signed primary,
 including the governing-resource changes caused by incorporating a signed helper.
 That final artifact is a different identity. Review its impact and refresh affected
 tests/admission before relying on it. Unknown future bytes have no signing approval.
-The older b265/4013e82 signing request is superseded and held.
+The older b265/4013e82 signing request remains a superseded historical request;
+it grants no current signing authority.
 
 ## Verify: root's private preparation checkpoint
 
 Use the existing [personal evaluation certificate procedure](../personal-evaluation-certificates.md).
+For selected testers, use the separately approved
+[private tester evaluation procedure](../private-tester-evaluation.md); sharing
+only the exact public signer never transfers a private key or another user's
+DPAPI access.
 Reuse only reconciled existing dedicated identities and their recorded authority.
 Keep signing and encryption purposes separate, non-exportability and narrow user
 trust intact. Do not open or modify the held private #160 artifacts from this
@@ -109,6 +164,52 @@ Other terminals are `NotStarted/20`, `Cancelled/30`, `TimedOut/40`,
 `IntegrityFailed/50`, and `CleanupIncomplete/60`. GUI, record, Completion Summary,
 exit status, package and cleanup must agree. A cancelled run may have a protected
 usable partial result or no usable package; neither implies completion.
+
+## Ordered Windows 11 user test matrix
+
+Execute only after root has filled the final binding and admitted the session.
+Start each separate assessment with fresh preparation and record its plan digest,
+network choice, exact candidate and private evidence reference. A row that needs
+an unavailable recipient, privilege route or observer stays Blocked; document its
+owner instead of improvising another route. The steps reference existing LIVE134
+IDs; they add no new requirement IDs or reduced acceptance profile.
+
+| Existing acceptance ID | User actions, in order | Expected result and private record |
+| --- | --- | --- |
+| LIVE134-1, LIVE134-8: receive and launch | Follow the selected tester procedure: independently verify the final archive and both PowerShell signatures/resources, then double-click Start-WIN-PCInfo.cmd. Read startup status; Tab through the preparation window and open/close Help and About. | Truthful startup status precedes preparation; no collection before approval; readable four facts, controls and passive help; no hidden console input. Retain verification outcomes, environment/display details and any refusal reason privately. |
+| LIVE134-1: choices and decline | Open Change network / output; cancel once and confirm prior choices remain. Prepare Local Only with the approved private destination and zero or one preconfirmed recipient. Inspect the complete plan; click Decline. | Choice cancellation preserves prior request; saving creates a fresh plan. Decline ends NotStarted/20 with no assessment collection/request/package. Independent collection/file observations support that absence claim. |
+| LIVE134-1, LIVE134-2, LIVE134-3: real Local Only report | Use New preparation / retry after verified cleanup; approve once. Respond personally to any disclosed UAC. Move/resize the window and use keyboard controls during work. At completion, inspect coverage and choose Open report; follow an evidence link and a recommendation; close viewing explicitly. | Actual selected families execute and agree across source comparisons, record, package, report and Completion Summary. Outcome/exit, package and cleanup agree. Record first progress, maximum heartbeat gap and resource measurements; a waiting heartbeat is not source progress. Verify owned viewing plaintext removal independently. |
+| LIVE134-6: protected reopening | Choose Reopen encrypted results. Open the retained package with the initiating-user Local route; close viewing. Repeat independently with the approved Recipient route in its admitted user context, then close viewing. | Each route validates before exposing HTML; no fallback between protectors. Retain opening and cleanup outcomes for each route. Missing recipient/context is Blocked; same-user access does not prove independent-user or off-device recovery. |
+| LIVE134-7: deliberate sharing | Choose Save HTML for consultant and refuse the warning; confirm no export. Repeat, accept the warning, choose the approved private destination and inspect the exported HTML. Cancel the destination dialog in a separate subcase. | Refusal/dialog cancellation writes nothing; accepted export is the requested restricted HTML only, visibly designated Restricted Diagnostic Evidence. Record exact owned output/absence and removal disposition; no upload or implicit export. |
+| LIVE134-4, LIVE134-3: Cancel | Start a fresh real assessment. Once authenticated collection has actually started, click Cancel assessment; wait for the terminal and cleanup. | Acknowledgment <=2 seconds; no new scheduling; owned work stops; cleanup <=2 minutes. Record actual execution witness, click/acknowledgment/terminal/cleanup times and protected partial/no-package disposition. A precollection cancel is a separate case, not this evidence. |
+| LIVE134-4, LIVE134-3: active Close | Start another fresh assessment. Once real collection has started, close the main window with its window-close control; wait through the displayed cleanup state. | Same controlled stop/cleanup contract as Cancel; distinct evidence. Window closing alone does not prove child/task absence. Retain owned ordinary/administrator/SYSTEM lifetime evidence for applicable stages. |
+| LIVE134-5: privilege and denial | In separate admitted runs exercise approved elevation, already-elevated launch, alternate administrator where authorized, and personal denial of the disclosed UAC. Use naturally denied source access; do not change settings to create it. | At most one approved administrator phase and predefined SYSTEM work; initiating-user protection/context retained; safe unrelated work continues with explicit denied/unavailable coverage. Missing authority or scenario stays Blocked. |
+| LIVE134-6: recovery and next run | Follow only root's separately approved interruption case. On the next launch, inspect the recovery-only plan and approve recovery of the exact owned destination. After verified cleanup, prepare a new assessment; exercise a second-launch ownership refusal while its first owner is active. | Recovery never resumes collection or removes foreign/ambiguous state; protected package retained. New run works after cleanup; concurrent launch neither joins nor disrupts the live owner. Record journal/ownership/absence proof privately. |
+| LIVE134-1, LIVE134-2, LIVE134-8: remaining scope | Prepare Microsoft Connectivity Enabled separately; inspect endpoints/protocols before approval. Complete the family crosswalk. Review the actual report offline in Edge, print preview and an approved scripting-disabled setup; traverse links/details and all controls with Tab/Shift+Tab and focus activation at intended scaling. | Traffic stays within the approved plan; unrelated local failures remain scoped. Report is self-contained English, useful and keyboard-operable without color-only meaning. Guided/automation parity, non-English Windows and additional #193 environments retain their separately recorded pending cases. |
+
+Use only separately approved live interruption and denial scenarios where the
+requirement demands them. Use existing controlled negatives for difficult
+corruption, missing-runtime and trust failures rather than changing the user's
+device to manufacture them.
+Never infer verified worker/task/observer or plaintext cleanup from a closed
+window, a terminal label or an empty report. Root's scoped independent evidence
+must establish the relevant ownership and absence.
+
+### Source and existing QA crosswalk
+
+These references locate the implementation to inspect and its established
+controlled checks. Their presence is not current execution evidence. Preserve
+`GUI134-1..33`, `ID134-1..6`, `LIVE134-1..8` and `APP134-1..8` in the
+[requirement register](issue-158-requirement-register.json); root integrates the
+new candidate-bound results there after qualification.
+
+| Behavior | Owning seam and existing checks |
+| --- | --- |
+| Runtime/startup and entry parity | [Launch engine](../../src/LaunchEngine.ps1), [GUI dispatch](../../src/ApplicationMain.ps1), [request adapters](../../src/EntryAdapters.ps1); [launch contracts](../../tests/LaunchContract.Tests.ps1), [runtime selection](../../tests/RuntimeSelection.Tests.ps1), [startup feedback](../../tests/LauncherStartupFeedback.Tests.ps1), [Status desk entry](../../tests/StatusDeskEntry.Tests.ps1). |
+| Choices, approval and passive help | [Status desk](../../src/StatusDesk.ps1): Show-StatusDeskChoicesDialog, Show-StatusDeskRecipientDialog, Get-StatusDeskHelpText and Invoke-StatusDesk; [choices](../../tests/StatusDeskChoices.Tests.ps1), [recipient selection](../../tests/StatusDeskRecipientSelection.Tests.ps1), [product help](../../tests/ProductHelpApplication.Tests.ps1). |
+| Real-engine progress and Cancel/Close | [Status desk](../../src/StatusDesk.ps1): Request-StatusDeskCancellation and Complete-StatusDeskSession; [engine](../../tests/StatusDeskEngine.Tests.ps1), [WPF](../../tests/StatusDeskWpf.Tests.ps1), [active actions](../../tests/StatusDeskActiveActions.Tests.ps1), [opening](../../tests/StatusDeskOpening.Tests.ps1), [cleanup gate](../../tests/StatusDeskCleanupGate.Tests.ps1). Controlled substitutions do not establish live client acceptance. |
+| Viewing, export and recovery | [Status desk](../../src/StatusDesk.ps1): Show-StatusDeskReport; [recipient sharing](../../src/RecipientSharing.ps1): Export-RestrictedAssessmentReport; [workspace](../../src/EvidenceWorkspace.ps1): Invoke-AssessmentRecoveryGate; [viewing](../../tests/StatusDeskViewing.Tests.ps1), [recipient opening](../../tests/RecipientViewingApplication.Tests.ps1), [export](../../tests/RestrictedReportExport.Tests.ps1), [recovery](../../tests/StatusDeskRecovery.Tests.ps1), [lock](../../tests/StatusDeskLock.Tests.ps1). |
+| Report and culture | [Full report application](../../tests/FullReportApplication.Tests.ps1), [contract formats](../../tests/ContractFormats.Tests.ps1), family comparisons below. Preserve en-US, es-MX, tr-TR, ja-JP and ar-SA controlled fixtures and the separate real non-English Windows requirement. |
 
 ## Eight live checks: execution and acceptance record
 
@@ -203,7 +304,8 @@ not truncate evidence. Three clean full-profile qualifying measurements and
 missing physical/managed/non-English/fresh-client dimensions remain pending.
 
 Use [the bounded observer supplement](issue-158-observer-boundary.md) and the
-existing #160 procedure. **No trace or calibration has run or is authorized.**
+existing #160 procedure. **This packet establishes no live client trace or
+calibration execution or authority.**
 The unresolved save/metadata/bookkeeping and attribution boundaries block a
 zero-request acceptance claim; a selected-provider profile or zero events alone
 cannot establish it. Root must clear the documented boundary before asking for
@@ -247,7 +349,7 @@ Copy this template into the private session and publish only reviewed safe field
 
 ```text
 Session owner / date / deadline outcome:
-Source SHA / unsigned C158 identity / actual final admitted candidate identity:
+Source SHA / current unsigned precursor identity / actual final admitted candidate identity:
 Runtime and broad scenario (no device, account, tenant or network identifiers):
 Profile/version; network behavior; privilege route; protection route:
 Requirement/control/family/live-check ID:

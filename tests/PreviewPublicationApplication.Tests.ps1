@@ -1,24 +1,67 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+
+function Assert-ReleaseApplicationTestPathAncestors {
+    param([string] $Path)
+    $cursor=[IO.Path]::GetFullPath($Path)
+    while ($cursor) {
+        if (([IO.Directory]::Exists($cursor) -or [IO.File]::Exists($cursor)) -and
+            ((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Owned application fixtures cannot use reparse paths.' }
+        $cursor=[IO.Path]::GetDirectoryName($cursor)
+    }
+}
+
+function Remove-OwnedReleaseApplicationTestRoot {
+    param([string] $Path, [string] $ExpectedParent, [string] $Nonce, [string] $Kind)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    $full=[IO.Path]::GetFullPath($Path)
+    if (-not [IO.Path]::GetDirectoryName($full).Equals([IO.Path]::GetFullPath($ExpectedParent).TrimEnd('\'),[StringComparison]::OrdinalIgnoreCase) -or
+        [IO.Path]::GetFileName($full) -cnotmatch ('^[a-z-]+-'+[regex]::Escape($Nonce)+'$')) { throw 'Owned application fixture boundary changed.' }
+    # Only an explicitly missing entry is absent. Files, reparse entries and
+    # unreadable/unknown entry types preserve the owning fixture as uncertain.
+    $entry=$null
+    try { $entry=Get-Item -LiteralPath $full -Force -ErrorAction Stop }
+    catch {
+        if ($_.CategoryInfo.Category -eq [Management.Automation.ErrorCategory]::ObjectNotFound -and
+            $_.Exception -is [Management.Automation.ItemNotFoundException]) { return }
+        throw
+    }
+    if ($entry -isnot [IO.DirectoryInfo] -or
+        ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Owned application fixture root type or attributes changed.' }
+    Assert-ReleaseApplicationTestPathAncestors -Path $full
+    if (@(Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }).Count) { throw 'Owned application fixture contains a reparse entry.' }
+    if ([IO.File]::ReadAllText((Join-Path $full 'fixture-owner.txt')) -cne ($Kind+'|'+$Nonce)) { throw 'Owned application fixture marker changed.' }
+    Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction Stop
+    if ([IO.Directory]::Exists($full) -or [IO.File]::Exists($full)) { throw 'Owned application fixture cleanup remains incomplete.' }
+}
+
+$candidateUseError=$null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$fixtureOwner=[pscustomobject]@{Nonce=[Guid]::NewGuid().ToString('N');Unsafe=$false;WorkRoot=$null;PrivateRoot=$null;RepositoryParent=(Join-Path $repositoryRoot '.test-output');PrivateParent=[IO.Path]::GetTempPath()}
+try {
 . (Join-Path $repositoryRoot 'src/PreviewPublication.ps1')
 
 $resultSchemaPath = Join-Path $repositoryRoot 'schemas/preview-publication-result.schema.json'
 $previewSchemaPath = Join-Path $repositoryRoot 'schemas/preview-publication-preview.schema.json'
 $completePath = Join-Path $PSScriptRoot 'fixtures/preview-publication-complete-signed.json'
 $policy = Get-PreviewPublicationPolicy
-$workRoot = Join-Path $repositoryRoot '.test-output/preview-publication-application'
-if (Test-Path -LiteralPath $workRoot) {
-    Remove-Item -LiteralPath $workRoot -Recurse -Force
+$workRoot = Join-Path $fixtureOwner.RepositoryParent ('preview-publication-application-'+$fixtureOwner.Nonce)
+$privateFixtureRoot = Join-Path $fixtureOwner.PrivateParent ('win-pcinfo-preview-publication-application-fixtures-'+$fixtureOwner.Nonce)
+foreach ($owned in @(@{Path=$workRoot;Kind='Repository'},@{Path=$privateFixtureRoot;Kind='Private'})) {
+    Assert-ReleaseApplicationTestPathAncestors -Path $owned.Path
+    if ([IO.Directory]::Exists($owned.Path) -or [IO.File]::Exists($owned.Path)) { throw 'Unique application fixture already exists.' }
+    $null=[IO.Directory]::CreateDirectory($owned.Path)
+    if ($owned.Kind -ceq 'Repository') { $fixtureOwner.WorkRoot=$owned.Path } else { $fixtureOwner.PrivateRoot=$owned.Path }
+    [IO.File]::WriteAllText((Join-Path $owned.Path 'fixture-owner.txt'),($owned.Kind+'|'+$fixtureOwner.Nonce),[Text.UTF8Encoding]::new($false))
 }
-$null = New-Item -ItemType Directory -Path $workRoot -Force
-$candidatePath = Join-Path $workRoot 'WIN-PCInfo.ps1'
-$null = & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath
+[IO.File]::WriteAllText((Join-Path $workRoot 'private-fixture-owner.json'),([ordered]@{contract='win-pcinfo.release-application-test-fixture/1.0.0';nonce=$fixtureOwner.Nonce;repositoryRoot=$workRoot;privateRoot=$privateFixtureRoot;candidatePath=$candidateContext.Path;candidateSha256=$candidateContext.Sha256;scope='Fixture ownership only; native lifetime evidence remains with the admitted supervisor.'}|ConvertTo-Json -Depth 4),[Text.UTF8Encoding]::new($false))
+$candidatePath = $candidateContext.Path
 
 $candidateDigest = Get-PreviewPublicationSha256 -Bytes (
     [System.IO.File]::ReadAllBytes($candidatePath)
@@ -76,10 +119,7 @@ function New-BoundPublicationPath {
 
 function New-MarkedWorkspace {
     param([Parameter(Mandatory)] [string] $Name)
-    $path = Join-Path ([System.IO.Path]::GetTempPath()) "win-pcinfo-publish-app-$Name"
-    if (Test-Path -LiteralPath $path) {
-        Remove-Item -LiteralPath $path -Recurse -Force
-    }
+    $path = Join-Path $privateFixtureRoot $Name
     $null = New-Item -ItemType Directory -Path $path -Force
     [System.IO.File]::WriteAllText(
         (Join-Path $path $policy.workspace.markerFileName),
@@ -187,7 +227,7 @@ try {
     Assert-Equal 'PUBLISH.REQUEST_INVALID' $kindTerminal[0].reasonCode `
         'a wrong-kind request uses a stable reason'
 
-    $repoWorkspace = Join-Path $repositoryRoot '.test-output/preview-publication-app-repo-ws'
+    $repoWorkspace = Join-Path $workRoot 'forbidden-in-repo'
     if (Test-Path -LiteralPath $repoWorkspace) {
         Remove-Item -LiteralPath $repoWorkspace -Recurse -Force
     }
@@ -208,17 +248,34 @@ try {
     Assert-Equal 'PUBLISH.WORKSPACE_REPOSITORY_PATH' $repoTerminal[0].reasonCode `
         'the generated application rejects a workspace inside the repository'
 }
-finally {
-    foreach ($name in @('safe', 'secret', 'kind')) {
-        $path = Join-Path ([System.IO.Path]::GetTempPath()) "win-pcinfo-publish-app-$name"
-        if (Test-Path -LiteralPath $path) {
-            Remove-Item -LiteralPath $path -Recurse -Force
-        }
-    }
-    $repoWorkspace = Join-Path $repositoryRoot '.test-output/preview-publication-app-repo-ws'
-    if (Test-Path -LiteralPath $repoWorkspace) {
-        Remove-Item -LiteralPath $repoWorkspace -Recurse -Force
-    }
+finally { }
 }
-
+catch {
+    $candidateUseError=$_
+    $fixtureOwner.Unsafe=Test-QualificationCleanupUnverified -Exception $_.Exception
+}
+finally {
+    # The shared candidate finalizer receives an unsafe body to preserve an
+    # owned standalone output. Ordinary body errors are retained once by the
+    # outer finalizer; they do not become an unsafe cleanup by classification.
+    $finalBodyError=if($fixtureOwner.Unsafe){$null}else{$candidateUseError}
+    Complete-QualificationHarness -BodyError $finalBodyError -Cleanup @(
+        {
+            try { Close-TestCandidate -Candidate $candidateContext -BodyError $(if($fixtureOwner.Unsafe){$candidateUseError}else{$null}) }
+            catch { $fixtureOwner.Unsafe=$true; throw }
+        },
+        {
+            if (-not $fixtureOwner.Unsafe) {
+                try { Remove-OwnedReleaseApplicationTestRoot -Path $fixtureOwner.PrivateRoot -ExpectedParent $fixtureOwner.PrivateParent -Nonce $fixtureOwner.Nonce -Kind Private }
+                catch { $fixtureOwner.Unsafe=$true; throw }
+            }
+        },
+        {
+            if (-not $fixtureOwner.Unsafe) {
+                try { Remove-OwnedReleaseApplicationTestRoot -Path $fixtureOwner.WorkRoot -ExpectedParent $fixtureOwner.RepositoryParent -Nonce $fixtureOwner.Nonce -Kind Repository }
+                catch { $fixtureOwner.Unsafe=$true; throw }
+            }
+        }
+    )
+}
 Write-Output 'PASS: the generated application stages, previews, and synthetically publishes without collection.'

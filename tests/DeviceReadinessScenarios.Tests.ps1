@@ -1,12 +1,15 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateError = $null
+try {
+$candidatePath = $candidateContext.Path
 
 $cases = @(
     @{scenario='Partial';exit=10;terminal='CompletedWithGaps';coverage='Partial';finding='Indeterminate';activation='Unknown';virtual='NotDetected';form='Desktop';battery='Absent'},
@@ -75,4 +78,7 @@ foreach ($case in $cases) {
     if ($result.StandardError) { throw "$name wrote stderr: $($result.StandardError)" }
 }
 
+}
+catch { $candidateError = $_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateError }
 Write-Output 'PASS: all generated device-context scenarios preserve evidence, privacy, advisory limits, and cleanup semantics.'

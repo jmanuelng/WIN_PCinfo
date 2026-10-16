@@ -1,15 +1,18 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateError = $null
+try {
+$candidatePath = $candidateContext.Path
 
 $cases = @(
     @{name='identity-workgroup';scenario='Workgroup';exit=0;outcome='Completed';user='Complete';registration='Complete';workSchool='Complete';userFinding='ExpectedCondition';tasks=6;relation='SameUser'},
@@ -58,4 +61,7 @@ foreach($case in $cases){
     if($result.StandardError){throw "$($case.name) wrote stderr: $($result.StandardError)"}
 }
 
+}
+catch { $candidateError = $_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateError }
 Write-Output 'PASS: the generated application exercises all registration, enrollment, locale, source, and identity contexts.'

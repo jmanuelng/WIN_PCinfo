@@ -772,24 +772,14 @@ function Invoke-SigningBoundarySmoke {
         # installations. This changes no signing admission or smoke arguments.
         $PowerShellPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     }
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $PowerShellPath
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    foreach ($argument in @(
-        '-NoLogo', '-NoProfile', '-File', $SignedScriptPath, '-Workflow', 'Help'
-    )) {
-        $null = $startInfo.ArgumentList.Add($argument)
+    if (-not (Get-Command Invoke-ReleaseHelpSmokeProcess -ErrorAction SilentlyContinue)) {
+        . (Join-Path $PSScriptRoot 'ProcessSupervisor.ps1')
     }
-    $process = [System.Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
     try {
-        $null = $process.Start()
-        $standardOutput = $process.StandardOutput.ReadToEnd()
-        $null = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
-        if ($process.ExitCode -ne 0) {
+        $transport = Invoke-ReleaseHelpSmokeProcess -CandidatePath $SignedScriptPath -PowerShellPath $PowerShellPath
+        if (-not $transport.Started) { return $false }
+        $standardOutput = $transport.StandardOutput
+        if ($transport.ExitCode -ne 0) {
             return $false
         }
         foreach ($line in @($standardOutput -split "`r?`n" | Where-Object { $_ })) {
@@ -806,10 +796,8 @@ function Invoke-SigningBoundarySmoke {
         $true
     }
     catch {
+        if (Test-ReleaseSmokeOwnershipUnverified -Exception $_.Exception) { throw }
         $false
-    }
-    finally {
-        $process.Dispose()
     }
 }
 

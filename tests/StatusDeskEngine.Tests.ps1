@@ -1,9 +1,11 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $CancelDuringPrivilege,
+    [string] $CandidatePath = '', [string] $PreparedManifestPath = '', [string] $PreparedManifestSha256 = '',
     [switch] $DelayPrivilegeStartup,
     [ValidateSet('','Identity','Resource','Network','Software','Certificate','Connectivity')]
     [string] $QualificationCancelAfter = '',
     [string] $QualificationPath = '',
+    [string] $ControlledRunLockNamespace = '',
     [switch] $RequireQualityBudgets,
     [string] $QualificationSourceCase = '',
     [ValidateSet('','PrivilegeTimeout','PrivilegePreStartTimeout','PrivilegePreStartCancel','PrivilegeLoss','PrivilegePostStartLoss','SystemCancel','SystemTimeout','SystemLoss')] [string] $QualificationPlanFault = '',
@@ -34,15 +36,95 @@ param([switch] $CancelAfterIdentity, [switch] $CancelAfterResource, [switch] $Ca
     [ValidateSet('AcceptedElevation','AlreadyElevated','AlternateAdministrator','ElevationDenied')]
     [string] $PrivilegeOutcome = 'AcceptedElevation',
     [string] $RecoveryDestination = '', [string] $RecoveryExpectedReason = '',
-    [switch] $RecoveryAuthorized, [string] $InterruptHandoffPath = '',
+    [switch] $RecoveryAuthorized, [string] $InterruptHandoffPath = '', [string] $RecoveryCreatorDirectory = '',
     [ValidateSet('None','Integrity','PreStartIntegrity','Cleanup')] [string] $FailureKind = 'None')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+function Get-ControlledRunLockAdmission {
+    param([string] $Namespace, [Collections.IDictionary] $Arguments)
+    if (-not $Namespace) { return $null }
+    if ($Namespace -cnotmatch '\ALocal\\WINPCInfo-Qualification-([a-f0-9]{64})-worker([12])\z') {
+        throw 'Controlled run lock requires the exact local qualification cohort and worker namespace.'
+    }
+    $cohort=$Matches[1]; $worker=$Matches[2]
+    if ([string]$Arguments['ControlledRunLockNamespace'] -cne $Namespace) {
+        throw 'Controlled run lock namespace must match the explicit root binding.'
+    }
+    $allowed=@('ControlledRunLockNamespace','CandidatePath','PreparedManifestPath',
+        'PreparedManifestSha256','QualificationPath','RemoteSourceScenario','PlatformSourceScenario')
+    if (@($Arguments.Keys | Where-Object { $_ -notin $allowed }).Count) {
+        throw 'Controlled run lock cannot compose other scenarios, faults, recovery or quality measurement.'
+    }
+    foreach ($name in @('CandidatePath','PreparedManifestPath','PreparedManifestSha256','QualificationPath')) {
+        if ($name -notin $Arguments.Keys -or -not [string]$Arguments[$name]) {
+            throw 'Controlled run lock requires an explicit pinned candidate, manifest and retained evidence.'
+        }
+    }
+    if ([string]$Arguments['PreparedManifestSha256'] -cnotmatch '\A[a-f0-9]{64}\z') {
+        throw 'Controlled run lock requires a canonical prepared manifest digest.'
+    }
+    if ($cohort -cne [string]$Arguments['PreparedManifestSha256']) {
+        throw 'Controlled run lock cohort must match the pinned prepared manifest digest.'
+    }
+    $remote='RemoteSourceScenario' -in $Arguments.Keys
+    $platform='PlatformSourceScenario' -in $Arguments.Keys
+    if ($remote -eq $platform -or
+        ($remote -and [string]$Arguments['RemoteSourceScenario'] -cne 'Configured') -or
+        ($platform -and [string]$Arguments['PlatformSourceScenario'] -cne 'Running')) {
+        throw 'Controlled run lock admits only Remote Configured or Platform Running, separately.'
+    }
+    [ordered]@{
+        originalNamespace='Global\WINPCInfo-AssessmentRun-v1'
+        replacementNamespace=$Namespace; cohort=$cohort; worker=[int]$worker
+        claimScope='ControlledCollectorFunctionalityOnly'
+        productionLockQualification='NotQualified'; resourceQualification='NotQualified'
+        clientQualification='NotQualified'
+    }
+}
+function Add-ControlledRunLockNamespace {
+    param([string] $ModuleText, [string] $Namespace)
+    if (-not $Namespace) { return $ModuleText }
+    if ($Namespace -cnotmatch '\ALocal\\WINPCInfo-Qualification-([a-f0-9]{64})-worker([12])\z') {
+        throw 'Controlled run lock namespace is not admitted.'
+    }
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseInput($ModuleText,[ref]$tokens,[ref]$errors)
+    $getters=@($ast.FindAll({param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ieq 'Get-AssessmentRunLifecyclePolicy'
+    },$true))
+    $aliases=@($ast.FindAll({param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ieq 'Get-ControlledOriginalAssessmentRunLifecyclePolicy'
+    },$true))
+    if ($errors.Count -or $getters.Count -ne 1 -or $aliases.Count) {
+        throw 'Controlled run lock requires one original policy getter and no competing alias.'
+    }
+    $source=Rename-QualificationFunction -Source $ModuleText -Name Get-AssessmentRunLifecyclePolicy `
+        -Replacement Get-ControlledOriginalAssessmentRunLifecyclePolicy
+    # Preserve the original integrity/provenance/semantic validation. Clone its
+    # returned object before replacing only the physical lock name. This source
+    # transform is private to the controlled harness and never changes a candidate.
+    $source+(@'
+
+function Get-AssessmentRunLifecyclePolicy {
+    $original=Get-ControlledOriginalAssessmentRunLifecyclePolicy
+    if ([string]$original.activeRunLock.name -cne 'Global\WINPCInfo-AssessmentRun-v1') {
+        throw 'The controlled harness does not recognize the production run lock.'
+    }
+    $copy=[Management.Automation.PSSerializer]::Deserialize(
+        [Management.Automation.PSSerializer]::Serialize($original,100))
+    $copy.activeRunLock.name='__CONTROLLED_RUN_LOCK_NAMESPACE__'
+    $copy
+}
+'@).Replace('__CONTROLLED_RUN_LOCK_NAMESPACE__',$Namespace)
+}
+$controlledRunLockAdmission=Get-ControlledRunLockAdmission -Namespace $ControlledRunLockNamespace -Arguments $PSBoundParameters
 if ($CancelDuringPrivilege -and ($ActiveAction -ne 'None' -or $QualificationPlanFault)) {
     throw 'Automatic active privilege cancellation cannot compose a GUI action or independent plan fault.'
 }
 if ($DelayPrivilegeStartup) {
-    $startupArguments=@('CancelDuringPrivilege','DelayPrivilegeStartup','QualificationPath')
+    $startupArguments=@('CancelDuringPrivilege','DelayPrivilegeStartup','QualificationPath','CandidatePath','PreparedManifestPath','PreparedManifestSha256')
     if (-not $CancelDuringPrivilege -or @($PSBoundParameters.Keys | Where-Object { $_ -notin $startupArguments }).Count) {
         throw 'Delayed privilege startup requires only the controlled automatic cancellation regression.'
     }
@@ -53,7 +135,7 @@ if ($ActivePrivilegeBoundary -ne 'AfterExecution' -and
     throw 'Explicit privilege startup witnesses require an active WPF Privilege case outside resource qualification.'
 }
 if ($ActivePrivilegeBoundary -ne 'AfterExecution') {
-    $boundaryArguments=@('Wpf','ActiveAction','ActiveWorker','ActivePrivilegeBoundary','RequireRecoveryJournal','QualificationPath')
+    $boundaryArguments=@('Wpf','ActiveAction','ActiveWorker','ActivePrivilegeBoundary','RequireRecoveryJournal','QualificationPath','CandidatePath','PreparedManifestPath','PreparedManifestSha256')
     if (@($PSBoundParameters.Keys | Where-Object { $_ -notin $boundaryArguments }).Count) {
         throw 'Explicit privilege startup witnesses cannot compose independent cancellation or fault seams.'
     }
@@ -78,7 +160,7 @@ if (-not $QualificationPath -and $env:WINPCINFO_TEST_EVIDENCE) {
 }
 $qualificationArguments = [ordered]@{}
 foreach ($entry in $PSBoundParameters.GetEnumerator()) {
-    if ($entry.Key -notin @('QualificationPath','RecoveryDestination','InterruptHandoffPath')) {
+    if ($entry.Key -notin @('QualificationPath','RecoveryDestination','InterruptHandoffPath','CandidatePath','PreparedManifestPath','PreparedManifestSha256')) {
         $qualificationArguments[$entry.Key] = if ($entry.Value -is [Management.Automation.SwitchParameter]) { [bool]$entry.Value } else { $entry.Value }
     }
 }
@@ -153,15 +235,12 @@ if ($RequireQualityBudgets) {
     if ($memoryCalibrationAccepted) { $memoryCalibrationSha256=(Get-FileHash -LiteralPath $memoryCalibrationPath).Hash.ToLowerInvariant() }
 }
 
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-if ($RequireQualityBudgets) {
-    # A delivered assessment does not execute its build pipeline. Run the exact
-    # same deterministic build in a separate process; retain the original
-    # mixed-process failures rather than subtracting estimated overhead.
-    Invoke-QualificationTestProcess -HostPath (Join-Path $PSHOME 'pwsh.exe') -Arguments @(
-        '-NoLogo','-NoProfile','-File',(Join-Path $repositoryRoot 'build/Build.ps1'),'-OutputPath',$candidate
-    ) | Out-Null
-} else { & (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null }
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256 -SeparateBuildProcess:$RequireQualityBudgets
+$candidate=$candidateContext.Path
+$qualificationArguments['PreparedCandidate']=$candidateContext.Prepared
+$candidateUseError=$null
+try {
 $regions = [regex]::Matches([IO.File]::ReadAllText($candidate),
     '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach ($region in $regions) { . ([scriptblock]::Create($region.Groups[2].Value)) }
@@ -377,6 +456,16 @@ if ($RequireRecoveryJournal) {
         '$script:StatusDeskTransport.State.JournalObserved=(Test-Path -LiteralPath $Parameters.Request.outputDestination) -and @(Get-ChildItem -LiteralPath $Parameters.Request.outputDestination -Filter WINPCInfo-Recovery-v1-* -Directory).Count -eq 1; $result=Invoke-ControlledPrivilegedCollectionPlan -PreparationPlan')
 }
 if ($InterruptHandoffPath) {
+    . (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
+    if([string]::IsNullOrEmpty($RecoveryCreatorDirectory)){throw 'Original interrupted recovery requires its creator retention directory.'}
+    $recoveryProtocol=Get-QualificationRecoveryCreatorProtocol
+    $recoveryProtocolHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($recoveryProtocol))).ToLowerInvariant()
+    $recoveryPrefix=$recoveryProtocol+[Environment]::NewLine+'$script:RecoveryOriginalProtocolSha256='''+$recoveryProtocolHash+''';'+[Environment]::NewLine
+    $moduleText += [Environment]::NewLine+$recoveryPrefix
+    $workerAnchor='try { $worker = [System.Diagnostics.Process]::Start($startInfo) }'
+    if(([regex]::Matches($moduleText,[regex]::Escape($workerAnchor))).Count -ne 1){throw 'Original recovery coordinator creation boundary changed.'}
+    $workerReplacement='try { $recoveryRequest=Begin-RecoveryOriginalCreation -Directory ''__OWNER__'' -Role StatusWorker -StartInfo $startInfo -WorkerConfiguration $workerConfiguration -WorkerTemplateSha256 $workerDigest; $worker = [System.Diagnostics.Process]::Start($startInfo); Save-RecoveryOriginalCreation -Request $recoveryRequest -Process $worker }'
+    $moduleText=$moduleText.Replace($workerAnchor,$workerReplacement.Replace('__OWNER__',$RecoveryCreatorDirectory.Replace("'","''")))
     # Only the controlled worker can witness creation of its nested child.
     # Rebind this synthetic fixture policy to its instrumented source.
     . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
@@ -389,7 +478,7 @@ function Get-PrivilegedCollectionWorkerSource {
     $source=Get-RecoveryOriginalPrivilegeWorkerSource
     $anchor='$null = [System.Diagnostics.Process]::Start($childStartInfo)'
     if(([regex]::Matches($source,[regex]::Escape($anchor))).Count -ne 1){throw 'Controlled recovery child boundary changed.'}
-    $source.Replace($anchor, '$recoveryChild = [System.Diagnostics.Process]::Start($childStartInfo); [IO.File]::WriteAllText(''__RECOVERY_WITNESS__'', ($PID.ToString() + '':'' + $recoveryChild.Id.ToString()))')
+    '__PROTOCOL_PREFIX__'+$source.Replace($anchor, '$recoveryRequest=Begin-RecoveryOriginalCreation -Directory ''__OWNER__'' -Role StatusNested -StartInfo $childStartInfo; $recoveryChild = [System.Diagnostics.Process]::Start($childStartInfo); Save-RecoveryOriginalCreation -Request $recoveryRequest -Process $recoveryChild; [IO.File]::WriteAllText(''__RECOVERY_WITNESS__'', ($PID.ToString() + '':'' + $recoveryChild.Id.ToString()))')
 }
 function Get-PrivilegedCollectionPlanPolicy {
     $policy=Get-RecoveryOriginalPrivilegePolicy
@@ -398,7 +487,7 @@ function Get-PrivilegedCollectionPlanPolicy {
     $policy
 }
 '@
-    $moduleText += "`n" + $instrumentation.Replace('__RECOVERY_WITNESS__', $InterruptHandoffPath.Replace("'", "''"))
+    $moduleText += "`n" + $instrumentation.Replace('__RECOVERY_WITNESS__', $InterruptHandoffPath.Replace("'", "''")).Replace('__OWNER__',$RecoveryCreatorDirectory.Replace("'","''")).Replace('__PROTOCOL_PREFIX__',$recoveryPrefix.Replace("'","''"))
 }
 if ($FailureKind -eq 'PreStartIntegrity') {
     $moduleText = $moduleText.Replace('-LocalPackageProtector $LocalPackageProtector -ValidationScenario AcceptedElevation',
@@ -589,7 +678,13 @@ if ($RequireQualityBudgets) {
     # The inventory parser and generated replacement strings are setup only.
     [GC]::Collect(2,[GCCollectionMode]::Aggressive,$true,$true)
 }
-else { $definitionInitializer=[scriptblock]::Create($moduleText) }
+else {
+    if ($null -ne $controlledRunLockAdmission) {
+        . (Join-Path $PSScriptRoot 'AssessmentQualificationSupport.ps1')
+        $moduleText=Add-ControlledRunLockNamespace -ModuleText $moduleText -Namespace $ControlledRunLockNamespace
+    }
+    $definitionInitializer=[scriptblock]::Create($moduleText)
+}
     if ($HoldRunLock) {
         $runLock = [Threading.Mutex]::new($false, [string](Get-AssessmentRunLifecyclePolicy).activeRunLock.name)
         $runLockOwned = $runLock.WaitOne(0)
@@ -625,6 +720,27 @@ else { $definitionInitializer=[scriptblock]::Create($moduleText) }
             }
         }.GetNewClosure())
         $measureWorkload = ${function:Measure-QualificationWorkload}.GetNewClosure()
+        # GetNewClosure copies variables, so bind the original script-local
+        # sampler helpers into this same callback module before the timer runs.
+        $measureWorkloadBindings = [ordered]@{
+            'Register-QualificationWorkspaceDirectoryIdentities' = ${function:Register-QualificationWorkspaceDirectoryIdentities}
+            'Test-QualificationWorkspaceDirectoryDisappeared' = ${function:Test-QualificationWorkspaceDirectoryDisappeared}
+            'Get-QualificationWorkspaceNativeErrorCode' = ${function:Get-QualificationWorkspaceNativeErrorCode}
+            'Get-EvidenceWorkspaceFileSystemIdentity' = ${function:Get-EvidenceWorkspaceFileSystemIdentity}
+            'Initialize-EvidenceWorkspaceNative' = ${function:Initialize-EvidenceWorkspaceNative}
+        }
+        if ($RequireQualityBudgets) {
+            $measureWorkloadBindings['Get-QualificationMemorySnapshot'] = ${function:Get-QualificationMemorySnapshot}
+            $measureWorkloadBindings['Initialize-QualificationNativeMemory'] = ${function:Initialize-QualificationNativeMemory}
+        }
+        & $measureWorkload.Module {
+            param([Collections.IDictionary]$Bindings)
+            foreach ($name in $Bindings.Keys) {
+                Set-Item -LiteralPath ('Function:script:' + $name) -Value $Bindings[$name]
+            }
+        } $measureWorkloadBindings
+        # Capture the self-contained original assertion before the driver creates its callback module.
+        $assertEqualWpfDriver = ${function:Assert-Equal}
         $driver.Add_Tick({
             if ($QualificationPath -and ($qualityWatch.ElapsedMilliseconds - $quality.lastSampleMilliseconds) -ge 1000) { & $measureWorkload }
             $window=$uiState.Window
@@ -647,7 +763,7 @@ else { $definitionInitializer=[scriptblock]::Create($moduleText) }
                 $ActivePrivilegeBoundary -eq 'BeforeExecution' -and
                 -not $uiState.Session.Transport.State.ContainsKey('ControlledWorkerStarted') -and
                 [IO.File]::Exists($preStartWitness)) {
-                Assert-Equal 'SyntheticBeforeWorkerHello' ([IO.File]::ReadAllText($preStartWitness)) 'actual worker reached its bounded pre-admission witness'
+                & $assertEqualWpfDriver 'SyntheticBeforeWorkerHello' ([IO.File]::ReadAllText($preStartWitness)) 'actual worker reached its bounded pre-admission witness'
                 $uiState.Session.Transport.State.ControlledWorkerStarted=[Diagnostics.Stopwatch]::GetTimestamp()
             }
             if ($ActiveAction -ne 'None' -and -not $uiState.ActionSent -and
@@ -1145,6 +1261,7 @@ finally {
                 -not [string]::IsNullOrEmpty($session.Transport.State.PackagePath)
         }
         $projection['arguments'] = $qualificationArguments
+        if ($null -ne $controlledRunLockAdmission) { $projection['controlledRunLock'] = $controlledRunLockAdmission }
         if ($ActiveAction -ne 'None' -and $ActiveWorker -eq 'Privilege' -and $null -ne $session -and
             $session.Transport.State.ContainsKey('ActivePrivilegeExecutionStarted')) {
             $projection['activePrivilegeExecutionStarted']=$session.Transport.State.ActivePrivilegeExecutionStarted
@@ -1164,7 +1281,7 @@ finally {
             process = 'ControlledGeneratedStatusDeskAndTestDriver'
             assessmentInterval = 'ProcessLifetimeThroughCompletedSessionAndWpfViewingBeforePostAssessmentAssertions'
             includesModuleLoadingAndTestDriver = $true
-            includesInProcessBuild = (-not $RequireQualityBudgets)
+            includesInProcessBuild = (-not $RequireQualityBudgets -and $qualificationArguments['PreparedCandidate'] -ne $true)
             includesPostAssessmentAssertions = $true
             workingSetMethod = 'WindowsProcessLifetimePeakAndPeriodicSamples'
             privateMemoryMethod = if ($RequireQualityBudgets) { 'NativeWindowsLifetimePrivateCommitPeakAndPeriodicSamples' } else { 'PeriodicSamplesWithRecordedCountAndMaximumGap' }
@@ -1366,3 +1483,6 @@ finally {
     }
 }
 Write-Output 'PASS: generated Status desk worker executes controlled comprehensive collectors, protects a useful offline report, and cleans viewing.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

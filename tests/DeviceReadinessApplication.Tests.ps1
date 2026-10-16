@@ -1,10 +1,9 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
@@ -33,7 +32,11 @@ function Assert-DeviceReadinessPublicOutput {
     }
 }
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateError = $null
+try {
+$candidatePath = $candidateContext.Path
 
 $validationRoot = Join-Path (Split-Path -Parent $candidatePath) '.device-readiness-validation'
 if ([System.IO.Directory]::Exists($validationRoot)) {
@@ -136,4 +139,7 @@ catch {
 Assert-Equal $true $alteredGuidanceRejected 'only the exact reviewed public caution is allowlisted'
 if ($result.StandardError) { throw "Complete wrote stderr: $($result.StandardError)" }
 
+}
+catch { $candidateError = $_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateError }
 Write-Output 'PASS: the generated application completes the Device and Windows readiness slice.'

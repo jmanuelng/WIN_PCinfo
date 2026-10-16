@@ -41,8 +41,12 @@ function Stop-RecoveryApplication {
 
 $handoffFinalizer=Get-FixtureFinalizer 'Test-RecoveryChildFailureAfterHandoff'
 $pipeFinalizer=Get-FixtureFinalizer 'Test-RecoveryExitedChildWithIncompleteOutput'
-$controllerLoop=@((Read-FixtureAst 'PrivilegedExecutionPhase.Tests.ps1').EndBlock.Statements |
-    Where-Object {$_ -is [Management.Automation.Language.ForEachStatementAst] -and $_.Variable.Extent.Text -eq '$name'})[0]
+$controllerLoops=@((Read-FixtureAst 'PrivilegedExecutionPhase.Tests.ps1').FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.ForEachStatementAst] -and $node.Variable.Extent.Text -eq '$name'
+},$true))
+if($controllerLoops.Count-ne1){throw 'Actual controller case loop is missing or ambiguous.'}
+$controllerLoop=$controllerLoops[0]
 $controllerStatements=@($controllerLoop.Body.Statements)
 $controllerInvocationIndex=-1
 for($index=0;$index-lt$controllerStatements.Count;$index++){
@@ -70,11 +74,128 @@ function New-InjectedProcess {
     }
     return $process
 }
+# These adapters observe only the injected objects below. They never construct
+# a genuine original-creator owner, process identity, admission or native proof.
+function Assert-ReplayOwner($Owner) {
+    if($null-eq$Owner-or-not[object]::ReferenceEquals($Owner,$script:replayObserverOwner)-or
+        $Owner.ReplayOnly-isnot[bool]-or-not$Owner.ReplayOnly){throw 'Foreign synthetic replay owner.'}
+}
+function Save-QualificationOriginalCreatorTerminal {
+    param($Owner,[string]$Disposition,[bool]$Forced,[string]$StandardOutput,[string]$StandardError,[string]$StreamContract)
+    Assert-ReplayOwner $Owner
+    $expected=switch($Owner.Kind){Metadata{'ExactMetadataMismatchFixture'}Handoff{'FailedOriginalHandoffFixture'}Pipe{'OriginalIncompletePipeRefusalNative0'}Tree{'ParentOnlyStopLeavesNestedAlive'}default{throw 'Unexpected replay owner kind.'}}
+    if($Disposition-cne$expected-or$Owner.Unsafe-or$Owner.TerminalRetained-or$Owner.Completed-or$Owner.Process.DisposeCount-ne0){throw 'Synthetic terminal order or disposition differs.'}
+    $expectedContract=if($Owner.Kind-ceq'Metadata'){'NoRedirectedChannels'}else{'OriginalReadToEndStrings'}
+    if($StreamContract-cne$expectedContract-or$Forced-ne($Owner.Kind-cne'Pipe')){throw 'Synthetic terminal contract differs.'}
+    $Owner.Trace.Add('SaveOriginal');$Owner.TerminalRetained=$true
+}
+function Complete-QualificationOriginalCreatorOwner {
+    param($Owner)
+    Assert-ReplayOwner $Owner
+    if($Owner.Unsafe-or-not$Owner.TerminalRetained-or$Owner.Completed-or$Owner.Process.DisposeCount-ne1-or$Owner.Process.DisposeThrows){throw 'Synthetic original close precedes successful disposal or terminal.'}
+    $Owner.Trace.Add('CompleteOriginal');$Owner.Completed=$true
+}
+function Save-QualificationRecoveryOriginalTerminal {
+    param($Owner,[string]$Role,$Process,$CreatorProcess,[string]$Disposition)
+    Assert-ReplayOwner $Owner
+    if($Owner.Kind-cne'Tree'-or$Role-cne'RecoveryNested'-or$Disposition-cne'ParentOnlyStopThenSeparateHeldChildStop'-or
+        -not[object]::ReferenceEquals($Process,$Owner.Nested)-or-not[object]::ReferenceEquals($CreatorProcess,$Owner.Process)-or
+        $Process.DisposeCount-ne0-or$Owner.NestedSaved-or$Owner.TerminalRetained){throw 'Synthetic nested terminal identity or order differs.'}
+    $Owner.Trace.Add('SaveNested');$Owner.NestedSaved=$true
+}
+function Complete-QualificationRecoveryOriginalTerminal {
+    param($Owner,[string]$Role)
+    Assert-ReplayOwner $Owner
+    if($Role-cne'RecoveryNested'-or-not$Owner.NestedSaved-or$Owner.NestedCompleted-or
+        $Owner.Nested.DisposeCount-ne1-or$Owner.Nested.DisposeThrows){throw 'Synthetic nested close precedes successful disposal or terminal.'}
+    $Owner.Trace.Add('CompleteNested');$Owner.NestedCompleted=$true
+}
 function New-InjectedOutput {
-    $output=[pscustomobject]@{WaitResult=$true;WaitCount=0}
-    $output | Add-Member ScriptMethod Wait {param($Milliseconds) $this.WaitCount++;return $this.WaitResult}
+    $output=[pscustomobject]@{WaitResult=$true;WaitCount=0;ResultCount=0}
+    $output|Add-Member ScriptMethod Wait {param($Milliseconds) $this.WaitCount++;return $this.WaitResult}
+    $output|Add-Member ScriptProperty IsCompletedSuccessfully {$this.WaitResult}
+    $output|Add-Member ScriptMethod GetAwaiter {return $this}
+    $output|Add-Member ScriptMethod GetResult {
+        if(-not$this.WaitResult-or$this.WaitCount-lt1){throw 'Incomplete synthetic output cannot be read.'}
+        $this.ResultCount++;return 'Synthetic replay output; no native execution.'
+    }
     return $output
 }
+
+function New-ReplayOnlyOwner([string]$Kind,$Process,$Nested) {
+    [pscustomobject]@{ReplayOnly=$true;Kind=$Kind;Process=$Process;Nested=$Nested;Unsafe=$false;
+        TerminalRetained=$false;Completed=$false;NestedSaved=$false;NestedCompleted=$false;
+        Trace=[Collections.Generic.List[string]]::new()}
+}
+function Assert-ReplayObserverRefusal([scriptblock]$Action,[string]$Because) {
+    $refused=$false
+    try { & $Action } catch { $refused=$true }
+    Assert-Equal $true $refused $Because
+    $script:replayObserverRefusals++
+}
+function Test-ReplayObserverBoundary {
+    $script:replayObserverRefusals=0
+    $process=New-InjectedProcess
+    $script:replayObserverOwner=New-ReplayOnlyOwner Metadata $process $null
+    $owner=$script:replayObserverOwner
+    try {
+        Assert-ReplayObserverRefusal { Assert-ReplayOwner $null } 'null replay owner is rejected'
+        Assert-ReplayObserverRefusal { Assert-ReplayOwner (New-ReplayOnlyOwner Metadata $process $null) } 'lookalike replay owner is rejected'
+        Assert-ReplayObserverRefusal { Complete-QualificationOriginalCreatorOwner $owner } 'close before terminal is rejected'
+        Assert-ReplayObserverRefusal { Save-QualificationOriginalCreatorTerminal -Owner $owner -Disposition Wrong -Forced $true -StreamContract NoRedirectedChannels } 'wrong terminal disposition is rejected'
+        Assert-ReplayObserverRefusal { Save-QualificationOriginalCreatorTerminal -Owner $owner -Disposition ExactMetadataMismatchFixture -Forced $false -StreamContract NoRedirectedChannels } 'wrong forced flag is rejected'
+        Assert-ReplayObserverRefusal { Save-QualificationOriginalCreatorTerminal -Owner $owner -Disposition ExactMetadataMismatchFixture -Forced $true -StreamContract Wrong } 'wrong stream contract is rejected'
+        Save-QualificationOriginalCreatorTerminal -Owner $owner -Disposition ExactMetadataMismatchFixture -Forced $true -StreamContract NoRedirectedChannels
+        Assert-ReplayObserverRefusal { Save-QualificationOriginalCreatorTerminal -Owner $owner -Disposition ExactMetadataMismatchFixture -Forced $true -StreamContract NoRedirectedChannels } 'duplicate terminal is rejected'
+        Assert-ReplayObserverRefusal { Complete-QualificationOriginalCreatorOwner $owner } 'close before handle disposal is rejected'
+        $process.Dispose()
+        Complete-QualificationOriginalCreatorOwner $owner
+        Assert-ReplayObserverRefusal { Complete-QualificationOriginalCreatorOwner $owner } 'duplicate close is rejected'
+        $nested=New-InjectedProcess;$process=New-InjectedProcess
+        $script:replayObserverOwner=New-ReplayOnlyOwner Tree $process $nested
+        $owner=$script:replayObserverOwner
+        Assert-ReplayObserverRefusal { Complete-QualificationRecoveryOriginalTerminal -Owner $owner -Role RecoveryNested } 'nested close before terminal is rejected'
+        Assert-ReplayObserverRefusal { Save-QualificationRecoveryOriginalTerminal -Owner $owner -Role Wrong -Process $nested -CreatorProcess $process -Disposition ParentOnlyStopThenSeparateHeldChildStop } 'wrong nested role is rejected'
+        Assert-ReplayObserverRefusal { Save-QualificationRecoveryOriginalTerminal -Owner $owner -Role RecoveryNested -Process (New-InjectedProcess) -CreatorProcess $process -Disposition ParentOnlyStopThenSeparateHeldChildStop } 'foreign nested process is rejected'
+        Assert-ReplayObserverRefusal { Save-QualificationRecoveryOriginalTerminal -Owner $owner -Role RecoveryNested -Process $nested -CreatorProcess (New-InjectedProcess) -Disposition ParentOnlyStopThenSeparateHeldChildStop } 'foreign nested creator is rejected'
+        Save-QualificationRecoveryOriginalTerminal -Owner $owner -Role RecoveryNested -Process $nested -CreatorProcess $process -Disposition ParentOnlyStopThenSeparateHeldChildStop
+        Assert-ReplayObserverRefusal { Save-QualificationRecoveryOriginalTerminal -Owner $owner -Role RecoveryNested -Process $nested -CreatorProcess $process -Disposition ParentOnlyStopThenSeparateHeldChildStop } 'duplicate nested terminal is rejected'
+        Assert-ReplayObserverRefusal { Complete-QualificationRecoveryOriginalTerminal -Owner $owner -Role RecoveryNested } 'nested close before disposal is rejected'
+        $nested.Dispose()
+        Complete-QualificationRecoveryOriginalTerminal -Owner $owner -Role RecoveryNested
+        Assert-ReplayObserverRefusal { Complete-QualificationRecoveryOriginalTerminal -Owner $owner -Role RecoveryNested } 'duplicate nested close is rejected'
+        $task=New-InjectedOutput
+        Assert-ReplayObserverRefusal { $task.GetAwaiter().GetResult() } 'unobserved output cannot be read'
+        $task.WaitResult=$false;$null=$task.Wait(0)
+        Assert-ReplayObserverRefusal { $task.GetAwaiter().GetResult() } 'incomplete observed output cannot be read'
+        Assert-Equal 0 $task.ResultCount 'refused reads consume no synthetic result'
+        $task.WaitResult=$true;$null=$task.Wait(0);$null=$task.GetAwaiter().GetResult()
+        Assert-Equal 1 $task.ResultCount 'completed observed output is read exactly once'
+    } finally { $script:replayObserverOwner=$null }
+}
+function Assert-ReplayIntendedFault($Case,$Caught) {
+    if($null-eq$Caught){return}
+    $message=$Caught.Exception.ToString()
+    Assert-Equal $false ($message-match 'The variable .*cannot be retrieved|not recognized as a name|does not contain a method|MethodNotFound') 'unrelated replay setup errors cannot satisfy an expected fault'
+    if(-not$Case.unsafe-or$Case.kind-ceq'Controller'){return}
+    $expected=switch -Regex ($Case.name) {
+        '^(MetadataKillFailure|HandoffKillFailure|PipeKillFailure|HandoffKillAfterExit|PipeKillAfterExit|TreeNestedStopFailure)$' {'Injected exact-owned stop failure.';break}
+        'DisposeFailure$' {'Injected owned handle disposal failure.';break}
+        '^MetadataWaitTimeout$' {'Exact-owned metadata test child absence remains unverified.';break}
+        '^HandoffWaitTimeout$' {'Controlled handoff child remains active.';break}
+        '^PipeWaitTimeout$' {'Owned pipe regression remains active.';break}
+        '^HandoffPendingOutput$' {'Controlled handoff child output remains unverified.';break}
+        '^PipePendingError$' {'Owned pipe fixture error output remains unverified.';break}
+        '^TreeParentStopFailure$' {'Injected exact-owned parent stop failure.';break}
+        '^TreeParentWaitTimeout$' {'Exact-owned fixture parent absence remains unverified.';break}
+        '^TreeOutputPending$' {'Exact-owned fixture standard output remains open.';break}
+        '^TreeMissingNested' {'started parent has no admitted nested child ownership.';break}
+        default {throw 'Expected replay fault has no intended cause.'}
+    }
+    Assert-Equal $true ($message.Contains($expected)) ($Case.name+' retains the intended injected fault')
+}
+
+Test-ReplayObserverBoundary
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
 $fixtureRoot=Join-Path $repositoryRoot ('.test-output/fixture-finalizers-'+[guid]::NewGuid().ToString('N'))
 $null=[IO.Directory]::CreateDirectory($fixtureRoot)
@@ -178,6 +299,16 @@ try {
             if($case.name-eq'TreeMissingNestedAndWitness'){[IO.File]::Delete($witness)}
         }
 
+        # Only this case's injected objects are admitted to the replay observers.
+        $candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+        $script:replayObserverOwner=New-ReplayOnlyOwner -Kind $case.kind -Process $(switch($case.kind){Metadata{$child}Handoff{$child}Pipe{$repro}Tree{$root}default{$null}}) -Nested $nested
+        $metadataOwner=$null;$handoffOwner=$null;$pipeOwner=$null;$fixtureOwner=$null
+        switch($case.kind){
+            Metadata{$metadataOwner=$script:replayObserverOwner}
+            Handoff{$handoffOwner=$script:replayObserverOwner}
+            Pipe{$pipeOwner=$script:replayObserverOwner}
+            Tree{$fixtureOwner=$script:replayObserverOwner}
+        }
         if($case.ContainsKey('foreignMarker')) {
             [IO.File]::WriteAllText((Get-QualificationCleanupBlockerPath),'synthetic-unrelated-marker')
         }
@@ -208,6 +339,7 @@ try {
             }
         }catch{$caught=$_}
         $unsafe=$null-ne$caught-and(Test-QualificationCleanupUnverified -Exception $caught.Exception)
+        Assert-ReplayIntendedFault $case $caught
         Assert-Equal $case.unsafe $unsafe ($case.name+' preserves actual shared unsafe disposition')
         # Consume only this injected invocation's success stream, including the
         # sentinel emitted before its terminating exception. Real outer cleanup
@@ -252,9 +384,9 @@ try {
         if($case.ContainsKey('foreignMarker')){
             Assert-Equal 'synthetic-unrelated-marker' ([IO.File]::ReadAllText((Get-QualificationCleanupBlockerPath))) 'verified fixture cannot clear an unrelated suite marker'
         }
-        $replayResults.Add([ordered]@{case=$case.name;result='Pass';expectedUnsafe=$case.unsafe;actualUnsafe=$unsafe;capturedUnsafeSignals=$signals.Count;nativeProcessesStarted=0;bodyFailureRetained=$null-ne$originalBodyError})
+        $replayResults.Add([ordered]@{case=$case.name;result='Pass';expectedUnsafe=$case.unsafe;actualUnsafe=$unsafe;capturedUnsafeSignals=$signals.Count;nativeProcessesStarted=0;bodyFailureRetained=$null-ne$originalBodyError;replayOnlyOwnerTrace=$script:replayObserverOwner.Trace.ToArray()})
     }
-    $evidence=[ordered]@{recordType='win-pcinfo.actual-fixture-finalizer-replays';result='Pass';scope='Actual AST finalizers/controller assertion suffix under injected process/output faults only';nativeProcessesStarted=0;productionControllerExecuted=$false;cases=$replayResults.ToArray();inputs=@(
+    $evidence=[ordered]@{recordType='win-pcinfo.actual-fixture-finalizer-replays';result='Pass';scope='Actual AST finalizers/controller assertion suffix under injected process/output faults only';nativeProcessesStarted=0;productionControllerExecuted=$false;replayOnlyObserverRefusals=$script:replayObserverRefusals;cases=$replayResults.ToArray();inputs=@(
         'RecoveryProcessOwnership.Tests.ps1','PrivilegedExecutionPhase.Tests.ps1','QualificationCleanup.Tests.ps1','QualificationCleanup.ps1'
     ) | ForEach-Object {[ordered]@{file=$_;sha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $_) -Algorithm SHA256).Hash.ToLowerInvariant()}}}
     if($env:WINPCINFO_TEST_EVIDENCE){

@@ -1,11 +1,15 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 
 # Execute the generated preparation contract with only the initiating-user
 # crypto provider replaced. No production command-line trust override exists.
@@ -90,4 +94,9 @@ foreach ($case in @('ProtectDenied', 'EmptyWrap', 'OversizedWrap', 'UnprotectDen
         Assert-Equal 0 @($buffer | Where-Object { $_ -ne 0 }).Count "$case clears controllable buffers"
     }
 }
-Write-Output 'PASS: generated preparation verifies and clears its initiating-user probe without collection.'
+$candidateSuccessMessages.Add('PASS: generated preparation verifies and clears its initiating-user probe without collection.')
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

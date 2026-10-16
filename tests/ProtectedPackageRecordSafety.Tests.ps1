@@ -1,13 +1,17 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 . (Join-Path $PSScriptRoot 'PackageSafetyTestSupport.ps1')
 . (Join-Path $PSScriptRoot 'ContractFormatTestSupport.ps1')
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateSuccessMessages=[Collections.Generic.List[string]]::new()
+$candidateUseError=$null
+try {
 $regions = [regex]::Matches([IO.File]::ReadAllText($candidate),
     '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach ($region in $regions) { . ([scriptblock]::Create($region.Groups[2].Value)) }
@@ -42,7 +46,7 @@ try {
                 if($null -ne $opened.artifacts){foreach($buffer in $opened.artifacts.Values){[Security.Cryptography.CryptographicOperations]::ZeroMemory($buffer)}}
                 [Security.Cryptography.CryptographicOperations]::ZeroMemory($bytes)
             }
-            Write-Output "PASS: $culture legitimate semantic formats survive authenticated packaging byte-for-byte."
+            $candidateSuccessMessages.Add("PASS: $culture legitimate semantic formats survive authenticated packaging byte-for-byte.")
         }
     } finally { [cultureinfo]::CurrentCulture=$savedCulture }
     $cases = [ordered]@{
@@ -102,7 +106,7 @@ try {
         Assert-Equal ($before -join '|') (@([IO.Directory]::EnumerateFileSystemEntries($root) | Sort-Object) -join '|') "$name creates no viewing artifact or journal"
         [Security.Cryptography.CryptographicOperations]::ZeroMemory($bytes)
         [Security.Cryptography.CryptographicOperations]::ZeroMemory($hostile)
-        Write-Output "PASS: authenticated package record $name refused before naming, admission and viewing."
+        $candidateSuccessMessages.Add("PASS: authenticated package record $name refused before naming, admission and viewing.")
     }
 }
 finally {
@@ -114,3 +118,8 @@ finally {
     if ([IO.Path]::GetDirectoryName($resolved) -ne [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))) { throw 'Record test cleanup escaped its parent.' }
     if ([IO.Directory]::Exists($resolved)) { [IO.Directory]::Delete($resolved, $true) }
 }
+
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
+foreach ($candidateSuccessMessage in $candidateSuccessMessages) { Write-Output $candidateSuccessMessage }

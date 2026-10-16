@@ -3,6 +3,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
+. (Join-Path $PSScriptRoot 'QualificationFixtureProcess.ps1')
 . (Join-Path $PSScriptRoot 'RecoveryProcessOwnership.ps1')
 $parent=[Diagnostics.Process]::GetCurrentProcess()
 $child=$null
@@ -13,7 +14,10 @@ try {
     $start.FileName=Join-Path $PSHOME 'pwsh.exe'
     $start.UseShellExecute=$false; $start.CreateNoWindow=$true
     foreach($argument in @('-NoLogo','-NoProfile','-NonInteractive','-Command','[Threading.Thread]::Sleep(30000)')){$start.ArgumentList.Add($argument)}
+    $metadataOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot (Split-Path -Parent $PSScriptRoot) -TestPath $PSCommandPath -Profile RecoveryMetadata -StartInfo $start
+    Assert-QualificationOriginalCreatorCreation $metadataOwner
     $child=[Diagnostics.Process]::Start($start)
+    Register-QualificationFixtureProcess -Owner $metadataOwner -Process $child
     $null=$child.Handle
     $entries=@(Get-CimInstance Win32_Process -Filter ('ProcessId = '+$child.Id))
     Assert-Equal 1 $entries.Count 'only the explicitly created child PID is observed'
@@ -52,7 +56,13 @@ finally {
                 throw 'Exact-owned metadata test child absence remains unverified.'
             }
         },
-        {if($null -ne $child){$child.Dispose()}},
+        {
+            if($null -ne $child){
+                try{Save-QualificationOriginalCreatorTerminal -Owner $metadataOwner -Disposition ExactMetadataMismatchFixture -Forced $true -StreamContract NoRedirectedChannels}
+                finally{$child.Dispose()}
+                Complete-QualificationOriginalCreatorOwner $metadataOwner
+            }
+        },
         {if($null -ne $held){$held.Dispose()}},
         {$parent.Dispose()}
     )
@@ -67,21 +77,27 @@ $witness=Join-Path $ownedRoot 'nested-ready'
 $root=$null;$nested=$null;$rootOutput=$null;$rootError=$null;$stopBodyError=$null
 $stopFixtureCleanup=@{parentStop=$false;parentAbsent=$false;nestedStop=$false;nestedAbsent=$false;outputClosed=$false;errorClosed=$false;nestedDisposed=$false;parentDisposed=$false}
 try {
+    $fixtureNonce=[guid]::NewGuid().ToString('N');$fixtureDirectory=Join-Path (Split-Path -Parent $PSScriptRoot) ('.test-output/original-creator/'+$fixtureNonce)
+    $protocol=Get-QualificationRecoveryCreatorProtocol;$protocolHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($protocol))).ToLowerInvariant()
     $code=@'
 $start=[Diagnostics.ProcessStartInfo]::new()
 $start.FileName=Join-Path $PSHOME 'pwsh.exe'
 $start.UseShellExecute=$false;$start.CreateNoWindow=$true
 foreach($argument in @('-NoLogo','-NoProfile','-NonInteractive','-Command','[Threading.Thread]::Sleep(30000)')){$start.ArgumentList.Add($argument)}
-$nested=[Diagnostics.Process]::Start($start)
+$recoveryRequest=Begin-RecoveryOriginalCreation -Directory '__OWNER__' -Role RecoveryNested -StartInfo $start; $nested=[Diagnostics.Process]::Start($start); Save-RecoveryOriginalCreation -Request $recoveryRequest -Process $nested
 [IO.File]::WriteAllText('__WITNESS__',$nested.Id.ToString())
 [Threading.Thread]::Sleep(30000)
-'@.Replace('__WITNESS__',$witness.Replace("'","''"))
+'@.Replace('__WITNESS__',$witness.Replace("'","''")).Replace('__OWNER__',$fixtureDirectory.Replace("'","''"))
+    $code=$protocol+[Environment]::NewLine+'$script:RecoveryOriginalProtocolSha256='''+$protocolHash+''';'+[Environment]::NewLine+$code
     $start=[Diagnostics.ProcessStartInfo]::new()
     $start.FileName=Join-Path $PSHOME 'pwsh.exe'
     $start.UseShellExecute=$false;$start.CreateNoWindow=$true
     $start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
     foreach($argument in @('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code)))){$start.ArgumentList.Add($argument)}
+    $fixtureOwner=New-QualificationOriginalCreatorOwner -RepositoryRoot (Split-Path -Parent $PSScriptRoot) -TestPath $PSCommandPath -Profile RecoveryFixtureParent -StartInfo $start -Nonce $fixtureNonce
+    Assert-QualificationOriginalCreatorCreation $fixtureOwner
     $root=[Diagnostics.Process]::Start($start);$null=$root.Handle
+    Register-QualificationFixtureProcess -Owner $fixtureOwner -Process $root
     $rootOutput=$root.StandardOutput.ReadToEndAsync();$rootError=$root.StandardError.ReadToEndAsync()
     $watch=[Diagnostics.Stopwatch]::StartNew()
     while(-not [IO.File]::Exists($witness)-and -not $root.HasExited-and $watch.ElapsedMilliseconds-lt5000){Start-Sleep -Milliseconds 25}
@@ -127,11 +143,17 @@ finally {
             $stopFixtureCleanup.errorClosed=$true
         },
         {
-            if($null-ne$nested){$nested.Dispose()}
+            if($null-ne$nested){try{Save-QualificationRecoveryOriginalTerminal -Owner $fixtureOwner -Role RecoveryNested -Process $nested -CreatorProcess $root -Disposition ParentOnlyStopThenSeparateHeldChildStop}finally{$nested.Dispose()};Complete-QualificationRecoveryOriginalTerminal -Owner $fixtureOwner -Role RecoveryNested}
             $stopFixtureCleanup.nestedDisposed=$true
         },
         {
-            if($null-ne$root){$root.Dispose()}
+            if($null-ne$root){
+                try {
+                    if($null-eq$rootOutput-or$null-eq$rootError-or-not$rootOutput.IsCompletedSuccessfully-or-not$rootError.IsCompletedSuccessfully){$fixtureOwner.Unsafe=$true;throw 'Original parent stream tasks did not complete; no blocking GetResult is allowed.'}
+                    Save-QualificationOriginalCreatorTerminal -Owner $fixtureOwner -Disposition ParentOnlyStopLeavesNestedAlive -Forced $true -StandardOutput $rootOutput.GetAwaiter().GetResult() -StandardError $rootError.GetAwaiter().GetResult() -StreamContract OriginalReadToEndStrings
+                }finally{$root.Dispose()}
+                Complete-QualificationOriginalCreatorOwner $fixtureOwner
+            }
             $stopFixtureCleanup.parentDisposed=$true
         },
         {

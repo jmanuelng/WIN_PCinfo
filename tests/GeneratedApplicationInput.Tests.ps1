@@ -33,13 +33,19 @@ $line = [Console]::In.ReadLine()
 '@, [Text.UTF8Encoding]::new($false))
 
 [IO.File]::WriteAllText($launcherPath, @'
-param([string] $HarnessPath, [string] $CandidatePath, [string] $HostPath, [string] $WitnessPath, [string] $Case)
+param([string] $HarnessPath, [string] $CandidatePath, [string] $HostPath, [string] $WitnessPath, [string] $Case, [string] $InputLauncherOwnerDirectory)
 $ErrorActionPreference = 'Stop'
 . $HarnessPath
+$inputBinding=Enter-InputLauncher -RepositoryRoot (Split-Path -Parent (Split-Path -Parent $HarnessPath)) -Directory $InputLauncherOwnerDirectory
 $parameters = @{
     CandidatePath = $CandidatePath
     PowerShellPath = $HostPath
     Arguments = @('-WitnessPath', $WitnessPath)
+    InputLauncherOwnerDirectory = $InputLauncherOwnerDirectory
+    WorkingDirectory = $inputBinding.Record.repositoryRoot
+    TimeoutMs = 10000
+    CleanupReserveMs = 5000
+    AuthorityEnds = $inputBinding.Ends
 }
 switch ($Case) {
     'Empty' { $parameters.StandardInput = '' }
@@ -72,8 +78,10 @@ function Stop-ExactInputRegressionProcess {
         $exception.Data['OwnedCleanupUnverified'] = $true
         throw $exception
     }
+    if ((Get-InputLauncherRemainingMs -Owner $inputOwner) -lt 6000) { throw (New-InputLauncherUnsafe 'Input regression exact stop lacks original deadline reserve') }
+    $inputOwner.Unsafe = $true
     $Process.Kill()
-    if (-not $Process.WaitForExit(5000)) {
+    if (-not $Process.WaitForExit([int](Get-InputLauncherWaitMs -Owner $inputOwner -MaximumMs 5000 -ReserveMs 1000))) {
         $exception = [InvalidOperationException]::new('Input regression owned process did not stop')
         $exception.Data['OwnedCleanupUnverified'] = $true
         throw $exception
@@ -94,23 +102,30 @@ try {
             '-HostPath', $hostPath, '-WitnessPath', $witnessPath, '-Case', $case)) {
             $null = $startInfo.ArgumentList.Add($argument)
         }
+        $inputOwner = New-InputLauncherOwner -RepositoryRoot $repositoryRoot -FixtureRoot $fixtureRoot -Case $case -StartInfo $startInfo
         $launcher = [Diagnostics.Process]::new()
         $launcher.StartInfo = $startInfo
         $launcherStart = $null
         $timedOut = $false
         $candidate = $null
-        $caseError = $null
+        $caseError = $null; $terminalObserved = $false; $streamsDrained = $false; $output = $null; $errors = $null
         try {
-            $null = $launcher.Start()
+            if ((Get-InputLauncherRemainingMs -Owner $inputOwner) -lt 27000) { throw 'Input launcher original creation authority consumed before Start' }
+            $inputOwner.Process = $launcher
+            if (-not $launcher.Start()) { $inputOwner.Unsafe = $true; throw (New-InputLauncherUnsafe 'Input launcher original Start returned false') }
+            Register-InputLauncherOriginal -Owner $inputOwner -Process $launcher
             $launcherStart = $launcher.StartTime.ToUniversalTime()
             # Intentionally leave the launcher's redirected input open and empty.
             # The nested harness must supply its own EOF rather than inherit this pipe.
             $stdout = $launcher.StandardOutput.ReadToEndAsync()
             $stderr = $launcher.StandardError.ReadToEndAsync()
             if (-not $launcher.WaitForExit(15000)) {
-                $timedOut = $true
+                $timedOut = $true; $inputOwner.Unsafe = $true
                 throw 'Generated application inherited open stdin instead of receiving deterministic EOF'
             }
+            $terminalObserved = $true
+            if (-not [Threading.Tasks.Task]::WhenAll([Threading.Tasks.Task[]]@($stdout,$stderr)).Wait([int](Get-InputLauncherWaitMs -Owner $inputOwner -MaximumMs 5000 -ReserveMs 6000))) { $inputOwner.Unsafe = $true; throw (New-InputLauncherUnsafe 'Input launcher stdout/stderr did not complete within original authority') }
+            $streamsDrained = $true
             $output = $stdout.GetAwaiter().GetResult()
             $errors = $stderr.GetAwaiter().GetResult()
             Assert-Equal 0 $launcher.ExitCode 'the isolated harness invocation exits successfully'
@@ -130,7 +145,9 @@ try {
         $observations.Add($observation)
         # Each cleanup action is attempted independently. The shared finalizer
         # retains the case failure and marks any unverified cleanup as unsafe.
-        Complete-QualificationHarness -BodyError $caseError -Cleanup @(
+        Complete-QualificationHarness -BodyError $caseError -RetainEvidence {
+            Save-InputLauncherTerminal -Owner $inputOwner -TerminalObserved $terminalObserved -StreamsDrained $streamsDrained -Forced $inputOwner.Unsafe -StandardOutput $output -StandardError $errors
+        } -Cleanup @(
             {
                 if ($null -ne $launcherStart) {
                     if (-not (Test-Path -LiteralPath $witnessPath)) { throw 'Input candidate lifetime witness missing' }
@@ -169,8 +186,11 @@ try {
                     throw 'Owned isolated input fixture process remains present'
                 }
             },
-            { $launcher.Dispose() }
-        ) -RetainCleanupEvidence { $observation.exactOwnedCleanupVerified = $true }
+            { if ($inputOwner.TerminalRetained -and $terminalObserved -and -not $inputOwner.Unsafe) { $launcher.Dispose(); $inputOwner.Disposed = $true } }
+        ) -RetainCleanupEvidence {
+            Complete-InputLauncherOwner -Owner $inputOwner -ExactFixtureCleanupVerified $true
+            $observation.exactOwnedCleanupVerified = $true
+        }
     }
 }
 catch { $bodyError = $_ }

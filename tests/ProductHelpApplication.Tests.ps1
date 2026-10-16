@@ -1,16 +1,18 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath,[string] $PreparedManifestPath,[string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$bodyError=$null
+try {
 
 function Assert-NoDiscoveryLeak {
     param(
@@ -78,4 +80,7 @@ $fixtureRun = Invoke-GeneratedApplication -CandidatePath $candidatePath -Argumen
 )
 Assert-NoDiscoveryLeak -Result $fixtureRun -Because 'a synthetic full-profile assessment'
 
+}
+catch { $bodyError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $bodyError }
 Write-Output 'PASS: generated Help and About are passive, and assessment runs never prompt for feedback.'

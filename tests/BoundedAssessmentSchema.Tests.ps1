@@ -1,11 +1,14 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidate = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidate | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidate=$candidateContext.Path
+$candidateUseError=$null
+try {
 $regions = [regex]::Matches([IO.File]::ReadAllText($candidate),
     '(?ms)^#region Generated from src/(?!ApplicationHeader|ApplicationMain)([^\r\n]+)\r?\n(.*?)^#endregion Generated from src/\1')
 foreach ($region in $regions) { . ([scriptblock]::Create($region.Groups[2].Value)) }
@@ -140,3 +143,6 @@ $script:faultCalls=0; $script:faultPass=1; $script:faultKind='ErrorAndTrue'
 $result=Test-AssessmentContract -Utf8Bytes ([Text.Encoding]::UTF8.GetBytes($largeJson)) -ConvertFromJsonCommand $trustedConverter -TestJsonCommand (Get-Command Invoke-BoundedFaultingSchemaCommand)
 Assert-Equal 'CONTRACT.VALIDATOR_FAILED' $result.reasonCode 'a command error plus success cannot qualify the public large-record boundary'
 Write-Output 'PASS: large-record lexical safety and public schema/command reasons precede any projected acceptance.'
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

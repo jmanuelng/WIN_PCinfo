@@ -1,17 +1,24 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationFixturePath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 $contractFixturePath = Join-Path $PSScriptRoot 'fixtures/contract-positive.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateUseError=$null
+try {
+$generatedFixtureRoot=$null
+$fixtureRootCreated=$false
+$fixtureBodyError=$null
+try {
 
 function Invoke-ContractFixture {
     param([Parameter(Mandatory)] [string] $LiteralPath)
@@ -68,8 +75,9 @@ Assert-Equal 'CONTRACT.DUPLICATE_PROPERTY' $duplicateValidation.reasonCode `
 
 Write-Output 'PASS: duplicate JSON property names fail closed before conversion.'
 
-$generatedFixtureRoot = Join-Path $repositoryRoot '.test-output/contract-validator'
-$null = New-Item -ItemType Directory -Path $generatedFixtureRoot -Force
+$generatedFixtureRoot = Join-Path $repositoryRoot ('.test-output/contract-validator-'+[guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Path $generatedFixtureRoot -ErrorAction Stop
+$fixtureRootCreated=$true
 $invalidUtf8Path = Join-Path $generatedFixtureRoot 'invalid-utf8.json'
 [System.IO.File]::WriteAllBytes($invalidUtf8Path, [byte[]] @(0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xc3, 0x28, 0x22, 0x7d))
 $invalidUtf8 = Invoke-ContractFixture -LiteralPath $invalidUtf8Path
@@ -255,3 +263,21 @@ Assert-Equal 'CONTRACT.FIELD_BOUND_EXCEEDED' $fieldBoundValidation.reasonCode `
     'field bounds are enforced separately from the whole-document safety ceiling'
 
 Write-Output 'PASS: Evidence Field Definition bounds are enforced on admitted observations.'
+}
+catch { $fixtureBodyError=$_ }
+finally {
+    Complete-QualificationHarness -BodyError $fixtureBodyError -Cleanup @({
+        if ($null -ne $fixtureBodyError -and (Test-QualificationCleanupUnverified -Exception $fixtureBodyError.Exception)) { throw 'Preserve validator fixtures until owned cleanup is verified.' }
+        if (-not $fixtureRootCreated) { return }
+        if ($null -ne $generatedFixtureRoot) {
+            $resolved=[IO.Path]::GetFullPath($generatedFixtureRoot)
+            if ([IO.Path]::GetDirectoryName($resolved) -ne [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))) { throw 'Validator fixture cleanup escaped its parent.' }
+            if ([IO.Directory]::Exists($resolved) -and ([IO.File]::GetAttributes($resolved) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Validator fixture root identity is ambiguous.' }
+            if ([IO.Directory]::Exists($resolved)) { [IO.Directory]::Delete($resolved,$true) }
+            if ([IO.Directory]::Exists($resolved)) { throw 'Owned validator fixture absence remains unverified.' }
+        }
+    })
+}
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }

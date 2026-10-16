@@ -1,14 +1,17 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repositoryRoot=Split-Path -Parent $PSScriptRoot
-$candidatePath=Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath=Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationPath=Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath|Out-Null
+$candidateContext = Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidateError = $null
+try {
+$candidatePath = $candidateContext.Path
 
 $cases=@(
     @{scenario='MultipleAdapters';coverage='Complete';adapters=2;profiles=2;routes=1;resolvers=1;vpn=0;security=0;connections=0;configuration='Informational';components='Informational'},
@@ -86,4 +89,7 @@ $invalid=Invoke-GeneratedApplication -CandidatePath $candidatePath -Arguments @(
 Assert-Equal 1 @($invalid.Records|Where-Object recordType -eq 'win-pcinfo.terminal').Count 'an invalid network fixture retains one stable terminal path'
 Assert-Equal 0 @($invalid.Records|Where-Object recordType -eq 'win-pcinfo.network-topology-validation').Count 'an invalid fixture cannot fabricate a topology projection'
 if($invalid.StandardError){throw "Invalid fixture wrote stderr: $($invalid.StandardError)"}
+}
+catch { $candidateError = $_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateError }
 Write-Output 'PASS: the generated application proves Local Only topology evidence, privacy, reporting, packaging, and cleanup.'

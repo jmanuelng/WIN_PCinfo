@@ -1,19 +1,26 @@
 [CmdletBinding()]
-param()
+param([string] $CandidatePath, [string] $PreparedManifestPath, [string] $PreparedManifestSha256)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$candidatePath = Join-Path $repositoryRoot 'artifacts/WIN-PCInfo.ps1'
 $requestPath = Join-Path $PSScriptRoot 'fixtures/automation-request.json'
 $preparationFixturePath = Join-Path $PSScriptRoot 'fixtures/preparation-ready.json'
 $positiveFixturePath = Join-Path $PSScriptRoot 'fixtures/contract-positive.json'
-$generatedFixtureRoot = Join-Path $repositoryRoot '.test-output/contract-semantic-matrix'
 . (Join-Path $PSScriptRoot 'TestHarness.ps1')
 
-$null = New-Item -ItemType Directory -Path $generatedFixtureRoot -Force
-& (Join-Path $repositoryRoot 'build/Build.ps1') -OutputPath $candidatePath | Out-Null
+$candidateContext=Open-TestCandidate -RepositoryRoot $repositoryRoot -CandidatePath $CandidatePath `
+    -PreparedManifestPath $PreparedManifestPath -PreparedManifestSha256 $PreparedManifestSha256
+$candidatePath=$candidateContext.Path
+$candidateUseError=$null
+try {
+$generatedFixtureRoot=Join-Path $repositoryRoot ('.test-output/contract-semantic-matrix-'+[guid]::NewGuid().ToString('N'))
+$fixtureRootCreated=$false
+$fixtureBodyError=$null
+try {
+$null = New-Item -ItemType Directory -Path $generatedFixtureRoot -ErrorAction Stop
+$fixtureRootCreated=$true
 
 function Write-DerivedSyntheticFixture {
     param(
@@ -179,3 +186,19 @@ if ([string] $positive.observations[0].value -notmatch '[^\x00-\x7F]') {
 }
 
 Write-Output "PASS: $($cases.Count) incomplete/state/reference fixtures fail closed and the locale fixture remains explicit."
+}
+catch { $fixtureBodyError=$_ }
+finally {
+    Complete-QualificationHarness -BodyError $fixtureBodyError -Cleanup @({
+        if ($null -ne $fixtureBodyError -and (Test-QualificationCleanupUnverified -Exception $fixtureBodyError.Exception)) { throw 'Preserve semantic fixtures until owned cleanup is verified.' }
+        if (-not $fixtureRootCreated) { return }
+        $resolved=[IO.Path]::GetFullPath($generatedFixtureRoot)
+        if ([IO.Path]::GetDirectoryName($resolved) -ne [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.test-output'))) { throw 'Semantic fixture cleanup escaped its parent.' }
+        if ([IO.Directory]::Exists($resolved) -and ([IO.File]::GetAttributes($resolved) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Semantic fixture root identity is ambiguous.' }
+        if ([IO.Directory]::Exists($resolved)) { [IO.Directory]::Delete($resolved,$true) }
+        if ([IO.Directory]::Exists($resolved)) { throw 'Owned semantic fixture absence remains unverified.' }
+    })
+}
+}
+catch { $candidateUseError=$_ }
+finally { Close-TestCandidate -Candidate $candidateContext -BodyError $candidateUseError }
